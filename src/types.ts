@@ -99,7 +99,8 @@ export type ActiveAppWindow =
   | 'freelance'
   | 'social'
   | 'routines'
-  | 'security';
+  | 'security'
+  | 'mobile_remote';
 
 export type MainNavigationTab =
   | 'voice_core'
@@ -166,10 +167,18 @@ export interface TelegramBotConfig {
   botName: string;
   botUsername: string;
   botTokenMasked: string;
-  webhookStatus: 'connected' | 'polling' | 'disconnected';
+  isLiveTokenConfigured: boolean;
+  isLiveConnected: boolean;
+  mode: 'live_polling' | 'live_webhook' | 'simulator';
+  webhookStatus: 'connected' | 'polling' | 'disconnected' | 'waiting_token';
+  telegramLink?: string;
   allowedUserIds: string[];
   humanApprovalRequired: boolean;
   notificationsEnabled: boolean;
+  adminChatIdConfigured?: boolean;
+  totalMessagesReceived?: number;
+  lastActivity?: string;
+  errorMessage?: string;
 }
 
 export type SecurityLevel = 1 | 2 | 3 | 4;

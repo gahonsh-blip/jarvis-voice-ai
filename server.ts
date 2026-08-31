@@ -406,7 +406,7 @@ let oracleCloudState = {
   ],
 };
 
-// Simulated Telegram Mobile Chat
+// Telegram Mobile Chat & Live Gateway State
 let telegramMessages = [
   {
     id: 'tg-1',
@@ -431,15 +431,45 @@ let telegramMessages = [
   },
 ];
 
-let telegramConfig = {
+let telegramConfig: {
+  botName: string;
+  botUsername: string;
+  botTokenMasked: string;
+  isLiveTokenConfigured: boolean;
+  isLiveConnected: boolean;
+  mode: 'live_polling' | 'live_webhook' | 'simulator';
+  webhookStatus: 'connected' | 'polling' | 'disconnected' | 'waiting_token';
+  telegramLink?: string;
+  allowedUserIds: string[];
+  humanApprovalRequired: boolean;
+  notificationsEnabled: boolean;
+  adminChatIdConfigured?: boolean;
+  totalMessagesReceived?: number;
+  lastActivity?: string;
+  errorMessage?: string;
+} = {
   botName: 'Hermes JARVIS Mobile Controller',
   botUsername: '@HermesJarvisAssistantBot',
-  botTokenMasked: '7192837492:AAH*********_MaskedInVault',
-  webhookStatus: 'connected' as const,
-  allowedUserIds: ['@Sir_Owner (Admin ID: 849201948)'],
+  botTokenMasked: process.env.TELEGRAM_BOT_TOKEN
+    ? `${process.env.TELEGRAM_BOT_TOKEN.substring(0, 8)}...${process.env.TELEGRAM_BOT_TOKEN.slice(-4)}`
+    : 'Not Configured (Add TELEGRAM_BOT_TOKEN)',
+  isLiveTokenConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+  isLiveConnected: false,
+  mode: process.env.TELEGRAM_BOT_TOKEN ? 'live_polling' : 'simulator',
+  webhookStatus: process.env.TELEGRAM_BOT_TOKEN ? 'polling' : 'waiting_token',
+  telegramLink: 'https://t.me/BotFather',
+  allowedUserIds: process.env.TELEGRAM_ADMIN_CHAT_ID ? [process.env.TELEGRAM_ADMIN_CHAT_ID] : ['Owner (Auto-registers on /start)'],
   humanApprovalRequired: true,
   notificationsEnabled: true,
+  adminChatIdConfigured: Boolean(process.env.TELEGRAM_ADMIN_CHAT_ID),
+  totalMessagesReceived: 3,
+  lastActivity: new Date().toISOString(),
 };
+
+// Known active chat ID from environment or auto-registered from first /start message
+let activeTelegramChatId: string | number | null = process.env.TELEGRAM_ADMIN_CHAT_ID || null;
+let telegramPollingActive = false;
+let lastTelegramUpdateId = 0;
 
 // Security Matrix
 let securityMatrixState: {
@@ -859,81 +889,370 @@ ${p.deliverables.map((d) => `- [${d.done ? 'x' : ' '}] ${d.text}`).join('\n')}
   });
 });
 
+// -------------------------------------------------------------
+// REAL TELEGRAM BOT MOBILE CONTROLLER ENGINE
+// -------------------------------------------------------------
+
+async function callTelegramApi(method: string, body?: any) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not configured');
+
+  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await res.json();
+  if (!data.ok) {
+    throw new Error(data.description || `Telegram API call to ${method} failed`);
+  }
+  return data.result;
+}
+
+async function sendRealTelegramMessage(chatId: string | number, text: string, replyMarkup?: any) {
+  try {
+    const result = await callTelegramApi('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+      reply_markup: replyMarkup,
+    });
+    return result;
+  } catch (err: any) {
+    console.warn(`[Telegram Bot] Failed to send message to ${chatId}:`, err.message);
+    return null;
+  }
+}
+
+async function processMobileCommand(text: string, senderLabel: string = 'user', chatId?: string | number) {
+  const userMsg = {
+    id: `tg-${Date.now()}`,
+    sender: 'user' as const,
+    text,
+    timestamp: new Date().toISOString(),
+    type: 'text' as const,
+  };
+  telegramMessages.push(userMsg);
+  telegramConfig.totalMessagesReceived = (telegramConfig.totalMessagesReceived || 0) + 1;
+  telegramConfig.lastActivity = new Date().toISOString();
+  memoryState.stats.totalCommands += 1;
+
+  // Process command through Jarvis Intent Engine
+  const intentData = classifyIntentLocally(text);
+  let botReplyText = '';
+  let actionData: any = null;
+  let inlineKeyboard: any = null;
+
+  if (text.trim() === '/start') {
+    botReplyText = `🤖 *HERMES JARVIS ONLINE MOBILE CONTROLLER*\n\nWelcome, Sir! Your autonomous AI core is connected to this phone.\n\n*Quick Mobile Commands:*\n• \`JARVIS, project check करो\`\n• \`JARVIS, आज की LinkedIn post बनाओ\`\n• \`JARVIS, client lead quotation बनाओ\`\n• \`JARVIS, server status बताओ\`\n• \`JARVIS, कल सुबह 9 बजे report देना\`\n\n*Level 4 Human Approval*: All external actions require your confirmation.`;
+    inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '📊 Project Audit', callback_data: 'cmd_check_project' },
+          { text: '☁️ Server Telemetry', callback_data: 'cmd_cloud_telemetry' },
+        ],
+        [
+          { text: '📝 Draft Social Post', callback_data: 'cmd_draft_post' },
+          { text: '💼 Client Quotation', callback_data: 'cmd_gen_quote' },
+        ],
+      ],
+    };
+  } else if (intentData.intent === 'check_project') {
+    botReplyText = `📊 *HERMES PROJECT AUDIT*\n\n✅ *Status*: All active repositories inspected.\n• \`ai-freelance-portal\` — Branch main: Clean, 0 uncommitted changes.\n• \`jarvis-hermes-core\` — Oracle VM daemon active, uptime ${oracleCloudState.uptimeHours} hrs.\n\n⚡ All tests green. No blocking issues found.`;
+    actionData = { type: 'check_project', status: 'clean' };
+    inlineKeyboard = {
+      inline_keyboard: [
+        [{ text: '📝 Create Today\'s Post', callback_data: 'cmd_draft_post' }],
+        [{ text: '🔄 Re-Audit Codebase', callback_data: 'cmd_check_project' }],
+      ],
+    };
+  } else if (intentData.intent === 'create_social_post') {
+    botReplyText = `📱 *NEW SOCIAL MEDIA POST DRAFTED*\n\n*Topic*: AI Agent Workflows for Developers\n*Platform*: LinkedIn & Twitter/X\n\n📝 *Draft Preview*:\n"Orchestrating autonomous AI agents with Oracle Always Free cloud gives you a 24/7 personal assistant on your phone for ₹0."\n\n⚠️ *Human Approval Mode*: Post तैयार है। क्या मैं इसे publish करूँ?`;
+    actionData = { type: 'social_draft', postId: 'post-1', status: 'pending_approval' };
+    inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '✅ YES (Publish Now)', callback_data: 'approve_publish_post_1' },
+          { text: '❌ REJECT (Draft Only)', callback_data: 'reject_post_1' },
+        ],
+      ],
+    };
+  } else if (intentData.intent === 'find_document') {
+    const doc = intentData.actionPayload?.query || 'Document';
+    botReplyText = `🔍 *FILE SEARCH RESULT*\n\nFound matching file in memory storage:\n📄 \`${doc}\`\n• *Path*: \`/workspace/storage/documents/${doc}\`\n• *Size*: 42.5 KB\n• *Summary*: Specification brief for client project milestone.`;
+    actionData = { type: 'file_found', query: doc };
+  } else if (intentData.intent === 'schedule_morning_report') {
+    botReplyText = `⏰ *SCHEDULE CONFIRMED*\n\nSir, I have scheduled your proactive Morning Briefing for *09:00 AM IST tomorrow*.\n\nI will send you summary audio + task checklist right here on Telegram.`;
+    actionData = { type: 'scheduled', time: '09:00 AM' };
+  } else if (intentData.intent === 'generate_quotation') {
+    botReplyText = `💼 *QUOTATION GENERATED*\n\n• *Client*: Aarav Tech Solutions\n• *Total Estimate*: ₹65,000 (10 Days Delivery)\n• *Milestones*: 3 phases\n\nReady for client review. Would you like me to send it?`;
+    actionData = { type: 'quotation_ready', amount: 65000 };
+    inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '📤 Send to Client', callback_data: 'send_quote_client' },
+          { text: '✏️ Edit Scope', callback_data: 'edit_quote_scope' },
+        ],
+      ],
+    };
+  } else if (intentData.intent === 'cloud_telemetry') {
+    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${oracleCloudState.status} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${oracleCloudState.metrics.cpuUsage}% | *RAM*: ${oracleCloudState.metrics.ramUsage} GB / 24 GB\n• *Cost*: ₹0 / Always Free\n• *IP*: ${oracleCloudState.publicIp}`;
+    actionData = { type: 'telemetry', metrics: oracleCloudState.metrics };
+  } else {
+    // Natural Language LLM Processing
+    const ai = getGenAI();
+    if (ai) {
+      try {
+        const result = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `You are Hermes Jarvis, an autonomous AI assistant serving the user on mobile Telegram. Reply with professional poise, concise clarity, and helpful markdown formatting with emojis. User message: "${text}".`,
+                },
+              ],
+            },
+          ],
+        });
+        botReplyText = result.text?.trim() || 'Sir, command processed successfully on your cloud node.';
+      } catch {
+        botReplyText = `Command "${text}" executed on Oracle ARM node. All systems standing by.`;
+      }
+    } else {
+      botReplyText = `Command received via Telegram: "${text}". Executing on cloud agent.`;
+    }
+  }
+
+  const botMsg = {
+    id: `tg-${Date.now() + 1}`,
+    sender: 'jarvis_bot' as const,
+    text: botReplyText,
+    timestamp: new Date().toISOString(),
+    type: 'text' as const,
+    actionData,
+  };
+  telegramMessages.push(botMsg);
+  if (telegramMessages.length > 80) telegramMessages.shift();
+
+  // If real Telegram chat is active, send live message back to the phone!
+  if (chatId && process.env.TELEGRAM_BOT_TOKEN) {
+    await sendRealTelegramMessage(chatId, botReplyText, inlineKeyboard);
+  }
+
+  persistMemory();
+  return { userMsg, botMsg, inlineKeyboard };
+}
+
+async function handleTelegramCallback(callbackQuery: any) {
+  const data = callbackQuery.data;
+  const chatId = callbackQuery.message?.chat?.id;
+  const callbackId = callbackQuery.id;
+
+  // Acknowledge callback immediately
+  try {
+    await callTelegramApi('answerCallbackQuery', {
+      callback_query_id: callbackId,
+      text: 'Action processed by JARVIS',
+    });
+  } catch (err: any) {
+    console.warn('[Telegram Bot] Callback answer warning:', err.message);
+  }
+
+  if (data === 'cmd_check_project') {
+    await processMobileCommand('JARVIS, project check करो', 'user', chatId);
+  } else if (data === 'cmd_cloud_telemetry') {
+    await processMobileCommand('JARVIS, server status बताओ', 'user', chatId);
+  } else if (data === 'cmd_draft_post') {
+    await processMobileCommand('JARVIS, आज की LinkedIn post बनाओ', 'user', chatId);
+  } else if (data === 'cmd_gen_quote') {
+    await processMobileCommand('JARVIS, client lead quotation बनाओ', 'user', chatId);
+  } else if (data === 'approve_publish_post_1') {
+    // Approve post
+    const targetPost = socialPosts.find((p) => p.id === 'post-1');
+    if (targetPost) targetPost.status = 'published';
+    securityMatrixState.auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: 'Publish LinkedIn Post (Level 4 Approved via Mobile Telegram)',
+      levelRequired: 4,
+      approvedBy: 'HUMAN_CONFIRMATION_TELEGRAM_MOBILE',
+      status: 'EXECUTED',
+    });
+
+    const confirmText = '✅ *LEVEL 4 AUTHORIZATION CONFIRMED*\n\nSir, your LinkedIn post has been approved and published to the live queue.\n\nAudit log updated in Security Matrix.';
+    const botMsg = {
+      id: `tg-${Date.now()}`,
+      sender: 'jarvis_bot' as const,
+      text: confirmText,
+      timestamp: new Date().toISOString(),
+      type: 'text' as const,
+    };
+    telegramMessages.push(botMsg);
+    if (chatId) await sendRealTelegramMessage(chatId, confirmText);
+  } else if (data === 'reject_post_1') {
+    const cancelText = '❌ *ACTION REJECTED*\n\nUnderstood, Sir. The post remains saved as a local draft in memory.';
+    const botMsg = {
+      id: `tg-${Date.now()}`,
+      sender: 'jarvis_bot' as const,
+      text: cancelText,
+      timestamp: new Date().toISOString(),
+      type: 'text' as const,
+    };
+    telegramMessages.push(botMsg);
+    if (chatId) await sendRealTelegramMessage(chatId, cancelText);
+  }
+}
+
+async function startTelegramPolling() {
+  if (!process.env.TELEGRAM_BOT_TOKEN) return;
+  if (telegramPollingActive) return;
+
+  try {
+    console.log('[Telegram Bot] Initializing connection with api.telegram.org...');
+    const botInfo = await callTelegramApi('getMe');
+    telegramConfig.isLiveConnected = true;
+    telegramConfig.isLiveTokenConfigured = true;
+    telegramConfig.botUsername = `@${botInfo.username}`;
+    telegramConfig.botName = botInfo.first_name || 'Hermes JARVIS Mobile Controller';
+    telegramConfig.telegramLink = `https://t.me/${botInfo.username}`;
+    telegramConfig.mode = 'live_polling';
+    telegramConfig.webhookStatus = 'polling';
+    console.log(`[Telegram Bot] Connected as ${telegramConfig.botUsername} (ID: ${botInfo.id})`);
+
+    telegramPollingActive = true;
+
+    // Background Long-Polling Loop
+    (async () => {
+      while (telegramPollingActive) {
+        try {
+          const updates = await callTelegramApi('getUpdates', {
+            offset: lastTelegramUpdateId + 1,
+            timeout: 20,
+            allowed_updates: ['message', 'callback_query'],
+          });
+
+          if (Array.isArray(updates) && updates.length > 0) {
+            for (const update of updates) {
+              lastTelegramUpdateId = update.update_id;
+
+              if (update.message) {
+                const msg = update.message;
+                const chatId = msg.chat?.id;
+                const text = msg.text || msg.caption || '';
+                const senderName = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name || 'User');
+
+                if (chatId) {
+                  activeTelegramChatId = chatId;
+                  if (!telegramConfig.allowedUserIds.includes(String(chatId))) {
+                    telegramConfig.allowedUserIds = [String(chatId), `@${senderName}`];
+                  }
+                }
+
+                if (text) {
+                  console.log(`[Telegram Bot] Received from phone (${senderName}): ${text}`);
+                  await processMobileCommand(text, senderName, chatId);
+                }
+              } else if (update.callback_query) {
+                await handleTelegramCallback(update.callback_query);
+              }
+            }
+          }
+        } catch (pollErr: any) {
+          // Graceful backoff on network issues
+          await new Promise((r) => setTimeout(r, 4000));
+        }
+      }
+    })();
+  } catch (err: any) {
+    console.warn('[Telegram Bot] Connection initialization note:', err.message);
+    telegramConfig.errorMessage = err.message;
+    telegramConfig.isLiveConnected = false;
+    telegramConfig.webhookStatus = 'waiting_token';
+  }
+}
+
+// Telegram Gateway Webhook Route (for direct production webhook setups)
+app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
+  try {
+    const update = req.body;
+    if (update.message) {
+      const msg = update.message;
+      const chatId = msg.chat?.id;
+      const text = msg.text || msg.caption || '';
+      const senderName = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name || 'User');
+
+      if (chatId) activeTelegramChatId = chatId;
+      if (text) {
+        await processMobileCommand(text, senderName, chatId);
+      }
+    } else if (update.callback_query) {
+      await handleTelegramCallback(update.callback_query);
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    console.error('Webhook error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Telegram Gateway APIs
 app.get('/api/telegram/messages', (req: Request, res: Response) => {
   res.json({
     config: telegramConfig,
     messages: telegramMessages,
+    activeChatId: activeTelegramChatId,
   });
+});
+
+app.get('/api/telegram/status', (req: Request, res: Response) => {
+  res.json({
+    config: telegramConfig,
+    activeChatId: activeTelegramChatId,
+    totalMessages: telegramMessages.length,
+    lastActivity: telegramConfig.lastActivity,
+  });
+});
+
+app.post('/api/telegram/test-live', async (req: Request, res: Response) => {
+  try {
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
+      return res.json({
+        success: false,
+        message: 'TELEGRAM_BOT_TOKEN is not defined in environment.',
+        config: telegramConfig,
+      });
+    }
+
+    const botInfo = await callTelegramApi('getMe');
+    let notificationSent = false;
+
+    if (activeTelegramChatId) {
+      const testMsg = `🔔 *HERMES JARVIS TEST SIGNAL*\n\nMobile gateway is online and securely authenticated from your web control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Cloud Node*: Oracle Always Free ARM64`;
+      const sendRes = await sendRealTelegramMessage(activeTelegramChatId, testMsg);
+      notificationSent = Boolean(sendRes);
+    }
+
+    res.json({
+      success: true,
+      bot: botInfo,
+      notificationSent,
+      activeChatId: activeTelegramChatId,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.post('/api/telegram/send', async (req: Request, res: Response) => {
   try {
-    const { text, type = 'text' } = req.body;
+    const { text } = req.body;
     if (!text) return res.status(400).json({ error: 'Text command is required' });
 
-    const userMsg = {
-      id: `tg-${Date.now()}`,
-      sender: 'user' as const,
-      text,
-      timestamp: new Date().toISOString(),
-      type: type as any,
-    };
-    telegramMessages.push(userMsg);
-
-    // Process command through Jarvis Intent Engine
-    const intentData = classifyIntentLocally(text);
-    let botReplyText = '';
-    let actionData: any = null;
-
-    if (intentData.intent === 'check_project') {
-      botReplyText = `📊 *HERMES PROJECT AUDIT*\n\n✅ *Status*: All 2 active repositories inspected.\n• \`ai-freelance-portal\` — Branch main: Clean, 0 uncommitted changes.\n• \`jarvis-hermes-core\` — Oracle VM daemon active, uptime ${oracleCloudState.uptimeHours} hrs.\n\n⚡ All tests green. No blocking issues found.`;
-      actionData = { type: 'check_project', status: 'clean' };
-    } else if (intentData.intent === 'create_social_post') {
-      botReplyText = `📱 *NEW SOCIAL MEDIA POST DRAFTED*\n\n*Topic*: AI Agent Workflows for Developers\n*Platform*: LinkedIn & Twitter/X\n\n📝 *Draft Preview*:\n"Orchestrating autonomous AI agents with Oracle Always Free cloud gives you a 24/7 personal assistant on your phone for ₹0."\n\n⚠️ *Human Approval Mode*: Post तैयार है। क्या मैं इसे publish करूँ? (Reply YES to publish).`;
-      actionData = { type: 'social_draft', postId: 'post-1', status: 'pending_approval' };
-    } else if (intentData.intent === 'find_document') {
-      const doc = intentData.actionPayload?.query || 'Document';
-      botReplyText = `🔍 *FILE SEARCH RESULT*\n\nFound matching file in memory storage:\n📄 \`${doc}\`\n• *Path*: \`/workspace/storage/documents/${doc}\`\n• *Size*: 42.5 KB\n• *Summary*: Specification brief for client project milestone.`;
-      actionData = { type: 'file_found', query: doc };
-    } else if (intentData.intent === 'schedule_morning_report') {
-      botReplyText = `⏰ *SCHEDULE CONFIRMED*\n\nSir, I have scheduled your proactive Morning Briefing for *09:00 AM IST tomorrow*.\n\nI will send you summary audio + task checklist right here on Telegram.`;
-      actionData = { type: 'scheduled', time: '09:00 AM' };
-    } else if (intentData.intent === 'generate_quotation') {
-      botReplyText = `💼 *QUOTATION GENERATED*\n\n• *Client*: Aarav Tech Solutions\n• *Total Estimate*: ₹65,000 (10 Days Delivery)\n• *Milestones*: 3 phases\n\nReady for client review. Would you like me to send it?`;
-      actionData = { type: 'quotation_ready', amount: 65000 };
-    } else if (intentData.intent === 'cloud_telemetry') {
-      botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${oracleCloudState.status} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${oracleCloudState.metrics.cpuUsage}% | *RAM*: ${oracleCloudState.metrics.ramUsage} GB / 24 GB\n• *Cost*: ₹0 / Always Free\n• *IP*: ${oracleCloudState.publicIp}`;
-      actionData = { type: 'telemetry', metrics: oracleCloudState.metrics };
-    } else {
-      // General chat
-      const ai = getGenAI();
-      if (ai) {
-        try {
-          const result = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: [{ role: 'user', parts: [{ text: `You are Hermes Jarvis on Telegram Mobile. User sent: "${text}". Reply concisely with relevant emoji formatting.` }] }],
-          });
-          botReplyText = result.text?.trim() || 'Sir, command processed successfully on your cloud node.';
-        } catch {
-          botReplyText = `Command "${text}" executed on Oracle ARM node. All systems standing by.`;
-        }
-      } else {
-        botReplyText = `Command received via Telegram: "${text}". Executing on cloud agent.`;
-      }
-    }
-
-    const botMsg = {
-      id: `tg-${Date.now() + 1}`,
-      sender: 'jarvis_bot' as const,
-      text: botReplyText,
-      timestamp: new Date().toISOString(),
-      type: 'text' as const,
-      actionData,
-    };
-    telegramMessages.push(botMsg);
-
-    res.json({ success: true, userMessage: userMsg, botMessage: botMsg });
+    const result = await processMobileCommand(text, 'web_client', activeTelegramChatId || undefined);
+    res.json({ success: true, userMessage: result.userMsg, botMessage: result.botMsg });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1476,6 +1795,12 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Jarvis Voice AI Server active on http://0.0.0.0:${PORT}`);
+    // Initialize Real Telegram Gateway
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      startTelegramPolling();
+    } else {
+      console.log('[Telegram Bot] TELEGRAM_BOT_TOKEN not provided. Simulator & Web Remote mode active.');
+    }
   });
 }
 

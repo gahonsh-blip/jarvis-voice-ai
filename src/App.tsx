@@ -516,7 +516,7 @@ export default function App() {
       />
 
       <TelegramGatewayModal
-        isOpen={activeApp === 'telegram'}
+        isOpen={activeApp === 'telegram' || activeApp === 'mobile_remote'}
         onClose={() => setActiveApp(null)}
         onSpeak={speakText}
       />
