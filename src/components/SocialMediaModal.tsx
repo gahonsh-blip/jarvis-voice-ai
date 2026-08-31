@@ -20,6 +20,12 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
+  UserCheck,
+  LogOut,
+  ShieldCheck,
+  Link2,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
 
@@ -37,12 +43,16 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   const [platform, setPlatform] = useState<string>('LinkedIn');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copiedRedirectUri, setCopiedRedirectUri] = useState<boolean>(false);
 
   // Platform Integration Hub State
   const [platforms, setPlatforms] = useState<PlatformIntegrationInfo[]>([]);
   const [testingPlatform, setTestingPlatform] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; status: string; message: string; accountName?: string }>>({});
   const [expandedPlatform, setExpandedPlatform] = useState<string | null>('linkedin');
+  const [isConnectingOAuth, setIsConnectingOAuth] = useState<boolean>(false);
+  const [oauthNotice, setOauthNotice] = useState<string | null>(null);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -50,6 +60,28 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       fetchPlatforms();
     }
   }, [isOpen]);
+
+  // Listen for OAuth Popup PostMessages
+  useEffect(() => {
+    const handleOAuthMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'LINKEDIN_OAUTH_SUCCESS') {
+        setIsConnectingOAuth(false);
+        setOauthError(null);
+        setOauthNotice(`✅ Successfully authorized Personal Profile for ${event.data.member?.name || 'LinkedIn Member'}!`);
+        fetchPlatforms();
+        fetchPosts();
+        onSpeak(`LinkedIn personal profile connected successfully for ${event.data.member?.name || 'Member'}, Sir.`);
+      } else if (event.data?.type === 'LINKEDIN_OAUTH_ERROR') {
+        setIsConnectingOAuth(false);
+        setOauthError(`LinkedIn OAuth error: ${event.data.error || 'Authorization cancelled'}`);
+        setOauthNotice(null);
+        onSpeak('LinkedIn connection was not completed, Sir.');
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
+  }, [onSpeak]);
 
   const fetchPosts = async () => {
     try {
@@ -76,6 +108,65 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     } catch (err) {
       console.warn('Failed to fetch platform integrations:', err);
     }
+  };
+
+  const handleConnectLinkedIn = async () => {
+    setIsConnectingOAuth(true);
+    setOauthError(null);
+    setOauthNotice(null);
+
+    try {
+      const redirectUri = window.location.origin + '/api/auth/linkedin/callback';
+      const res = await fetch(`/api/auth/linkedin/url?redirect_uri=${encodeURIComponent(redirectUri)}`);
+      const data = await res.json();
+
+      if (!data.success || !data.url) {
+        setIsConnectingOAuth(false);
+        setOauthError(data.message || 'LINKEDIN_CLIENT_ID is missing. Please configure it in AI Studio Settings (⚙️).');
+        onSpeak('Sir, LINKEDIN_CLIENT_ID is required before launching OAuth. Please check settings.');
+        return;
+      }
+
+      // Open OAuth Authorization Popup directly to provider URL
+      const width = 600;
+      const height = 720;
+      const left = window.screenX + Math.max(0, (window.outerWidth - width) / 2);
+      const top = window.screenY + Math.max(0, (window.outerHeight - height) / 2);
+
+      const popup = window.open(
+        data.url,
+        'linkedin_oauth_popup',
+        `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=yes`
+      );
+
+      if (!popup || popup.closed) {
+        setIsConnectingOAuth(false);
+        setOauthError('Popup window was blocked by browser. Please allow popups for this site.');
+      }
+    } catch (err: any) {
+      setIsConnectingOAuth(false);
+      setOauthError(`OAuth initiation error: ${err.message}`);
+    }
+  };
+
+  const handleDisconnectLinkedIn = async () => {
+    try {
+      const res = await fetch('/api/auth/linkedin/disconnect', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setOauthNotice('LinkedIn personal profile disconnected.');
+        fetchPlatforms();
+        onSpeak('LinkedIn personal profile disconnected, Sir.');
+      }
+    } catch (err) {
+      console.warn('Disconnect error:', err);
+    }
+  };
+
+  const handleCopyRedirectUri = (uri: string) => {
+    navigator.clipboard.writeText(uri);
+    setCopiedRedirectUri(true);
+    setTimeout(() => setCopiedRedirectUri(false), 2500);
   };
 
   const handleTestConnection = async (platformKey: SocialPlatformKey) => {
@@ -170,6 +261,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     }
   };
 
+  const linkedInInfo = platforms.find((p) => p.id === 'linkedin');
+  const isLinkedInConnected = linkedInInfo?.status === 'CONNECTED';
+
   if (!isOpen) return null;
 
   return (
@@ -230,6 +324,26 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
             </button>
           </div>
         </div>
+
+        {/* Global OAuth Feedback Notification */}
+        {oauthNotice && (
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-emerald-950/80 border border-emerald-600/50 text-emerald-200 text-xs flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{oauthNotice}</span>
+            </div>
+            <button onClick={() => setOauthNotice(null)} className="text-emerald-400 hover:text-emerald-200 text-xs font-mono">Dismiss</button>
+          </div>
+        )}
+        {oauthError && (
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-950/80 border border-rose-600/50 text-rose-200 text-xs flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{oauthError}</span>
+            </div>
+            <button onClick={() => setOauthError(null)} className="text-rose-400 hover:text-rose-200 text-xs font-mono">Dismiss</button>
+          </div>
+        )}
 
         {/* Modal Body */}
         {activeTab === 'drafts' ? (
@@ -329,6 +443,47 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
             {/* Right: Preview & Human Approval Screen */}
             {selectedPost ? (
               <div className="w-full md:w-7/12 p-6 overflow-y-auto flex flex-col gap-5 bg-slate-900/40">
+                {/* LinkedIn Personal Member Channel Status Bar */}
+                {selectedPost.platform === 'LinkedIn' && (
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-[#0077b5]/20 border border-[#0077b5]/40 flex items-center justify-center font-bold text-xs text-[#0077b5]">
+                        in
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-200">
+                            Target: Personal Member Profile
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-blue-950 text-blue-300 border border-blue-800">
+                            UGC API
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-mono">
+                          {isLinkedInConnected
+                            ? (linkedInInfo?.accountName || 'Authenticated Member')
+                            : 'Not Connected — Connect via OAuth'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {!isLinkedInConnected ? (
+                      <button
+                        onClick={handleConnectLinkedIn}
+                        disabled={isConnectingOAuth}
+                        className="px-3 py-1.5 rounded-lg bg-[#0077b5] hover:bg-[#006097] text-white text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      >
+                        {isConnectingOAuth ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                        Connect LinkedIn
+                      </button>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Ready
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* Human Approval Warning Banner */}
                 {selectedPost.status === 'pending_approval' && (
                   <div className="p-4 rounded-xl bg-amber-950/50 border border-amber-500/40 text-amber-200 flex items-start gap-3">
@@ -435,10 +590,10 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
               <div>
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                   <Globe className="w-4 h-4 text-purple-400" />
-                  Connected Platforms & Official API Status
+                  Connected Platforms & Official OAuth Status
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Every platform adheres to truth-in-execution: missing keys will keep posts in offline drafts with zero false claims.
+                  LinkedIn Personal Profile 3-legged OAuth 2.0 flow with 1-click browser popup connection and zero fake claims.
                 </p>
               </div>
               <button
@@ -456,33 +611,53 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                 const isExpanded = expandedPlatform === p.id;
                 const testResult = testResults[p.id];
                 const isTesting = testingPlatform === p.id;
+                const isLinkedIn = p.id === 'linkedin';
+                const oauth = p.oauthStatus;
 
                 return (
                   <div
                     key={p.id}
-                    className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col gap-4 shadow-xl"
+                    className={`p-5 rounded-2xl border flex flex-col gap-4 shadow-xl transition-all ${
+                      isLinkedIn && p.status === 'CONNECTED'
+                        ? 'bg-slate-900 border-[#0077b5]/40 shadow-blue-950/20'
+                        : 'bg-slate-900/90 border-slate-800'
+                    }`}
                   >
                     {/* Header Row */}
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center font-mono font-bold text-xs text-purple-400">
-                          {p.id.slice(0, 2).toUpperCase()}
+                        <div
+                          className={`w-11 h-11 rounded-xl flex items-center justify-center font-mono font-bold text-sm ${
+                            isLinkedIn
+                              ? 'bg-[#0077b5]/20 border border-[#0077b5]/40 text-[#0077b5]'
+                              : 'bg-slate-950 border border-slate-800 text-purple-400'
+                          }`}
+                        >
+                          {isLinkedIn ? 'in' : p.id.slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="text-sm font-bold text-slate-100">{p.name}</h4>
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300">
                               {p.category}
                             </span>
+                            {isLinkedIn && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-950 text-blue-300 border border-blue-800 font-semibold">
+                                Personal Profile
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-400 font-mono">
-                            {p.accountName ? `Connected: ${p.accountName}` : 'Status: Ready for Credentials'}
+                            {p.accountName
+                              ? `Authenticated: ${p.accountName}`
+                              : 'Status: Ready for 1-Click OAuth Connection'}
                           </p>
                         </div>
                       </div>
 
-                      {/* Status Badge & Test Button */}
-                      <div className="flex items-center gap-3">
+                      {/* Action Buttons & Status Badge */}
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        {/* Status Badge */}
                         <span
                           className={`px-3 py-1 rounded-lg text-xs font-mono font-bold border ${
                             p.status === 'CONNECTED' || p.status === 'VERIFIED'
@@ -495,6 +670,35 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           {p.status}
                         </span>
 
+                        {/* LinkedIn OAuth 1-Click Action Buttons */}
+                        {isLinkedIn && (
+                          <>
+                            {p.status === 'CONNECTED' ? (
+                              <button
+                                onClick={handleDisconnectLinkedIn}
+                                className="px-3 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-700/50 text-rose-200 text-xs font-mono flex items-center gap-1.5 transition-colors"
+                              >
+                                <LogOut className="w-3.5 h-3.5" />
+                                Disconnect
+                              </button>
+                            ) : (
+                              <button
+                                onClick={handleConnectLinkedIn}
+                                disabled={isConnectingOAuth}
+                                className="px-3.5 py-1.5 rounded-lg bg-[#0077b5] hover:bg-[#006097] text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-lg shadow-blue-950 disabled:opacity-50"
+                              >
+                                {isConnectingOAuth ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Link2 className="w-3.5 h-3.5" />
+                                )}
+                                Connect LinkedIn
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {/* Test Connection Probe */}
                         <button
                           onClick={() => handleTestConnection(p.id)}
                           disabled={isTesting}
@@ -512,6 +716,48 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                         </button>
                       </div>
                     </div>
+
+                    {/* LinkedIn Connected Member Banner */}
+                    {isLinkedIn && oauth?.connected && (
+                      <div className="p-3.5 rounded-xl bg-slate-950/80 border border-[#0077b5]/30 flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          {oauth.picture ? (
+                            <img
+                              src={oauth.picture}
+                              alt={oauth.name || 'Member'}
+                              className="w-10 h-10 rounded-full border border-slate-700 object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-blue-950 border border-blue-700 flex items-center justify-center text-blue-300 font-bold text-sm">
+                              {oauth.name?.slice(0, 2).toUpperCase() || 'LI'}
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-100 text-xs">{oauth.name || 'Personal Member'}</span>
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                OAuth 2.0 Token Active
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              Author URN: <code className="text-purple-300">{oauth.authorUrn || `urn:li:person:${oauth.memberSub || 'self'}`}</code>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleConnectLinkedIn}
+                            disabled={isConnectingOAuth}
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono flex items-center gap-1 transition-colors"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isConnectingOAuth ? 'animate-spin' : ''}`} />
+                            Reconnect / Refresh
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Live Test Diagnostic Output */}
                     {testResult && (
@@ -533,6 +779,31 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     {/* Expanded Setup Guide & Variables Checklist */}
                     {isExpanded && (
                       <div className="pt-4 border-t border-slate-800 flex flex-col gap-4 text-xs font-sans">
+                        {/* Authorized Redirect URI Box (Critical for LinkedIn Developer Portal) */}
+                        {isLinkedIn && oauth?.redirectUri && (
+                          <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-700/40 flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-purple-200 font-mono text-xs flex items-center gap-1.5">
+                                <Link2 className="w-3.5 h-3.5 text-purple-400" />
+                                Authorized Redirect URL (for LinkedIn Developer Portal):
+                              </span>
+                              <button
+                                onClick={() => handleCopyRedirectUri(oauth.redirectUri!)}
+                                className="px-2.5 py-1 rounded bg-purple-900/60 hover:bg-purple-800 border border-purple-500/40 text-purple-200 text-[11px] font-mono flex items-center gap-1 transition-colors"
+                              >
+                                {copiedRedirectUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                {copiedRedirectUri ? 'Copied!' : 'Copy URL'}
+                              </button>
+                            </div>
+                            <code className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-purple-300 font-mono text-xs break-all select-all">
+                              {oauth.redirectUri}
+                            </code>
+                            <p className="text-[11px] text-slate-400">
+                              Paste this exact URL into your LinkedIn Developer App under <strong>Auth ➔ OAuth 2.0 settings ➔ Authorized redirect URLs for your app</strong>.
+                            </p>
+                          </div>
+                        )}
+
                         {/* Capabilities */}
                         <div>
                           <span className="text-xs font-mono font-bold text-slate-300 block mb-1.5">
@@ -553,7 +824,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                         {/* Required Environment Variables */}
                         <div>
                           <span className="text-xs font-mono font-bold text-slate-300 block mb-1.5">
-                            Required Environment Variables (Settings Menu):
+                            Required Environment Variables (Settings Menu ⚙️):
                           </span>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 font-mono">
                             {p.requiredEnvVars.map((v, i) => (

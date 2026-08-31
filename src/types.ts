@@ -249,6 +249,24 @@ export type SocialPublishingState =
   | 'NOT_PUBLISHED'
   | 'REJECTED';
 
+export interface LinkedInOAuthStatus {
+  connected: boolean;
+  authType?: 'OAUTH_2_0' | 'STATIC_ENV_TOKEN';
+  memberSub?: string;
+  authorUrn?: string;
+  name?: string;
+  email?: string;
+  picture?: string;
+  profileUrl?: string;
+  connectedAt?: string;
+  expiresAt?: string;
+  scopes?: string[];
+  hasClientId: boolean;
+  hasClientSecret: boolean;
+  redirectUri: string;
+  message?: string;
+}
+
 export interface PlatformIntegrationInfo {
   id: SocialPlatformKey;
   name: string;
@@ -260,6 +278,8 @@ export interface PlatformIntegrationInfo {
   avatarUrl?: string;
   lastVerifiedAt?: string;
   errorMessage?: string;
+  authType?: 'OAUTH_2_0' | 'STATIC_TOKEN' | 'API_KEY';
+  oauthStatus?: LinkedInOAuthStatus;
   requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean; placeholder: string }[];
   developerPortalUrl: string;
   setupInstructions: string[];

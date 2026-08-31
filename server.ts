@@ -92,6 +92,20 @@ export interface ServerFreelanceLead {
   };
 }
 
+export interface ServerLinkedInConnection {
+  connected: boolean;
+  authType: 'OAUTH_2_0' | 'STATIC_ENV_TOKEN';
+  memberSub?: string;
+  authorUrn?: string;
+  name?: string;
+  email?: string;
+  picture?: string;
+  connectedAt?: string;
+  expiresAt?: string;
+  scopes?: string[];
+  accessToken?: string; // Stored securely in server memory/state, NEVER exposed in logs/client UI
+}
+
 interface MemoryData {
   name?: string;
   notes: { id: string; title: string; content: string; createdAt: string }[];
@@ -105,6 +119,7 @@ interface MemoryData {
   socialPosts: ServerSocialPost[];
   auditLogs: AuditLogEntry[];
   freelanceLeads: ServerFreelanceLead[];
+  linkedInConnection?: ServerLinkedInConnection;
   schedulerState: {
     lastMorningRunDate?: string;
     lastMiddayRunDate?: string;
@@ -278,6 +293,29 @@ function persistMemory() {
   } catch (err: any) {
     console.warn('[Storage] Error writing to jarvis_memory.json:', err?.message);
   }
+}
+
+export function addAuditLog(
+  action: string,
+  levelRequired: 1 | 2 | 3 | 4 = 1,
+  approvedBy: string = 'HUMAN_CONFIRMATION',
+  status: string = 'VERIFIED'
+) {
+  const entry: AuditLogEntry = {
+    id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    action,
+    levelRequired,
+    approvedBy,
+    status,
+    verificationStatus: 'VERIFIED',
+    finalTruthState: 'VERIFIED',
+  };
+  memoryState.auditLogs.unshift(entry);
+  if (memoryState.auditLogs.length > 100) {
+    memoryState.auditLogs = memoryState.auditLogs.slice(0, 100);
+  }
+  persistMemory();
 }
 
 // Shortcuts for convenience
@@ -762,7 +800,7 @@ let proactiveReports = [
 // ==============================================================================
 
 /**
- * 1. LINKEDIN VERIFICATION & PUBLISHING ENGINE (Official REST API v2)
+ * 1. LINKEDIN VERIFICATION & PUBLISHING ENGINE (Official REST API v2 - Personal Profile UGC)
  */
 async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
   success: boolean;
@@ -773,8 +811,9 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
   errorReason?: string;
   userMessage: string;
 }> {
-  const token = (process.env.LINKEDIN_ACCESS_TOKEN || '').trim();
-  const authorUrn = (process.env.LINKEDIN_AUTHOR_URN || '').trim();
+  const oauthConn = memoryState.linkedInConnection;
+  const token = (oauthConn?.connected && oauthConn.accessToken ? oauthConn.accessToken : (process.env.LINKEDIN_ACCESS_TOKEN || '')).trim();
+  const configuredUrn = (oauthConn?.connected && oauthConn.authorUrn ? oauthConn.authorUrn : (process.env.LINKEDIN_AUTHOR_URN || '')).trim();
 
   if (!token) {
     return {
@@ -782,14 +821,14 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
       executionStatus: 'NOT_PUBLISHED',
       verificationStatus: 'MISSING_CREDENTIALS',
       finalTruthState: 'DRAFT',
-      errorReason: 'LINKEDIN_ACCESS_TOKEN is not configured in server environment. Post is held safely in local DRAFT queue without false claims.',
-      userMessage: '⚠️ NOT PUBLISHED: Real LinkedIn publishing requires LINKEDIN_ACCESS_TOKEN in environment. Post is retained safely in your local DRAFT queue with zero false claims.',
+      errorReason: 'LinkedIn is not connected. Connect your Personal Profile via the "Connect LinkedIn" OAuth button or configure LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET. Post is held safely in local DRAFT queue without false claims.',
+      userMessage: '⚠️ NOT PUBLISHED: Real LinkedIn publishing requires an active OAuth connection. Post is retained safely in your local DRAFT queue with zero false claims.',
     };
   }
 
   try {
-    let targetAuthor = authorUrn;
-    if (!targetAuthor) {
+    let targetAuthor = configuredUrn;
+    if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
       const meRes = await fetch('https://api.linkedin.com/v2/userinfo', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -840,10 +879,10 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: resData.id,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on LinkedIn! Share ID: ${resData.id}`,
+        userMessage: `✅ VERIFIED & PUBLISHED: Live on LinkedIn personal profile! Share ID: ${resData.id}`,
       };
     } else {
-      const errDetail = resData?.message || `HTTP status ${res.status}`;
+      const errDetail = resData?.message || (resData?.serviceErrorCode ? `Code ${resData.serviceErrorCode}: ${resData.message}` : `HTTP status ${res.status}`);
       return {
         success: false,
         executionStatus: 'FAILED',
@@ -1200,12 +1239,13 @@ async function testPlatformConnection(platformKey: string): Promise<{
   const p = platformKey.toLowerCase();
 
   if (p === 'linkedin') {
-    const token = (process.env.LINKEDIN_ACCESS_TOKEN || '').trim();
+    const conn = memoryState.linkedInConnection;
+    const token = (conn?.connected && conn.accessToken ? conn.accessToken : (process.env.LINKEDIN_ACCESS_TOKEN || '')).trim();
     if (!token) {
       return {
         success: false,
         status: 'NOT_CONFIGURED',
-        message: 'Missing LINKEDIN_ACCESS_TOKEN in environment secrets.',
+        message: 'LinkedIn is not connected. Connect your Personal Profile via the "Connect LinkedIn" OAuth button or configure credentials.',
       };
     }
     try {
@@ -1214,18 +1254,26 @@ async function testPlatformConnection(platformKey: string): Promise<{
       });
       if (res.ok) {
         const data: any = await res.json();
+        const memberName = data.name || `${data.given_name || ''} ${data.family_name || ''}`.trim() || 'LinkedIn Member';
+        const memberUrn = data.sub ? `urn:li:person:${data.sub}` : conn?.authorUrn;
+        if (conn && conn.connected) {
+          conn.name = memberName;
+          if (data.picture) conn.picture = data.picture;
+          if (data.email) conn.email = data.email;
+          persistMemory();
+        }
         return {
           success: true,
           status: 'VERIFIED',
-          accountName: data.name || data.localizedFirstName || 'LinkedIn User',
-          accountIdentifier: data.sub ? `urn:li:person:${data.sub}` : undefined,
-          message: `Connected & Verified as ${data.name || 'LinkedIn Member'}.`,
+          accountName: memberName,
+          accountIdentifier: memberUrn,
+          message: `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`,
         };
       } else {
         return {
           success: false,
           status: res.status === 401 ? 'EXPIRED' : 'ERROR',
-          message: `LinkedIn returned HTTP ${res.status}. Token may be invalid or expired.`,
+          message: `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked. Please reconnect.`,
         };
       }
     } catch (e: any) {
@@ -2629,10 +2677,37 @@ app.post('/api/social/action', async (req: Request, res: Response) => {
 });
 
 /**
+ * Helper to determine canonical LinkedIn OAuth Redirect URI
+ */
+function getLinkedInRedirectUri(req?: Request, explicitUri?: string): string {
+  if (explicitUri && explicitUri.trim()) {
+    return explicitUri.trim();
+  }
+  const appBase = (process.env.APP_BASE_URL || process.env.APP_URL || '').trim();
+  if (appBase) {
+    return `${appBase.replace(/\/$/, '')}/api/auth/linkedin/callback`;
+  }
+  if (req) {
+    const origin = req.headers.origin || (req.headers.host ? `${req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'}://${req.headers.host}` : '');
+    if (origin) {
+      return `${origin.replace(/\/$/, '')}/api/auth/linkedin/callback`;
+    }
+  }
+  return 'https://ais-dev-qrqmhpjchdhsgz7e2uxem6-754235044596.asia-southeast1.run.app/api/auth/linkedin/callback';
+}
+
+/**
  * Multi-Platform Social Integrations Status Engine
  */
-function getPlatformIntegrationsStatus(): any[] {
-  const linkedinToken = (process.env.LINKEDIN_ACCESS_TOKEN || '').trim();
+function getPlatformIntegrationsStatus(req?: Request): any[] {
+  const conn = memoryState.linkedInConnection;
+  const isLinkedInOAuthConnected = Boolean(conn && conn.connected && conn.accessToken);
+  const staticLinkedInToken = (process.env.LINKEDIN_ACCESS_TOKEN || '').trim();
+  const isLinkedInConnected = isLinkedInOAuthConnected || Boolean(staticLinkedInToken);
+  const linkedInClientId = (process.env.LINKEDIN_CLIENT_ID || '').trim();
+  const linkedInClientSecret = (process.env.LINKEDIN_CLIENT_SECRET || '').trim();
+  const linkedInRedirectUri = getLinkedInRedirectUri(req);
+
   const fbToken = (process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '').trim();
   const fbPageId = (process.env.FACEBOOK_PAGE_ID || '').trim();
   const igToken = (process.env.INSTAGRAM_ACCESS_TOKEN || '').trim();
@@ -2646,23 +2721,44 @@ function getPlatformIntegrationsStatus(): any[] {
   return [
     {
       id: 'linkedin',
-      name: 'LinkedIn Member / UGC API',
+      name: 'LinkedIn Personal Profile (Member UGC API)',
       category: 'Professional',
-      status: linkedinToken ? 'CONNECTED' : 'NOT_CONFIGURED',
-      accountName: linkedinToken ? 'Configured Member' : undefined,
-      accountIdentifier: process.env.LINKEDIN_AUTHOR_URN || undefined,
+      status: isLinkedInConnected ? 'CONNECTED' : 'NOT_CONFIGURED',
+      authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_TOKEN' : 'OAUTH_2_0',
+      accountName: conn?.name || (staticLinkedInToken ? 'Configured Member (Env Token)' : undefined),
+      accountIdentifier: conn?.authorUrn || process.env.LINKEDIN_AUTHOR_URN || (conn?.memberSub ? `urn:li:person:${conn.memberSub}` : undefined),
+      avatarUrl: conn?.picture || undefined,
+      lastVerifiedAt: conn?.connectedAt || undefined,
+      oauthStatus: {
+        connected: isLinkedInConnected,
+        authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_ENV_TOKEN' : undefined,
+        name: conn?.name || (staticLinkedInToken ? 'Configured Personal Member' : undefined),
+        memberSub: conn?.memberSub,
+        authorUrn: conn?.authorUrn || (staticLinkedInToken ? process.env.LINKEDIN_AUTHOR_URN || 'urn:li:person:self' : undefined),
+        email: conn?.email,
+        picture: conn?.picture,
+        connectedAt: conn?.connectedAt,
+        expiresAt: conn?.expiresAt,
+        scopes: conn?.scopes || ['w_member_social', 'openid', 'profile', 'email'],
+        hasClientId: Boolean(linkedInClientId),
+        hasClientSecret: Boolean(linkedInClientSecret),
+        redirectUri: linkedInRedirectUri,
+      },
       developerPortalUrl: 'https://developer.linkedin.com',
       setupInstructions: [
-        '1. Go to LinkedIn Developer Portal (developer.linkedin.com) and create an App.',
-        '2. Request "Share on LinkedIn" and "Sign In with LinkedIn using OpenID Connect" products.',
-        '3. In Auth tab, generate an OAuth 2.0 Access Token with "w_member_social" scope.',
-        '4. Set LINKEDIN_ACCESS_TOKEN and optionally LINKEDIN_AUTHOR_URN in environment variables.',
+        '1. Go to LinkedIn Developer Portal (developer.linkedin.com/apps) and create or select your App.',
+        '2. In the "Products" tab, request: "Share on LinkedIn" (w_member_social) and "Sign In with LinkedIn using OpenID Connect" (openid, profile, email).',
+        '3. In the "Auth" tab, under "OAuth 2.0 settings", add Authorized Redirect URL:',
+        `   ${linkedInRedirectUri}`,
+        '4. Add LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in AI Studio Settings (⚙️).',
+        '5. Click the "Connect LinkedIn" button to authorize your Personal Profile in 1-Click!',
       ],
       requiredEnvVars: [
-        { key: 'LINKEDIN_ACCESS_TOKEN', label: 'OAuth 2.0 Access Token', configured: Boolean(linkedinToken), isSecret: true, placeholder: 'AQV...' },
-        { key: 'LINKEDIN_AUTHOR_URN', label: 'Author URN (Optional)', configured: Boolean(process.env.LINKEDIN_AUTHOR_URN), isSecret: false, placeholder: 'urn:li:person:xyz' },
+        { key: 'LINKEDIN_CLIENT_ID', label: 'OAuth 2.0 Client ID (Primary)', configured: Boolean(linkedInClientId), isSecret: false, placeholder: '77...' },
+        { key: 'LINKEDIN_CLIENT_SECRET', label: 'OAuth 2.0 Client Secret (Primary)', configured: Boolean(linkedInClientSecret), isSecret: true, placeholder: 'WPL_AP1...' },
+        { key: 'LINKEDIN_ACCESS_TOKEN', label: 'Legacy / Static Access Token (Fallback)', configured: Boolean(staticLinkedInToken), isSecret: true, placeholder: 'AQV...' },
       ],
-      capabilities: ['UGC Text Posts', 'Hashtags', 'Rich Snippets', 'Live Author Verification'],
+      capabilities: ['Personal Member Posts', 'OpenID Authentication', '1-Click OAuth Connect', 'Real UGC Publishing', 'Live Author Verification'],
     },
     {
       id: 'facebook',
@@ -2748,8 +2844,319 @@ function getPlatformIntegrationsStatus(): any[] {
   ];
 }
 
+// ------------------------------------------------------------------------------
+// LINKEDIN 3-LEGGED OAUTH 2.0 ROUTES (Personal Member Profile Targeting)
+// ------------------------------------------------------------------------------
+
+/**
+ * 1. Generate LinkedIn OAuth Authorization URL
+ */
+app.get('/api/auth/linkedin/url', (req: Request, res: Response) => {
+  const clientId = (process.env.LINKEDIN_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.LINKEDIN_CLIENT_SECRET || '').trim();
+  const reqRedirectUri = req.query.redirect_uri as string;
+  const redirectUri = getLinkedInRedirectUri(req, reqRedirectUri);
+
+  if (!clientId) {
+    return res.json({
+      success: false,
+      configured: false,
+      hasClientId: false,
+      hasClientSecret: Boolean(clientSecret),
+      redirectUri,
+      message: 'LINKEDIN_CLIENT_ID is not configured in environment variables. Please add LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in AI Studio Settings (⚙️).',
+    });
+  }
+
+  const state = 'hermes_li_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+  const scope = 'w_member_social openid profile email';
+  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=${encodeURIComponent(scope)}`;
+
+  res.json({
+    success: true,
+    configured: true,
+    hasClientId: true,
+    hasClientSecret: Boolean(clientSecret),
+    url: authUrl,
+    redirectUri,
+    state,
+  });
+});
+
+/**
+ * 2. LinkedIn OAuth 2.0 Authorization Callback Handler
+ */
+app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (req: Request, res: Response) => {
+  const { code, state, error, error_description } = req.query;
+  const clientId = (process.env.LINKEDIN_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.LINKEDIN_CLIENT_SECRET || '').trim();
+  const redirectUri = getLinkedInRedirectUri(req);
+
+  if (error || !code) {
+    const errMsg = (error_description as string) || (error as string) || 'LinkedIn Authorization was cancelled or denied.';
+    res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>LinkedIn Auth Cancelled</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 440px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">⚠️ LinkedIn Connection Cancelled</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${errMsg}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'LINKEDIN_OAUTH_ERROR', error: ${JSON.stringify(errMsg)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+    return;
+  }
+
+  if (!clientId || !clientSecret) {
+    res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Missing OAuth Credentials</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 460px; text-align: center; padding: 28px; border: 1px solid #854d0e; border-radius: 16px; background: #422006;">
+    <h3 style="color: #fde047; margin: 0 0 10px 0; font-size: 18px;">⚠️ Missing LinkedIn Client Secret</h3>
+    <p style="color: #fef08a; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">LINKEDIN_CLIENT_SECRET is required to complete the OAuth exchange. Please configure it in AI Studio Settings.</p>
+    <button onclick="window.close()" style="background: #a16207; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'LINKEDIN_OAUTH_ERROR', error: 'Missing LINKEDIN_CLIENT_SECRET' }, '*');
+    }
+  </script>
+</body>
+</html>`);
+    return;
+  }
+
+  try {
+    // Exchange authorization code for OAuth access token
+    const tokenParams = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: code as string,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+    });
+
+    const tokenRes = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: tokenParams.toString(),
+    });
+
+    const tokenData: any = await tokenRes.json().catch(() => null);
+
+    if (!tokenRes.ok || !tokenData?.access_token) {
+      const errDetail = tokenData?.error_description || tokenData?.error || `HTTP ${tokenRes.status}`;
+      res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>OAuth Exchange Failed</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 480px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">❌ Token Exchange Failed</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">LinkedIn rejected authorization code: ${errDetail}. Verify your Client ID, Secret, and Redirect URI.</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'LINKEDIN_OAUTH_ERROR', error: ${JSON.stringify(errDetail)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+      return;
+    }
+
+    const accessToken = tokenData.access_token;
+    const expiresIn = tokenData.expires_in || 5184000;
+    const grantedScopes = tokenData.scope ? (typeof tokenData.scope === 'string' ? tokenData.scope.split(' ') : tokenData.scope) : ['w_member_social', 'openid', 'profile', 'email'];
+
+    // Fetch authenticated member personal profile
+    const userinfoRes = await fetch('https://api.linkedin.com/v2/userinfo', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    let memberName = 'LinkedIn Member';
+    let memberSub = '';
+    let authorUrn = 'urn:li:person:self';
+    let memberEmail = '';
+    let memberPicture = '';
+
+    if (userinfoRes.ok) {
+      const uData: any = await userinfoRes.json().catch(() => null);
+      if (uData) {
+        memberSub = uData.sub || '';
+        memberName = uData.name || `${uData.given_name || ''} ${uData.family_name || ''}`.trim() || 'LinkedIn Member';
+        authorUrn = memberSub ? `urn:li:person:${memberSub}` : 'urn:li:person:self';
+        memberEmail = uData.email || '';
+        memberPicture = uData.picture || '';
+      }
+    }
+
+    // Persist securely in server state
+    memoryState.linkedInConnection = {
+      connected: true,
+      authType: 'OAUTH_2_0',
+      memberSub,
+      authorUrn,
+      name: memberName,
+      email: memberEmail,
+      picture: memberPicture,
+      connectedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      scopes: grantedScopes,
+      accessToken,
+    };
+    persistMemory();
+
+    // Log security audit entry
+    addAuditLog(
+      `LinkedIn Personal Profile Connected via OAuth 2.0 (${memberName} - ${authorUrn})`,
+      1,
+      'HUMAN_CONFIRMATION',
+      'VERIFIED'
+    );
+
+    res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LinkedIn Connected</title>
+</head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 440px; width: 100%; text-align: center; padding: 32px 24px; border: 1px solid #166534; border-radius: 20px; background: #052e16; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+    <div style="width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #15803d; display: flex; align-items: center; justify-content: center; font-size: 28px; color: #f0fdf4;">
+      ✓
+    </div>
+    <h2 style="color: #4ade80; margin: 0 0 8px 0; font-size: 20px; font-weight: 700;">LinkedIn Connected!</h2>
+    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Authenticated as <strong>${memberName}</strong></p>
+    <p style="color: #86efac; font-size: 12px; font-family: monospace; margin: 0 0 20px 0;">${authorUrn}</p>
+    <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
+      Target: Personal Member Profile (Real UGC Posts API Ready)
+    </div>
+    <button onclick="window.close()" style="background: #16a34a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;">Done</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({
+        type: 'LINKEDIN_OAUTH_SUCCESS',
+        member: {
+          name: ${JSON.stringify(memberName)},
+          authorUrn: ${JSON.stringify(authorUrn)},
+          picture: ${JSON.stringify(memberPicture)},
+          email: ${JSON.stringify(memberEmail)}
+        }
+      }, '*');
+      setTimeout(() => {
+        window.close();
+      }, 1500);
+    } else {
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
+    }
+  </script>
+</body>
+</html>`);
+  } catch (ex: any) {
+    res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>OAuth Error</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 480px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">❌ Authentication Exception</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${ex.message}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'LINKEDIN_OAUTH_ERROR', error: ${JSON.stringify(ex.message)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+  }
+});
+
+/**
+ * 3. LinkedIn Connection Status Engine
+ */
+app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
+  const clientId = (process.env.LINKEDIN_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.LINKEDIN_CLIENT_SECRET || '').trim();
+  const staticToken = (process.env.LINKEDIN_ACCESS_TOKEN || '').trim();
+  const staticUrn = (process.env.LINKEDIN_AUTHOR_URN || '').trim();
+  const redirectUri = getLinkedInRedirectUri(req);
+
+  if (memoryState.linkedInConnection && memoryState.linkedInConnection.connected) {
+    const conn = memoryState.linkedInConnection;
+    return res.json({
+      connected: true,
+      authType: conn.authType || 'OAUTH_2_0',
+      name: conn.name,
+      memberSub: conn.memberSub,
+      authorUrn: conn.authorUrn,
+      email: conn.email,
+      picture: conn.picture,
+      connectedAt: conn.connectedAt,
+      expiresAt: conn.expiresAt,
+      scopes: conn.scopes || ['w_member_social', 'openid', 'profile', 'email'],
+      hasClientId: Boolean(clientId),
+      hasClientSecret: Boolean(clientSecret),
+      redirectUri,
+    });
+  }
+
+  if (staticToken) {
+    return res.json({
+      connected: true,
+      authType: 'STATIC_ENV_TOKEN',
+      name: 'Configured Personal Member (Env Token)',
+      authorUrn: staticUrn || 'urn:li:person:self',
+      hasClientId: Boolean(clientId),
+      hasClientSecret: Boolean(clientSecret),
+      redirectUri,
+    });
+  }
+
+  return res.json({
+    connected: false,
+    hasClientId: Boolean(clientId),
+    hasClientSecret: Boolean(clientSecret),
+    redirectUri,
+    message: 'LinkedIn is not connected. Connect via OAuth 2.0 or configure credentials.',
+  });
+});
+
+/**
+ * 4. Disconnect LinkedIn OAuth Account
+ */
+app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
+  const prevMember = memoryState.linkedInConnection?.name || 'LinkedIn User';
+  memoryState.linkedInConnection = undefined;
+  persistMemory();
+
+  addAuditLog(
+    `LinkedIn Personal Profile Disconnected (${prevMember})`,
+    1,
+    'HUMAN_CONFIRMATION',
+    'VERIFIED'
+  );
+
+  res.json({ success: true, message: 'LinkedIn disconnected successfully.' });
+});
+
 app.get('/api/social/platforms', (req: Request, res: Response) => {
-  const platforms = getPlatformIntegrationsStatus();
+  const platforms = getPlatformIntegrationsStatus(req);
   res.json({ success: true, platforms });
 });
 
