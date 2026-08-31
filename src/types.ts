@@ -228,9 +228,47 @@ export interface FreelanceLead {
   };
 }
 
+export type SocialPlatformKey = 'linkedin' | 'facebook' | 'instagram' | 'youtube' | 'twitter';
+
+export type PlatformConnectionStatus =
+  | 'NOT_CONFIGURED'
+  | 'AUTH_REQUIRED'
+  | 'CONNECTED'
+  | 'ERROR'
+  | 'EXPIRED'
+  | 'VERIFIED';
+
+export type SocialPublishingState =
+  | 'DRAFT'
+  | 'APPROVAL_REQUIRED'
+  | 'APPROVED'
+  | 'EXECUTING'
+  | 'API_CONFIRMED'
+  | 'VERIFIED'
+  | 'FAILED'
+  | 'NOT_PUBLISHED'
+  | 'REJECTED';
+
+export interface PlatformIntegrationInfo {
+  id: SocialPlatformKey;
+  name: string;
+  category: 'Professional' | 'Social' | 'Visual' | 'Video' | 'Microblog';
+  status: PlatformConnectionStatus;
+  accountName?: string;
+  accountIdentifier?: string;
+  profileUrl?: string;
+  avatarUrl?: string;
+  lastVerifiedAt?: string;
+  errorMessage?: string;
+  requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean; placeholder: string }[];
+  developerPortalUrl: string;
+  setupInstructions: string[];
+  capabilities: string[];
+}
+
 export interface SocialMediaPostDraft {
   id: string;
-  platform: 'LinkedIn' | 'Twitter/X' | 'Instagram' | 'Telegram' | 'Telegram Channel' | string;
+  platform: 'LinkedIn' | 'Facebook Page' | 'Instagram' | 'YouTube' | 'Twitter/X' | 'Telegram' | string;
   topic: string;
   topicHi?: string;
   content: string;
@@ -239,12 +277,12 @@ export interface SocialMediaPostDraft {
   status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'not_published' | 'failed' | string;
   scheduledTime?: string;
   likesSimulated?: number;
-  executionStatus?: 'DRAFT' | 'PENDING_APPROVAL' | 'QUEUED' | 'EXECUTING' | 'SUCCESS' | 'FAILED' | 'VERIFIED' | 'NOT_PUBLISHED';
+  executionStatus?: 'DRAFT' | 'APPROVAL_REQUIRED' | 'APPROVED' | 'EXECUTING' | 'API_CONFIRMED' | 'SUCCESS' | 'FAILED' | 'VERIFIED' | 'NOT_PUBLISHED';
   verificationStatus?: 'VERIFIED' | 'UNVERIFIED' | 'MISSING_CREDENTIALS' | 'PROVIDER_ERROR' | 'STANDBY';
   errorReason?: string;
   providerUrn?: string;
   verifiedAt?: string;
-  finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED';
+  finalTruthState?: 'DRAFT' | 'APPROVAL_REQUIRED' | 'APPROVED' | 'EXECUTING' | 'API_CONFIRMED' | 'VERIFIED' | 'FAILED' | 'NOT_PUBLISHED' | 'REJECTED';
 }
 
 export interface ProactiveReportItem {

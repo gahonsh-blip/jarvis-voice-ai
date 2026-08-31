@@ -292,7 +292,56 @@ export function processOfflineCommand(
     };
   }
 
-  // 16. General Offline Fallback Greeting / Conversational Response
+  // 16. Conversational Greetings and Inquiries
+  if (lower === 'hi' || lower === 'hello' || lower === 'hey' || lower.includes('नमस्ते') || lower.includes('kaisa hai') || lower.includes('kaise ho')) {
+    const reply = isHindi
+      ? `नमस्ते ${updatedMemory.name || 'सर'}! हरमीस जार्विस ऑफ़लाइन मोड में सक्रिय है। मैं आपकी क्या मदद कर सकता हूँ?`
+      : `Greetings ${updatedMemory.name || 'Sir'}! Hermes Jarvis is standing by in local neural mode. How may I assist you today?`;
+    return {
+      reply,
+      intent: 'chat',
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  if (lower.includes('who are you') || lower.includes('तुम कौन हो') || lower.includes('aap kaun ho')) {
+    const reply = isHindi
+      ? `मैं हरमीस जार्विस (HERMES JARVIS) हूँ — आपका मोबाइल-नियंत्रित ऑटोनॉमस एआई असिस्टेंट।`
+      : `I am HERMES JARVIS — your mobile-controlled autonomous AI assistant running with local and cloud neural pipelines.`;
+    return {
+      reply,
+      intent: 'chat',
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  if (lower.includes('how are you') || lower.includes('कैसे हो') || lower.includes('सब ठीक')) {
+    const reply = isHindi
+      ? `सभी सिस्टम सामान्य रूप से काम कर रहे हैं, ${updatedMemory.name || 'सर'}। ऑफ़लाइन मेमोरी सुरक्षित है।`
+      : `All systems nominal and operating with high efficiency, ${updatedMemory.name || 'Sir'}. Offline memory is fully synchronized.`;
+    return {
+      reply,
+      intent: 'chat',
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  if (lower.includes('thank') || lower.includes('धन्यवाद') || lower.includes('shukriya')) {
+    const reply = isHindi
+      ? `आपकी सेवा में सदैव तत्पर, ${updatedMemory.name || 'सर'}!`
+      : `Always an honor to assist you, ${updatedMemory.name || 'Sir'}!`;
+    return {
+      reply,
+      intent: 'chat',
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 17. General Offline Fallback Conversational Response
   const userName = updatedMemory.name || 'Sir';
   const offlineNote = isHindi
     ? `कमांड स्वीकार की गई, ${userName}। मैं वर्तमान में लोकल ऑफ़लाइन मोड में काम कर रहा हूँ। आपका डेटा स्थानीय मेमोरी में सुरक्षित है।`
