@@ -4,6 +4,15 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 
+// Global error guards to prevent any third-party or network rejections from killing the dev server
+process.on('uncaughtException', (err) => {
+  console.warn('[Server Process Guard] Uncaught Exception:', err?.message || err);
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  console.warn('[Server Process Guard] Unhandled Rejection:', reason?.message || reason);
+});
+
 const app = express();
 const PORT = 3000;
 
@@ -431,6 +440,22 @@ let telegramMessages = [
   },
 ];
 
+function getCleanTelegramToken(): string | null {
+  const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim().replace(/^["']|["']$/g, '');
+  if (!token || token.length < 10 || !token.includes(':')) {
+    return null;
+  }
+  return token;
+}
+
+function getCleanAdminChatId(): string | null {
+  const raw = (process.env.TELEGRAM_ADMIN_CHAT_ID || '').trim().replace(/^["']|["']$/g, '');
+  return raw.length > 0 ? raw : null;
+}
+
+const initialTelegramToken = getCleanTelegramToken();
+const initialAdminChatId = getCleanAdminChatId();
+
 let telegramConfig: {
   botName: string;
   botUsername: string;
@@ -450,24 +475,24 @@ let telegramConfig: {
 } = {
   botName: 'Hermes JARVIS Mobile Controller',
   botUsername: '@HermesJarvisAssistantBot',
-  botTokenMasked: process.env.TELEGRAM_BOT_TOKEN
-    ? `${process.env.TELEGRAM_BOT_TOKEN.substring(0, 8)}...${process.env.TELEGRAM_BOT_TOKEN.slice(-4)}`
+  botTokenMasked: initialTelegramToken
+    ? `${initialTelegramToken.substring(0, Math.min(6, initialTelegramToken.length))}...${initialTelegramToken.slice(-4)}`
     : 'Not Configured (Add TELEGRAM_BOT_TOKEN)',
-  isLiveTokenConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+  isLiveTokenConfigured: Boolean(initialTelegramToken),
   isLiveConnected: false,
-  mode: process.env.TELEGRAM_BOT_TOKEN ? 'live_polling' : 'simulator',
-  webhookStatus: process.env.TELEGRAM_BOT_TOKEN ? 'polling' : 'waiting_token',
+  mode: initialTelegramToken ? 'live_polling' : 'simulator',
+  webhookStatus: initialTelegramToken ? 'polling' : 'waiting_token',
   telegramLink: 'https://t.me/BotFather',
-  allowedUserIds: process.env.TELEGRAM_ADMIN_CHAT_ID ? [process.env.TELEGRAM_ADMIN_CHAT_ID] : ['Owner (Auto-registers on /start)'],
+  allowedUserIds: initialAdminChatId ? [initialAdminChatId] : ['Owner (Auto-registers on /start)'],
   humanApprovalRequired: true,
   notificationsEnabled: true,
-  adminChatIdConfigured: Boolean(process.env.TELEGRAM_ADMIN_CHAT_ID),
+  adminChatIdConfigured: Boolean(initialAdminChatId),
   totalMessagesReceived: 3,
   lastActivity: new Date().toISOString(),
 };
 
 // Known active chat ID from environment or auto-registered from first /start message
-let activeTelegramChatId: string | number | null = process.env.TELEGRAM_ADMIN_CHAT_ID || null;
+let activeTelegramChatId: string | number | null = initialAdminChatId;
 let telegramPollingActive = false;
 let lastTelegramUpdateId = 0;
 
@@ -893,35 +918,81 @@ ${p.deliverables.map((d) => `- [${d.done ? 'x' : ' '}] ${d.text}`).join('\n')}
 // REAL TELEGRAM BOT MOBILE CONTROLLER ENGINE
 // -------------------------------------------------------------
 
-async function callTelegramApi(method: string, body?: any) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not configured');
-
-  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const data = await res.json();
-  if (!data.ok) {
-    throw new Error(data.description || `Telegram API call to ${method} failed`);
+async function callTelegramApi(method: string, body?: any, timeoutMs = 8000) {
+  const token = getCleanTelegramToken();
+  if (!token) {
+    throw new Error('TELEGRAM_BOT_TOKEN is missing or malformed');
   }
-  return data.result;
+
+  const controller = new AbortController();
+  const timeoutTimer = setTimeout(() => {
+    try {
+      controller.abort();
+    } catch {
+      // ignore
+    }
+  }, timeoutMs);
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutTimer);
+
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+      const err: any = new Error(`Telegram API returned non-JSON response (HTTP ${res.status})`);
+      err.statusCode = res.status;
+      throw err;
+    }
+
+    if (!data || !data.ok) {
+      const desc = data?.description || `Telegram API call to ${method} failed (HTTP ${res.status})`;
+      const err: any = new Error(desc);
+      err.statusCode = res.status;
+      err.errorCode = data?.error_code;
+      throw err;
+    }
+    return data.result;
+  } catch (err: any) {
+    clearTimeout(timeoutTimer);
+    if (err.name === 'AbortError') {
+      const abortErr: any = new Error(`Telegram API request to ${method} timed out after ${timeoutMs}ms`);
+      abortErr.statusCode = 408;
+      throw abortErr;
+    }
+    throw err;
+  }
 }
 
 async function sendRealTelegramMessage(chatId: string | number, text: string, replyMarkup?: any) {
+  if (!getCleanTelegramToken() || !chatId) return null;
   try {
     const result = await callTelegramApi('sendMessage', {
       chat_id: chatId,
       text,
       parse_mode: 'Markdown',
       reply_markup: replyMarkup,
-    });
+    }, 5000);
     return result;
   } catch (err: any) {
-    console.warn(`[Telegram Bot] Failed to send message to ${chatId}:`, err.message);
-    return null;
+    // If Markdown parsing fails or any other issue, attempt plain text fallback
+    try {
+      return await callTelegramApi('sendMessage', {
+        chat_id: chatId,
+        text,
+        reply_markup: replyMarkup,
+      }, 5000);
+    } catch (fallbackErr: any) {
+      console.warn(`[Telegram Bot] Failed to send message to ${chatId}:`, fallbackErr.message);
+      return null;
+    }
   }
 }
 
@@ -1037,9 +1108,11 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
   telegramMessages.push(botMsg);
   if (telegramMessages.length > 80) telegramMessages.shift();
 
-  // If real Telegram chat is active, send live message back to the phone!
-  if (chatId && process.env.TELEGRAM_BOT_TOKEN) {
-    await sendRealTelegramMessage(chatId, botReplyText, inlineKeyboard);
+  // If real Telegram chat is active and configured, attempt sending non-blocking
+  if (chatId && getCleanTelegramToken()) {
+    sendRealTelegramMessage(chatId, botReplyText, inlineKeyboard).catch((e) => {
+      console.warn('[Telegram Bot] Send message async note:', e.message);
+    });
   }
 
   persistMemory();
@@ -1051,12 +1124,12 @@ async function handleTelegramCallback(callbackQuery: any) {
   const chatId = callbackQuery.message?.chat?.id;
   const callbackId = callbackQuery.id;
 
-  // Acknowledge callback immediately
+  // Acknowledge callback safely
   try {
     await callTelegramApi('answerCallbackQuery', {
       callback_query_id: callbackId,
       text: 'Action processed by JARVIS',
-    });
+    }, 5000);
   } catch (err: any) {
     console.warn('[Telegram Bot] Callback answer warning:', err.message);
   }
@@ -1070,7 +1143,6 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data === 'cmd_gen_quote') {
     await processMobileCommand('JARVIS, client lead quotation बनाओ', 'user', chatId);
   } else if (data === 'approve_publish_post_1') {
-    // Approve post
     const targetPost = socialPosts.find((p) => p.id === 'post-1');
     if (targetPost) targetPost.status = 'published';
     securityMatrixState.auditLogs.unshift({
@@ -1107,12 +1179,19 @@ async function handleTelegramCallback(callbackQuery: any) {
 }
 
 async function startTelegramPolling() {
-  if (!process.env.TELEGRAM_BOT_TOKEN) return;
+  const token = getCleanTelegramToken();
+  if (!token) {
+    telegramConfig.isLiveConnected = false;
+    telegramConfig.isLiveTokenConfigured = false;
+    telegramConfig.mode = 'simulator';
+    telegramConfig.webhookStatus = 'waiting_token';
+    return;
+  }
   if (telegramPollingActive) return;
 
   try {
-    console.log('[Telegram Bot] Initializing connection with api.telegram.org...');
-    const botInfo = await callTelegramApi('getMe');
+    console.log('[Telegram Bot] Initializing connection with api.telegram.org (non-blocking)...');
+    const botInfo = await callTelegramApi('getMe', undefined, 5000);
     telegramConfig.isLiveConnected = true;
     telegramConfig.isLiveTokenConfigured = true;
     telegramConfig.botUsername = `@${botInfo.username}`;
@@ -1120,19 +1199,27 @@ async function startTelegramPolling() {
     telegramConfig.telegramLink = `https://t.me/${botInfo.username}`;
     telegramConfig.mode = 'live_polling';
     telegramConfig.webhookStatus = 'polling';
+    telegramConfig.errorMessage = undefined;
     console.log(`[Telegram Bot] Connected as ${telegramConfig.botUsername} (ID: ${botInfo.id})`);
 
     telegramPollingActive = true;
+    let consecutiveErrors = 0;
 
-    // Background Long-Polling Loop
+    // Background Long-Polling Loop (fail-safe and non-blocking)
     (async () => {
       while (telegramPollingActive) {
         try {
-          const updates = await callTelegramApi('getUpdates', {
-            offset: lastTelegramUpdateId + 1,
-            timeout: 20,
-            allowed_updates: ['message', 'callback_query'],
-          });
+          const updates = await callTelegramApi(
+            'getUpdates',
+            {
+              offset: lastTelegramUpdateId + 1,
+              timeout: 10,
+              allowed_updates: ['message', 'callback_query'],
+            },
+            14000
+          );
+
+          consecutiveErrors = 0;
 
           if (Array.isArray(updates) && updates.length > 0) {
             for (const update of updates) {
@@ -1152,25 +1239,51 @@ async function startTelegramPolling() {
                 }
 
                 if (text) {
-                  console.log(`[Telegram Bot] Received from phone (${senderName}): ${text}`);
-                  await processMobileCommand(text, senderName, chatId);
+                  await processMobileCommand(text, senderName, chatId).catch((cmdErr) => {
+                    console.warn('[Telegram Bot] Command processing note:', cmdErr.message);
+                  });
                 }
               } else if (update.callback_query) {
-                await handleTelegramCallback(update.callback_query);
+                await handleTelegramCallback(update.callback_query).catch((cbErr) => {
+                  console.warn('[Telegram Bot] Callback processing note:', cbErr.message);
+                });
               }
             }
           }
         } catch (pollErr: any) {
-          // Graceful backoff on network issues
-          await new Promise((r) => setTimeout(r, 4000));
+          consecutiveErrors++;
+          // Fatal auth/status errors or repeated network failures stop polling gracefully
+          if (
+            pollErr.errorCode === 401 ||
+            pollErr.statusCode === 401 ||
+            pollErr.statusCode === 404 ||
+            pollErr.statusCode === 409 ||
+            consecutiveErrors >= 3
+          ) {
+            console.warn(`[Telegram Bot] Polling paused (${pollErr.message}). Switching to standby.`);
+            telegramPollingActive = false;
+            telegramConfig.isLiveConnected = false;
+            telegramConfig.mode = 'simulator';
+            telegramConfig.webhookStatus = 'waiting_token';
+            telegramConfig.errorMessage = pollErr.message;
+            break;
+          }
+
+          await new Promise((r) => setTimeout(r, 6000));
         }
       }
-    })();
+    })().catch((loopErr) => {
+      console.warn('[Telegram Bot] Polling loop finished:', loopErr.message);
+      telegramPollingActive = false;
+      telegramConfig.isLiveConnected = false;
+    });
   } catch (err: any) {
-    console.warn('[Telegram Bot] Connection initialization note:', err.message);
+    console.warn('[Telegram Bot] Connection initialization note (server unaffected):', err.message);
     telegramConfig.errorMessage = err.message;
     telegramConfig.isLiveConnected = false;
+    telegramConfig.mode = 'simulator';
     telegramConfig.webhookStatus = 'waiting_token';
+    telegramPollingActive = false;
   }
 }
 
@@ -1218,31 +1331,40 @@ app.get('/api/telegram/status', (req: Request, res: Response) => {
 
 app.post('/api/telegram/test-live', async (req: Request, res: Response) => {
   try {
-    if (!process.env.TELEGRAM_BOT_TOKEN) {
+    const token = getCleanTelegramToken();
+    if (!token) {
       return res.json({
         success: false,
-        message: 'TELEGRAM_BOT_TOKEN is not defined in environment.',
+        message: 'TELEGRAM_BOT_TOKEN is not defined or is invalid in environment.',
         config: telegramConfig,
       });
     }
 
-    const botInfo = await callTelegramApi('getMe');
-    let notificationSent = false;
+    try {
+      const botInfo = await callTelegramApi('getMe', undefined, 5000);
+      let notificationSent = false;
 
-    if (activeTelegramChatId) {
-      const testMsg = `🔔 *HERMES JARVIS TEST SIGNAL*\n\nMobile gateway is online and securely authenticated from your web control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Cloud Node*: Oracle Always Free ARM64`;
-      const sendRes = await sendRealTelegramMessage(activeTelegramChatId, testMsg);
-      notificationSent = Boolean(sendRes);
+      if (activeTelegramChatId) {
+        const testMsg = `🔔 *HERMES JARVIS TEST SIGNAL*\n\nMobile gateway is online and securely authenticated from your web control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Cloud Node*: Oracle Always Free ARM64`;
+        const sendRes = await sendRealTelegramMessage(activeTelegramChatId, testMsg);
+        notificationSent = Boolean(sendRes);
+      }
+
+      return res.json({
+        success: true,
+        bot: botInfo,
+        notificationSent,
+        activeChatId: activeTelegramChatId,
+      });
+    } catch (apiErr: any) {
+      return res.json({
+        success: false,
+        message: apiErr.message || 'Failed to reach Telegram API.',
+        config: telegramConfig,
+      });
     }
-
-    res.json({
-      success: true,
-      bot: botInfo,
-      notificationSent,
-      activeChatId: activeTelegramChatId,
-    });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(200).json({ success: false, error: err?.message || 'Unknown error occurred' });
   }
 });
 
@@ -1795,13 +1917,18 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Jarvis Voice AI Server active on http://0.0.0.0:${PORT}`);
-    // Initialize Real Telegram Gateway
-    if (process.env.TELEGRAM_BOT_TOKEN) {
-      startTelegramPolling();
+    // Initialize Real Telegram Gateway in deferred non-blocking manner
+    const cleanToken = getCleanTelegramToken();
+    if (cleanToken) {
+      setTimeout(() => {
+        startTelegramPolling().catch((e) => console.warn('[Telegram Bot] Startup polling notice:', e.message));
+      }, 500);
     } else {
-      console.log('[Telegram Bot] TELEGRAM_BOT_TOKEN not provided. Simulator & Web Remote mode active.');
+      console.log('[Telegram Bot] TELEGRAM_BOT_TOKEN not provided or format invalid. Simulator & Web Remote mode active.');
     }
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error('[Server Error] Failed to initialize server:', err);
+});
