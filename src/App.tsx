@@ -24,55 +24,51 @@ import {
   ActiveAppWindow,
   IntentCategory,
 } from './types';
-import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock } from 'lucide-react';
+import {
+  loadLocalChatHistory,
+  saveLocalChatHistory,
+  clearLocalChatHistory,
+  loadLocalMemory,
+  saveLocalMemory,
+  loadLocalVoiceSettings,
+  saveLocalVoiceSettings,
+  queuePendingSync,
+  getPendingSyncQueue,
+  clearPendingSyncQueue,
+} from './utils/offlineStorage';
+import { processOfflineCommand } from './utils/localJarvisEngine';
+import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 
 export default function App() {
-  // State
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'init-1',
-      role: 'system',
-      content: 'HERMES JARVIS PROTOCOL ACTIVE. Connected to Oracle Cloud Always Free ARM node & Android Telegram Gateway.',
-      timestamp: new Date().toISOString(),
-    },
-    {
-      id: 'init-2',
-      role: 'jarvis',
-      content: 'Good day, Sir! Hermes Jarvis online and standing by. Master Blueprint Phase 0 (Safety) and Phase 1 (Cloud ARM VM) are ready. Speak or command me anytime.',
-      timestamp: new Date().toISOString(),
-    },
-  ]);
-
-  const [memory, setMemory] = useState<MemoryStore>({
-    name: '',
-    notes: [],
-    customKeyValues: {},
-    stats: {
-      totalCommands: 0,
-      actionsExecuted: 0,
-      lastActive: new Date().toISOString(),
-    },
-  });
+  // State with offline-first localStorage hydration
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadLocalChatHistory());
+  const [memory, setMemory] = useState<MemoryStore>(() => loadLocalMemory());
 
   const [activeApp, setActiveApp] = useState<ActiveAppWindow>(null);
   const [isListening, setIsListening] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [volumeLevel, setVolumeLevel] = useState<number>(0);
-  const [statusText, setStatusText] = useState<string>('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+  const [statusText, setStatusText] = useState<string>('SYSTEM READY • OFFLINE-FIRST STORAGE ACTIVE');
   const [geminiConnected, setGeminiConnected] = useState<boolean>(false);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [notepadInitialContent, setNotepadInitialContent] = useState<string>('');
   const [browserSearchQuery, setBrowserSearchQuery] = useState<string>('');
 
-  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
-    autoSpeak: true,
-    rate: 1.0,
-    pitch: 1.0,
-    volume: 1.0,
-    voiceURI: '',
-    language: 'en-US',
-    wakeWordEnabled: false,
-    wakeWord: 'jarvis',
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => {
+    const saved = loadLocalVoiceSettings();
+    return (
+      saved || {
+        autoSpeak: true,
+        rate: 1.0,
+        pitch: 1.0,
+        volume: 1.0,
+        voiceURI: '',
+        language: 'en-US',
+        wakeWordEnabled: false,
+        wakeWord: 'jarvis',
+      }
+    );
   });
 
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -80,6 +76,62 @@ export default function App() {
 
   // Audio Context & Recognition References
   const recognitionRef = useRef<any>(null);
+
+  // Synchronize state changes to localStorage
+  useEffect(() => {
+    saveLocalChatHistory(messages);
+  }, [messages]);
+
+  useEffect(() => {
+    saveLocalMemory(memory);
+  }, [memory]);
+
+  useEffect(() => {
+    saveLocalVoiceSettings(voiceSettings);
+  }, [voiceSettings]);
+
+  // Online / Offline Detection & Sync Queue Processor
+  const flushPendingSyncQueue = useCallback(async () => {
+    const queue = getPendingSyncQueue();
+    if (queue.length === 0) return;
+
+    console.log(`[OfflineStorage] Flushing ${queue.length} pending updates to server...`);
+    try {
+      // Send current complete local memory to keep server in sync
+      const currentMem = loadLocalMemory();
+      const res = await fetch('/api/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentMem),
+      });
+      if (res.ok) {
+        clearPendingSyncQueue();
+        console.log('[OfflineStorage] Pending sync queue flushed successfully.');
+      }
+    } catch (err) {
+      console.warn('[OfflineStorage] Retry flush failed, queued for next reconnect:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setStatusText('BACKEND RECONNECTED • SYNCING MEMORY');
+      flushPendingSyncQueue();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setStatusText('OFFLINE MODE ACTIVE • LOCAL PERSISTENCE RUNNING');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [flushPendingSyncQueue]);
 
   // Initialize Voices
   useEffect(() => {
@@ -95,20 +147,47 @@ export default function App() {
     }
   }, []);
 
-  // Fetch initial memory and health
+  // Fetch initial memory and health from server, merging with local storage
   useEffect(() => {
     fetch('/api/memory')
       .then((res) => res.json())
-      .then((data) => setMemory(data))
-      .catch((err) => console.warn('Memory fetch error:', err));
+      .then((serverData) => {
+        setMemory((prevLocal) => {
+          // Merge server data with any existing local memory
+          const merged: MemoryStore = {
+            ...prevLocal,
+            ...serverData,
+            name: serverData.name || prevLocal.name || '',
+            notes: (serverData.notes && serverData.notes.length > 0) ? serverData.notes : prevLocal.notes,
+            customKeyValues: {
+              ...prevLocal.customKeyValues,
+              ...(serverData.customKeyValues || {}),
+            },
+            stats: {
+              totalCommands: Math.max(prevLocal.stats?.totalCommands || 0, serverData.stats?.totalCommands || 0),
+              actionsExecuted: Math.max(prevLocal.stats?.actionsExecuted || 0, serverData.stats?.actionsExecuted || 0),
+              lastActive: serverData.stats?.lastActive || prevLocal.stats?.lastActive || new Date().toISOString(),
+            },
+          };
+          saveLocalMemory(merged);
+          return merged;
+        });
+        // Flush any offline queued mutations
+        flushPendingSyncQueue();
+      })
+      .catch((err) => {
+        console.warn('[OfflineStorage] Server fetch failed, running seamlessly from local offline memory:', err);
+      });
 
     fetch('/api/health')
       .then((res) => res.json())
       .then((data) => {
         if (data.geminiEnabled) setGeminiConnected(true);
       })
-      .catch((err) => console.warn('Health check error:', err));
-  }, []);
+      .catch(() => {
+        setGeminiConnected(false);
+      });
+  }, [flushPendingSyncQueue]);
 
   // Speak Text Function
   const speakText = useCallback(
@@ -217,7 +296,7 @@ export default function App() {
     []
   );
 
-  // Send Command to Backend
+  // Send Command to Backend with Offline Fallback
   const handleSendCommand = useCallback(
     async (text: string) => {
       if (!text.trim() || isProcessing) return;
@@ -229,9 +308,18 @@ export default function App() {
         timestamp: new Date().toISOString(),
       };
 
-      setMessages((prev) => [...prev, userMsg]);
+      setMessages((prev) => {
+        const next = [...prev, userMsg];
+        saveLocalChatHistory(next);
+        return next;
+      });
+
       setIsProcessing(true);
       setStatusText(`ANALYZING COMMAND: "${text}"`);
+
+      // Attempt backend API with a 6-second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       try {
         const res = await fetch('/api/chat', {
@@ -242,7 +330,14 @@ export default function App() {
             history: messages.slice(-6),
             language: voiceSettings.language,
           }),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
+
+        if (!res.ok) {
+          throw new Error(`Server returned status ${res.status}`);
+        }
 
         const data = await res.json();
         const jarvisMsg: ChatMessage = {
@@ -255,10 +350,18 @@ export default function App() {
           actionDetail: data.actionDetail,
         };
 
-        setMessages((prev) => [...prev, jarvisMsg]);
+        setMessages((prev) => {
+          const next = [...prev, jarvisMsg];
+          saveLocalChatHistory(next);
+          return next;
+        });
 
         if (data.memory) {
-          setMemory(data.memory);
+          setMemory((prev) => {
+            const merged = { ...prev, ...data.memory };
+            saveLocalMemory(merged);
+            return merged;
+          });
         }
 
         if (data.actionExecuted && data.intent) {
@@ -267,21 +370,47 @@ export default function App() {
 
         // Voice Response
         speakText(data.reply);
+        setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
       } catch (err: any) {
-        console.error('Chat error:', err);
-        const errMsg: ChatMessage = {
+        clearTimeout(timeoutId);
+        console.warn('[Hermes Jarvis] Backend unreachable or timed out, executing offline local intelligence engine:', err.message);
+
+        // Process seamlessly with Local Offline Intent & Fallback Engine
+        const localResult = processOfflineCommand(text, memory, voiceSettings.language);
+
+        const offlineJarvisMsg: ChatMessage = {
           id: String(Date.now() + 1),
           role: 'jarvis',
-          content: 'My internal communication bus experienced a slight delay. Please repeat your instruction.',
+          content: localResult.reply,
           timestamp: new Date().toISOString(),
+          intent: localResult.intent,
+          actionExecuted: localResult.actionExecuted,
+          actionDetail: localResult.actionDetail,
         };
-        setMessages((prev) => [...prev, errMsg]);
-        speakText(errMsg.content);
+
+        setMessages((prev) => {
+          const next = [...prev, offlineJarvisMsg];
+          saveLocalChatHistory(next);
+          return next;
+        });
+
+        if (localResult.updatedMemory) {
+          setMemory(localResult.updatedMemory);
+          saveLocalMemory(localResult.updatedMemory);
+          queuePendingSync('memory_sync', localResult.updatedMemory);
+        }
+
+        if (localResult.actionExecuted && localResult.intent) {
+          handleExecuteAction(localResult.intent, localResult.actionDetail?.payload);
+        }
+
+        speakText(localResult.reply);
+        setStatusText('LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE');
       } finally {
         setIsProcessing(false);
       }
     },
-    [isProcessing, messages, voiceSettings.language, speakText, handleExecuteAction]
+    [isProcessing, messages, memory, voiceSettings.language, speakText, handleExecuteAction]
   );
 
   // Setup Web Speech Recognition
@@ -357,8 +486,12 @@ export default function App() {
     }
   };
 
-  // Memory Handlers
+  // Memory Handlers with immediate LocalStorage persistence and background sync
   const handleUpdateName = async (name: string) => {
+    const updatedMemory = { ...memory, name };
+    setMemory(updatedMemory);
+    saveLocalMemory(updatedMemory);
+
     try {
       const res = await fetch('/api/memory', {
         method: 'POST',
@@ -366,13 +499,27 @@ export default function App() {
         body: JSON.stringify({ name }),
       });
       const data = await res.json();
-      if (data.memory) setMemory(data.memory);
+      if (data.memory) {
+        setMemory(data.memory);
+        saveLocalMemory(data.memory);
+      }
     } catch (err) {
-      console.warn('Update name failed:', err);
+      console.warn('[OfflineStorage] Update name offline, saved to localStorage and queued for sync:', err);
+      queuePendingSync('name', { name });
     }
   };
 
   const handleAddCustomKey = async (key: string, value: string) => {
+    const updatedMemory = {
+      ...memory,
+      customKeyValues: {
+        ...memory.customKeyValues,
+        [key]: value,
+      },
+    };
+    setMemory(updatedMemory);
+    saveLocalMemory(updatedMemory);
+
     try {
       const res = await fetch('/api/memory', {
         method: 'POST',
@@ -380,14 +527,22 @@ export default function App() {
         body: JSON.stringify({ customKeyValues: { [key]: value } }),
       });
       const data = await res.json();
-      if (data.memory) setMemory(data.memory);
+      if (data.memory) {
+        setMemory(data.memory);
+        saveLocalMemory(data.memory);
+      }
     } catch (err) {
-      console.warn('Add custom key failed:', err);
+      console.warn('[OfflineStorage] Add custom key offline, saved to localStorage and queued for sync:', err);
+      queuePendingSync('custom_key', { [key]: value });
     }
   };
 
   const handleDeleteNote = async (id: string) => {
     const updatedNotes = memory.notes.filter((n) => n.id !== id);
+    const updatedMemory = { ...memory, notes: updatedNotes };
+    setMemory(updatedMemory);
+    saveLocalMemory(updatedMemory);
+
     try {
       const res = await fetch('/api/memory', {
         method: 'POST',
@@ -395,9 +550,13 @@ export default function App() {
         body: JSON.stringify({ notes: updatedNotes }),
       });
       const data = await res.json();
-      if (data.memory) setMemory(data.memory);
+      if (data.memory) {
+        setMemory(data.memory);
+        saveLocalMemory(data.memory);
+      }
     } catch (err) {
-      console.warn('Delete note failed:', err);
+      console.warn('[OfflineStorage] Delete note offline, saved to localStorage and queued for sync:', err);
+      queuePendingSync('note_delete', { id });
     }
   };
 
@@ -409,6 +568,10 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
     const updatedNotes = [newNote, ...(memory.notes || [])];
+    const updatedMemory = { ...memory, notes: updatedNotes };
+    setMemory(updatedMemory);
+    saveLocalMemory(updatedMemory);
+
     try {
       const res = await fetch('/api/memory', {
         method: 'POST',
@@ -416,10 +579,19 @@ export default function App() {
         body: JSON.stringify({ notes: updatedNotes }),
       });
       const data = await res.json();
-      if (data.memory) setMemory(data.memory);
+      if (data.memory) {
+        setMemory(data.memory);
+        saveLocalMemory(data.memory);
+      }
     } catch (err) {
-      console.warn('Save note failed:', err);
+      console.warn('[OfflineStorage] Save note offline, saved to localStorage and queued for sync:', err);
+      queuePendingSync('note_add', newNote);
     }
+  };
+
+  const handleClearChatHistory = () => {
+    clearLocalChatHistory();
+    setMessages(loadLocalChatHistory());
   };
 
   return (
@@ -428,6 +600,7 @@ export default function App() {
       <HUDHeader
         userName={memory.name}
         geminiConnected={geminiConnected}
+        isOnline={isOnline}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenMemory={() => setActiveApp('memory')}
         onOpenBlueprint={() => setActiveApp('blueprint')}
@@ -497,6 +670,7 @@ export default function App() {
             onSendMessage={handleSendCommand}
             isProcessing={isProcessing}
             onSpeakAgain={speakText}
+            onClearHistory={handleClearChatHistory}
           />
         </div>
       </main>

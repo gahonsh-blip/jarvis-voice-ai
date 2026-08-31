@@ -202,7 +202,12 @@ export interface SecurityMatrixState {
     action: string;
     levelRequired: SecurityLevel;
     approvedBy: 'AUTO_RULE' | 'HUMAN_CONFIRMATION' | 'SYSTEM_POLICY' | string;
-    status: 'EXECUTED' | 'BLOCKED' | 'PENDING' | string;
+    status: 'EXECUTED' | 'BLOCKED' | 'PENDING' | 'VERIFIED' | 'FAILED' | 'NOT_PUBLISHED' | string;
+    targetPlatform?: string;
+    verificationStatus?: 'VERIFIED' | 'UNVERIFIED' | 'MISSING_CREDENTIALS' | 'PROVIDER_ERROR' | 'STANDBY';
+    errorReason?: string;
+    providerUrn?: string;
+    finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED' | string;
   }[];
 }
 
@@ -231,9 +236,15 @@ export interface SocialMediaPostDraft {
   content: string;
   hashtags: string[];
   creativePrompt: string;
-  status: 'draft' | 'pending_approval' | 'approved' | 'published' | string;
+  status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'not_published' | 'failed' | string;
   scheduledTime?: string;
   likesSimulated?: number;
+  executionStatus?: 'DRAFT' | 'PENDING_APPROVAL' | 'QUEUED' | 'EXECUTING' | 'SUCCESS' | 'FAILED' | 'VERIFIED' | 'NOT_PUBLISHED';
+  verificationStatus?: 'VERIFIED' | 'UNVERIFIED' | 'MISSING_CREDENTIALS' | 'PROVIDER_ERROR' | 'STANDBY';
+  errorReason?: string;
+  providerUrn?: string;
+  verifiedAt?: string;
+  finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED';
 }
 
 export interface ProactiveReportItem {
@@ -251,4 +262,71 @@ export interface ProactiveReportItem {
     pendingTasksCount: number;
     socialPostsPublished: number;
   };
+}
+
+export interface DaemonTelemetry {
+  daemon: {
+    status: 'ONLINE' | 'STANDBY' | 'DEGRADED';
+    pid: number;
+    uptimeSeconds: number;
+    nodeVersion: string;
+    memoryMb: number;
+    platform: string;
+    host: string;
+    port: number;
+    bootTimestamp: string;
+    heartbeatTimestamp: string;
+  };
+  telegram: {
+    configured: boolean;
+    connected: boolean;
+    mode: 'live_polling' | 'live_webhook' | 'simulator';
+    botUsername: string;
+    adminChatIdConfigured: boolean;
+    activeChatId: string | number | null;
+    totalMessagesReceived: number;
+    processedUpdatesCount: number;
+    lastHeartbeat: string;
+    errorMessage?: string;
+  };
+  aiEngine: {
+    provider: string;
+    geminiConfigured: boolean;
+    model: string;
+    fallbackActive: boolean;
+    bilingualSupport: boolean;
+  };
+  scheduler: {
+    active: boolean;
+    activeJobsCount: number;
+    jobs: { id: string; name: string; cronOrTime: string; lastRun?: string; nextRun: string }[];
+    lastRunLog: string[];
+  };
+  storage: {
+    persistenceFile: string;
+    existsOnDisk: boolean;
+    notesCount: number;
+    leadsCount: number;
+    postsCount: number;
+    auditLogsCount: number;
+    lastPersisted: string;
+  };
+  integrations: {
+    linkedin: {
+      configured: boolean;
+      authorUrnConfigured: boolean;
+      status: 'CONFIGURED_LIVE' | 'STANDBY_MISSING_CREDENTIALS';
+      lastVerification?: string;
+    };
+    telegram: {
+      configured: boolean;
+      status: 'CONNECTED' | 'STANDBY' | 'SIMULATOR';
+    };
+    oracleCloud: {
+      tier: string;
+      status: 'RUNNING' | 'STANDBY';
+      cost: string;
+    };
+  };
+  recentAuditLogs: any[];
 }

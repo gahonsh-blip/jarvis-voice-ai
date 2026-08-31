@@ -207,14 +207,18 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                       <span className="text-xs font-bold text-slate-200">{post.platform}</span>
                       <span
                         className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                          post.status === 'published'
+                          post.finalTruthState === 'VERIFIED' || post.status === 'published'
                             ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            : post.status === 'not_published' || post.finalTruthState === 'NOT_PUBLISHED'
+                            ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                            : post.status === 'failed' || post.finalTruthState === 'FAILED'
+                            ? 'bg-rose-950 text-rose-300 border border-rose-800'
                             : post.status === 'pending_approval'
-                            ? 'bg-amber-950 text-amber-300 border border-amber-800 animate-pulse'
+                            ? 'bg-purple-950 text-purple-300 border border-purple-800 animate-pulse'
                             : 'bg-slate-800 text-slate-400'
                         }`}
                       >
-                        {post.status.replace('_', ' ').toUpperCase()}
+                        {post.finalTruthState ? post.finalTruthState : post.status.replace('_', ' ').toUpperCase()}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 truncate">{post.topic}</p>
@@ -266,16 +270,38 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                 </div>
               )}
 
+              {/* Verification & Error Diagnostics */}
+              {selectedPost.errorReason && (
+                <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800 text-xs font-mono flex flex-col gap-1 text-amber-200">
+                  <span className="font-bold flex items-center gap-1 text-amber-400">
+                    <ShieldAlert className="w-3.5 h-3.5" /> Verification Notice:
+                  </span>
+                  <span className="text-[11px] leading-relaxed">{selectedPost.errorReason}</span>
+                </div>
+              )}
+
+              {selectedPost.providerUrn && (
+                <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800 text-xs font-mono flex items-center justify-between text-emerald-200">
+                  <span>Provider URN:</span>
+                  <span className="text-emerald-400 font-bold text-[11px]">{selectedPost.providerUrn}</span>
+                </div>
+              )}
+
               {/* Approval Actions */}
               <div className="flex items-center justify-between pt-4 border-t border-slate-800">
                 <div className="text-xs font-mono text-slate-400">
-                  {selectedPost.status === 'published' ? (
+                  {selectedPost.status === 'published' || selectedPost.finalTruthState === 'VERIFIED' ? (
                     <span className="text-emerald-400 font-bold flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4" />
-                      Live & Broadcasted ({selectedPost.likesSimulated} engagements)
+                      Live & Verified
+                    </span>
+                  ) : selectedPost.status === 'not_published' || selectedPost.finalTruthState === 'NOT_PUBLISHED' ? (
+                    <span className="text-amber-400 font-bold flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4" />
+                      Not Published (Held in Draft)
                     </span>
                   ) : (
-                    <span>Status: Awaiting your action</span>
+                    <span>Status: Awaiting Human Action</span>
                   )}
                 </div>
 

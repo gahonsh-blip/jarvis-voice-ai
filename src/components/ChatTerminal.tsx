@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Terminal as TerminalIcon, Sparkles, CheckCircle2, ChevronRight, Zap, Volume2 } from 'lucide-react';
+import { Send, Terminal as TerminalIcon, Sparkles, CheckCircle2, ChevronRight, Zap, Volume2, Database, Trash2, HardDrive } from 'lucide-react';
 import { ChatMessage } from '../types';
 
 interface ChatTerminalProps {
@@ -7,6 +7,7 @@ interface ChatTerminalProps {
   onSendMessage: (text: string) => void;
   isProcessing: boolean;
   onSpeakAgain: (text: string) => void;
+  onClearHistory?: () => void;
 }
 
 export const ChatTerminal: React.FC<ChatTerminalProps> = ({
@@ -14,6 +15,7 @@ export const ChatTerminal: React.FC<ChatTerminalProps> = ({
   onSendMessage,
   isProcessing,
   onSpeakAgain,
+  onClearHistory,
 }) => {
   const [inputVal, setInputVal] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -38,11 +40,28 @@ export const ChatTerminal: React.FC<ChatTerminalProps> = ({
           <span className="text-xs font-hud font-bold text-cyan-200 tracking-wider">
             JARVIS COMMAND STREAM & TRANSCRIPT
           </span>
+          <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-[10px] font-mono text-cyan-300">
+            <HardDrive className="w-3 h-3 text-cyan-400" />
+            <span>LOCAL MEMORY ({messages.length})</span>
+          </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block"></span>
+
+        <div className="flex items-center gap-2">
+          {onClearHistory && messages.length > 2 && (
+            <button
+              onClick={onClearHistory}
+              className="px-2 py-0.5 rounded bg-slate-900 hover:bg-red-950/60 border border-slate-800 hover:border-red-500/40 text-[10px] font-mono text-slate-400 hover:text-red-300 flex items-center gap-1 transition-colors"
+              title="Clear Local Transcript"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span className="hidden md:inline">Clear</span>
+            </button>
+          )}
+          <div className="flex items-center gap-1.5 ml-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block"></span>
+          </div>
         </div>
       </div>
 

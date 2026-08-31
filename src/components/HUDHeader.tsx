@@ -17,6 +17,7 @@ import {
 interface HUDHeaderProps {
   userName?: string;
   geminiConnected: boolean;
+  isOnline?: boolean;
   onOpenSettings: () => void;
   onOpenMemory: () => void;
   onOpenBlueprint: () => void;
@@ -31,6 +32,7 @@ interface HUDHeaderProps {
 export const HUDHeader: React.FC<HUDHeaderProps> = ({
   userName,
   geminiConnected,
+  isOnline = true,
   onOpenSettings,
   onOpenMemory,
   onOpenBlueprint,
@@ -82,6 +84,17 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono font-bold">
                   ₹0 Always Free
                 </span>
+                {isOnline ? (
+                  <span className="hidden sm:inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                    SYNCED
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-500/50 text-amber-300 font-mono font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    OFFLINE READY
+                  </span>
+                )}
               </div>
               <p className="text-xs font-mono text-slate-400 flex items-center gap-1.5">
                 <span>OPERATOR:</span>

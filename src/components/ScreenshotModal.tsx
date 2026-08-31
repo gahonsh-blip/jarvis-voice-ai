@@ -15,17 +15,24 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
 
   const takeScreenCapture = async () => {
     setIsCapturing(true);
+    let activeStream: MediaStream | null = null;
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
+        activeStream = await navigator.mediaDevices.getDisplayMedia({
           video: { displaySurface: 'browser' },
         });
 
-        const track = stream.getVideoTracks()[0];
-        // Capture using video element for universal browser support
         const video = document.createElement('video');
-        video.srcObject = stream;
-        await video.play();
+        video.srcObject = activeStream;
+        video.muted = true;
+        await new Promise<void>((resolve) => {
+          video.onloadedmetadata = () => {
+            video.play().then(() => resolve()).catch(() => resolve());
+          };
+          // Timeout fallback in case event doesn't fire immediately
+          setTimeout(resolve, 800);
+        });
+
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth || 1280;
         canvas.height = video.videoHeight || 720;
@@ -35,7 +42,6 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
           const dataUrl = canvas.toDataURL('image/png');
           setCapturedImage(dataUrl);
         }
-        track.stop();
       } else {
         // Fallback simulation screenshot using canvas
         simulateScreenshot();
@@ -44,6 +50,15 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
       console.warn('DisplayMedia capture denied or unsupported, using canvas snapshot fallback.', err);
       simulateScreenshot();
     } finally {
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // ignore
+          }
+        });
+      }
       setIsCapturing(false);
     }
   };

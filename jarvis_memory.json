@@ -1,0 +1,163 @@
+{
+  "name": "",
+  "notes": [
+    {
+      "id": "1",
+      "title": "Project Setup Notes",
+      "content": "Jarvis Voice Assistant migrated to Node.js & React with full autonomy and speech recognition.",
+      "createdAt": "2026-08-31T10:26:35.715Z"
+    }
+  ],
+  "customKeyValues": {
+    "protocol": "Jarvis V2 Core",
+    "runtime": "Node.js + Oracle ARM64 Always Free",
+    "status": "ONLINE",
+    "persistence": "Durable Disk Sync (jarvis_memory.json)",
+    "version": "2.5.0-autonomous"
+  },
+  "stats": {
+    "totalCommands": 17,
+    "actionsExecuted": 3,
+    "lastActive": "2026-08-31T11:38:59.310Z"
+  },
+  "processedTelegramUpdates": [],
+  "socialPosts": [
+    {
+      "id": "post-1",
+      "platform": "LinkedIn",
+      "topic": "How Autonomous AI Agents are transforming Freelance Engineering",
+      "topicHi": "ऑटोनॉमस एआई एजेंट्स कैसे फ्रीलांसिंग को बदल रहे हैं",
+      "content": "🚀 The future of engineering isn't writing code manually from scratch — it's orchestrating autonomous AI agents like Hermes and Jarvis.\n\nFrom handling automated client requirement audits to drafting quotations and managing cloud servers, our Always-Free Oracle ARM stack delivers ₹0 infrastructure cost with enterprise capabilities.\n\nAre you building single-task chatbots or full autonomous agents?\n\n#ArtificialIntelligence #FreelanceTech #DevOps #OracleCloud #AutonomousAgents #BuildInPublic",
+      "hashtags": [
+        "#ArtificialIntelligence",
+        "#FreelanceTech",
+        "#DevOps",
+        "#OracleCloud",
+        "#AutonomousAgents"
+      ],
+      "creativePrompt": "Futuristic sci-fi holographic workspace showing an AI core managing multiple cloud nodes and mobile notifications, 8k resolution, cinematic lighting.",
+      "status": "not_published",
+      "scheduledTime": "Today at 05:00 PM IST",
+      "likesSimulated": 0,
+      "executionStatus": "NOT_PUBLISHED",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "finalTruthState": "DRAFT",
+      "errorReason": "LINKEDIN_ACCESS_TOKEN is not configured in server environment. Post is held safely in local DRAFT queue without false claims."
+    },
+    {
+      "id": "post-2",
+      "platform": "Twitter/X",
+      "topic": "Oracle Always Free ARM VM Guide",
+      "topicHi": "ओरेकल ऑलवेज फ्री एआरएम वीएम गाइड",
+      "content": "💡 PSA for developers:\nOracle Cloud offers 4 ARM OCPUs, 24GB RAM, and 200GB storage completely ₹0 / forever.\n\nPair it with an autonomous AI agent + Telegram webhook, and you have a 24/7 personal assistant on your phone without paying a penny.\n\nThread below on how we set up Phase 0 & 1 👇",
+      "hashtags": [
+        "#CloudComputing",
+        "#OracleCloud",
+        "#Developers",
+        "#AI"
+      ],
+      "creativePrompt": "Minimalist tech diagram of mobile connected to cloud server with zero cost badge.",
+      "status": "draft",
+      "scheduledTime": "Tomorrow at 10:00 AM IST",
+      "likesSimulated": 0,
+      "executionStatus": "DRAFT",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "DRAFT"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "audit-1788176335875",
+      "timestamp": "2026-08-31T11:38:55.875Z",
+      "action": "Execute Level 4 LinkedIn Publish (post-1)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_CONFIRMATION_WEB_PANEL",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "LinkedIn",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "LINKEDIN_ACCESS_TOKEN is not configured in server environment. Post is held safely in local DRAFT queue without false claims.",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "log-1",
+      "timestamp": "2026-08-31T09:38:50.226Z",
+      "action": "Read Git Repository Status (Level 1)",
+      "levelRequired": 1,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-2",
+      "timestamp": "2026-08-31T10:38:50.226Z",
+      "action": "Draft Social Media Post for LinkedIn (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-3",
+      "timestamp": "2026-08-31T11:23:50.226Z",
+      "action": "Generate Client Quotation ₹45,000 (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    }
+  ],
+  "freelanceLeads": [
+    {
+      "id": "lead-1",
+      "clientName": "Aarav Tech Solutions (Bengaluru)",
+      "source": "Website Form",
+      "projectType": "AI Integration",
+      "rawRequirement": "Need an autonomous customer support chatbot with WhatsApp integration and CRM sync.",
+      "budgetEstimate": {
+        "currency": "INR",
+        "amount": 65000
+      },
+      "status": "Quotation Sent",
+      "createdAt": "2026-08-30T11:38:50.226Z",
+      "quotation": {
+        "scopeSummary": "Autonomous multi-lingual WhatsApp AI bot with CRM lead capture & real-time notification webhook.",
+        "timelineDays": 10,
+        "totalPrice": 65000,
+        "milestones": [
+          {
+            "title": "Architecture & WhatsApp Business API Setup",
+            "price": 20000,
+            "days": 3
+          },
+          {
+            "title": "Gemini AI Prompt & Intent Engine",
+            "price": 25000,
+            "days": 4
+          },
+          {
+            "title": "CRM Database Sync & Testing",
+            "price": 20000,
+            "days": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "lead-2",
+      "clientName": "Global Horizon Exports",
+      "source": "Telegram AI Bot",
+      "projectType": "Full-Stack Web App",
+      "rawRequirement": "B2B product catalog portal with inventory tracker and PDF quotation generator.",
+      "budgetEstimate": {
+        "currency": "INR",
+        "amount": 85000
+      },
+      "status": "AI Requirements Extracted",
+      "createdAt": "2026-08-31T03:38:50.226Z"
+    }
+  ],
+  "schedulerState": {}
+}

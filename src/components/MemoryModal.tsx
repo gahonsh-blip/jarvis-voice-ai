@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Database, Plus, Trash2, Edit3, User, BookOpen, Clock, Activity } from 'lucide-react';
+import { X, Database, Plus, Trash2, Edit3, User, BookOpen, Clock, Activity, Download, HardDrive, CheckCircle } from 'lucide-react';
 import { MemoryStore } from '../types';
 
 interface MemoryModalProps {
@@ -24,6 +24,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
   const [newKey, setNewKey] = useState('');
   const [newVal, setNewVal] = useState('');
   const [activeTab, setActiveTab] = useState<'profile' | 'notes' | 'knowledge'>('profile');
+  const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
@@ -41,6 +42,22 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
     setNewVal('');
   };
 
+  const handleExportJSON = () => {
+    try {
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(memory, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', dataStr);
+      downloadAnchor.setAttribute('download', `hermes_jarvis_memory_${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (err) {
+      console.warn('Failed to export memory JSON:', err);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
       <div className="w-full max-w-2xl bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col glow-cyan-sm max-h-[85vh]">
@@ -51,21 +68,37 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
               <Database className="w-4 h-4 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-sm font-hud font-bold text-cyan-200 uppercase tracking-wider">
-                JARVIS MEMORY BANKS [memory.json]
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-hud font-bold text-cyan-200 uppercase tracking-wider">
+                  JARVIS MEMORY BANKS [memory.json]
+                </h2>
+                <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-mono">
+                  <HardDrive className="w-2.5 h-2.5" />
+                  LocalStorage Synced
+                </span>
+              </div>
               <span className="text-[11px] font-mono text-slate-400">
-                Persistent Identity & Knowledge Matrix
+                Offline-First Persistent Identity & Knowledge Matrix
               </span>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportJSON}
+              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-xs font-mono text-cyan-300 flex items-center gap-1 transition-colors"
+              title="Download Memory Backup JSON"
+            >
+              {copied ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Downloaded' : 'Backup'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Selection */}

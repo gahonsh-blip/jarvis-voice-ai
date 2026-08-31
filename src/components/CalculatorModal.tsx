@@ -31,13 +31,21 @@ export const CalculatorModal: React.FC<CalculatorModalProps> = ({ isOpen, onClos
 
   const handleCalculate = () => {
     try {
-      // Safe math evaluator without eval()
-      const sanitized = display.replace(/×/g, '*').replace(/÷/g, '/').replace(/\^/g, '**');
-      // Using Function constructor with strict scope
+      // Safe math evaluator
+      const sanitized = display.replace(/×/g, '*').replace(/÷/g, '/').replace(/\^/g, '**').trim();
+      // Ensure only numbers, decimal points, basic operators, and parentheses
+      if (!/^[0-9+\-*/().\s*]+$/.test(sanitized)) {
+        setDisplay('Error');
+        return;
+      }
       const res = new Function(`'use strict'; return (${sanitized})`)();
-      const formatted = String(Number.isFinite(res) ? Math.round(res * 100000000) / 100000000 : 'Error');
+      const formatted = typeof res === 'number' && Number.isFinite(res)
+        ? String(Math.round(res * 100000000) / 100000000)
+        : 'Error';
       setEquation(`${display} = ${formatted}`);
-      setHistory((prev) => [ `${display} = ${formatted}`, ...prev.slice(0, 5) ]);
+      if (formatted !== 'Error') {
+        setHistory((prev) => [ `${display} = ${formatted}`, ...prev.slice(0, 5) ]);
+      }
       setDisplay(formatted);
     } catch {
       setDisplay('Error');

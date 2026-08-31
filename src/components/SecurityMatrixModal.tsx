@@ -217,10 +217,10 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
               {securityState?.auditLogs.map((log) => (
                 <div
                   key={log.id}
-                  className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center justify-between"
+                  className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 font-bold text-[10px]">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 font-bold text-[10px] shrink-0">
                       Level {log.levelRequired}
                     </span>
                     <span className="text-slate-200">{log.action}</span>
@@ -228,7 +228,19 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
                   <div className="flex items-center gap-3 text-[11px]">
                     <span className="text-slate-500">By: {log.approvedBy}</span>
-                    <span className="text-emerald-400 font-bold">{log.status}</span>
+                    <span
+                      className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                        log.status === 'VERIFIED' || log.status === 'EXECUTED'
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          : log.status === 'NOT_PUBLISHED'
+                          ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                          : log.status === 'BLOCKED' || log.status === 'FAILED'
+                          ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                          : 'bg-slate-800 text-slate-300'
+                      }`}
+                    >
+                      {log.status}
+                    </span>
                     <span className="text-slate-500">
                       {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
