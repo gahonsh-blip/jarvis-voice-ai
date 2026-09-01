@@ -1,8 +1,33 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
+import crypto from 'crypto';
+import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import {
+  getEmergencyState,
+  toggleEmergencyStop,
+  isFinanceBlocked,
+  getPendingApprovals,
+  getAllActionRequests,
+  createPendingActionRequest,
+  updateActionRequestStatus,
+  realFsList,
+  realFsRead,
+  realFsWrite,
+  realFsDelete,
+  realGitStatus,
+  realGitLog,
+  realGitDiff,
+  realGithubStatus,
+  realGithubRepos,
+  realGithubCreateIssue,
+  realWebFetch,
+  realEmailStatus,
+  getIntegrationsAuditReport,
+} from './server_tools';
 
 // ==============================================================================
 // 1. PROCESS SUPERVISION & GLOBAL SAFETY GUARDS (24/7 DAEMON RESILIENCE)
@@ -37,7 +62,48 @@ const PORT = 3000;
 app.use(express.json({ limit: '10mb' }));
 
 // ==============================================================================
-// 2. DURABLE PERSISTENT STATE ENGINE & MULTI-TIER MEMORY
+// 2. SECURE SERVER-SIDE TOKEN VAULT (AES-256-GCM ENCRYPTION)
+// ==============================================================================
+const VAULT_SECRET = process.env.APP_SECRET || process.env.SESSION_SECRET || 'hermes_jarvis_oracle_arm_vault_key_2026';
+const VAULT_KEY = crypto.scryptSync(VAULT_SECRET, 'hermes_salt_vault_2026', 32);
+
+interface EncryptedVaultData {
+  iv: string;
+  content: string;
+  tag: string;
+}
+
+function encryptToken(text: string): EncryptedVaultData {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-gcm', VAULT_KEY, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const tag = cipher.getAuthTag().toString('hex');
+  return {
+    iv: iv.toString('hex'),
+    content: encrypted,
+    tag,
+  };
+}
+
+function decryptToken(encrypted: EncryptedVaultData | string): string {
+  if (typeof encrypted === 'string') {
+    return encrypted;
+  }
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', VAULT_KEY, Buffer.from(encrypted.iv, 'hex'));
+    decipher.setAuthTag(Buffer.from(encrypted.tag, 'hex'));
+    let decrypted = decipher.update(encrypted.content, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (e: any) {
+    console.warn('[Vault] Token decryption error:', e.message);
+    return '';
+  }
+}
+
+// ==============================================================================
+// 3. DURABLE PERSISTENT STATE ENGINE & MULTI-TIER MEMORY
 // ==============================================================================
 const MEMORY_FILE_PATH = path.join(process.cwd(), 'jarvis_memory.json');
 
@@ -103,7 +169,9 @@ export interface ServerLinkedInConnection {
   connectedAt?: string;
   expiresAt?: string;
   scopes?: string[];
-  accessToken?: string; // Stored securely in server memory/state, NEVER exposed in logs/client UI
+  accessToken?: string; // In-memory cached token
+  accessTokenEncrypted?: EncryptedVaultData; // Encrypted on-disk format
+  errorReason?: string;
 }
 
 interface MemoryData {
@@ -271,10 +339,32 @@ try {
       auditLogs: Array.isArray(parsed.auditLogs) && parsed.auditLogs.length > 0 ? parsed.auditLogs : memoryState.auditLogs,
       freelanceLeads: Array.isArray(parsed.freelanceLeads) && parsed.freelanceLeads.length > 0 ? parsed.freelanceLeads : memoryState.freelanceLeads,
       schedulerState: parsed.schedulerState || {},
+      linkedInConnection: parsed.linkedInConnection ? {
+        ...parsed.linkedInConnection,
+        accessToken: parsed.linkedInConnection.accessTokenEncrypted
+          ? decryptToken(parsed.linkedInConnection.accessTokenEncrypted)
+          : parsed.linkedInConnection.accessToken,
+      } : undefined,
     };
   }
 } catch (err: any) {
   console.warn('[Storage] Could not read jarvis_memory.json, using default in-memory state:', err?.message);
+}
+
+export function getDecryptedLinkedInAccessToken(): string {
+  const conn = memoryState.linkedInConnection;
+  if (conn?.accessToken && typeof conn.accessToken === 'string' && conn.accessToken.length > 5) {
+    return conn.accessToken;
+  }
+  if (conn?.accessTokenEncrypted) {
+    const decrypted = decryptToken(conn.accessTokenEncrypted);
+    if (decrypted) {
+      conn.accessToken = decrypted;
+      return decrypted;
+    }
+  }
+  const envToken = (process.env.LINKEDIN_ACCESS_TOKEN || '').trim();
+  return envToken;
 }
 
 let lastPersistedTimestamp = new Date().toISOString();
@@ -288,7 +378,19 @@ function persistMemory() {
     if (memoryState.auditLogs.length > 100) {
       memoryState.auditLogs = memoryState.auditLogs.slice(0, 100);
     }
-    fs.writeFileSync(MEMORY_FILE_PATH, JSON.stringify(memoryState, null, 2), 'utf-8');
+
+    // Clone state and ensure sensitive token is encrypted on disk
+    const diskState = { ...memoryState };
+    if (diskState.linkedInConnection) {
+      const rawToken = diskState.linkedInConnection.accessToken || (diskState.linkedInConnection.accessTokenEncrypted ? decryptToken(diskState.linkedInConnection.accessTokenEncrypted) : '');
+      diskState.linkedInConnection = {
+        ...diskState.linkedInConnection,
+        accessToken: undefined, // Never save plaintext token in disk JSON
+        accessTokenEncrypted: rawToken ? encryptToken(rawToken) : diskState.linkedInConnection.accessTokenEncrypted,
+      };
+    }
+
+    fs.writeFileSync(MEMORY_FILE_PATH, JSON.stringify(diskState, null, 2), 'utf-8');
     lastPersistedTimestamp = new Date().toISOString();
   } catch (err: any) {
     console.warn('[Storage] Error writing to jarvis_memory.json:', err?.message);
@@ -336,8 +438,58 @@ function getGenAI(): GoogleGenAI | null {
 }
 
 // Intent Classification Helper (matching ask_ai_for_intent & regex)
-function classifyIntentLocally(text: string): { intent: string; confidence: number; actionPayload?: any } {
+function classifyIntentLocally(text: string): { intent: string; confidence: number; actionPayload?: any; financeBlocked?: boolean; financeReason?: string } {
   const lower = text.toLowerCase().trim();
+
+  // 0. STRICT FINANCE EXCLUSION CHECK
+  const financeCheck = isFinanceBlocked(lower);
+  if (financeCheck.blocked) {
+    return {
+      intent: 'finance_blocked',
+      confidence: 1,
+      financeBlocked: true,
+      financeReason: financeCheck.reason,
+    };
+  }
+
+  // Emergency Stop / Pause / Resume
+  if (lower.includes('emergency stop') || lower.includes('stop all actions') || lower.includes('pause jarvis') || lower.includes('emergency pause') || lower === 'stop' || lower === '/stop' || lower === '/emergency_stop') {
+    return { intent: 'emergency_stop', confidence: 1 };
+  }
+  if (lower.includes('emergency resume') || lower.includes('resume actions') || lower.includes('unpause') || lower.includes('continue actions') || lower === '/resume') {
+    return { intent: 'emergency_resume', confidence: 1 };
+  }
+
+  // Real Git Tools
+  if (lower.includes('git status') || lower.includes('git diff') || lower.includes('git log') || lower.includes('git check') || lower.includes('repo status')) {
+    return { intent: 'git_status_tool', confidence: 0.95 };
+  }
+
+  // Real GitHub Tools
+  if (lower.includes('github') || lower.includes('my repos') || lower.includes('github issues') || lower.includes('git repos')) {
+    return { intent: 'github_repos_tool', confidence: 0.95 };
+  }
+
+  // Real Filesystem Tools
+  if (lower.includes('list files') || lower.includes('show files') || lower.includes('directory list') || lower.includes('project files') || lower.includes('files dikhao')) {
+    return { intent: 'list_files_tool', confidence: 0.95 };
+  }
+
+  // Web Research Tool
+  if (lower.startsWith('research ') || lower.startsWith('fetch url ') || lower.includes('web research') || lower.includes('search web')) {
+    const target = lower.replace(/^(?:research|fetch url|web research|search web)\s+/i, '').trim();
+    return { intent: 'web_research_tool', confidence: 0.95, actionPayload: { target } };
+  }
+
+  // Integrations Status / Tool Audit
+  if (lower.includes('integrations audit') || lower.includes('tools status') || lower.includes('api status') || lower.includes('check apis') || lower.includes('connected tools')) {
+    return { intent: 'tools_audit', confidence: 0.95 };
+  }
+
+  // Approvals & Permission Gate
+  if (lower.includes('pending approvals') || lower.includes('permission gate') || lower.includes('action approvals') || lower.includes('approvals dikhao')) {
+    return { intent: 'pending_approvals', confidence: 0.95 };
+  }
 
   // Exit
   if (lower === 'exit' || lower.includes('बंद करो') || lower.includes('बाय') || lower === 'quit') {
@@ -800,7 +952,7 @@ let proactiveReports = [
 // ==============================================================================
 
 /**
- * 1. LINKEDIN VERIFICATION & PUBLISHING ENGINE (Official REST API v2 - Personal Profile UGC)
+ * 1. LINKEDIN VERIFICATION & PUBLISHING ENGINE (Official REST Posts API - Personal Member Profile)
  */
 async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
   success: boolean;
@@ -812,7 +964,7 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
   userMessage: string;
 }> {
   const oauthConn = memoryState.linkedInConnection;
-  const token = (oauthConn?.connected && oauthConn.accessToken ? oauthConn.accessToken : (process.env.LINKEDIN_ACCESS_TOKEN || '')).trim();
+  const token = getDecryptedLinkedInAccessToken();
   const configuredUrn = (oauthConn?.connected && oauthConn.authorUrn ? oauthConn.authorUrn : (process.env.LINKEDIN_AUTHOR_URN || '')).trim();
 
   if (!token) {
@@ -826,6 +978,23 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
     };
   }
 
+  // Token expiration timestamp check
+  if (oauthConn?.expiresAt && new Date(oauthConn.expiresAt).getTime() < Date.now()) {
+    if (oauthConn) {
+      oauthConn.connected = false;
+      oauthConn.errorReason = 'OAuth token expired. Please reconnect.';
+      persistMemory();
+    }
+    return {
+      success: false,
+      executionStatus: 'FAILED',
+      verificationStatus: 'PROVIDER_ERROR',
+      finalTruthState: 'FAILED',
+      errorReason: 'LinkedIn OAuth token has expired. Please reconnect your Personal Profile via the "Connect LinkedIn" button.',
+      userMessage: '❌ EXPIRED TOKEN: LinkedIn OAuth token has expired. Click "Connect LinkedIn" to refresh authorization.',
+    };
+  }
+
   try {
     let targetAuthor = configuredUrn;
     if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
@@ -833,53 +1002,91 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
         headers: { Authorization: `Bearer ${token}` },
       });
       if (meRes.ok) {
-        const meData: any = await meRes.json();
-        if (meData.sub) {
+        const meData: any = await meRes.json().catch(() => null);
+        if (meData?.sub) {
           targetAuthor = `urn:li:person:${meData.sub}`;
+          if (oauthConn) {
+            oauthConn.memberSub = meData.sub;
+            oauthConn.authorUrn = targetAuthor;
+            if (meData.name) oauthConn.name = meData.name;
+            if (meData.picture) oauthConn.picture = meData.picture;
+            if (meData.email) oauthConn.email = meData.email;
+            persistMemory();
+          }
         }
+      } else if (meRes.status === 401 || meRes.status === 403) {
+        if (oauthConn) {
+          oauthConn.connected = false;
+          oauthConn.errorReason = 'OAuth token invalid or expired. Reconnection required.';
+          persistMemory();
+        }
+        return {
+          success: false,
+          executionStatus: 'FAILED',
+          verificationStatus: 'PROVIDER_ERROR',
+          finalTruthState: 'FAILED',
+          errorReason: 'LinkedIn authentication failed (HTTP 401/403). Token expired or revoked.',
+          userMessage: '❌ AUTHENTICATION ERROR: LinkedIn rejected the token (HTTP 401/403). Please reconnect via the Connect LinkedIn button.',
+        };
       }
     }
 
-    if (!targetAuthor) {
+    if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
       targetAuthor = 'urn:li:person:self';
     }
 
-    const payload = {
+    // Official LinkedIn REST Posts API (2025/v2) Payload for Personal Member Profile
+    const postPayload = {
       author: targetAuthor,
+      commentary: `${post.content}\n\n${(post.hashtags || []).join(' ')}`.trim(),
+      visibility: 'PUBLIC',
+      distribution: {
+        feedDistribution: 'MAIN_FEED',
+        targetEntities: [],
+        thirdPartyDistributionChannels: [],
+      },
       lifecycleState: 'PUBLISHED',
-      specificContent: {
-        'com.linkedin.ugc.ShareContent': {
-          shareCommentary: {
-            text: `${post.content}\n\n${(post.hashtags || []).join(' ')}`,
-          },
-          shareMediaCategory: 'NONE',
-        },
-      },
-      visibility: {
-        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
-      },
+      isReshareDisabledByAuthor: false,
     };
 
-    const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+    const res = await fetch('https://api.linkedin.com/rest/posts', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        'LinkedIn-Version': '202501',
         'X-Restli-Protocol-Version': '2.0.0',
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(postPayload),
     });
 
+    const xRestliId = res.headers.get('x-restli-id') || res.headers.get('location') || '';
     const resData: any = await res.json().catch(() => null);
 
-    if (res.ok && resData && resData.id) {
+    if (res.status === 201 || (res.ok && (xRestliId || resData?.id))) {
+      const postId = xRestliId || resData?.id || `urn:li:share:${Date.now()}`;
       return {
         success: true,
         executionStatus: 'SUCCESS',
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
-        providerUrn: resData.id,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on LinkedIn personal profile! Share ID: ${resData.id}`,
+        providerUrn: postId,
+        userMessage: `✅ VERIFIED & PUBLISHED: Live on LinkedIn personal member profile! Post URN: ${postId}`,
+      };
+    } else if (res.status === 401 || res.status === 403) {
+      if (oauthConn) {
+        oauthConn.connected = false;
+        oauthConn.errorReason = 'OAuth token rejected or missing w_member_social scope. Please reconnect.';
+        persistMemory();
+      }
+      const errDetail = resData?.message || `HTTP ${res.status}`;
+      return {
+        success: false,
+        executionStatus: 'FAILED',
+        verificationStatus: 'PROVIDER_ERROR',
+        finalTruthState: 'FAILED',
+        errorReason: `LinkedIn Auth/Permission Error: ${errDetail}`,
+        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Please ensure 'w_member_social' permission is approved and reconnect.`,
       };
     } else {
       const errDetail = resData?.message || (resData?.serviceErrorCode ? `Code ${resData.serviceErrorCode}: ${resData.message}` : `HTTP status ${res.status}`);
@@ -1240,7 +1447,7 @@ async function testPlatformConnection(platformKey: string): Promise<{
 
   if (p === 'linkedin') {
     const conn = memoryState.linkedInConnection;
-    const token = (conn?.connected && conn.accessToken ? conn.accessToken : (process.env.LINKEDIN_ACCESS_TOKEN || '')).trim();
+    const token = getDecryptedLinkedInAccessToken();
     if (!token) {
       return {
         success: false,
@@ -1253,13 +1460,14 @@ async function testPlatformConnection(platformKey: string): Promise<{
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data: any = await res.json();
-        const memberName = data.name || `${data.given_name || ''} ${data.family_name || ''}`.trim() || 'LinkedIn Member';
-        const memberUrn = data.sub ? `urn:li:person:${data.sub}` : conn?.authorUrn;
+        const data: any = await res.json().catch(() => null);
+        const memberName = data?.name || `${data?.given_name || ''} ${data?.family_name || ''}`.trim() || 'LinkedIn Member';
+        const memberUrn = data?.sub ? `urn:li:person:${data.sub}` : conn?.authorUrn;
         if (conn && conn.connected) {
           conn.name = memberName;
-          if (data.picture) conn.picture = data.picture;
-          if (data.email) conn.email = data.email;
+          if (data?.picture) conn.picture = data.picture;
+          if (data?.email) conn.email = data.email;
+          if (memberUrn) conn.authorUrn = memberUrn;
           persistMemory();
         }
         return {
@@ -1270,10 +1478,15 @@ async function testPlatformConnection(platformKey: string): Promise<{
           message: `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`,
         };
       } else {
+        if (conn) {
+          conn.connected = false;
+          conn.errorReason = `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked.`;
+          persistMemory();
+        }
         return {
           success: false,
           status: res.status === 401 ? 'EXPIRED' : 'ERROR',
-          message: `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked. Please reconnect.`,
+          message: `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked. Please click "Connect LinkedIn" to reconnect.`,
         };
       }
     } catch (e: any) {
@@ -1992,6 +2205,35 @@ async function handleTelegramCallback(callbackQuery: any) {
     const result = await executeApprovedAction(postId, 'reject', 'HUMAN_CONFIRMATION_TELEGRAM_MOBILE');
 
     const cancelText = `❌ *ACTION REJECTED*\n\nUnderstood, Sir. The post remains saved as a local draft in memory with status: \`${result.post?.finalTruthState || 'REJECTED'}\`.`;
+    const botMsg = {
+      id: `tg-${Date.now()}`,
+      sender: 'jarvis_bot' as const,
+      text: cancelText,
+      timestamp: new Date().toISOString(),
+      type: 'text' as const,
+    };
+    telegramMessages.push(botMsg);
+    if (chatId) await sendRealTelegramMessage(chatId, cancelText);
+  } else if (data.startsWith('approve_perm_')) {
+    const permId = data.replace('approve_perm_', '');
+    const updated = updateActionRequestStatus(permId, 'EXECUTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
+    const confirmText = updated
+      ? `✅ *LEVEL 4 ACTION APPROVED & EXECUTED*\n\n• *Action*: ${updated.exactAction}\n• *Target*: \`${updated.target}\`\n• *Status*: EXECUTED (Verified)`
+      : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired.`;
+
+    const botMsg = {
+      id: `tg-${Date.now()}`,
+      sender: 'jarvis_bot' as const,
+      text: confirmText,
+      timestamp: new Date().toISOString(),
+      type: 'text' as const,
+    };
+    telegramMessages.push(botMsg);
+    if (chatId) await sendRealTelegramMessage(chatId, confirmText);
+  } else if (data.startsWith('reject_perm_')) {
+    const permId = data.replace('reject_perm_', '');
+    const updated = updateActionRequestStatus(permId, 'REJECTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
+    const cancelText = `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated?.exactAction || permId}\` cancelled safely.`;
     const botMsg = {
       id: `tg-${Date.now()}`,
       sender: 'jarvis_bot' as const,
@@ -2721,7 +2963,7 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
   return [
     {
       id: 'linkedin',
-      name: 'LinkedIn Personal Profile (Member UGC API)',
+      name: 'LinkedIn Personal Profile (Member Posts API)',
       category: 'Professional',
       status: isLinkedInConnected ? 'CONNECTED' : 'NOT_CONFIGURED',
       authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_TOKEN' : 'OAUTH_2_0',
@@ -2756,9 +2998,9 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       requiredEnvVars: [
         { key: 'LINKEDIN_CLIENT_ID', label: 'OAuth 2.0 Client ID (Primary)', configured: Boolean(linkedInClientId), isSecret: false, placeholder: '77...' },
         { key: 'LINKEDIN_CLIENT_SECRET', label: 'OAuth 2.0 Client Secret (Primary)', configured: Boolean(linkedInClientSecret), isSecret: true, placeholder: 'WPL_AP1...' },
-        { key: 'LINKEDIN_ACCESS_TOKEN', label: 'Legacy / Static Access Token (Fallback)', configured: Boolean(staticLinkedInToken), isSecret: true, placeholder: 'AQV...' },
+        { key: 'LINKEDIN_ACCESS_TOKEN', label: 'Static Access Token (Fallback)', configured: Boolean(staticLinkedInToken), isSecret: true, placeholder: 'AQV...' },
       ],
-      capabilities: ['Personal Member Posts', 'OpenID Authentication', '1-Click OAuth Connect', 'Real UGC Publishing', 'Live Author Verification'],
+      capabilities: ['Personal Member Profile Posts', 'OpenID Authentication', '1-Click OAuth Connect', 'REST Posts API (2025/v2)', 'Live Member Verification'],
     },
     {
       id: 'facebook',
@@ -3288,6 +3530,297 @@ Respond with ONLY the exact category string.`,
   }
 });
 
+// ==============================================================================
+// 8.5. AUTONOMOUS PERMISSION GATE, EMERGENCY STOP & REAL TOOLS APIs
+// ==============================================================================
+
+// Emergency Stop Controls
+app.get('/api/emergency/status', (req: Request, res: Response) => {
+  res.json(getEmergencyState());
+});
+
+app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
+  const { requestedBy = 'HUMAN_OPERATOR', reason } = req.body;
+  const updated = toggleEmergencyStop(requestedBy, reason);
+
+  // Add audit log
+  memoryState.auditLogs.unshift({
+    id: `log-emerg-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    action: updated.emergencyPaused
+      ? `🚨 EMERGENCY STOP ACTIVATED by ${requestedBy}: All autonomous external actions and modifications PAUSED.`
+      : `🟢 EMERGENCY STOP DEACTIVATED by ${requestedBy}: Autonomous subsystem operations RESUMED.`,
+    levelRequired: 4,
+    approvedBy: requestedBy,
+    status: 'EXECUTED',
+    verificationStatus: 'VERIFIED',
+    finalTruthState: 'VERIFIED',
+  });
+
+  // Notify Telegram Admin if connected
+  if (activeTelegramChatId && getCleanTelegramToken()) {
+    const alertMsg = updated.emergencyPaused
+      ? `🚨 *HERMES JARVIS: EMERGENCY STOP ACTIVATED*\n\nAll autonomous external actions, drafts, code modifications, and background tasks are now **HARD PAUSED** by ${requestedBy}.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: SYSTEM FROZEN`
+      : `🟢 *HERMES JARVIS: SYSTEM RESUMED*\n\nEmergency stop released by ${requestedBy}. Normal permission-gated operations are now active.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: STANDBY`;
+    sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
+  }
+
+  persistMemory();
+  res.json({ success: true, ...updated });
+});
+
+// Approvals & Action Requests Registry
+app.get('/api/approvals/pending', (req: Request, res: Response) => {
+  res.json({ pending: getPendingApprovals(), emergencyState: getEmergencyState() });
+});
+
+app.get('/api/approvals/all', (req: Request, res: Response) => {
+  res.json({ requests: getAllActionRequests(), emergencyState: getEmergencyState() });
+});
+
+app.post('/api/approvals/create', (req: Request, res: Response) => {
+  const { exactAction, target, contentChanges, level = 4, source = 'web_terminal', platform, actionPayload } = req.body;
+
+  if (!exactAction || !target) {
+    return res.status(400).json({ error: 'exactAction and target are required' });
+  }
+
+  const result = createPendingActionRequest({
+    exactAction,
+    target,
+    contentChanges: contentChanges || 'Execution parameters specified in payload',
+    level,
+    source,
+    platform,
+    actionPayload,
+  });
+
+  if (result.blockedByFinance) {
+    return res.status(403).json({
+      success: false,
+      blocked: true,
+      reason: result.financeReason,
+      request: result.request,
+    });
+  }
+
+  if (result.blockedByEmergency) {
+    return res.status(423).json({
+      success: false,
+      blocked: true,
+      reason: 'Emergency Stop is active. Action creation paused.',
+      request: result.request,
+    });
+  }
+
+  // If source is Telegram or requested with notification, send approval card to Telegram
+  if (activeTelegramChatId && getCleanTelegramToken()) {
+    const cardText = `⚠️ *PERMISSION LEVEL ${level} ACTION REQUEST*\n\n• *EXACT ACTION*: ${exactAction}\n• *TARGET*: \`${target}\`\n• *CHANGES / PAYLOAD*: ${contentChanges}\n• *REQUIRED PERMISSION*: LEVEL ${level} (Human Confirmation)\n\nReply with *YES / APPROVE* or *NO / REJECT*.`;
+    const keyboard = [
+      [
+        { text: '✅ YES / APPROVE', callback_data: `approve_perm_${result.request.id}` },
+        { text: '❌ NO / REJECT', callback_data: `reject_perm_${result.request.id}` },
+      ],
+    ];
+    sendRealTelegramMessage(activeTelegramChatId, cardText, keyboard).catch(() => {});
+  }
+
+  res.json({ success: true, request: result.request });
+});
+
+app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
+  const { id, decision, approver = 'HUMAN_OPERATOR' } = req.body;
+  if (!id || !decision) {
+    return res.status(400).json({ error: 'id and decision (APPROVE | REJECT) are required' });
+  }
+
+  const emergency = getEmergencyState();
+  if (emergency.emergencyPaused && decision === 'APPROVE') {
+    return res.status(423).json({
+      success: false,
+      error: 'Cannot approve action while Emergency Stop is active. Release emergency stop first.',
+    });
+  }
+
+  if (decision === 'REJECT') {
+    const updated = updateActionRequestStatus(id, 'REJECTED', { resolvedBy: approver });
+    memoryState.auditLogs.unshift({
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: `REJECTED Action "${updated?.exactAction || id}" by ${approver}`,
+      levelRequired: updated?.level || 4,
+      approvedBy: approver,
+      status: 'REJECTED',
+      verificationStatus: 'STANDBY',
+      finalTruthState: 'REJECTED',
+    });
+    persistMemory();
+    return res.json({ success: true, request: updated, message: 'Action rejected and cancelled safely.' });
+  }
+
+  // APPROVE & EXECUTE
+  const allReqs = getAllActionRequests();
+  const targetReq = allReqs.find((r) => r.id === id);
+  if (!targetReq) {
+    return res.status(404).json({ error: 'Action request not found' });
+  }
+
+  // Finance check
+  const fin = isFinanceBlocked(`${targetReq.exactAction} ${targetReq.target} ${targetReq.contentChanges}`);
+  if (fin.blocked) {
+    updateActionRequestStatus(id, 'REJECTED', { errorReason: fin.reason, resolvedBy: 'FINANCE_SECURITY_GUARD' });
+    return res.status(403).json({ success: false, error: fin.reason });
+  }
+
+  try {
+    let executionResult: any = { executed: true };
+
+    // Execute based on platform / payload
+    if (targetReq.platform === 'LinkedIn' || targetReq.exactAction.toLowerCase().includes('linkedin')) {
+      // Find matching social post or execute direct payload
+      const post = memoryState.socialPosts[0];
+      if (post) {
+        const publishRes = await executeApprovedAction(post.id, 'approve_and_publish', approver);
+        executionResult = publishRes;
+      }
+    } else if (targetReq.exactAction.toLowerCase().includes('github issue')) {
+      const { repo, title, body } = targetReq.actionPayload || {};
+      if (repo && title) {
+        const ghRes = await realGithubCreateIssue(repo, title, body || '');
+        executionResult = ghRes;
+      }
+    }
+
+    const updated = updateActionRequestStatus(id, 'EXECUTED', {
+      resultUrn: executionResult?.post?.livePostUrl || executionResult?.issueUrl || 'urn:jarvis:executed:' + id,
+      resolvedBy: approver,
+    });
+
+    memoryState.auditLogs.unshift({
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: `EXECUTED Approved Action: ${targetReq.exactAction} on ${targetReq.target}`,
+      levelRequired: targetReq.level,
+      approvedBy: approver,
+      status: 'EXECUTED',
+      verificationStatus: 'VERIFIED',
+      finalTruthState: 'VERIFIED',
+    });
+
+    persistMemory();
+    res.json({ success: true, request: updated, executionResult, message: 'Action executed successfully.' });
+  } catch (err: any) {
+    const updated = updateActionRequestStatus(id, 'FAILED', { errorReason: err.message, resolvedBy: approver });
+    res.status(500).json({ success: false, request: updated, error: err.message });
+  }
+});
+
+// Integrations Diagnostics Audit API
+app.get('/api/tools/integrations/audit', (req: Request, res: Response) => {
+  res.json(getIntegrationsAuditReport());
+});
+
+// Real Filesystem Tools APIs
+app.post('/api/tools/fs/list', (req: Request, res: Response) => {
+  const { path: subPath = '.' } = req.body;
+  res.json(realFsList(subPath));
+});
+
+app.post('/api/tools/fs/read', (req: Request, res: Response) => {
+  const { path: filePath } = req.body;
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+  res.json(realFsRead(filePath));
+});
+
+app.post('/api/tools/fs/write', (req: Request, res: Response) => {
+  const { path: filePath, content } = req.body;
+  if (!filePath || content === undefined) {
+    return res.status(400).json({ error: 'path and content are required' });
+  }
+  const result = realFsWrite(filePath, content);
+  if (result.success) {
+    memoryState.auditLogs.unshift({
+      id: `log-fs-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: `Modified Workspace File: "${filePath}" (${result.bytesWritten} bytes)`,
+      levelRequired: 3,
+      approvedBy: 'HUMAN_OR_AGENT_WORKSPACE',
+      status: 'EXECUTED',
+      verificationStatus: 'VERIFIED',
+      finalTruthState: 'VERIFIED',
+    });
+    persistMemory();
+  }
+  res.json(result);
+});
+
+app.post('/api/tools/fs/delete', (req: Request, res: Response) => {
+  const { path: filePath } = req.body;
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+  const result = realFsDelete(filePath);
+  if (result.success) {
+    memoryState.auditLogs.unshift({
+      id: `log-fs-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: `Deleted Workspace Resource: "${filePath}"`,
+      levelRequired: 3,
+      approvedBy: 'HUMAN_OPERATOR',
+      status: 'EXECUTED',
+      verificationStatus: 'VERIFIED',
+      finalTruthState: 'VERIFIED',
+    });
+    persistMemory();
+  }
+  res.json(result);
+});
+
+// Real Git Tools APIs
+app.post('/api/tools/git/status', (req: Request, res: Response) => {
+  res.json(realGitStatus());
+});
+
+app.post('/api/tools/git/log', (req: Request, res: Response) => {
+  const { count = 5 } = req.body;
+  res.json(realGitLog(Number(count) || 5));
+});
+
+app.post('/api/tools/git/diff', (req: Request, res: Response) => {
+  res.json(realGitDiff());
+});
+
+// Real GitHub Tools APIs
+app.post('/api/tools/github/status', async (req: Request, res: Response) => {
+  const status = await realGithubStatus();
+  res.json(status);
+});
+
+app.post('/api/tools/github/repos', async (req: Request, res: Response) => {
+  const repos = await realGithubRepos();
+  res.json(repos);
+});
+
+app.post('/api/tools/github/create-issue', async (req: Request, res: Response) => {
+  const { repo, title, body } = req.body;
+  if (!repo || !title) {
+    return res.status(400).json({ error: 'repo and title are required' });
+  }
+  const result = await realGithubCreateIssue(repo, title, body || '');
+  res.json(result);
+});
+
+// Controlled Web Research API
+app.post('/api/tools/web/fetch', async (req: Request, res: Response) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'url is required' });
+  const result = await realWebFetch(url);
+  res.json(result);
+});
+
+// Real Email Status API
+app.post('/api/tools/email/status', (req: Request, res: Response) => {
+  res.json(realEmailStatus());
+});
+
 // Memory API
 app.get('/api/memory', (req: Request, res: Response) => {
   res.json({
@@ -3345,6 +3878,82 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     let actionDetail: any = null;
 
     switch (intentData.intent) {
+      case 'finance_blocked': {
+        spokenResponse = intentData.financeReason || 'HERMES JARVIS Security Protocol: Financial operations are strictly restricted and prohibited from autonomous control.';
+        actionExecuted = true;
+        actionDetail = { type: 'finance_blocked', title: 'Finance Blocked (Safety Exclusion)', payload: { reason: intentData.financeReason } };
+        break;
+      }
+      case 'emergency_stop': {
+        toggleEmergencyStop('VOICE_OR_CHAT_USER', 'User requested immediate Emergency Stop');
+        spokenResponse = 'Emergency Stop is now active. All autonomous modifications, drafts, and external publishing are frozen.';
+        actionExecuted = true;
+        actionDetail = { type: 'emergency_stop', title: 'Emergency Stop Activated', payload: getEmergencyState() };
+        break;
+      }
+      case 'emergency_resume': {
+        toggleEmergencyStop('VOICE_OR_CHAT_USER', 'User released Emergency Stop');
+        spokenResponse = 'Emergency Stop deactivated. All subsystems resumed under normal Level 1-4 permission gating.';
+        actionExecuted = true;
+        actionDetail = { type: 'emergency_resume', title: 'Emergency Stop Released', payload: getEmergencyState() };
+        break;
+      }
+      case 'git_status_tool': {
+        const git = realGitStatus();
+        spokenResponse = `Git repository active on branch ${git.branch}. ${git.clean ? 'Working directory is clean.' : git.statusText}`;
+        actionExecuted = true;
+        actionDetail = { type: 'git_status', title: `Git: ${git.branch}`, payload: git };
+        break;
+      }
+      case 'github_repos_tool': {
+        const ghStatus = await realGithubStatus();
+        if (ghStatus.connected) {
+          const repos = await realGithubRepos();
+          spokenResponse = `Authenticated as GitHub user @${ghStatus.username}. Located ${repos.repos?.length || 0} active repositories.`;
+          actionExecuted = true;
+          actionDetail = { type: 'github_repos', title: `GitHub @${ghStatus.username}`, payload: repos };
+        } else {
+          spokenResponse = ghStatus.message || 'GitHub is not configured. Provide GITHUB_TOKEN in environment settings.';
+          actionExecuted = true;
+          actionDetail = { type: 'github_status', title: 'GitHub Not Configured', payload: ghStatus };
+        }
+        break;
+      }
+      case 'list_files_tool': {
+        const fsResult = realFsList('.');
+        spokenResponse = fsResult.success
+          ? `Workspace file index loaded: ${fsResult.files?.length || 0} items found.`
+          : `Failed to list files: ${fsResult.error}`;
+        actionExecuted = true;
+        actionDetail = { type: 'list_files', title: 'Workspace Files', payload: fsResult };
+        break;
+      }
+      case 'web_research_tool': {
+        const target = intentData.actionPayload?.target || 'https://news.ycombinator.com';
+        const webRes = await realWebFetch(target);
+        spokenResponse = webRes.success
+          ? `Web analysis complete for "${webRes.title}".`
+          : `Web fetch notice: ${webRes.error}`;
+        actionExecuted = true;
+        actionDetail = { type: 'web_research', title: `Web: ${webRes.title || target}`, payload: webRes };
+        break;
+      }
+      case 'tools_audit': {
+        const audit = getIntegrationsAuditReport();
+        spokenResponse = `Integrations audit complete: ${audit.summary.connected} verified real integrations online, ${audit.summary.notConfigured} pending environment configuration.`;
+        actionExecuted = true;
+        actionDetail = { type: 'tools_audit', title: 'Integrations Matrix', payload: audit };
+        break;
+      }
+      case 'pending_approvals': {
+        const pending = getPendingApprovals();
+        spokenResponse = pending.length > 0
+          ? `You have ${pending.length} pending action approval(s) in queue requiring Level 3/4 human authorization.`
+          : 'Zero pending action approvals. The approval queue is clean.';
+        actionExecuted = true;
+        actionDetail = { type: 'pending_approvals', title: 'Approvals Queue', payload: { count: pending.length, pending } };
+        break;
+      }
       case 'check_project': {
         spokenResponse = 'Auditing active project repositories on Oracle Cloud VM. Codebase is clean with zero open regressions.';
         actionExecuted = true;

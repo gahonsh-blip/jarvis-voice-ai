@@ -17,6 +17,8 @@ import { FreelancePipelineModal } from './components/FreelancePipelineModal';
 import { SocialMediaModal } from './components/SocialMediaModal';
 import { ProactiveRoutinesModal } from './components/ProactiveRoutinesModal';
 import { SecurityMatrixModal } from './components/SecurityMatrixModal';
+import { AutonomousToolsModal } from './components/AutonomousToolsModal';
+import { PermissionGateway } from './components/PermissionGateway';
 import {
   ChatMessage,
   MemoryStore,
@@ -610,6 +612,8 @@ export default function App() {
         onOpenSocial={() => setActiveApp('social')}
         onOpenRoutines={() => setActiveApp('routines')}
         onOpenSecurity={() => setActiveApp('security')}
+        onOpenAutonomousTools={() => setActiveApp('autonomous_tools')}
+        onOpenPermissionGateway={() => setActiveApp('permission_gateway')}
       />
 
       {/* Main Sci-Fi Dashboard */}
@@ -720,6 +724,17 @@ export default function App() {
       <SecurityMatrixModal
         isOpen={activeApp === 'security'}
         onClose={() => setActiveApp(null)}
+      />
+
+      <AutonomousToolsModal
+        isOpen={activeApp === 'autonomous_tools'}
+        onClose={() => setActiveApp(null)}
+      />
+
+      <PermissionGateway
+        isOpen={activeApp === 'permission_gateway'}
+        onClose={() => setActiveApp(null)}
+        onSpeak={speakText}
       />
 
       {/* Tool Modals */}

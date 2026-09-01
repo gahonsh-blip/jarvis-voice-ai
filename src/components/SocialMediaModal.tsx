@@ -456,7 +456,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                             Target: Personal Member Profile
                           </span>
                           <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-blue-950 text-blue-300 border border-blue-800">
-                            UGC API
+                            Posts API (2025/v2)
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400 font-mono">

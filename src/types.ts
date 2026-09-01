@@ -100,6 +100,8 @@ export type ActiveAppWindow =
   | 'social'
   | 'routines'
   | 'security'
+  | 'autonomous_tools'
+  | 'permission_gateway'
   | 'mobile_remote';
 
 export type MainNavigationTab =
@@ -320,6 +322,51 @@ export interface ProactiveReportItem {
     pendingTasksCount: number;
     socialPostsPublished: number;
   };
+}
+
+export interface PermissionActionRequest {
+  id: string;
+  exactAction: string;
+  target: string;
+  contentChanges: string;
+  requiredPermission: 'LEVEL 4 EXTERNAL ACTION' | 'LEVEL 3 MODIFY';
+  level: 3 | 4;
+  requestedAt: string;
+  source: 'web_terminal' | 'telegram_mobile' | 'voice_command' | 'scheduler_daemon' | string;
+  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'EXECUTED' | 'FAILED' | 'BLOCKED_EMERGENCY_STOP';
+  platform?: string;
+  actionPayload?: any;
+  resultUrn?: string;
+  errorReason?: string;
+}
+
+export interface ToolExecutionResponse {
+  success: boolean;
+  toolName: string;
+  level: 1 | 2 | 3 | 4;
+  status: 'EXECUTED' | 'BLOCKED' | 'PENDING_APPROVAL' | 'FAILED' | 'NOT_CONNECTED';
+  result?: any;
+  message: string;
+  auditLogId?: string;
+  pendingApproval?: PermissionActionRequest;
+}
+
+export interface IntegrationAuditItem {
+  id: string;
+  name: string;
+  service: string;
+  status: 'REAL_WORKING' | 'NOT_CONNECTED';
+  reason?: string;
+  requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean; placeholder: string }[];
+  scopesOrPermissions: string[];
+  capabilities: string[];
+}
+
+export interface EmergencyControlState {
+  emergencyPaused: boolean;
+  pausedAt?: string;
+  pausedBy?: string;
+  reason?: string;
 }
 
 export interface DaemonTelemetry {

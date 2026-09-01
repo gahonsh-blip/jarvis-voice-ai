@@ -13,6 +13,8 @@ import {
   Share2,
   Sunrise,
   Lock,
+  ShieldAlert,
+  Wrench,
 } from 'lucide-react';
 import { ActiveAppWindow } from '../types';
 
@@ -69,6 +71,20 @@ export const AppDock: React.FC<AppDockProps> = ({
       voiceCmd: 'morning briefing',
       icon: Sunrise,
       color: 'text-pink-400',
+    },
+    {
+      id: 'permission_gateway' as const,
+      label: 'Permission Gateway',
+      voiceCmd: 'open permission gateway',
+      icon: ShieldAlert,
+      color: 'text-amber-400',
+    },
+    {
+      id: 'autonomous_tools' as const,
+      label: 'Autonomous Tools',
+      voiceCmd: 'open autonomous tools',
+      icon: Wrench,
+      color: 'text-cyan-400',
     },
     {
       id: 'security' as const,

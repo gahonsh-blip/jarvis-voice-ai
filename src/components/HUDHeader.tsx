@@ -12,6 +12,8 @@ import {
   Lock,
   Sunrise,
   Sliders,
+  Wrench,
+  AlertOctagon,
 } from 'lucide-react';
 
 interface HUDHeaderProps {
@@ -27,6 +29,8 @@ interface HUDHeaderProps {
   onOpenSocial: () => void;
   onOpenRoutines: () => void;
   onOpenSecurity: () => void;
+  onOpenAutonomousTools: () => void;
+  onOpenPermissionGateway: () => void;
 }
 
 export const HUDHeader: React.FC<HUDHeaderProps> = ({
@@ -42,6 +46,8 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   onOpenSocial,
   onOpenRoutines,
   onOpenSecurity,
+  onOpenAutonomousTools,
+  onOpenPermissionGateway,
 }) => {
   const [time, setTime] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
@@ -168,6 +174,22 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
             <span>Master Blueprint (Phase 0-9)</span>
+          </button>
+
+          <button
+            onClick={onOpenAutonomousTools}
+            className="px-3 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/60 text-cyan-200 font-bold flex items-center gap-1.5 shrink-0 transition-colors shadow-sm"
+          >
+            <Wrench className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Autonomous Tools</span>
+          </button>
+
+          <button
+            onClick={onOpenPermissionGateway}
+            className="px-3 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-500/60 text-amber-200 font-bold flex items-center gap-1.5 shrink-0 transition-colors shadow-sm"
+          >
+            <Shield className="w-3.5 h-3.5 text-amber-400" />
+            <span>Permission Gateway (Level 4)</span>
           </button>
 
           <button
