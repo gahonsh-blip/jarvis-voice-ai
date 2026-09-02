@@ -360,31 +360,46 @@ export function detectLanguageSwitchCommand(text: string): { code?: string; requ
 
   // 1. Hindi Mode Switch
   if (
+    lower.includes('हिंदी में बात') ||
     lower.includes('हिंदी में बोलो') ||
-    lower.includes('हिंदी मोड') ||
-    lower.includes('hindi mode') ||
+    lower.includes('हिंदी बोलो') ||
+    lower.includes('मुझसे हिंदी') ||
+    lower.includes('बात करो हिंदी') ||
+    lower.includes('hindi mein baat') ||
+    lower.includes('hindi me baat') ||
+    lower.includes('hindi mein bolo') ||
+    lower.includes('hindi me bolo') ||
+    lower.includes('talk in hindi') ||
+    lower.includes('talk to me in hindi') ||
     lower.includes('speak in hindi') ||
     lower.includes('switch to hindi') ||
-    lower.includes('talk in hindi') ||
+    lower.includes('hindi mode') ||
+    lower.includes('हिंदी मोड') ||
     lower === 'hindi' ||
-    lower === 'हिंदी'
+    lower === 'हिंदी' ||
+    (/^hindi\b/i.test(lower) && /(?:baat|bolo|speak|talk|karo)/i.test(lower))
   ) {
     return {
       code: 'hi-IN',
       requested: true,
       newLang: 'hi-IN',
-      acknowledgment: 'जी सर, हिंदी मोड सक्रिय है। अब मैं आपसे हिंदी में बात करूँगा।',
+      acknowledgment: 'जी सर, हिंदी मोड सक्रिय है। अब मैं आपसे हिंदी में बात करूँगा। बताइए, मैं आपकी क्या सहायता करूँ?',
     };
   }
 
   // 2. Hinglish Mode Switch
   if (
+    lower.includes('हिंग्लिश में बात') ||
+    lower.includes('हिंग्लिश में बोलो') ||
+    lower.includes('हिंग्लिश बोलो') ||
+    lower.includes('hinglish mein baat') ||
+    lower.includes('hinglish me baat') ||
     lower.includes('हिंग्लिश मोड') ||
     lower.includes('hinglish mode') ||
-    lower.includes('हिंग्लिश में बोलो') ||
     lower.includes('speak in hinglish') ||
     lower.includes('switch to hinglish') ||
-    lower === 'hinglish'
+    lower === 'hinglish' ||
+    (/^hinglish\b/i.test(lower) && /(?:baat|bolo|speak|talk|karo)/i.test(lower))
   ) {
     return {
       code: 'hinglish',
@@ -399,10 +414,15 @@ export function detectLanguageSwitchCommand(text: string): { code?: string; requ
     lower.includes('english mode') ||
     lower.includes('speak in english') ||
     lower.includes('अंग्रेजी में बोलो') ||
-    lower.includes('switch to english') ||
+    lower.includes('अंग्रेजी में बात') ||
+    lower.includes('english me baat') ||
+    lower.includes('english mein baat') ||
     lower.includes('talk in english') ||
+    lower.includes('talk to me in english') ||
+    lower.includes('switch to english') ||
     lower === 'english' ||
-    lower === 'अंग्रेजी'
+    lower === 'अंग्रेजी' ||
+    (/^english\b/i.test(lower) && /(?:baat|bolo|speak|talk)/i.test(lower))
   ) {
     return {
       code: 'en-US',

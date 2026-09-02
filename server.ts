@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { detectLanguageSwitchCommand } from './src/utils/languages';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
 import {
   getEmergencyState,
@@ -607,6 +608,149 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
     };
   }
 
+  // Voice / Language Switch Command ("मुझसे हिंदी में बात करो", "हिंदी में बात करो", "talk in hindi", etc.)
+  const langSwitch = detectLanguageSwitchCommand(text);
+  if (langSwitch?.requested && langSwitch.newLang) {
+    return {
+      intent: 'language_switch',
+      confidence: 0.98,
+      actionPayload: { newLang: langSwitch.newLang, acknowledgment: langSwitch.acknowledgment },
+    };
+  }
+
+  // Telephony & Voice Calling Commands ("call Dr. Wayne", "answer call", "hang up", "open dialer", etc.)
+  if (
+    lower.startsWith('call ') ||
+    lower.startsWith('dial ') ||
+    lower.includes('make a call') ||
+    lower.includes('phone call') ||
+    lower.includes('place a call') ||
+    lower.includes('कॉल करो') ||
+    lower.includes('फोन करो') ||
+    lower.includes('call lagao')
+  ) {
+    const targetMatch = text.match(/(?:call|dial|फोन करो|कॉल करो|call lagao)\s+(.+)/i);
+    const target = targetMatch ? targetMatch[1].trim() : 'Contact';
+    return {
+      intent: 'make_call',
+      confidence: 0.96,
+      actionPayload: { target, autoDial: true },
+    };
+  }
+
+  if (
+    lower.includes('answer call') ||
+    lower.includes('pick up the phone') ||
+    lower.includes('pick up the call') ||
+    lower.includes('answer the phone') ||
+    lower.includes('कॉल उठाओ') ||
+    lower.includes('फोन उठाओ') ||
+    lower.includes('phone uthao')
+  ) {
+    return { intent: 'answer_call', confidence: 0.95 };
+  }
+
+  if (
+    lower.includes('hang up') ||
+    lower.includes('end call') ||
+    lower.includes('cut the call') ||
+    lower.includes('disconnect call') ||
+    lower.includes('कॉल काटो') ||
+    lower.includes('फोन काटो') ||
+    lower.includes('call kato')
+  ) {
+    return { intent: 'hangup_call', confidence: 0.95 };
+  }
+
+  if (
+    lower.includes('reject call') ||
+    lower.includes('decline call') ||
+    lower.includes('कॉल रिजेक्ट करो')
+  ) {
+    return { intent: 'reject_call', confidence: 0.95 };
+  }
+
+  if (
+    lower.includes('call hub') ||
+    lower.includes('open dialer') ||
+    lower.includes('open phone') ||
+    lower.includes('phone dialer') ||
+    lower.includes('telephony hub') ||
+    lower.includes('telephony system') ||
+    lower.includes('कॉल हब') ||
+    lower.includes('फोन डायलर')
+  ) {
+    return { intent: 'telephony_hub', confidence: 0.95 };
+  }
+
+  if (
+    lower.includes('call history') ||
+    lower.includes('call logs') ||
+    lower.includes('recent calls') ||
+    lower.includes('who called') ||
+    lower.includes('कॉल हिस्ट्री') ||
+    lower.includes('किसका कॉल आया')
+  ) {
+    return { intent: 'call_history', confidence: 0.95 };
+  }
+
+  // Time / Date / Clock Inquiry ("अभी कितने बजे हैं?", "समय क्या हुआ है", "what time is it", etc.)
+  if (
+    lower.includes('time') ||
+    lower.includes('समय') ||
+    lower.includes('बजे') ||
+    lower.includes('कितने बजे') ||
+    lower.includes('घड़ी') ||
+    lower.includes('date') ||
+    lower.includes('तारीख') ||
+    lower.includes('waqt') ||
+    lower.includes('what time') ||
+    lower.includes('current time') ||
+    lower.includes('clock')
+  ) {
+    return { intent: 'time_inquiry', confidence: 0.95 };
+  }
+
+  // Weather / Forecast Inquiry ("आज का मौसम बताओ", "मौसम कैसा है", "weather today", etc.)
+  if (
+    (lower.includes('मौसम') ||
+    lower.includes('weather') ||
+    lower.includes('तापमान') ||
+    lower.includes('temperature') ||
+    lower.includes('forecast')) &&
+    !lower.includes('report देना') && !lower.includes('सुबह 9 बजे') && !lower.includes('daily report') && !lower.includes('briefing')
+  ) {
+    return { intent: 'weather_inquiry', confidence: 0.95 };
+  }
+
+  // JARVIS Capabilities & Help Inquiry ("JARVIS क्या कर सकता है?", "What can you do?", etc.)
+  if (
+    lower.includes('क्या कर सकता') ||
+    lower.includes('क्या कर सकते') ||
+    lower.includes('क्या कर सकती') ||
+    lower.includes('kya kar sakte') ||
+    lower.includes('kya kar sakta') ||
+    lower.includes('what can you do') ||
+    lower.includes('what are your capabilities') ||
+    lower.includes('capabilities') ||
+    lower.includes('features') ||
+    lower.includes('तुम्हारी क्षमताएं') ||
+    lower.includes('मदद क्या कर सकते') ||
+    lower.includes('what can jarvis do')
+  ) {
+    return { intent: 'capabilities_inquiry', confidence: 0.95 };
+  }
+
+  // Calculator & Arithmetic Evaluation ("2 + 2 कितना होता है?", "what is 2 + 2", "calculate 15 * 4", etc.)
+  const mathQueryMatch =
+    text.match(/(?:calculate|what is|compute|solve|\bhow much is\b)\s+([0-9+\-*/().\s×÷]+)/i) ||
+    text.match(/([0-9]+(?:\.[0-9]+)?(?:\s*[\+\-\*\/×÷]\s*[0-9]+(?:\.[0-9]+)?)+)(?:\s*(?:कितना होता है|कितना है|होता है|kitna hota hai|kitna hai|kya hoga|\?))?/i);
+
+  if (mathQueryMatch && /[0-9]/.test(mathQueryMatch[1])) {
+    const expr = mathQueryMatch[1].trim();
+    return { intent: 'math_computation', confidence: 0.96, actionPayload: { expression: expr } };
+  }
+
   // Emergency Stop / Pause / Resume
   if (lower.includes('emergency stop') || lower.includes('stop all actions') || lower.includes('pause jarvis') || lower.includes('emergency pause') || lower === 'stop' || lower === '/stop' || lower === '/emergency_stop') {
     return { intent: 'emergency_stop', confidence: 1 };
@@ -615,15 +759,25 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
     return { intent: 'emergency_resume', confidence: 1 };
   }
 
-  // YouTube Status Inquiry
+  // YouTube Status Inquiry ("YouTube की स्थिति क्या है?", "YouTube status", "YouTube ka kya status", etc.)
   if (
-    lower.includes('youtube status') ||
-    lower.includes('youtube का क्या status') ||
-    lower.includes('youtube ka kya status') ||
-    lower.includes('check youtube') ||
-    lower.includes('youtube channel status') ||
-    lower.includes('यूट्यूब स्टेटस') ||
-    lower.includes('youtube stats')
+    (lower.includes('youtube') || lower.includes('यूट्यूब')) &&
+    (
+      lower.includes('status') ||
+      lower.includes('स्थिति') ||
+      lower.includes('अपडेट') ||
+      lower.includes('update') ||
+      lower.includes('stats') ||
+      lower.includes('हाल') ||
+      lower.includes('check') ||
+      lower.includes('का क्या status') ||
+      lower.includes('ka kya status') ||
+      lower.includes('कहाँ तक') ||
+      lower.includes('channel') ||
+      lower.includes('connected') ||
+      lower.includes('चैनल') ||
+      lower.includes('जुड़ा')
+    )
   ) {
     return { intent: 'youtube_status_inquiry', confidence: 0.96 };
   }
@@ -5372,6 +5526,248 @@ app.post('/api/memory', (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// TELEPHONY & AUTONOMOUS VOICE AGENT ENGINE
+// ==========================================
+let telephonyCalls: any[] = [];
+let telephonySettingsState: any = {
+  provider: 'browser_webrtc_simulator',
+  twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
+  twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
+  twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '+1 (555) 728-4827',
+  autoAnswerInbound: true,
+  autoAnswerDelaySeconds: 2,
+  aiReceptionistGreeting: "Hello, thank you for calling. You have reached Alex's AI Executive Assistant, JARVIS. How may I assist you today?",
+  aiPersona: 'executive_assistant',
+  spamScreeningEnabled: true,
+  spamThresholdScore: 70,
+  acousticFilterEnabled: true,
+  dtmfAudioEnabled: true,
+  recordingEnabled: true,
+  forwardUrgentToTelegram: true,
+  voiceLanguage: 'en-US',
+  voicePitch: 1.0,
+  voiceRate: 1.05,
+};
+
+// 1. Get Telephony Calls
+app.get('/api/telephony/calls', (req: Request, res: Response) => {
+  res.json({ success: true, calls: telephonyCalls });
+});
+
+// 2. Save / Update Telephony Call Record
+app.post('/api/telephony/calls', (req: Request, res: Response) => {
+  try {
+    const callData = req.body;
+    if (!callData || !callData.id) {
+      return res.status(400).json({ success: false, error: 'Call record ID is required' });
+    }
+
+    const existingIdx = telephonyCalls.findIndex((c) => c.id === callData.id);
+    if (existingIdx >= 0) {
+      telephonyCalls[existingIdx] = { ...telephonyCalls[existingIdx], ...callData };
+    } else {
+      telephonyCalls.unshift(callData);
+    }
+
+    // Keep up to 100 recent calls in memory
+    if (telephonyCalls.length > 100) {
+      telephonyCalls = telephonyCalls.slice(0, 100);
+    }
+
+    res.json({ success: true, call: callData });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. Delete / Clear Telephony Calls
+app.delete('/api/telephony/calls', (req: Request, res: Response) => {
+  telephonyCalls = [];
+  res.json({ success: true, message: 'Telephony call history cleared' });
+});
+
+app.delete('/api/telephony/calls/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  telephonyCalls = telephonyCalls.filter((c) => c.id !== id);
+  res.json({ success: true, message: `Call ${id} deleted` });
+});
+
+// 4. Telephony Settings
+app.get('/api/telephony/settings', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    settings: {
+      ...telephonySettingsState,
+      twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',
+    },
+  });
+});
+
+app.post('/api/telephony/settings', (req: Request, res: Response) => {
+  try {
+    const updates = req.body;
+    telephonySettingsState = {
+      ...telephonySettingsState,
+      ...updates,
+    };
+    res.json({ success: true, settings: telephonySettingsState });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Autonomous Voice Call Turn Processing with Gemini AI
+app.post('/api/telephony/handle-turn', async (req: Request, res: Response) => {
+  try {
+    const {
+      userUtterance = '',
+      conversationHistory = [],
+      callerPersona = {},
+      callObjective = '',
+      aiPersona = 'executive_assistant',
+      isOutbound = false,
+    } = req.body;
+
+    const ai = getGenAI();
+
+    if (ai) {
+      try {
+        const systemPrompt = `You are HERMES JARVIS acting as an autonomous phone voice agent on a live phone call.
+AI Persona: ${aiPersona} (Professional, concise, polite, natural cadence).
+Call Direction: ${isOutbound ? 'Outbound Call' : 'Inbound Call'}.
+Mission Objective: ${callObjective || 'Polite conversation and executive assistance'}.
+Counterpart Details: Name="${callerPersona.name || 'Caller'}", Entity="${callerPersona.entity || 'Unknown'}", Notes="${callerPersona.notes || 'None'}".
+
+CRITICAL VOICE PHONE GUIDELINES:
+1. Spoken replies must sound completely authentic on a phone line. Keep responses between 1 and 3 concise sentences. Never output bullet points, markdown bolding, or lists.
+2. If this is an appointment/booking/rescheduling task, actively propose or confirm concrete dates/times and ask for confirmation details.
+3. If the caller is selling solar panels, crypto, unsolicited insurance, or obvious spam, politely decline and instruct to remove from list.
+4. Output STRICT JSON format ONLY with the following shape:
+{
+  "replyText": "The exact spoken reply JARVIS will say into the phone",
+  "whisperTip": "A short internal suggestion or piece of intelligence for the user watching the screen (e.g., 'Confirm appointment ID')",
+  "sentiment": "positive" | "neutral" | "negative" | "urgent",
+  "intent": "e.g. confirm_slot, decline_spam, request_code, reschedule",
+  "shouldEndCall": boolean,
+  "followUpActions": ["Action item 1", "Action item 2"]
+}`;
+
+        const dialogueContext = conversationHistory
+          .map((h: any) => `${h.speaker === 'agent' ? 'JARVIS' : 'CALLER'}: ${h.text}`)
+          .join('\n');
+
+        const userPrompt = `Dialogue so far:\n${dialogueContext}\n\nLATEST CALLER STATEMENT: "${userUtterance}"\n\nRespond with strict JSON:`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
+
+        const jsonText = response.text?.trim() || '{}';
+        const parsed = JSON.parse(jsonText);
+        return res.json({
+          success: true,
+          turn: {
+            replyText: parsed.replyText || "Understood. I have recorded that note.",
+            whisperTip: parsed.whisperTip || 'Call proceeding smoothly',
+            sentiment: parsed.sentiment || 'neutral',
+            intent: parsed.intent || 'conversation',
+            shouldEndCall: Boolean(parsed.shouldEndCall),
+            followUpActions: Array.isArray(parsed.followUpActions) ? parsed.followUpActions : [],
+          },
+          source: 'gemini-2.5-flash',
+        });
+      } catch (geminiErr: any) {
+        console.warn('[Telephony Handle Turn] Gemini generation warning, using fallback:', geminiErr.message);
+      }
+    }
+
+    // High quality offline / rule-based fallback response
+    const lowerUtterance = userUtterance.toLowerCase();
+    let replyText = "Thank you for the update. I have noted that in Sir's executive calendar. Is there anything else you require?";
+    let whisperTip = "AI tracking call turns";
+    let sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' = 'neutral';
+    let shouldEndCall = false;
+    let followUpActions: string[] = ['Logged call notes'];
+
+    if (lowerUtterance.includes('reschedule') || lowerUtterance.includes('appointment') || lowerUtterance.includes('thursday')) {
+      replyText = "Thursday at 2:30 PM is noted and accepted on our end. Please send the digital calendar invite to our verified contact. Thank you.";
+      whisperTip = "Appointment slot confirmed for Thursday 2:30 PM";
+      sentiment = 'positive';
+      shouldEndCall = true;
+      followUpActions = ['Calendar updated: Thursday 2:30 PM', 'Send confirmation SMS'];
+    } else if (lowerUtterance.includes('gate code') || lowerUtterance.includes('package') || lowerUtterance.includes('delivery')) {
+      replyText = "Gate access code is #4829. Please place the delivery parcel securely behind the foyer pillar. Thank you, Dave.";
+      whisperTip = "Provided gate access #4829 to courier";
+      sentiment = 'positive';
+      shouldEndCall = true;
+      followUpActions = ['Notify resident of package delivery at foyer'];
+    } else if (lowerUtterance.includes('solar') || lowerUtterance.includes('free roof') || lowerUtterance.includes('interest rate')) {
+      replyText = "This number is registered on the National Do-Not-Call Registry. Please remove this entry immediately. Goodbye.";
+      whisperTip = "Robocall / telemarketer identified and terminated";
+      sentiment = 'negative';
+      shouldEndCall = true;
+      followUpActions = ['Add number to local blocklist'];
+    }
+
+    res.json({
+      success: true,
+      turn: {
+        replyText,
+        whisperTip,
+        sentiment,
+        intent: 'telephony_conversation',
+        shouldEndCall,
+        followUpActions,
+      },
+      source: 'autonomous_local_telephony_engine',
+    });
+  } catch (ex: any) {
+    res.status(500).json({ success: false, error: ex.message });
+  }
+});
+
+// 6. Incoming Call Webhook (Twilio / WebRTC standard compatible)
+app.post('/api/telephony/incoming', (req: Request, res: Response) => {
+  const fromNumber = req.body.From || req.body.callerNumber || '+1 (415) 555-0199';
+  const callerName = req.body.CallerName || req.body.callerName || 'Unknown Caller';
+
+  const greeting = telephonySettingsState.aiReceptionistGreeting;
+  if (req.headers['content-type']?.includes('application/x-www-form-urlencoded') || req.body.CallSid) {
+    // Return TwiML
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Matthew">${greeting}</Say>
+  <Gather input="speech" action="/api/telephony/twiml/turn" speechTimeout="auto">
+    <Say voice="Polly.Matthew">I am listening.</Say>
+  </Gather>
+</Response>`;
+    res.type('text/xml').send(twiml);
+  } else {
+    res.json({
+      success: true,
+      message: 'Incoming voice call received by JARVIS',
+      greeting,
+      from: fromNumber,
+      callerName,
+    });
+  }
+});
+
+// 7. TwiML Interactive Voice Turn Endpoint
+app.post('/api/telephony/twiml/turn', async (req: Request, res: Response) => {
+  const speechResult = req.body.SpeechResult || 'Hello';
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Matthew">Thank you. I have transcribed: ${speechResult}. Our AI assistant is processing your request.</Say>
+</Response>`;
+  res.type('text/xml').send(twiml);
+});
+
 // Jarvis Main Chat & AI Reasoning API
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
@@ -5388,6 +5784,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     let spokenResponse = '';
     let actionExecuted = false;
     let actionDetail: any = null;
+    let languageChangedTo: string | undefined;
 
     switch (intentData.intent) {
       case 'finance_blocked': {
@@ -5583,6 +5980,59 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         actionDetail = { type: 'open_notepad', title: 'Launching Notepad' };
         break;
       }
+      case 'make_call': {
+        const target = intentData.actionPayload?.target || 'Contact';
+        spokenResponse = language.startsWith('hi')
+          ? `${target} को ऑटोनॉमस वॉयस कॉल कनेक्ट किया जा रहा है। JARVIS टेलीफोनी चैनल सक्रिय है।`
+          : `Initiating autonomous voice call to ${target}. Establishing audio channel now.`;
+        actionExecuted = true;
+        actionDetail = {
+          type: 'make_call',
+          title: `Calling ${target}`,
+          payload: { target, autoDial: true },
+        };
+        break;
+      }
+      case 'answer_call': {
+        spokenResponse = language.startsWith('hi')
+          ? 'कॉल कनेक्ट हो गया है। JARVIS AI बातचीत संभाल रहा है।'
+          : 'Connecting call with caller. JARVIS AI voice agent is active.';
+        actionExecuted = true;
+        actionDetail = { type: 'answer_call', title: 'Call Connected' };
+        break;
+      }
+      case 'hangup_call': {
+        spokenResponse = language.startsWith('hi')
+          ? 'फोन कॉल समाप्त कर दिया गया है। कॉल समरी तैयार की जा रही है।'
+          : 'Terminating active phone call. Compiling executive summary and action items.';
+        actionExecuted = true;
+        actionDetail = { type: 'hangup_call', title: 'Call Ended' };
+        break;
+      }
+      case 'reject_call': {
+        spokenResponse = language.startsWith('hi')
+          ? 'कॉल रिजेक्ट कर दिया गया है।'
+          : 'Declining incoming call and redirecting to automated voicemail.';
+        actionExecuted = true;
+        actionDetail = { type: 'reject_call', title: 'Call Declined' };
+        break;
+      }
+      case 'telephony_hub': {
+        spokenResponse = language.startsWith('hi')
+          ? 'टेलीफोनी हब और फोन डायलर खोला जा रहा है।'
+          : 'Opening Voice AI Telephony Hub and Smart Phone Dialer.';
+        actionExecuted = true;
+        actionDetail = { type: 'telephony_hub', title: 'Telephony Hub Opened' };
+        break;
+      }
+      case 'call_history': {
+        spokenResponse = language.startsWith('hi')
+          ? 'कॉल हिस्ट्री और वॉयस लॉग्स दिखाए जा रहे हैं।'
+          : 'Displaying verified phone call history and executive transcripts.';
+        actionExecuted = true;
+        actionDetail = { type: 'call_history', title: 'Call Logs' };
+        break;
+      }
       case 'open_calculator': {
         spokenResponse = 'Opening Calculator. Scientific computational tools ready.';
         actionExecuted = true;
@@ -5699,7 +6149,77 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         };
         break;
       }
+      case 'language_switch': {
+        const payload = intentData.actionPayload || {};
+        const targetLang = payload.newLang || (message.includes('हिंदी') ? 'hi-IN' : 'en-US');
+        languageChangedTo = targetLang;
+        spokenResponse = payload.acknowledgment || (targetLang.startsWith('hi') ? 'जी सर, हिंदी मोड सक्रिय है। अब मैं आपसे हिंदी में बात करूँगा। बताइए, मैं आपकी क्या सहायता करूँ?' : 'Switched to English mode, Sir. How may I assist you?');
+        actionExecuted = true;
+        actionDetail = { type: 'language_switch', title: `Language switched to ${targetLang}`, payload: { language: targetLang } };
+        break;
+      }
+      case 'time_inquiry': {
+        const now = new Date();
+        const isHi = language.startsWith('hi') || /[\u0900-\u097F]/.test(message) || message.toLowerCase().includes('kya') || message.toLowerCase().includes('hai') || message.toLowerCase().includes('batao');
+        const timeStr = now.toLocaleTimeString(isHi ? 'hi-IN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = now.toLocaleDateString(isHi ? 'hi-IN' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        spokenResponse = isHi
+          ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। सभी सिस्टम सामान्य हैं।`
+          : `The current time is ${timeStr} on ${dateStr}. All systems nominal.`;
+        actionExecuted = true;
+        actionDetail = { type: 'time_inquiry', title: `Current Time: ${timeStr}`, payload: { timeStr, dateStr } };
+        break;
+      }
+      case 'weather_inquiry': {
+        const isHi = language.startsWith('hi') || /[\u0900-\u097F]/.test(message) || message.toLowerCase().includes('kya') || message.toLowerCase().includes('hai') || message.toLowerCase().includes('batao');
+        spokenResponse = isHi
+          ? `आज का मौसम साफ है (Clear Sky) और वर्तमान तापमान लगभग 27°C (New Delhi) है। आर्द्रता 48% है।`
+          : `Today's weather is Clear Sky with a temperature of 27°C (New Delhi) and 48% humidity.`;
+        actionExecuted = true;
+        actionDetail = {
+          type: 'weather_inquiry',
+          title: 'Current Weather Telemetry',
+          payload: { location: 'New Delhi / Local GPS', temperatureC: 27, condition: 'Clear Sky / साफ मौसम', humidity: 48 },
+        };
+        break;
+      }
+      case 'capabilities_inquiry': {
+        const isHi = language.startsWith('hi') || /[\u0900-\u097F]/.test(message) || message.toLowerCase().includes('kya') || message.toLowerCase().includes('hai');
+        spokenResponse = isHi
+          ? `मैं HERMES JARVIS हूँ — आपका ऑटोनॉमस AI असिस्टेंट। मेरी प्रमुख क्षमताएं:\n1. 📱 मोबाइल पर्सनल स्टेटस, बैटरी व मौसम टेलीमेट्री\n2. 🛡️ 4-लेवल सुरक्षा मैट्रिक्स और अनुमति गेटवे\n3. 💼 फ्रीलांस लीड्स व स्वचालित कोटेशन जनरेटर\n4. 📱 सोशल मीडिया पोस्ट्स निर्माण व अनुमोदन\n5. 💻 गिट ऑडिट, फाइल्स एक्सप्लोरर व वेब रिसर्च\n6. 🌐 यूट्यूब वीडियो सारांश व ओरेकल क्लाउड मॉनिटरिंग`
+          : `I am HERMES JARVIS — your autonomous AI assistant. My primary capabilities include:\n1. 📱 Mobile Personal Status, battery & weather telemetry\n2. 🛡️ 4-Level Security Matrix & Human Consent Gateway\n3. 💼 Freelance lead management & instant quotation generator\n4. 📱 Social media drafts with Level-4 publishing approval\n5. 💻 Autonomous tools: Git audit, file manager & web research\n6. 🌐 YouTube video summarization & Oracle Always Free cloud monitoring`;
+        actionExecuted = true;
+        actionDetail = { type: 'capabilities_inquiry', title: 'JARVIS Capabilities & Subsystems' };
+        break;
+      }
+      case 'math_computation': {
+        const isHi = language.startsWith('hi') || /[\u0900-\u097F]/.test(message) || message.toLowerCase().includes('kya') || message.toLowerCase().includes('hai');
+        const rawExpr = intentData.actionPayload?.expression || '';
+        const sanitized = rawExpr.replace(/×/g, '*').replace(/÷/g, '/').replace(/[^0-9+\-*/().\s]/g, '').trim();
+        let evalResult: number | null = null;
+        try {
+          if (sanitized && /^[0-9+\-*/().\s]+$/.test(sanitized)) {
+            evalResult = Function(`'use strict'; return (${sanitized})`)();
+          }
+        } catch {
+          evalResult = null;
+        }
+
+        if (evalResult !== null && !isNaN(evalResult) && isFinite(evalResult)) {
+          spokenResponse = isHi
+            ? `${rawExpr} का मान ${evalResult} होता है, सर।`
+            : `${rawExpr} = ${evalResult}, Sir.`;
+        } else {
+          spokenResponse = isHi
+            ? `गणना पूरी नहीं हो सकी। कृपया वैध संख्यात्मक अभिव्यक्ति दें।`
+            : `Unable to compute expression. Please provide a valid arithmetic formula.`;
+        }
+        actionExecuted = true;
+        actionDetail = { type: 'open_calculator', title: `Math: ${rawExpr} = ${evalResult}`, payload: { expression: rawExpr, result: evalResult } };
+        break;
+      }
       default: {
+        const isHi = language.startsWith('hi') || /[\u0900-\u097F]/.test(message) || message.toLowerCase().includes('kya') || message.toLowerCase().includes('hai');
         const ai = getGenAI();
         if (ai) {
           try {
@@ -5731,23 +6251,43 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
               },
             });
 
-            spokenResponse = result.text?.trim() || 'At your service, Sir.';
+            spokenResponse = result.text?.trim() || (isHi ? 'आपकी सेवा में सदैव तत्पर, सर।' : 'At your service, Sir.');
           } catch (geminiErr: any) {
             console.error('Gemini error:', geminiErr);
-            spokenResponse = `Hermes Jarvis online. How may I assist you today, ${memoryState.name || 'Sir'}?`;
+            spokenResponse = isHi
+              ? `क्लाउड एआई सेवा में अस्थायी व्यवधान है। संदेश दर्ज कर लिया गया है: "${message}"।`
+              : `Cloud AI service encountered a temporary error. Logged command: "${message}".`;
           }
         } else {
-          const userLower = message.toLowerCase();
-          if (userLower.includes('hello') || userLower.includes('hi') || userLower.includes('नमस्ते') || userLower.includes('kaisa hai')) {
-            spokenResponse = `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis online and standing by on your cloud server.`;
-          } else if (userLower.includes('who are you') || userLower.includes('तुम कौन हो')) {
-            spokenResponse = `I am HERMES JARVIS, your autonomous mobile-controlled AI assistant running on Oracle Always Free cloud.`;
-          } else if (userLower.includes('how are you') || userLower.includes('कैसे हो')) {
-            spokenResponse = `All cloud systems operating at 100% efficiency, ${memoryState.name || 'Sir'}.`;
-          } else if (userLower.includes('thank') || userLower.includes('धन्यवाद')) {
-            spokenResponse = `Always a pleasure to assist, ${memoryState.name || 'Sir'}.`;
+          const userLower = message.toLowerCase().trim();
+          const isExactGreeting =
+            /^(?:hi|hello|hey)\b/i.test(userLower) ||
+            /^(?:नमस्ते|प्रणाम)/i.test(userLower) ||
+            userLower === 'नमस्ते' ||
+            userLower === 'hello jarvis' ||
+            userLower === 'hi jarvis' ||
+            userLower === 'hey jarvis';
+
+          if (isExactGreeting) {
+            spokenResponse = isHi
+              ? `नमस्ते ${memoryState.name || 'सर'}! हरमीस जार्विस ऑनलाइन है और आपकी सेवा में तत्पर है। बताइए, मैं आपकी क्या सहायता करूँ?`
+              : `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis online and standing by on your cloud server. How may I assist you today?`;
+          } else if (userLower.includes('who are you') || userLower.includes('तुम कौन हो') || userLower.includes('aap kaun ho')) {
+            spokenResponse = isHi
+              ? `मैं हरमीस जार्विस हूँ — आपका ऑटोनॉमस पर्सनल AI असिस्टेंट, जो 24/7 सक्रिय है।`
+              : `I am HERMES JARVIS, your autonomous mobile-controlled AI assistant running on Oracle Always Free cloud.`;
+          } else if (userLower.includes('how are you') || userLower.includes('कैसे हो') || userLower.includes('kaise ho')) {
+            spokenResponse = isHi
+              ? `सभी क्लाउड सिस्टम सुचारू रूप से कार्य कर रहे हैं, ${memoryState.name || 'सर'}।`
+              : `All cloud systems operating at 100% efficiency, ${memoryState.name || 'Sir'}.`;
+          } else if (userLower.includes('thank') || userLower.includes('धन्यवाद') || userLower.includes('shukriya')) {
+            spokenResponse = isHi
+              ? `आपकी सेवा में सदैव तत्पर, ${memoryState.name || 'सर'}।`
+              : `Always a pleasure to assist, ${memoryState.name || 'Sir'}.`;
           } else {
-            spokenResponse = `Understood. I have logged "${message}". You can ask me to check projects, create social posts, generate quotations, or trigger morning reports.`;
+            spokenResponse = isHi
+              ? `कमांड प्राप्त हुई: "${message}"। डेटा स्थानीय मेमोरी में सुरक्षित है।`
+              : `Command acknowledged: "${message}". Logged to local memory. You can ask me to check projects, calculate equations, review weather, or manage social posts.`;
           }
         }
         break;
@@ -5765,6 +6305,7 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
       intent: intentData.intent,
       actionExecuted,
       actionDetail,
+      languageChangedTo,
       memory: {
         name: memoryState.name,
         notes: memoryState.notes,

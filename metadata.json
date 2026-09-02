@@ -1,6 +1,6 @@
 {
   "name": "Mobile-Controlled HERMES JARVIS",
-  "description": "Autonomous AI Agent with Mobile Telegram Control, Oracle Always Free ARM Cloud Architecture, Multi-tier Memory, Freelance Business Pipeline, Social Media Automation, and Security Matrix.",
+  "description": "Autonomous AI Agent with Voice AI Telephony, Call Handling, Mobile Telegram Control, Oracle Always Free ARM Cloud Architecture, Multi-tier Memory, Freelance Business Pipeline, Social Media Automation, and Security Matrix.",
   "requestFramePermissions": ["camera", "microphone", "display-capture"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

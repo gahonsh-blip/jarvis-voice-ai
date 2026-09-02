@@ -20,6 +20,22 @@ import { SecurityMatrixModal } from './components/SecurityMatrixModal';
 import { AutonomousToolsModal } from './components/AutonomousToolsModal';
 import { PermissionGateway } from './components/PermissionGateway';
 import { MobilePersonalStatusModal } from './components/MobilePersonalStatusModal';
+import { ActiveCallHUD } from './components/ActiveCallHUD';
+import { TelephonyHubModal } from './components/TelephonyHubModal';
+import { telephonyAudio } from './utils/telephonyAudio';
+import {
+  evaluateSpamScore,
+  generateCallSummary,
+  processCallTurnWithAi,
+} from './utils/telephonyEngine';
+import {
+  CallRecord,
+  TelephonySettings,
+  ContactItem,
+  SimulatedCallerPersona,
+  DEFAULT_CONTACTS,
+  DEFAULT_TELEPHONY_SETTINGS,
+} from './types/telephony';
 import { PublicInfoFooter } from './components/PublicInfoFooter';
 import {
   ChatMessage,
@@ -41,6 +57,13 @@ import {
   clearPendingSyncQueue,
 } from './utils/offlineStorage';
 import { processOfflineCommand } from './utils/localJarvisEngine';
+import {
+  determineTtsLocale,
+  findBestVoiceForLocale,
+  buildSpeechDiagnostics,
+  SpeechDiagnostics,
+} from './utils/speechTtsEngine';
+import { isSpeechInterruptionCommand } from './utils/languages';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 
 export default function App() {
@@ -58,6 +81,9 @@ export default function App() {
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [notepadInitialContent, setNotepadInitialContent] = useState<string>('');
   const [browserSearchQuery, setBrowserSearchQuery] = useState<string>('');
+  const [speechDiagnostics, setSpeechDiagnostics] = useState<SpeechDiagnostics | null>(null);
+
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => {
     const saved = loadLocalVoiceSettings();
@@ -77,6 +103,29 @@ export default function App() {
 
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+
+  // Autonomous Voice AI Telephony State
+  const [activeCall, setActiveCall] = useState<CallRecord | null>(null);
+  const [callHistory, setCallHistory] = useState<CallRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('hermes_jarvis_call_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [telephonyContacts] = useState<ContactItem[]>(DEFAULT_CONTACTS);
+  const [telephonySettings, setTelephonySettings] = useState<TelephonySettings>(() => {
+    try {
+      const saved = localStorage.getItem('hermes_jarvis_telephony_settings');
+      return saved ? JSON.parse(saved) : DEFAULT_TELEPHONY_SETTINGS;
+    } catch {
+      return DEFAULT_TELEPHONY_SETTINGS;
+    }
+  });
+  const [isCallMuted, setIsCallMuted] = useState(false);
+  const [isCallOnHold, setIsCallOnHold] = useState(false);
+  const [isAudioFilterActive, setIsAudioFilterActive] = useState(true);
 
   // Audio Context & Recognition References
   const recognitionRef = useRef<any>(null);
@@ -137,18 +186,51 @@ export default function App() {
     };
   }, [flushPendingSyncQueue]);
 
-  // Initialize Voices
+  // Initialize Voices with Android Chrome resilience and asynchronous voiceschanged event listener
   useEffect(() => {
+    let isMounted = true;
+
     const updateVoices = () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         const voices = window.speechSynthesis.getVoices();
-        setAvailableVoices(voices);
+        if (voices.length > 0 && isMounted) {
+          setAvailableVoices(voices);
+        }
       }
     };
+
     updateVoices();
+
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.addEventListener('voiceschanged', updateVoices);
       window.speechSynthesis.onvoiceschanged = updateVoices;
     }
+
+    // Android Chrome can delay populating voices list on initial page load
+    const timer1 = setTimeout(updateVoices, 250);
+    const timer2 = setTimeout(updateVoices, 1000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.removeEventListener('voiceschanged', updateVoices);
+      }
+    };
+  }, []);
+
+  // Stop Speaking Callback (interruption & cancellation handling)
+  const stopSpeaking = useCallback(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    }
+    activeUtteranceRef.current = null;
+    setIsSpeaking(false);
+    setStatusText('SPEECH HALTED • AWAITING COMMAND');
   }, []);
 
   // Fetch initial memory and health from server, merging with local storage
@@ -193,62 +275,459 @@ export default function App() {
       });
   }, [flushPendingSyncQueue]);
 
-  // Speak Text Function
+  // Speak Text Function with Audited Hindi TTS Locale & Native Voice Resolution
   const speakText = useCallback(
-    (text: string) => {
+    (text: string, targetLangOverride?: string) => {
       if (!voiceSettings.autoSpeak || typeof window === 'undefined' || !('speechSynthesis' in window)) {
         return;
       }
+
       try {
+        // Interruption safety: cancel previous speech and clear paused state
         window.speechSynthesis.cancel();
-        // Strip markdown formatting symbols for clean speech
-        const cleanText = text.replace(/[*_`#]/g, '');
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+
+        // Clean markdown formatting symbols for crisp, natural speech
+        const cleanText = text.replace(/[*_`#]/g, '').trim();
+        if (!cleanText) return;
+
+        // Fresh dynamic voice discovery: query live browser voices
+        const liveVoices = window.speechSynthesis.getVoices();
+        const voices = liveVoices.length > 0 ? liveVoices : availableVoices;
+        if (liveVoices.length > 0 && availableVoices.length === 0) {
+          setAvailableVoices(liveVoices);
+        }
+
+        // 1. Determine TTS Locale
+        const { targetLocale, isHindiTarget } = determineTtsLocale(
+          cleanText,
+          voiceSettings.language,
+          targetLangOverride
+        );
+
+        // 2. Select Voice
+        const resolution = findBestVoiceForLocale(voices, targetLocale, voiceSettings.voiceURI);
+
+        // 3. Build & record non-sensitive diagnostics
+        const diagnostics = buildSpeechDiagnostics(voiceSettings.language, resolution);
+        setSpeechDiagnostics(diagnostics);
+
+        if (isHindiTarget && !resolution.selectedVoice) {
+          console.warn(
+            '[HERMES JARVIS TTS] Hindi TTS voice unavailable on this device/browser. Outputting with lang="hi-IN" without English override.'
+          );
+        }
+
         const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.rate = voiceSettings.rate;
         utterance.pitch = voiceSettings.pitch;
         utterance.volume = voiceSettings.volume;
-        utterance.lang = voiceSettings.language;
+        utterance.lang = targetLocale;
 
-        if (voiceSettings.voiceURI) {
-          const selected = availableVoices.find((v) => v.voiceURI === voiceSettings.voiceURI);
-          if (selected) utterance.voice = selected;
-        } else {
-          // Find matching native voice for the selected language if available
-          const langPrefix = voiceSettings.language.split('-')[0].toLowerCase();
-          const matching = availableVoices.find(
-            (v) => v.lang.toLowerCase() === voiceSettings.language.toLowerCase() || v.lang.split('-')[0].toLowerCase() === langPrefix
-          );
-          if (matching) utterance.voice = matching;
+        if (resolution.selectedVoice) {
+          utterance.voice = resolution.selectedVoice;
         }
+
+        // Retain reference to prevent Android Chrome V8 garbage collection mid-speech
+        activeUtteranceRef.current = utterance;
 
         utterance.onstart = () => {
           setIsSpeaking(true);
-          setStatusText(`JARVIS SPEAKING: "${cleanText.slice(0, 35)}..."`);
+          const langBadge = isHindiTarget ? ' [HINDI TTS]' : '';
+          setStatusText(`JARVIS SPEAKING${langBadge}: "${cleanText.slice(0, 30)}..."`);
         };
 
         utterance.onend = () => {
+          activeUtteranceRef.current = null;
           setIsSpeaking(false);
           setStatusText('SYSTEM READY • AWAITING COMMAND');
         };
 
-        utterance.onerror = () => {
+        utterance.onerror = (event: any) => {
+          activeUtteranceRef.current = null;
           setIsSpeaking(false);
+          const errType = event.error || 'unknown_error';
+          console.warn('[HERMES JARVIS TTS] Speech error event:', errType);
+          setSpeechDiagnostics((prev) => (prev ? { ...prev, ttsErrorState: String(errType) } : null));
           setStatusText('SYSTEM READY');
         };
 
-        window.speechSynthesis.speak(utterance);
-      } catch (err) {
-        console.warn('Speech synthesis failed:', err);
+        // Small timeout ensures clean audio focus transition on mobile/Android Chrome
+        setTimeout(() => {
+          window.speechSynthesis.speak(utterance);
+        }, 15);
+      } catch (err: any) {
+        console.warn('[HERMES JARVIS TTS] Speech synthesis failed:', err);
+        activeUtteranceRef.current = null;
         setIsSpeaking(false);
+        setSpeechDiagnostics((prev) =>
+          prev ? { ...prev, ttsErrorState: err?.message || 'exception' } : null
+        );
       }
     },
     [voiceSettings, availableVoices]
   );
 
+  // Telephony call termination & summarizer
+  const handleEndCall = useCallback(() => {
+    if (!activeCall) return;
+    telephonyAudio.stopAll();
+    telephonyAudio.playDisconnectTone();
+
+    const finalizedSummary = generateCallSummary(activeCall);
+
+    const endedCall: CallRecord = {
+      ...activeCall,
+      status: 'ended',
+      summary: finalizedSummary.summary,
+      followUpActions: finalizedSummary.followUpActions,
+      sentiment: finalizedSummary.sentiment,
+      durationSeconds: Math.max(activeCall.durationSeconds || 14, 14),
+    };
+
+    setActiveCall(endedCall);
+    setCallHistory((prev) => [endedCall, ...prev]);
+
+    fetch('/api/telephony/calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(endedCall),
+    }).catch(() => {});
+  }, [activeCall]);
+
+  // Telephony call rejection
+  const handleDeclineCall = useCallback(() => {
+    if (!activeCall) return;
+    telephonyAudio.stopAll();
+    telephonyAudio.playBusyTone();
+
+    const declinedCall: CallRecord = {
+      ...activeCall,
+      status: 'declined',
+      summary: 'Call declined by user or spam filter.',
+      durationSeconds: 0,
+    };
+
+    setActiveCall(null);
+    setCallHistory((prev) => [declinedCall, ...prev]);
+
+    fetch('/api/telephony/calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(declinedCall),
+    }).catch(() => {});
+  }, [activeCall]);
+
+  // Telephony answer call
+  const handleAnswerCall = useCallback(
+    (mode: 'ai_autonomous' | 'ai_copilot' | 'direct_user' = 'ai_autonomous') => {
+      if (!activeCall) return;
+      telephonyAudio.stopAll();
+
+      const greeting = telephonySettings.aiReceptionistGreeting;
+      const callId = activeCall.id;
+
+      setActiveCall((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          status: 'in_call',
+          transcript: [
+            ...prev.transcript,
+            {
+              id: `turn_agent_${Date.now()}`,
+              speaker: 'agent',
+              text: greeting,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            },
+          ],
+        };
+      });
+
+      speakText(greeting);
+
+      if (mode === 'ai_autonomous' && activeCall.direction === 'inbound') {
+        setTimeout(async () => {
+          const currentCall = activeCall;
+          const callerInitialUtterance = currentCall.transcript[0]?.text || 'Hello, I was calling for Alex.';
+          const aiResponse = await processCallTurnWithAi({
+            callerUtterance: callerInitialUtterance,
+            transcript: currentCall.transcript,
+            activeCall: currentCall,
+            settings: telephonySettings,
+          });
+
+          setActiveCall((prev) => {
+            if (!prev || prev.id !== callId || prev.status !== 'in_call') return prev;
+            const updated = [
+              ...prev.transcript,
+              {
+                id: `turn_agent_reply_${Date.now()}`,
+                speaker: 'agent' as const,
+                text: aiResponse.replyText,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              },
+            ];
+            if (aiResponse.whisperTip) {
+              updated.push({
+                id: `turn_whisper_${Date.now()}`,
+                speaker: 'whisper' as const,
+                text: aiResponse.whisperTip,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              });
+            }
+            return {
+              ...prev,
+              transcript: updated,
+              sentiment: aiResponse.sentiment || prev.sentiment,
+            };
+          });
+
+          speakText(aiResponse.replyText);
+
+          if (aiResponse.shouldEndCall) {
+            setTimeout(() => {
+              handleEndCall();
+            }, 3500);
+          }
+        }, 2500);
+      }
+    },
+    [activeCall, telephonySettings, speakText, handleEndCall]
+  );
+
+  // Outbound call starter
+  const handleStartOutboundCall = useCallback(
+    ({
+      recipientNumber,
+      recipientName,
+      objective,
+      aiPersona,
+    }: {
+      recipientNumber: string;
+      recipientName: string;
+      objective: string;
+      aiPersona?: string;
+    }) => {
+      telephonyAudio.init();
+      if (telephonySettings.acousticFilterEnabled) {
+        telephonyAudio.enableTelephoneBandpass(true);
+      }
+      telephonyAudio.startDialTone();
+
+      const callId = `call_${Date.now()}`;
+      const newCall: CallRecord = {
+        id: callId,
+        direction: 'outbound',
+        callerName: memory.name || 'Alex (Executive)',
+        callerNumber: telephonySettings.twilioPhoneNumber || '+1 (555) 728-4827',
+        recipientName: recipientName || 'Direct Contact',
+        recipientNumber: recipientNumber || '+1 (415) 890-2134',
+        status: 'dialing',
+        mode: 'ai_autonomous',
+        startTime: new Date().toISOString(),
+        durationSeconds: 0,
+        transcript: [],
+        summary: '',
+        sentiment: 'neutral',
+        intent: 'outbound_coordination',
+        followUpActions: [],
+        objective: objective || 'General executive coordination',
+        aiPersona: aiPersona || telephonySettings.aiPersona,
+      };
+
+      setActiveCall(newCall);
+
+      // Transition to ringing after 1.5s
+      setTimeout(() => {
+        setActiveCall((prev) => (prev?.id === callId ? { ...prev, status: 'ringing' } : prev));
+        telephonyAudio.startRingback();
+
+        // Callee answers after another 2.2s
+        setTimeout(() => {
+          telephonyAudio.stopAll();
+          const firstGreeting = `Hello, this is JARVIS calling on behalf of Alex regarding ${newCall.objective}. Am I speaking with ${newCall.recipientName}?`;
+
+          setActiveCall((prev) => {
+            if (prev?.id !== callId) return prev;
+            return {
+              ...prev,
+              status: 'in_call',
+              transcript: [
+                {
+                  id: `turn_${Date.now()}`,
+                  speaker: 'agent' as const,
+                  text: firstGreeting,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                },
+              ],
+            };
+          });
+
+          speakText(firstGreeting);
+
+          // Callee responds after 3s
+          setTimeout(async () => {
+            const calleeAnswer = `Yes, this is ${newCall.recipientName}. Thank you for calling. What would you like to arrange?`;
+            setActiveCall((prev) => {
+              if (!prev || prev.id !== callId || prev.status !== 'in_call') return prev;
+              const nextTurns = [
+                ...prev.transcript,
+                {
+                  id: `turn_${Date.now()}`,
+                  speaker: 'callee' as const,
+                  text: calleeAnswer,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                },
+              ];
+              return { ...prev, transcript: nextTurns };
+            });
+
+            const aiTurn = await processCallTurnWithAi({
+              callerUtterance: calleeAnswer,
+              transcript: [
+                { id: '1', speaker: 'agent', text: firstGreeting, timestamp: '00:01' },
+                { id: '2', speaker: 'callee', text: calleeAnswer, timestamp: '00:04' },
+              ],
+              activeCall: newCall,
+              settings: telephonySettings,
+            });
+
+            setActiveCall((prev) => {
+              if (!prev || prev.id !== callId || prev.status !== 'in_call') return prev;
+              const nextTurns = [
+                ...prev.transcript,
+                {
+                  id: `turn_${Date.now()}`,
+                  speaker: 'agent' as const,
+                  text: aiTurn.replyText,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                },
+              ];
+              if (aiTurn.whisperTip) {
+                nextTurns.push({
+                  id: `whisper_${Date.now()}`,
+                  speaker: 'whisper' as const,
+                  text: aiTurn.whisperTip,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                });
+              }
+              return { ...prev, transcript: nextTurns };
+            });
+
+            speakText(aiTurn.replyText);
+          }, 3200);
+        }, 2200);
+      }, 1500);
+    },
+    [memory.name, telephonySettings, speakText]
+  );
+
+  // Incoming call simulator starter
+  const handleTriggerIncomingCall = useCallback(
+    (persona: SimulatedCallerPersona) => {
+      telephonyAudio.init();
+      if (telephonySettings.acousticFilterEnabled) {
+        telephonyAudio.enableTelephoneBandpass(true);
+      }
+      telephonyAudio.startRinging();
+
+      const spamAnalysis = evaluateSpamScore(persona.firstLine, persona.callerName);
+      const callId = `call_${Date.now()}`;
+
+      const newCall: CallRecord = {
+        id: callId,
+        direction: 'inbound',
+        callerName: persona.callerName,
+        callerNumber: persona.callerNumber,
+        recipientName: memory.name || 'Alex (Executive)',
+        recipientNumber: telephonySettings.twilioPhoneNumber || '+1 (555) 728-4827',
+        status: 'ringing',
+        mode: 'ai_autonomous',
+        startTime: new Date().toISOString(),
+        durationSeconds: 0,
+        transcript: [
+          {
+            id: `turn_caller_0`,
+            speaker: 'caller' as const,
+            text: persona.firstLine,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          },
+        ],
+        summary: '',
+        sentiment: persona.isSpam ? 'negative' : 'neutral',
+        intent: persona.intent || persona.goal || 'inbound_inquiry',
+        followUpActions: [],
+        spamScore: persona.isSpam ? 85 : spamAnalysis.score,
+        spamKeywords: spamAnalysis.reasons,
+        objective: persona.scenarioTitle,
+        aiPersona: telephonySettings.aiPersona,
+      };
+
+      setActiveCall(newCall);
+    },
+    [memory.name, telephonySettings]
+  );
+
+  // Auto-persist callHistory & telephonySettings
+  useEffect(() => {
+    try {
+      localStorage.setItem('hermes_jarvis_call_history', JSON.stringify(callHistory));
+    } catch (e) {
+      console.warn('Failed to save call history:', e);
+    }
+  }, [callHistory]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('hermes_jarvis_telephony_settings', JSON.stringify(telephonySettings));
+    } catch (e) {
+      console.warn('Failed to save telephony settings:', e);
+    }
+  }, [telephonySettings]);
+
+  // Handle incoming call auto-answer
+  useEffect(() => {
+    if (
+      activeCall &&
+      activeCall.direction === 'inbound' &&
+      activeCall.status === 'ringing' &&
+      telephonySettings.autoAnswerInbound
+    ) {
+      const delayMs = (telephonySettings.autoAnswerDelaySeconds || 2) * 1000;
+      const timer = setTimeout(() => {
+        handleAnswerCall('ai_autonomous');
+      }, delayMs);
+      return () => clearTimeout(timer);
+    }
+  }, [activeCall?.id, activeCall?.status, telephonySettings.autoAnswerInbound, telephonySettings.autoAnswerDelaySeconds, handleAnswerCall]);
+
   // Execute Local System Action
   const handleExecuteAction = useCallback(
     (intent: IntentCategory, payload?: any) => {
       switch (intent) {
+        case 'make_call':
+          handleStartOutboundCall({
+            recipientName: payload?.target || 'Direct Contact',
+            recipientNumber: payload?.number || '+1 (555) 728-4827',
+            objective: payload?.objective || 'Autonomous phone call coordination',
+          });
+          break;
+        case 'answer_call':
+          handleAnswerCall('ai_autonomous');
+          break;
+        case 'hangup_call':
+          handleEndCall();
+          break;
+        case 'reject_call':
+          handleDeclineCall();
+          break;
+        case 'telephony_hub':
+        case 'call_history':
+          setActiveApp('telephony');
+          break;
         case 'check_project':
           setActiveApp('blueprint');
           break;
@@ -315,6 +794,18 @@ export default function App() {
         case 'volume_down':
           setVoiceSettings((prev) => ({ ...prev, volume: Math.max(0.1, prev.volume - 0.2) }));
           break;
+        case 'language_switch':
+          if (payload?.language) {
+            setVoiceSettings((prev) => ({ ...prev, language: payload.language }));
+          }
+          break;
+        case 'weather_inquiry':
+        case 'time_inquiry':
+          setActiveApp('mobile_personal_status');
+          break;
+        case 'math_computation':
+          setActiveApp('calculator');
+          break;
         default:
           break;
       }
@@ -324,8 +815,16 @@ export default function App() {
 
   // Send Command to Backend with Offline Fallback
   const handleSendCommand = useCallback(
-    async (text: string) => {
-      if (!text.trim() || isProcessing) return;
+    async (rawText: string) => {
+      const text = rawText.trim();
+      if (!text || isProcessing) return;
+
+      // Real-time speech interruption check
+      if (isSpeechInterruptionCommand(text)) {
+        stopSpeaking();
+        setStatusText('SYSTEM READY • SPEECH INTERRUPTED');
+        return;
+      }
 
       const userMsg: ChatMessage = {
         id: String(Date.now()),
@@ -394,8 +893,14 @@ export default function App() {
           handleExecuteAction(data.intent, data.actionDetail?.payload);
         }
 
-        // Voice Response
-        speakText(data.reply);
+        let updatedLang = voiceSettings.language;
+        if (data.languageChangedTo) {
+          updatedLang = data.languageChangedTo;
+          setVoiceSettings((prev) => ({ ...prev, language: data.languageChangedTo }));
+        }
+
+        // Voice Response with guaranteed locale propagation
+        speakText(data.reply, updatedLang);
         setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
       } catch (err: any) {
         clearTimeout(timeoutId);
@@ -430,13 +935,19 @@ export default function App() {
           handleExecuteAction(localResult.intent, localResult.actionDetail?.payload);
         }
 
-        speakText(localResult.reply);
+        let offlineTargetLang = voiceSettings.language;
+        if (localResult.intent === 'language_switch' && localResult.actionDetail?.payload?.language) {
+          offlineTargetLang = localResult.actionDetail.payload.language;
+          setVoiceSettings((prev) => ({ ...prev, language: offlineTargetLang }));
+        }
+
+        speakText(localResult.reply, offlineTargetLang);
         setStatusText('LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE');
       } finally {
         setIsProcessing(false);
       }
     },
-    [isProcessing, messages, memory, voiceSettings.language, speakText, handleExecuteAction]
+    [isProcessing, messages, memory, voiceSettings.language, speakText, stopSpeaking, handleExecuteAction]
   );
 
   // Setup Web Speech Recognition
@@ -456,11 +967,14 @@ export default function App() {
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
-      recognition.lang = voiceSettings.language;
+      recognition.lang =
+        voiceSettings.language === 'hinglish' || voiceSettings.language === 'auto'
+          ? 'hi-IN'
+          : voiceSettings.language;
 
       recognition.onstart = () => {
         setIsListening(true);
-        setStatusText(`LISTENING (${voiceSettings.language})... SPEAK NOW`);
+        setStatusText(`LISTENING (${recognition.lang})... SPEAK NOW`);
       };
 
       recognition.onresult = (event: any) => {
@@ -620,6 +1134,37 @@ export default function App() {
     setMessages(loadLocalChatHistory());
   };
 
+  // Telephony Controls
+  const handleToggleHold = useCallback(() => {
+    setIsCallOnHold((prev) => {
+      const next = !prev;
+      if (next) {
+        telephonyAudio.startHoldMusic();
+        setActiveCall((c) => (c ? { ...c, status: 'on_hold' } : null));
+      } else {
+        telephonyAudio.stopHoldMusic();
+        setActiveCall((c) => (c ? { ...c, status: 'in_call' } : null));
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleMute = useCallback(() => {
+    setIsCallMuted((prev) => !prev);
+  }, []);
+
+  const handleToggleAudioFilter = useCallback(() => {
+    setIsAudioFilterActive((prev) => {
+      const next = !prev;
+      telephonyAudio.enableTelephoneBandpass(next);
+      return next;
+    });
+  }, []);
+
+  const handleSendDtmf = useCallback((digit: string) => {
+    telephonyAudio.playDtmf(digit);
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-cyan-500/30 selection:text-cyan-200">
       {/* HUD Header */}
@@ -655,6 +1200,7 @@ export default function App() {
             isProcessing={isProcessing}
             volumeLevel={volumeLevel}
             onToggleListen={toggleListening}
+            onStopSpeaking={stopSpeaking}
             statusText={statusText}
           />
 
@@ -818,6 +1364,42 @@ export default function App() {
         settings={voiceSettings}
         onUpdateSettings={(s) => setVoiceSettings(s)}
         availableVoices={availableVoices}
+        speechDiagnostics={speechDiagnostics}
+      />
+
+      {/* Autonomous Voice AI Telephony Live HUD & Management Hub */}
+      <ActiveCallHUD
+        activeCall={activeCall}
+        settings={telephonySettings}
+        isMuted={isCallMuted}
+        isOnHold={isCallOnHold}
+        audioFilterActive={isAudioFilterActive}
+        onToggleMute={handleToggleMute}
+        onToggleHold={handleToggleHold}
+        onToggleAudioFilter={handleToggleAudioFilter}
+        onEndCall={handleEndCall}
+        onAnswerCall={handleAnswerCall}
+        onDeclineCall={handleDeclineCall}
+        onSendDtmf={handleSendDtmf}
+        onCloseSummary={() => setActiveCall(null)}
+      />
+
+      <TelephonyHubModal
+        isOpen={activeApp === 'telephony'}
+        onClose={() => setActiveApp(null)}
+        activeCall={activeCall}
+        callHistory={callHistory}
+        contacts={telephonyContacts}
+        settings={telephonySettings}
+        onUpdateSettings={(s) => setTelephonySettings(s)}
+        onStartOutboundCall={handleStartOutboundCall}
+        onTriggerIncomingCall={handleTriggerIncomingCall}
+        onClearHistory={() => {
+          setCallHistory([]);
+          try {
+            localStorage.removeItem('hermes_jarvis_call_history');
+          } catch {}
+        }}
       />
     </div>
   );

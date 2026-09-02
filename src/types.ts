@@ -41,6 +41,17 @@ export type IntentCategory =
   | 'tools_audit'
   | 'pending_approvals'
   | 'social_hub'
+  | 'language_switch'
+  | 'time_inquiry'
+  | 'weather_inquiry'
+  | 'capabilities_inquiry'
+  | 'math_computation'
+  | 'make_call'
+  | 'answer_call'
+  | 'hangup_call'
+  | 'reject_call'
+  | 'telephony_hub'
+  | 'call_history'
   | 'chat';
 
 export interface ActionDetail {
@@ -125,7 +136,8 @@ export type ActiveAppWindow =
   | 'autonomous_tools'
   | 'permission_gateway'
   | 'mobile_remote'
-  | 'mobile_personal_status';
+  | 'mobile_personal_status'
+  | 'telephony';
 
 export type MainNavigationTab =
   | 'voice_core'
@@ -136,7 +148,10 @@ export type MainNavigationTab =
   | 'proactive_reports'
   | 'oracle_cloud'
   | 'security_matrix'
-  | 'mobile_status';
+  | 'mobile_status'
+  | 'telephony_hub';
+
+export * from './types/telephony';
 
 // -------------------------------------------------------------
 // MOBILE PERSONAL STATUS & HINDI MORNING BRIEFING

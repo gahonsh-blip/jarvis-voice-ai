@@ -15,6 +15,7 @@ import {
   Lock,
   ShieldAlert,
   Wrench,
+  PhoneCall,
 } from 'lucide-react';
 import { ActiveAppWindow } from '../types';
 
@@ -30,6 +31,13 @@ export const AppDock: React.FC<AppDockProps> = ({
   onQuickCommand,
 }) => {
   const tools = [
+    {
+      id: 'telephony' as const,
+      label: 'Telephony Hub',
+      voiceCmd: 'open dialer',
+      icon: PhoneCall,
+      color: 'text-cyan-300',
+    },
     {
       id: 'blueprint' as const,
       label: 'Master Plan',

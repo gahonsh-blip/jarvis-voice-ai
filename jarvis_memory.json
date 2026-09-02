@@ -13,12 +13,15 @@
     "runtime": "Node.js + Oracle ARM64 Always Free",
     "status": "ONLINE",
     "persistence": "Durable Disk Sync (jarvis_memory.json)",
-    "version": "2.5.0-autonomous"
+    "version": "2.5.0-autonomous",
+    "system_engine": "Oracle Always Free ARM64 + Local Hybrid Engine",
+    "voice_status": "SpeechSynthesis + Web Audio API",
+    "persistence_mode": "Offline-First LocalStorage & Backend Sync"
   },
   "stats": {
-    "totalCommands": 33,
-    "actionsExecuted": 3,
-    "lastActive": "2026-09-02T06:48:11.844Z"
+    "totalCommands": 97,
+    "actionsExecuted": 51,
+    "lastActive": "2026-09-02T17:54:23.085Z"
   },
   "processedTelegramUpdates": [],
   "socialPosts": [
@@ -471,7 +474,9 @@
       "createdAt": "2026-08-31T03:38:50.226Z"
     }
   ],
-  "schedulerState": {},
+  "schedulerState": {
+    "lastNightRunDate": "2026-09-02"
+  },
   "youTubeConnection": {
     "connected": true,
     "authType": "OAUTH_2_0",
@@ -480,7 +485,7 @@
     "customUrl": "@gahonsh",
     "avatarUrl": "https://yt3.ggpht.com/RG5NOUAsdcTZT65-nxyO4kLeHxnKm1i155IgQxN3DTmwydC3lWjbhE-GBIwQZRQ28m1NqPvafQ=s88-c-k-c0x00ffffff-no-rj",
     "connectedAt": "2026-09-02T06:56:16.694Z",
-    "expiresAt": "2026-09-02T07:56:15.694Z",
+    "expiresAt": "2026-09-02T18:42:59.504Z",
     "scopes": [
       "https://www.googleapis.com/auth/youtube.readonly",
       "https://www.googleapis.com/auth/youtube.upload",
@@ -489,14 +494,14 @@
       "openid"
     ],
     "accessTokenEncrypted": {
-      "iv": "d58967ccc0444480e1499b95045589c2",
-      "content": "90b6eb031211e50f37371759d2588a50ec4d0236a25a6cef21f7a12392024d3e1dbb229b1f4f8d10f032749ae73cb21423f63225dc71cf71af898f730522d08fcedffc0e2034ba7092916eb61c84a030bcbd0e3e8787b7b9d7124fc8107d1d64f3a289e340fc8011028cfbbab6a33758d6d09b769364dea40a0230ca5ae5fa247426c6ac04c024b3843a63984eb57911618c4f5d565fdfde42303de822bf620fc5758df4d09b1dec44995f7fefe3df0a06a6de75d77e4d6229e505aa84ef0d7ea7a50a4643e29d35991377b5199d5a4241ab39df24818f546477e560e2769d6cfe28f6c472cff9e382cf1ea9bc0b1db797e5f2ccc02768e2a6adddaa18",
-      "tag": "01726f22cb267822f22fa376e1dfeb53"
+      "iv": "74bea32917f414efa6a2068c71229b33",
+      "content": "a95c409b56d8505c5767d2c4f93fcff07e4a01e1184b2cd7e1a67e159a53344e334b169eb2c433ed337e657ac1de4e89a28d459ca4a58e2f919706037b682a5983fd10237391e359be34fcb6dceff54444df9644763723f2bf95bdb5db2fa5d6913309e28a41b2979a077fa2efa84c8945a5bc6195f83890a125e58a0c500cbfa4e12a335da12171bd790c4ad01a0bec71df41fa91b79be5bc68dca1f190eda7a28577ac485b8385dda5788b9a8f6566c2d51e3667e65356b56ceb76cfa48f96105e43a6722daad1d5762488240630629e34bac076cf0a10b9c8938e3e6128d2ebd7e466bdf46f81e343341ec34908f24e854670c36407b7e5e69f8f3fe0",
+      "tag": "45892415f91d447fc8e188a0f5d6ab5f"
     },
     "refreshTokenEncrypted": {
-      "iv": "d25859ab37dd75aab27292d855a61f0a",
-      "content": "8b598d27ab93665728493159d2afc54e88a55176a1260dd59936c5d8a24ed32a864aaf8ea07f1e4244e30331af5e7b44abd019579de6038800144fe287b45bcb1cac94ffd2c0312cb76187e253c1271f573897430b04d8c54a84483d84d2d18be93f4677e78b6b",
-      "tag": "61b79313e51b9b415dadf7c92143302e"
+      "iv": "e15d05bd241e007d5636c95a31477a93",
+      "content": "f98a16c8b97b799e642a7f4f9d9246063626cce30c4ff6de791dd9c1b8411adf11fe799aba11f80792276a2fe697a37d2ad2357a297278c8b6ef2241bc3643c00b9ba4273df92f16d6de54e8481c422c70983f1c9cab64c247ac1f8745cbf8d682730be2355fa6",
+      "tag": "b5a90043c845d700d12f1e4b09e31278"
     }
   }
 }

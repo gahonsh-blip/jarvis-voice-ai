@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, Volume2, Mic, Globe, Zap, Check, Sparkles, MessageSquare, Info } from 'lucide-react';
+import { X, Sliders, Volume2, Mic, Globe, Zap, Check, Sparkles, MessageSquare, Info, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { VoiceSettings } from '../types';
 import { SUPPORTED_LANGUAGES, getLanguageOption, POPULAR_LANGUAGE_CODES, LanguageOption } from '../utils/languages';
+import { isHindiVoice, SpeechDiagnostics } from '../utils/speechTtsEngine';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface SettingsModalProps {
   settings: VoiceSettings;
   onUpdateSettings: (settings: VoiceSettings) => void;
   availableVoices: SpeechSynthesisVoice[];
+  speechDiagnostics?: SpeechDiagnostics | null;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -17,6 +19,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onUpdateSettings,
   availableVoices,
+  speechDiagnostics,
 }) => {
   const [localSettings, setLocalSettings] = useState<VoiceSettings>(settings);
   const [searchFilter, setSearchFilter] = useState('');
@@ -29,17 +32,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const currentLangOption = getLanguageOption(localSettings.language);
 
-  // Find voices matching the currently selected language
+  // Find voices matching the currently selected language with specialized Hindi detection
+  const isCurrentHindi =
+    localSettings.language === 'hi-IN' ||
+    localSettings.language === 'hinglish' ||
+    localSettings.language.toLowerCase().startsWith('hi');
+
   const matchingVoices = availableVoices.filter((v) => {
+    if (isCurrentHindi) {
+      return isHindiVoice(v);
+    }
     const langPrefix = localSettings.language.split('-')[0].toLowerCase();
     const vPrefix = v.lang.split('-')[0].toLowerCase();
     return v.lang.toLowerCase() === localSettings.language.toLowerCase() || vPrefix === langPrefix;
   });
 
   const handleLanguageChange = (newCode: string) => {
-    // If current voiceURI doesn't match new language, suggest best matching voice if available
     let updatedVoiceURI = localSettings.voiceURI;
+    const isTargetHindi =
+      newCode === 'hi-IN' || newCode === 'hinglish' || newCode.toLowerCase().startsWith('hi');
+
     const targetVoices = availableVoices.filter((v) => {
+      if (isTargetHindi) {
+        return isHindiVoice(v);
+      }
       const langPrefix = newCode.split('-')[0].toLowerCase();
       const vPrefix = v.lang.split('-')[0].toLowerCase();
       return v.lang.toLowerCase() === newCode.toLowerCase() || vPrefix === langPrefix;
@@ -48,6 +64,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (targetVoices.length > 0 && !targetVoices.some((v) => v.voiceURI === localSettings.voiceURI)) {
       // Pick first matching voice
       updatedVoiceURI = targetVoices[0].voiceURI;
+    } else if (isTargetHindi && targetVoices.length === 0) {
+      // Clear voiceURI so it does not retain an English voice when switched to Hindi
+      updatedVoiceURI = '';
     }
 
     setLocalSettings({
@@ -225,24 +244,86 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
             <div className="flex items-center justify-between">
               <label className="font-hud font-semibold text-slate-200 block">Synthesizer Voice Profile</label>
-              {matchingVoices.length > 0 && (
+              {matchingVoices.length > 0 ? (
                 <span className="text-[10px] text-cyan-400 font-mono">
                   {matchingVoices.length} native voice(s) found
                 </span>
-              )}
+              ) : isCurrentHindi ? (
+                <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 inline" /> 0 Hindi voices
+                </span>
+              ) : null}
             </div>
+
             <select
               value={localSettings.voiceURI}
               onChange={(e) => setLocalSettings({ ...localSettings, voiceURI: e.target.value })}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-cyan-200 focus:outline-none focus:border-cyan-400 text-xs"
             >
               <option value="">Default System Voice (Auto)</option>
-              {availableVoices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang}) {v.lang.toLowerCase().startsWith(localSettings.language.split('-')[0].toLowerCase()) ? '★ MATCH' : ''}
-                </option>
-              ))}
+              {availableVoices.map((v) => {
+                const isHindi = isHindiVoice(v);
+                return (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name} ({v.lang}) {isHindi ? '★ HINDI NATIVE' : ''}
+                  </option>
+                );
+              })}
             </select>
+
+            {isCurrentHindi && matchingVoices.length === 0 && (
+              <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 text-[11px] leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 mb-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                  <span>Hindi TTS voice unavailable on this device/browser.</span>
+                </div>
+                <p className="text-amber-200/80">
+                  Audio output will be requested in <code className="font-mono bg-black/40 px-1 py-0.5 rounded text-amber-300">hi-IN</code> without forcing an English voice. To enable native speech on Android/Chrome, install or select the Hindi voice pack in <em>Settings &gt; Accessibility &gt; Text-to-speech output</em>.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Safe Non-Sensitive Speech Diagnostics */}
+          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-hud font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
+                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                TTS Engine Diagnostics
+              </span>
+              <span className="text-[10px] font-mono text-cyan-400">
+                {speechDiagnostics?.speechSynthesisAvailable ? 'Web Speech API Active' : 'API Standby'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+              <div className="p-2 rounded bg-slate-900 border border-slate-800/80">
+                <span className="text-slate-500 block text-[9px] uppercase">Active Lang</span>
+                <span className="text-cyan-300 truncate block">{localSettings.language}</span>
+              </div>
+              <div className="p-2 rounded bg-slate-900 border border-slate-800/80">
+                <span className="text-slate-500 block text-[9px] uppercase">Requested Locale</span>
+                <span className="text-cyan-300 truncate block">
+                  {speechDiagnostics?.requestedTtsLocale || (isCurrentHindi ? 'hi-IN' : localSettings.language)}
+                </span>
+              </div>
+              <div className="p-2 rounded bg-slate-900 border border-slate-800/80">
+                <span className="text-slate-500 block text-[9px] uppercase">Selected Voice</span>
+                <span className="text-cyan-300 truncate block">
+                  {speechDiagnostics?.selectedVoiceName || (localSettings.voiceURI ? 'Configured' : 'Auto / System')}
+                </span>
+              </div>
+              <div className="p-2 rounded bg-slate-900 border border-slate-800/80">
+                <span className="text-slate-500 block text-[9px] uppercase">Hindi Voices Detected</span>
+                <span className="text-cyan-300 truncate block">
+                  {availableVoices.filter(isHindiVoice).length} installed
+                </span>
+              </div>
+            </div>
+            {speechDiagnostics?.statusMessage && (
+              <div className="text-[10px] text-slate-400 font-mono truncate pt-1">
+                Status: <span className="text-slate-200">{speechDiagnostics.statusMessage}</span>
+              </div>
+            )}
           </div>
 
           {/* Speech Rate & Pitch */}

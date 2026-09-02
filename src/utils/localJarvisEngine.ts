@@ -133,10 +133,10 @@ export function processOfflineCommand(
     return {
       reply: ack,
       spokenText: ack,
-      intent: 'system_diagnostic',
+      intent: 'language_switch',
       languageChangedTo: langSwitch.newLang,
       actionExecuted: true,
-      actionDetail: { type: 'system_diagnostic', title: `Switch Language to ${langSwitch.newLang}` },
+      actionDetail: { type: 'language_switch', title: `Switch Language to ${langSwitch.newLang}`, payload: { language: langSwitch.newLang } },
       updatedMemory,
       offline: true,
     };
@@ -192,10 +192,10 @@ export function processOfflineCommand(
     };
   }
 
-  // 1. YouTube Channel Status Inquiries ("YouTube का क्या status है", "YouTube status", "YouTube update")
+  // 1. YouTube Channel Status Inquiries ("YouTube का क्या status है", "YouTube status", "YouTube update", "YouTube की स्थिति क्या है?")
   if (
-    lower.includes('youtube') &&
-    (lower.includes('status') || lower.includes('update') || lower.includes('क्या') || lower.includes('kya status') || lower.includes('connected') || lower.includes('channel') || lower.includes('अपडेट') || lower.includes('स्थिति') || lower.includes('stats'))
+    (lower.includes('youtube') || lower.includes('यूट्यूब')) &&
+    (lower.includes('status') || lower.includes('update') || lower.includes('क्या') || lower.includes('kya status') || lower.includes('connected') || lower.includes('channel') || lower.includes('अपडेट') || lower.includes('स्थिति') || lower.includes('stats') || lower.includes('चैनल') || lower.includes('जुड़ा'))
   ) {
     updatedMemory.stats.actionsExecuted += 1;
     const yt = currentMemory.youTubeConnection;
@@ -336,6 +336,35 @@ export function processOfflineCommand(
     };
   }
 
+  // 5.0 Dedicated Weather Inquiry ("आज का मौसम बताओ", "मौसम कैसा है", "what is the weather", "weather update")
+  if (
+    (lower.includes('मौसम') || lower.includes('weather') || lower.includes('तापमान') || lower.includes('temperature') || lower.includes('forecast')) &&
+    !lower.includes('good morning') && !lower.includes('सुप्रभात') && !lower.includes('ब्रीफिंग') && !lower.includes('briefing') && !lower.includes('बैटरी')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const weatherData = mobileStatus?.weather;
+    const condition = weatherData?.condition || 'Clear Sky';
+    const tempC = weatherData?.temperatureC ?? 27;
+    const humidity = weatherData?.humidity ?? 48;
+    const location = weatherData?.location || 'New Delhi';
+
+    const reply = isHindi
+      ? `आज का मौसम ${condition === 'Clear Sky' ? 'साफ (Clear Sky)' : condition} है। वर्तमान तापमान लगभग ${tempC}°C (${location}) और आर्द्रता ${humidity}% है।`
+      : isHinglish
+      ? `Aaj ka weather ${condition} hai, temperature ${tempC}°C (${location}), humidity ${humidity}%.`
+      : `Today's weather in ${location} is ${condition} with a temperature of ${tempC}°C and ${humidity}% humidity.`;
+
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'weather_inquiry',
+      actionExecuted: true,
+      actionDetail: { type: 'weather_inquiry', title: `Weather: ${tempC}°C, ${condition}`, payload: { temperatureC: tempC, condition, location, humidity } },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
   // 5. Morning Briefing & Mobile Personal Status (Strict Permission Matrix Enforcement)
   if (
     lower.includes('good morning') ||
@@ -346,7 +375,6 @@ export function processOfflineCommand(
     lower.includes('mobile status') ||
     lower.includes('मोबाइल स्टेटस') ||
     lower.includes('बैटरी') ||
-    lower.includes('मौसम') ||
     lower === 'gm' ||
     lower === '/briefing' ||
     lower === '/morning'
@@ -464,23 +492,27 @@ export function processOfflineCommand(
     };
   }
 
-  // 6. Calculator & Math Expressions
-  const mathQueryMatch = clean.match(/(?:calculate|what is|compute|solve|\bhow much is\b)\s+([0-9+\-*/().\s]+)/i);
+  // 6. Calculator & Math Expressions (Supports English, Hindi phrases e.g. "2 + 2 कितना होता है", and raw arithmetic)
+  const mathQueryMatch =
+    clean.match(/(?:calculate|what is|compute|solve|\bhow much is\b)\s+([0-9+\-*/().\s×÷]+)/i) ||
+    clean.match(/([0-9]+(?:\.[0-9]+)?(?:\s*[\+\-\*\/×÷]\s*[0-9]+(?:\.[0-9]+)?)+)(?:\s*(?:कितना होता है|कितना है|होता है|kitna hota hai|kitna hai|kya hoga|\?))?/i);
+
   if (mathQueryMatch && /[0-9]/.test(mathQueryMatch[1])) {
     try {
-      const sanitized = mathQueryMatch[1].replace(/×/g, '*').replace(/÷/g, '/').trim();
+      const expr = mathQueryMatch[1].trim();
+      const sanitized = expr.replace(/×/g, '*').replace(/÷/g, '/').trim();
       if (/^[0-9+\-*/().\s]+$/.test(sanitized)) {
         const val = new Function(`'use strict'; return (${sanitized})`)();
         if (typeof val === 'number' && Number.isFinite(val)) {
           updatedMemory.stats.actionsExecuted += 1;
           const resStr = String(Math.round(val * 1000000) / 1000000);
-          const reply = isHindi ? `गणना परिणाम: ${sanitized} = ${resStr}` : isHinglish ? `Result: ${sanitized} = ${resStr}` : `${sanitized} is ${resStr}.`;
+          const reply = isHindi ? `${expr} का मान ${resStr} होता है, सर।` : isHinglish ? `Result: ${expr} = ${resStr}` : `${expr} is ${resStr}.`;
           return {
             reply,
-            spokenText: isHindi ? `उत्तर ${resStr} है।` : isHinglish ? `Result ${resStr} hai.` : `The result is ${resStr}.`,
+            spokenText: isHindi ? `${expr} बराबर ${resStr} होता है।` : isHinglish ? `${expr} is equal to ${resStr}.` : `The result of ${expr} is ${resStr}.`,
             intent: 'open_calculator',
             actionExecuted: true,
-            actionDetail: { type: 'open_calculator', title: `Computed: ${sanitized} = ${resStr}` },
+            actionDetail: { type: 'open_calculator', title: `Computed: ${expr} = ${resStr}`, payload: { expression: expr, result: val } },
             updatedMemory,
             offline: true,
           };
@@ -515,6 +547,138 @@ export function processOfflineCommand(
       intent: 'open_notepad',
       actionExecuted: true,
       actionDetail: { type: 'open_notepad', title: 'Open Notepad Workspace' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 7.1 Telephony & Voice Calling ("call Dr. Wayne", "answer call", "hang up", "open dialer", etc.)
+  if (
+    lower.startsWith('call ') ||
+    lower.startsWith('dial ') ||
+    lower.includes('phone call') ||
+    lower.includes('make a call') ||
+    lower.includes('कॉल करो') ||
+    lower.includes('फोन करो') ||
+    lower.includes('call lagao')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const targetMatch = clean.match(/(?:call|dial|फोन करो|कॉल करो|call lagao)\s+(.+)/i);
+    const target = targetMatch ? targetMatch[1].trim() : 'Contact';
+    const reply = isHindi
+      ? `${target} को ऑटोनॉमस वॉयस कॉल कनेक्ट किया जा रहा है।`
+      : isHinglish
+      ? `${target} ko call connect kiya ja raha hai.`
+      : `Initiating autonomous voice call to ${target}.`;
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'make_call',
+      actionExecuted: true,
+      actionDetail: { type: 'make_call', title: `Calling ${target}`, payload: { target, autoDial: true } },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  if (
+    lower.includes('answer call') ||
+    lower.includes('pick up the phone') ||
+    lower.includes('pick up the call') ||
+    lower.includes('कॉल उठाओ') ||
+    lower.includes('फोन उठाओ') ||
+    lower.includes('phone uthao')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi ? 'कॉल कनेक्ट किया जा रहा है।' : 'Connecting call with caller.';
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'answer_call',
+      actionExecuted: true,
+      actionDetail: { type: 'answer_call', title: 'Call Connected' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  if (
+    lower.includes('hang up') ||
+    lower.includes('end call') ||
+    lower.includes('cut the call') ||
+    lower.includes('disconnect call') ||
+    lower.includes('कॉल काटो') ||
+    lower.includes('फोन काटो') ||
+    lower.includes('call kato')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi ? 'फोन कॉल समाप्त कर दिया गया है।' : 'Terminating active phone call.';
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'hangup_call',
+      actionExecuted: true,
+      actionDetail: { type: 'hangup_call', title: 'Call Ended' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  if (
+    lower.includes('reject call') ||
+    lower.includes('decline call') ||
+    lower.includes('कॉल रिजेक्ट करो')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi ? 'कॉल रिजेक्ट कर दिया गया है।' : 'Declining incoming call.';
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'reject_call',
+      actionExecuted: true,
+      actionDetail: { type: 'reject_call', title: 'Call Declined' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  if (
+    lower.includes('call hub') ||
+    lower.includes('open dialer') ||
+    lower.includes('open phone') ||
+    lower.includes('phone dialer') ||
+    lower.includes('telephony') ||
+    lower.includes('कॉल हब') ||
+    lower.includes('फोन डायलर')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi ? 'टेलीफोनी हब खोला जा रहा है।' : isHinglish ? 'Telephony Hub open ho raha hai.' : 'Opening Voice AI Telephony Hub.';
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'telephony_hub',
+      actionExecuted: true,
+      actionDetail: { type: 'telephony_hub', title: 'Open Telephony Hub' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  if (
+    lower.includes('call history') ||
+    lower.includes('call logs') ||
+    lower.includes('recent calls') ||
+    lower.includes('who called') ||
+    lower.includes('कॉल हिस्ट्री')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi ? 'कॉल हिस्ट्री और लॉग्स लोड किए जा रहे हैं।' : 'Loading phone call logs and transcripts.';
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'call_history',
+      actionExecuted: true,
+      actionDetail: { type: 'call_history', title: 'Call History' },
       updatedMemory,
       offline: true,
     };
@@ -718,8 +882,13 @@ export function processOfflineCommand(
     };
   }
 
-  // 12. Time / Date / Diagnostics
-  if (lower.includes('time') || lower.includes('date') || lower.includes('समय') || lower.includes('तारीख') || lower.includes('waqt') || lower.includes('diagnostic')) {
+  // 12.0 System Diagnostics & Full System Time/Date Report ("what is the current time and date", "diagnostics")
+  if (
+    lower.includes('current time and date') ||
+    lower.includes('diagnostic') ||
+    lower.includes('system status') ||
+    lower.includes('diagnostics')
+  ) {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -733,6 +902,73 @@ export function processOfflineCommand(
       reply,
       spokenText: reply,
       intent: 'system_diagnostic',
+      actionExecuted: true,
+      actionDetail: { type: 'system_diagnostic', title: 'Diagnostics Nominal' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 12.1 Time & Date / Clock Inquiry ("time kya hai", "kitne baje", "abhi ka time kya ho raha hai", "abhi kitne baje hain")
+  if (
+    lower.includes('time') ||
+    lower.includes('date') ||
+    lower.includes('समय') ||
+    lower.includes('तारीख') ||
+    lower.includes('waqt') ||
+    lower.includes('बजे') ||
+    lower.includes('कितने बजे') ||
+    lower.includes('घड़ी') ||
+    lower.includes('clock')
+  ) {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const reply = isHindi
+      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। सभी सिस्टम सामान्य हैं।`
+      : isHinglish
+      ? `Abhi time ${timeStr} hai, date ${dateStr}. Systems nominal.`
+      : `The current system time is ${timeStr} on ${dateStr}. Systems are operational.`;
+
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'time_inquiry',
+      actionExecuted: true,
+      actionDetail: { type: 'time_inquiry', title: `Current Time: ${timeStr}`, payload: { timeStr, dateStr } },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 12.5 JARVIS Capabilities & Help Inquiry ("JARVIS क्या कर सकता है?", "What can you do?")
+  if (
+    lower.includes('क्या कर सकता') ||
+    lower.includes('क्या कर सकते') ||
+    lower.includes('क्या कर सकती') ||
+    lower.includes('kya kar sakte') ||
+    lower.includes('kya kar sakta') ||
+    lower.includes('what can you do') ||
+    lower.includes('what are your capabilities') ||
+    lower.includes('capabilities') ||
+    lower.includes('features') ||
+    lower.includes('तुम्हारी क्षमताएं') ||
+    lower.includes('what can jarvis do')
+  ) {
+    const reply = isHindi
+      ? `मैं HERMES JARVIS हूँ — आपका ऑटोनॉमस AI असिस्टेंट। मुख्य क्षमताएं:\n1. 📱 मोबाइल स्थिति, मौसम व सुबह की ब्रीफिंग\n2. 🛡️ 4-लेवल सुरक्षा व अनुमति नियंत्रण\n3. 💼 फ्रीलांस कोटेशन व लीड प्रबंधन\n4. 📱 सोशल मीडिया पोस्ट्स जनरेशन\n5. 💻 गिट ऑडिट, फाइल्स व ऑटोनॉमस टूल्स\n6. 🌐 यूट्यूब वीडियो सारांश व ओरेकल क्लाउड मॉनिटरिंग`
+      : isHinglish
+      ? `Mai HERMES JARVIS hoon. Key capabilities: Mobile status & weather, freelance quotations, social media drafts, git/code audit, youtube summary, and Oracle Cloud monitoring.`
+      : `I am HERMES JARVIS — your autonomous AI assistant. Key capabilities include:\n1. Mobile Personal Status, weather & morning briefings\n2. 4-Level Security Matrix & Human Consent Gateway\n3. Freelance pipeline & instant quotation generation\n4. Social media drafts with Level-4 publishing approval\n5. Autonomous tools: Git audit, file manager & web research\n6. YouTube video summarization & Oracle Cloud VM monitoring`;
+
+    return {
+      reply,
+      spokenText: isHindi
+        ? `मैं हरमीस जार्विस हूँ। मैं मोबाइल स्टेटस, मौसम, सुरक्षा गेटवे, फ्रीलांस कोटेशन, सोशल मीडिया और गिट टूल्स में आपकी सहायता कर सकता हूँ।`
+        : reply,
+      intent: 'capabilities_inquiry',
+      actionExecuted: true,
+      actionDetail: { type: 'capabilities_inquiry', title: 'JARVIS Capabilities Matrix' },
       updatedMemory,
       offline: true,
     };
