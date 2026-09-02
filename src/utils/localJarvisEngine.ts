@@ -1,5 +1,14 @@
 import { IntentCategory, ActionDetail, MemoryStore, MobileStatusData } from '../types';
 import { detectSpeechLanguage, detectLanguageSwitchCommand, isSpeechInterruptionCommand } from './languages';
+import {
+  maskPhoneNumber,
+  DEFAULT_CLINIC_CONFIG,
+  evaluateClinicSafety,
+  checkHumanHandoffIntent,
+} from './telephonyPermissions';
+import { TelephonyProviderRegistry } from './telephonyAdapters';
+
+let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
 export interface LocalProcessingResult {
   reply: string;
@@ -492,10 +501,61 @@ export function processOfflineCommand(
     };
   }
 
+  // 5.5 Location Services & Geolocation Coordinates Inquiry
+  if (
+    lower.includes('where am i') ||
+    lower.includes('my location') ||
+    lower.includes('current location') ||
+    lower.includes('show map') ||
+    lower.includes('open map') ||
+    lower.includes('location services') ||
+    lower.includes('gps coordinates') ||
+    lower.includes('my coordinates') ||
+    lower.includes('gps status') ||
+    lower.includes('geolocation') ||
+    lower.includes('मेरा लोकेशन') ||
+    lower.includes('मेरी लोकेशन') ||
+    lower.includes('कहाँ हूँ') ||
+    lower.includes('लोकेशन बताओ')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'जियोलोकेशन और टैक्टिकल मैप मोड्यूल खोला जा रहा है। आपके जीपीएस निर्देशांक प्राप्त किए जा रहे हैं।'
+      : isHinglish
+      ? 'Location Services & Tactical Map open ho raha hai. Real-time GPS telemetry acquire ki ja rahi hai.'
+      : 'Accessing Geolocation API and orbital positioning telemetry. Opening Tactical Location Services.';
+
+    return {
+      reply,
+      spokenText: isHindi
+        ? 'लोकेशन सर्विसेज और जीपीएस मैप खोला जा रहा है।'
+        : isHinglish
+        ? 'Opening Location Services and tactical GPS map.'
+        : 'Accessing orbital telemetry. Opening Geolocation HUD.',
+      intent: 'location_services',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'location_services',
+        title: 'Launch Location Services & Tactical Map',
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
   // 6. Calculator & Math Expressions (Supports English, Hindi phrases e.g. "2 + 2 कितना होता है", and raw arithmetic)
+  const isCallingCommand =
+    lower.startsWith('call ') ||
+    lower.startsWith('dial ') ||
+    lower.includes('phone') ||
+    lower.includes('कॉल') ||
+    lower.includes('फोन') ||
+    lower.includes('call lagao');
+
   const mathQueryMatch =
-    clean.match(/(?:calculate|what is|compute|solve|\bhow much is\b)\s+([0-9+\-*/().\s×÷]+)/i) ||
-    clean.match(/([0-9]+(?:\.[0-9]+)?(?:\s*[\+\-\*\/×÷]\s*[0-9]+(?:\.[0-9]+)?)+)(?:\s*(?:कितना होता है|कितना है|होता है|kitna hota hai|kitna hai|kya hoga|\?))?/i);
+    !isCallingCommand &&
+    (clean.match(/(?:calculate|what is|compute|solve|\bhow much is\b)\s+([0-9+\-*/().\s×÷]+)/i) ||
+      clean.match(/([0-9]+(?:\.[0-9]+)?(?:\s*[\+\-\*\/×÷]\s*[0-9]+(?:\.[0-9]+)?)+)(?:\s*(?:कितना होता है|कितना है|होता है|kitna hota hai|kitna hai|kya hoga|\?))?/i));
 
   if (mathQueryMatch && /[0-9]/.test(mathQueryMatch[1])) {
     try {
@@ -553,6 +613,101 @@ export function processOfflineCommand(
   }
 
   // 7.1 Telephony & Voice Calling ("call Dr. Wayne", "answer call", "hang up", "open dialer", etc.)
+  // Mandatory Level-4 Outbound Authorization (Section H)
+  if (
+    lower.includes('कल इस नंबर पर फोन') ||
+    lower.includes('कल फोन करना') ||
+    lower.includes('schedule call tomorrow')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const targetMatch = clean.match(/(?:नंबर पर फोन|कल फोन करना|schedule call tomorrow)\s*(.*)/i);
+    const target = targetMatch && targetMatch[1].trim() ? targetMatch[1].trim() : '+91 9876543210';
+    const masked = maskPhoneNumber(target);
+    stagedOutboundCall = { destination: target, masked, isScheduled: true };
+    const reply = isHindi
+      ? `कल के लिए ${masked} पर आउटबाउंड कॉल रिक्वेस्ट दर्ज कर ली गई है।`
+      : `Scheduled pending outbound call request for tomorrow to ${masked}.`;
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'outbound_call_authorization',
+      actionExecuted: true,
+      actionDetail: { type: 'outbound_call_authorization', title: `Scheduled Call: ${masked}`, payload: { target, masked, scheduled: true } },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // Explicit confirmation for staged call ("हाँ, कॉल करो", "yes call", "approve call")
+  if (
+    (lower === 'हाँ, कॉल करो' ||
+      lower === 'हाँ कॉल करो' ||
+      lower.includes('call now') ||
+      lower.includes('yes, call') ||
+      lower.includes('yes call') ||
+      lower.includes('approve call') ||
+      lower === 'हाँ' ||
+      lower === 'yes' ||
+      lower === 'approve') &&
+    stagedOutboundCall
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const { destination, masked } = stagedOutboundCall;
+    const providerStatus = TelephonyProviderRegistry.getActiveStatus();
+
+    if (providerStatus === 'NOT_CONFIGURED') {
+      stagedOutboundCall = null;
+      const reply = isHindi
+        ? `कॉल नहीं की जा सकी क्योंकि टेलीफोनी क्रेडेंशियल्स कॉन्फ़िगर नहीं हैं (TELEPHONY_NOT_CONFIGURED)।`
+        : `Cannot place outbound call because telephony credentials are missing (TELEPHONY_NOT_CONFIGURED).`;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'outbound_call_authorization',
+        actionExecuted: false,
+        actionDetail: { type: 'outbound_call_authorization', title: 'Telephony Not Configured', payload: { status: 'TELEPHONY_NOT_CONFIGURED' } },
+        updatedMemory,
+        offline: true,
+      };
+    }
+
+    stagedOutboundCall = null;
+    const reply = isHindi
+      ? `कॉल अधिकृत हो गई है। ${masked} पर आउटबाउंड कॉल शुरू की जा रही है।`
+      : `Call authorized. Placing outbound call to ${masked} through carrier gateway.`;
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'make_call',
+      actionExecuted: true,
+      actionDetail: { type: 'make_call', title: `Calling ${masked}`, payload: { destination, autoDial: true } },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // Explicit cancellation ("रहने दो", "cancel call", "don't call")
+  if (
+    lower.includes('रहने दो') ||
+    lower.includes('cancel call') ||
+    lower.includes('don\'t call') ||
+    lower.includes('कॉल रद्द करो')
+  ) {
+    stagedOutboundCall = null;
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi ? 'आउटबाउंड कॉल रद्द कर दी गई है।' : 'Outbound call has been cancelled.';
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'outbound_call_authorization',
+      actionExecuted: true,
+      actionDetail: { type: 'outbound_call_authorization', title: 'Outbound Call Cancelled' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // Outbound call command - Requires Level-4 Human Authorization (Section H)
   if (
     lower.startsWith('call ') ||
     lower.startsWith('dial ') ||
@@ -560,22 +715,103 @@ export function processOfflineCommand(
     lower.includes('make a call') ||
     lower.includes('कॉल करो') ||
     lower.includes('फोन करो') ||
-    lower.includes('call lagao')
+    lower.includes('call lagao') ||
+    lower.includes('इस नंबर पर फोन करो')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
-    const targetMatch = clean.match(/(?:call|dial|फोन करो|कॉल करो|call lagao)\s+(.+)/i);
-    const target = targetMatch ? targetMatch[1].trim() : 'Contact';
+    const targetMatch = clean.match(/(?:call|dial|फोन करो|कॉल करो|call lagao|इस नंबर पर फोन करो)\s+(.+)/i);
+    const target = targetMatch ? targetMatch[1].trim() : '+91 9876543210';
+    const masked = maskPhoneNumber(target);
+
+    // Stage for Level-4 Authorization
+    stagedOutboundCall = { destination: target, masked };
+
     const reply = isHindi
-      ? `${target} को ऑटोनॉमस वॉयस कॉल कनेक्ट किया जा रहा है।`
-      : isHinglish
-      ? `${target} ko call connect kiya ja raha hai.`
-      : `Initiating autonomous voice call to ${target}.`;
+      ? `सर, मैं इस नंबर पर कॉल करने वाला हूँ: ${masked}। क्या आप अनुमति देते हैं?`
+      : `Sir, I am about to call: ${masked}. Do you authorize this outbound call?`;
     return {
       reply,
       spokenText: reply,
-      intent: 'make_call',
+      intent: 'outbound_call_authorization',
       actionExecuted: true,
-      actionDetail: { type: 'make_call', title: `Calling ${target}`, payload: { target, autoDial: true } },
+      actionDetail: {
+        type: 'outbound_call_authorization',
+        title: `Authorization Required: ${masked}`,
+        payload: { target, masked, requiresApproval: true },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 7.2 Clinic Operating Hours Query (Section C & X)
+  if (
+    lower.includes('क्लिनिक कितने बजे') ||
+    lower.includes('क्लिनिक खुलेगा') ||
+    lower.includes('clinic hours') ||
+    lower.includes('clinic timing') ||
+    lower.includes('when does the clinic open') ||
+    lower.includes('what time does the clinic open')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? `क्लिनिक सोमवार से शुक्रवार सुबह 9:00 बजे से शाम 6:00 बजे तक और शनिवार को सुबह 9:00 बजे से दोपहर 2:00 बजे तक खुला रहता है।`
+      : `The clinic is open Monday through Friday from 9:00 AM to 6:00 PM, and Saturday from 9:00 AM to 2:00 PM.`;
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'clinic_hours',
+      actionExecuted: true,
+      actionDetail: { type: 'clinic_hours', title: 'Clinic Hours Telemetry' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 7.3 Clinic Appointment Process Query (Section C & X)
+  if (
+    lower.includes('अपॉइंटमेंट कैसे मिलेगा') ||
+    lower.includes('अपॉइंटमेंट के लिए क्या करना होगा') ||
+    lower.includes('appointment के लिए क्या करना') ||
+    lower.includes('how to get an appointment') ||
+    lower.includes('book appointment') ||
+    lower.includes('appointment process')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? DEFAULT_CLINIC_CONFIG.appointmentProcess.hi
+      : DEFAULT_CLINIC_CONFIG.appointmentProcess.en;
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'appointment_process',
+      actionExecuted: true,
+      actionDetail: { type: 'appointment_process', title: 'Appointment Booking Process' },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 7.4 Human Handoff Intent (Section G & X)
+  if (checkHumanHandoffIntent(clean)) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const provider = TelephonyProviderRegistry.getProvider();
+    let reply = '';
+    if (provider.isConfigured()) {
+      reply = isHindi
+        ? 'मैं आपकी कॉल क्लिनिक कर्मचारी को ट्रांसफर कर रहा हूँ, कृपया प्रतीक्षा करें।'
+        : 'Attempting to transfer your call to our human clinic staff, please hold.';
+    } else {
+      reply = isHindi
+        ? 'माफ़ कीजिए, अभी क्लिनिक स्टाफ सीधे उपलब्ध नहीं है। क्या मैं आपका कोई संदेश नोट कर सकता हूँ?'
+        : 'I apologize, our human staff is not directly reachable on this line right now. Would you like to leave a message?';
+    }
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'human_handoff',
+      actionExecuted: true,
+      actionDetail: { type: 'human_handoff', title: 'Human Staff Handoff' },
       updatedMemory,
       offline: true,
     };

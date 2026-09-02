@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   Wrench,
   PhoneCall,
+  Navigation,
 } from 'lucide-react';
 import { ActiveAppWindow } from '../types';
 
@@ -37,6 +38,13 @@ export const AppDock: React.FC<AppDockProps> = ({
       voiceCmd: 'open dialer',
       icon: PhoneCall,
       color: 'text-cyan-300',
+    },
+    {
+      id: 'location' as const,
+      label: 'Location & GPS',
+      voiceCmd: 'where am i',
+      icon: Navigation,
+      color: 'text-emerald-400',
     },
     {
       id: 'blueprint' as const,

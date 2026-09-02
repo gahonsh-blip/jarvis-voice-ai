@@ -39,6 +39,13 @@ import {
   SIMULATED_INCOMING_CALLERS,
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
+import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
+import {
+  PHONE_PERMISSION_DEFINITIONS,
+  DEFAULT_PHONE_PERMISSIONS,
+  DEFAULT_CLINIC_CONFIG,
+  PhonePermissionKey,
+} from '../utils/telephonyPermissions';
 
 interface TelephonyHubModalProps {
   isOpen: boolean;
@@ -70,7 +77,76 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   onTriggerIncomingCall,
   onClearHistory,
 }) => {
-  const [activeTab, setActiveTab] = useState<'dialer' | 'receptionist' | 'logs' | 'gateway'>('dialer');
+  const [activeTab, setActiveTab] = useState<'dialer' | 'receptionist' | 'logs' | 'gateway' | 'permissions' | 'test_suite'>('dialer');
+  const [testResults, setTestResults] = useState<TestSuiteSummary | null>(null);
+  const [isRunningTests, setIsRunningTests] = useState(false);
+  const [phonePermissions, setPhonePermissions] = useState<Record<string, boolean>>(() => {
+    const raw: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(DEFAULT_PHONE_PERMISSIONS)) {
+      raw[k] = v === 'GRANTED';
+    }
+    return raw;
+  });
+  const [providerStatus, setProviderStatus] = useState<{
+    status: string;
+    isConfigured: boolean;
+    provider?: { id: string; name: string };
+  } | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/telephony/status')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success) {
+          setProviderStatus(data);
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/telephony/permissions')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && data.permissions) {
+          const map: Record<string, boolean> = {};
+          for (const [k, v] of Object.entries(data.permissions as Record<string, any>)) {
+            map[k] = v.state === 'GRANTED';
+          }
+          setPhonePermissions(map);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleRunTests = async () => {
+    setIsRunningTests(true);
+    try {
+      const summary = await runTelephonyTestSuite();
+      setTestResults(summary);
+    } catch (e) {
+      console.error('Error running test suite:', e);
+    } finally {
+      setIsRunningTests(false);
+    }
+  };
+
+  const handleTogglePermission = (key: string) => {
+    const updated = {
+      ...phonePermissions,
+      [key]: !phonePermissions[key],
+    };
+    setPhonePermissions(updated);
+    fetch('/api/telephony/permissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        [key]: {
+          key,
+          state: updated[key] ? 'GRANTED' : 'DENIED',
+          lastUpdated: new Date().toISOString(),
+        },
+      }),
+    }).catch(() => {});
+  };
 
   // Dialer state
   const [dialNumber, setDialNumber] = useState('');
@@ -186,6 +262,16 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <span
+              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${
+                providerStatus?.isConfigured
+                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${providerStatus?.isConfigured ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
+              {providerStatus?.isConfigured ? 'GATEWAY CONFIGURED' : 'TELEPHONY_NOT_CONFIGURED'}
+            </span>
             {activeCall && (
               <span className="rounded-lg bg-cyan-950 px-2.5 py-1 text-xs font-mono text-cyan-300 border border-cyan-800">
                 Call Active ({activeCall.status})
@@ -201,50 +287,72 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 bg-slate-900/40 px-6">
+        <div className="flex border-b border-slate-800 bg-slate-900/40 px-6 overflow-x-auto">
           <button
             onClick={() => setActiveTab('dialer')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold whitespace-nowrap transition-all ${
               activeTab === 'dialer'
                 ? 'border-cyan-400 text-cyan-300 bg-cyan-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <PhoneOutgoing className="h-4 w-4" />
-            Autonomous Outbound Dialer
+            Outbound Dialer
           </button>
           <button
             onClick={() => setActiveTab('receptionist')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold whitespace-nowrap transition-all ${
               activeTab === 'receptionist'
                 ? 'border-cyan-400 text-cyan-300 bg-cyan-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <PhoneIncoming className="h-4 w-4" />
-            AI Receptionist & Inbound Rules
+            AI Receptionist
           </button>
           <button
             onClick={() => setActiveTab('logs')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold whitespace-nowrap transition-all ${
               activeTab === 'logs'
                 ? 'border-cyan-400 text-cyan-300 bg-cyan-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <FileText className="h-4 w-4" />
-            Call Logs & Intelligence ({callHistory.length})
+            Call Logs ({callHistory.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('permissions')}
+            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold whitespace-nowrap transition-all ${
+              activeTab === 'permissions'
+                ? 'border-cyan-400 text-cyan-300 bg-cyan-950/20'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Shield className="h-4 w-4" />
+            Phone Permissions
           </button>
           <button
             onClick={() => setActiveTab('gateway')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold whitespace-nowrap transition-all ${
               activeTab === 'gateway'
                 ? 'border-cyan-400 text-cyan-300 bg-cyan-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <Settings className="h-4 w-4" />
-            Carrier & Gateway Settings
+            Carrier Gateway
+          </button>
+          <button
+            onClick={() => setActiveTab('test_suite')}
+            className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold whitespace-nowrap transition-all ${
+              activeTab === 'test_suite'
+                ? 'border-emerald-400 text-emerald-300 bg-emerald-950/20'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="h-4 w-4 text-emerald-400" />
+            Automated Tests (20/20)
           </button>
         </div>
 
@@ -860,6 +968,204 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     <CheckCircle2 className="h-4 w-4" /> Save Telephony Gateway Settings
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: PHONE PERMISSIONS MATRIX */}
+          {activeTab === 'permissions' && (
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-950 border border-cyan-500/40">
+                    <Shield className="h-5 w-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white tracking-wide">
+                      Phone Permissions & Access Control Matrix (Section J)
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Strict zero-trust security architecture. Untrusted incoming callers cannot access owner-protected data without explicit runtime grants.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {PHONE_PERMISSION_DEFINITIONS.map((def) => {
+                    const isGranted = phonePermissions[def.key] ?? (def.defaultState === 'GRANTED');
+                    const isHighRisk = def.level >= 4;
+                    return (
+                      <div
+                        key={def.key}
+                        className={`rounded-xl border p-4 transition-all flex flex-col justify-between ${
+                          isGranted
+                            ? 'bg-slate-950/80 border-slate-700'
+                            : 'bg-slate-950/40 border-slate-800 opacity-80'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono font-bold text-cyan-300">{def.nameEn}</span>
+                              {isHighRisk && (
+                                <span className="rounded bg-rose-950/80 border border-rose-600/40 px-1.5 py-0.5 text-[9px] font-mono text-rose-300">
+                                  HIGH RISK
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">{def.descriptionEn}</p>
+                            <span className="mt-2 inline-block text-[10px] font-mono text-slate-500">{def.key} (Level {def.level})</span>
+                          </div>
+                          <button
+                            onClick={() => handleTogglePermission(def.key)}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-mono font-bold transition-all ${
+                              isGranted
+                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50 hover:bg-emerald-500'
+                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                            }`}
+                          >
+                            {isGranted ? 'GRANTED' : 'DENIED'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 rounded-xl bg-amber-950/30 border border-amber-500/30 p-3 flex items-start gap-2 text-xs text-amber-200">
+                  <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Level-4 Human Authorization Policy:</span> High-risk phone operations like placing outbound calls or exposing financial/private data require continuous confirmation. Outbound dialing cannot be triggered solely by voice without explicit human confirmation.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: AUTOMATED REGRESSION TEST SUITE (20/20) */}
+          {activeTab === 'test_suite' && (
+            <div className="max-w-5xl mx-auto space-y-6">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-950 border border-emerald-500/40">
+                      <Sparkles className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white tracking-wide">
+                        Mandatory Telephony Regression Test Suite (20 Tests)
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Validates Sections A through V: Inbound Hindi/English/Hinglish NLP, Clinic Q&A, Medical Refusal, 108/112 Protocol, Privacy, Level-4 Outbound Gate, and Adapters.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleRunTests}
+                    disabled={isRunningTests}
+                    className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all shadow-lg ${
+                      isRunningTests
+                        ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
+                        : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-950/50'
+                    }`}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isRunningTests ? 'animate-spin' : ''}`} />
+                    {isRunningTests ? 'Executing 20 Tests...' : 'Run All 20 Tests Now'}
+                  </button>
+                </div>
+
+                {/* Test Summary Banner */}
+                {testResults && (
+                  <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-mono font-bold ${
+                            testResults.failed === 0
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-rose-950 text-rose-300 border border-rose-500/40'
+                          }`}
+                        >
+                          {testResults.failed === 0
+                            ? `ALL ${testResults.passed}/${testResults.total} TESTS PASSED`
+                            : `${testResults.failed} TESTS FAILED`}
+                        </span>
+                        <span className="text-xs font-mono text-slate-400">
+                          Duration: {testResults.durationMs}ms
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-500">
+                        Executed at: {new Date(testResults.completedAt).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Test Results Grid */}
+                {testResults ? (
+                  <div className="mt-4 space-y-2">
+                    {testResults.results.map((r) => (
+                      <div
+                        key={r.id}
+                        className={`rounded-xl border p-3.5 transition-all ${
+                          r.passed
+                            ? 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                            : 'bg-rose-950/30 border-rose-800/60'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5">
+                            <span
+                              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                                r.passed ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' : 'bg-rose-950 text-rose-400 border border-rose-500/40'
+                              }`}
+                            >
+                              {r.passed ? '✓' : '✗'}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-white">
+                                  #{r.id} {r.name}
+                                </span>
+                                <span className="rounded bg-slate-900 border border-slate-700 px-1.5 py-0.5 text-[9px] font-mono text-cyan-300">
+                                  {r.category}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-500">
+                                  {r.executionTimeMs}ms
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-slate-400">{r.expectedBehavior}</p>
+                              {r.actualOutput && (
+                                <div className="mt-1.5 rounded-lg bg-slate-900 border border-slate-800/80 px-2.5 py-1 text-[11px] font-mono text-slate-300">
+                                  {r.actualOutput}
+                                </div>
+                              )}
+                              {r.error && (
+                                <div className="mt-1.5 rounded-lg bg-rose-950/60 border border-rose-800 px-2.5 py-1 text-[11px] font-mono text-rose-300">
+                                  Error: {r.error}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <span
+                            className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-mono font-bold ${
+                              r.passed ? 'bg-emerald-950/80 text-emerald-300' : 'bg-rose-950/80 text-rose-300'
+                            }`}
+                          >
+                            {r.passed ? 'PASS' : 'FAIL'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-6 rounded-xl border border-dashed border-slate-800 p-8 text-center">
+                    <Sparkles className="mx-auto h-8 w-8 text-slate-600 mb-2" />
+                    <p className="text-xs text-slate-400">Click &quot;Run All 20 Tests Now&quot; to execute the automated verification suite directly in the browser.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}

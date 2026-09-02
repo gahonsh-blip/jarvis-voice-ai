@@ -52,6 +52,11 @@ export type IntentCategory =
   | 'reject_call'
   | 'telephony_hub'
   | 'call_history'
+  | 'clinic_hours'
+  | 'appointment_process'
+  | 'human_handoff'
+  | 'outbound_call_authorization'
+  | 'location_services'
   | 'chat';
 
 export interface ActionDetail {
@@ -137,7 +142,8 @@ export type ActiveAppWindow =
   | 'permission_gateway'
   | 'mobile_remote'
   | 'mobile_personal_status'
-  | 'telephony';
+  | 'telephony'
+  | 'location';
 
 export type MainNavigationTab =
   | 'voice_core'

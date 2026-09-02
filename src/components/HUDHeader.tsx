@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   FileText,
   Globe,
+  Navigation,
 } from 'lucide-react';
 import { getLanguageOption } from '../utils/languages';
 
@@ -39,6 +40,7 @@ interface HUDHeaderProps {
   onOpenAutonomousTools: () => void;
   onOpenPermissionGateway: () => void;
   onOpenMobileStatus?: () => void;
+  onOpenLocation?: () => void;
 }
 
 export const HUDHeader: React.FC<HUDHeaderProps> = ({
@@ -58,6 +60,7 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   onOpenAutonomousTools,
   onOpenPermissionGateway,
   onOpenMobileStatus,
+  onOpenLocation,
 }) => {
   const [time, setTime] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
@@ -246,6 +249,18 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
               <span className="text-slate-400">SECURITY:</span>
               <span className="text-purple-300 font-semibold">LEVEL 2 SAFE</span>
             </button>
+
+            {onOpenLocation && (
+              <button
+                onClick={onOpenLocation}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-emerald-500/50 transition-colors"
+                title="Open Geolocation & Tactical Navigation Services"
+              >
+                <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-slate-400">GPS:</span>
+                <span className="text-emerald-400 font-semibold">GEO-SERVICES</span>
+              </button>
+            )}
           </div>
 
           {/* Right: Real-time Clock, Kill Switch & Action Controls */}

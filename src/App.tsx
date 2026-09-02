@@ -22,6 +22,14 @@ import { PermissionGateway } from './components/PermissionGateway';
 import { MobilePersonalStatusModal } from './components/MobilePersonalStatusModal';
 import { ActiveCallHUD } from './components/ActiveCallHUD';
 import { TelephonyHubModal } from './components/TelephonyHubModal';
+import { LocationServicesModal } from './components/LocationServicesModal';
+import { DashboardMapSnippet } from './components/DashboardMapSnippet';
+import { GeoCoordinates, LocationAddress } from './types/location';
+import {
+  loadCachedLocation,
+  saveCachedLocation,
+  reverseGeocodeCoordinates,
+} from './utils/locationService';
 import { telephonyAudio } from './utils/telephonyAudio';
 import {
   evaluateSpamScore,
@@ -126,6 +134,50 @@ export default function App() {
   const [isCallMuted, setIsCallMuted] = useState(false);
   const [isCallOnHold, setIsCallOnHold] = useState(false);
   const [isAudioFilterActive, setIsAudioFilterActive] = useState(true);
+
+  // Geolocation & Geospatial Telemetry State
+  const [userCoords, setUserCoords] = useState<GeoCoordinates | null>(() => {
+    return loadCachedLocation()?.coords || null;
+  });
+  const [userAddress, setUserAddress] = useState<LocationAddress | null>(() => {
+    return loadCachedLocation()?.address || null;
+  });
+  const [isLocationLoading, setIsLocationLoading] = useState<boolean>(false);
+
+  const handleRefreshLocation = useCallback(() => {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) return;
+    setIsLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const c: GeoCoordinates = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          altitude: pos.coords.altitude,
+          altitudeAccuracy: pos.coords.altitudeAccuracy,
+          heading: pos.coords.heading,
+          speed: pos.coords.speed,
+          timestamp: pos.timestamp,
+        };
+        setUserCoords(c);
+        setIsLocationLoading(false);
+        const addr = await reverseGeocodeCoordinates(c.latitude, c.longitude);
+        setUserAddress(addr);
+        saveCachedLocation(c, addr);
+      },
+      () => {
+        setIsLocationLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  }, []);
+
+  // Request initial location on startup if not already loaded
+  useEffect(() => {
+    if (!userCoords && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+      handleRefreshLocation();
+    }
+  }, [userCoords, handleRefreshLocation]);
 
   // Audio Context & Recognition References
   const recognitionRef = useRef<any>(null);
@@ -806,6 +858,9 @@ export default function App() {
         case 'math_computation':
           setActiveApp('calculator');
           break;
+        case 'location_services':
+          setActiveApp('location');
+          break;
         default:
           break;
       }
@@ -1185,6 +1240,7 @@ export default function App() {
         onOpenAutonomousTools={() => setActiveApp('autonomous_tools')}
         onOpenPermissionGateway={() => setActiveApp('permission_gateway')}
         onOpenMobileStatus={() => setActiveApp('mobile_personal_status')}
+        onOpenLocation={() => setActiveApp('location')}
       />
 
       {/* Main Sci-Fi Dashboard */}
@@ -1210,32 +1266,55 @@ export default function App() {
               <span>HERMES BLUEPRINT MACROS</span>
               <span className="text-cyan-400">CLICK TO EXECUTE</span>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 font-mono text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 font-mono text-xs">
               <button
                 onClick={() => handleSendCommand('JARVIS, project check करो')}
                 className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-cyan-300 text-left truncate transition-colors"
               >
-                "Project check करो"
+                "Project check"
               </button>
               <button
                 onClick={() => handleSendCommand('JARVIS, आज की LinkedIn post बनाओ')}
                 className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-purple-300 text-left truncate transition-colors"
               >
-                "LinkedIn post बनाओ"
+                "LinkedIn post"
+              </button>
+              <button
+                onClick={() => handleSendCommand('Where am I? Current location')}
+                className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-emerald-300 text-left truncate transition-colors"
+              >
+                "Where am I?"
               </button>
               <button
                 onClick={() => handleSendCommand('JARVIS, client inquiry के लिए quotation तैयार करो')}
                 className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-amber-300 text-left truncate transition-colors"
               >
-                "Quotation तैयार करो"
+                "Quotation"
               </button>
               <button
                 onClick={() => handleSendCommand('JARVIS, कल सुबह 9 बजे मुझे report देना')}
                 className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-pink-300 text-left truncate transition-colors"
               >
-                "Morning briefing"
+                "Morning report"
+              </button>
+              <button
+                onClick={() => setActiveApp('telephony')}
+                className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-cyan-300 text-left truncate transition-colors"
+              >
+                "Telephony Hub"
               </button>
             </div>
+          </div>
+
+          {/* Dashboard Geolocation Radar Snippet */}
+          <div className="w-full max-w-sm mt-4">
+            <DashboardMapSnippet
+              coords={userCoords}
+              address={userAddress}
+              isLoading={isLocationLoading}
+              onOpenModal={() => setActiveApp('location')}
+              onRefresh={handleRefreshLocation}
+            />
           </div>
         </div>
 
@@ -1399,6 +1478,17 @@ export default function App() {
           try {
             localStorage.removeItem('hermes_jarvis_call_history');
           } catch {}
+        }}
+      />
+
+      {/* Geolocation & Tactical Navigation Services Modal */}
+      <LocationServicesModal
+        isOpen={activeApp === 'location'}
+        onClose={() => setActiveApp(null)}
+        onSpeak={speakText}
+        onCoordinatesUpdated={(c, a) => {
+          setUserCoords(c);
+          setUserAddress(a);
         }}
       />
     </div>

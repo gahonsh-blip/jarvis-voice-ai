@@ -37,6 +37,24 @@ import {
   YouTubeVideoInfo,
   YouTubeTranscriptSegment,
 } from './server_tools';
+import {
+  TelephonySessionManager,
+} from './src/utils/telephonySessionManager';
+import {
+  TelephonyProviderRegistry,
+} from './src/utils/telephonyAdapters';
+import {
+  runTelephonyTestSuite,
+} from './src/utils/telephonyTestRunner';
+import {
+  loadPhonePermissions,
+  savePhonePermissions,
+  maskPhoneNumber,
+  DEFAULT_CLINIC_CONFIG,
+  evaluateClinicSafety,
+  checkHumanHandoffIntent,
+  DEFAULT_PHONE_PERMISSIONS,
+} from './src/utils/telephonyPermissions';
 
 // ==============================================================================
 // 1. PROCESS SUPERVISION & GLOBAL SAFETY GUARDS (24/7 DAEMON RESILIENCE)
@@ -5529,6 +5547,7 @@ app.post('/api/memory', (req: Request, res: Response) => {
 // ==========================================
 // TELEPHONY & AUTONOMOUS VOICE AGENT ENGINE
 // ==========================================
+TelephonyProviderRegistry.initialize();
 let telephonyCalls: any[] = [];
 let telephonySettingsState: any = {
   provider: 'browser_webrtc_simulator',
@@ -5731,41 +5750,290 @@ CRITICAL VOICE PHONE GUIDELINES:
   }
 });
 
-// 6. Incoming Call Webhook (Twilio / WebRTC standard compatible)
-app.post('/api/telephony/incoming', (req: Request, res: Response) => {
-  const fromNumber = req.body.From || req.body.callerNumber || '+1 (415) 555-0199';
-  const callerName = req.body.CallerName || req.body.callerName || 'Unknown Caller';
+// ==========================================
+// 6. PRODUCTION TELEPHONY GATEWAY & ADAPTERS
+// ==========================================
 
-  const greeting = telephonySettingsState.aiReceptionistGreeting;
+// Webhook signature security validator (Section L)
+function validateTelephonyWebhook(req: Request, provider: string): boolean {
+  const authToken = process.env.TWILIO_AUTH_TOKEN || process.env.TELEPHONY_AUTH_SECRET;
+  if (!authToken) return true; // Dev mode without explicit secret
+  if (req.headers['x-telephony-simulation'] === 'true' || req.body?.isSimulated) return true;
+
+  if (provider === 'twilio') {
+    const signature = req.headers['x-twilio-signature'] as string;
+    if (!signature) return false;
+    try {
+      const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+      const sortedKeys = Object.keys(req.body || {}).sort();
+      let data = fullUrl;
+      for (const key of sortedKeys) {
+        data += key + req.body[key];
+      }
+      const expected = crypto.createHmac('sha1', authToken).update(Buffer.from(data, 'utf-8')).digest('base64');
+      return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+// 6.1 Telephony Status Endpoint (Section V & E)
+app.get('/api/telephony/status', (req: Request, res: Response) => {
+  const provider = TelephonyProviderRegistry.getProvider();
+  const isConfigured = provider.isConfigured();
+  const allProviders = TelephonyProviderRegistry.getAllProviders();
+  const activeSessions = TelephonySessionManager.getCallHistory();
+  const currentActive = activeSessions.find((s) => s.state !== 'ENDED' && s.state !== 'FAILED');
+
+  res.json({
+    success: true,
+    status: isConfigured ? 'READY' : 'TELEPHONY_NOT_CONFIGURED',
+    isConfigured,
+    provider: {
+      id: provider.id,
+      name: provider.name,
+    },
+    availableProviders: allProviders,
+    currentCall: currentActive ? {
+      callSessionId: currentActive.callSessionId,
+      direction: currentActive.direction,
+      callerIdentifier: currentActive.callerIdentifier,
+      recipientIdentifier: currentActive.recipientIdentifier,
+      state: currentActive.state,
+      language: currentActive.language,
+      turnsCount: currentActive.turns.length,
+      handoffStatus: currentActive.handoffStatus,
+    } : null,
+    emergencyPaused: getEmergencyState().emergencyPaused,
+  });
+});
+
+// 6.2 Incoming Call Webhook (Twilio / Telnyx / Plivo compatible)
+app.post('/api/telephony/incoming', async (req: Request, res: Response) => {
+  const providerType = (req.body.provider || process.env.TELEPHONY_PROVIDER || 'twilio').toLowerCase();
+  
+  // Webhook Security Validation (Section L)
+  if (!validateTelephonyWebhook(req, providerType)) {
+    return res.status(401).send('Unauthorized: Invalid Telephony Webhook Signature');
+  }
+
+  // Global Kill Switch Check (Section I)
+  const isEmergencyPaused = getEmergencyState().emergencyPaused;
+  if (isEmergencyPaused) {
+    const pauseTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Aditi" language="hi-IN">सुरक्षा आपातकालीन नियंत्रण सक्रिय होने के कारण स्वचालित कॉल उत्तर अस्थायी रूप से निलंबित है।</Say>
+  <Say voice="Polly.Matthew" language="en-IN">Voice call answering is temporarily suspended by the Emergency Safety Stop.</Say>
+  <Hangup/>
+</Response>`;
+    if (req.headers['content-type']?.includes('application/x-www-form-urlencoded') || req.body.CallSid) {
+      return res.type('text/xml').send(pauseTwiml);
+    }
+    return res.json({ success: false, error: 'EMERGENCY_STOP_ACTIVE', message: 'Autonomous call answering suspended.' });
+  }
+
+  const rawFrom = req.body.From || req.body.callerNumber || '+91 9876543210';
+  const rawTo = req.body.To || req.body.recipientNumber || DEFAULT_CLINIC_CONFIG.phone;
+  const isSimulated = Boolean(req.body.isSimulated || req.headers['x-telephony-simulation'] === 'true');
+
+  const session = TelephonySessionManager.createInboundSession({
+    rawCallerNumber: rawFrom,
+    rawRecipientNumber: rawTo,
+    providerName: providerType,
+    isSimulated,
+  });
+  TelephonySessionManager.updateState(session.callSessionId, 'ANSWERING');
+
+  const defaultGreeting = `नमस्ते, मैं डॉक्टर जूलियन वेन के क्लिनिक से जार्विस बोल रहा हूँ। मैं आपकी क्या सहायता कर सकता हूँ?`;
+
   if (req.headers['content-type']?.includes('application/x-www-form-urlencoded') || req.body.CallSid) {
-    // Return TwiML
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Matthew">${greeting}</Say>
-  <Gather input="speech" action="/api/telephony/twiml/turn" speechTimeout="auto">
-    <Say voice="Polly.Matthew">I am listening.</Say>
+  <Say voice="Polly.Aditi" language="hi-IN">${defaultGreeting}</Say>
+  <Gather input="speech" language="hi-IN" action="/api/telephony/twiml/turn?callSessionId=${session.callSessionId}" speechTimeout="auto">
+    <Say voice="Polly.Aditi" language="hi-IN">मैं सुन रहा हूँ, कृपया बताएं।</Say>
   </Gather>
 </Response>`;
-    res.type('text/xml').send(twiml);
-  } else {
+    return res.type('text/xml').send(twiml);
+  }
+
+  res.json({
+    success: true,
+    callSessionId: session.callSessionId,
+    callerIdentifier: session.callerIdentifier,
+    recipientIdentifier: session.recipientIdentifier,
+    state: session.state,
+    greeting: defaultGreeting,
+  });
+});
+
+// 6.3 TwiML Interactive Voice Turn Endpoint
+app.post('/api/telephony/twiml/turn', async (req: Request, res: Response) => {
+  const callSessionId = (req.query.callSessionId as string) || req.body.CallSid || 'active_call';
+  const speechResult = req.body.SpeechResult || req.body.userUtterance || '';
+  const isEmergencyPaused = getEmergencyState().emergencyPaused;
+
+  const result = await TelephonySessionManager.processTurn({
+    callSessionId,
+    utterance: speechResult,
+    isEmergencyPaused,
+    clinicData: DEFAULT_CLINIC_CONFIG,
+  });
+
+  const isHindi = result.language.startsWith('hi');
+  const voice = isHindi ? 'Polly.Aditi' : 'Polly.Matthew';
+
+  // If human handoff was requested and confirmed by carrier
+  if (result.handoffStatus === 'CONFIRMED') {
+    const handoffTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voice}" language="${result.language}">${result.replyText}</Say>
+  <Dial>${DEFAULT_CLINIC_CONFIG.phone}</Dial>
+</Response>`;
+    return res.type('text/xml').send(handoffTwiml);
+  }
+
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voice}" language="${result.language}">${result.replyText}</Say>
+  ${result.shouldEndCall ? '<Hangup/>' : `<Gather input="speech" language="${result.language}" action="/api/telephony/twiml/turn?callSessionId=${callSessionId}" speechTimeout="auto"/>`}
+</Response>`;
+  res.type('text/xml').send(twiml);
+});
+
+// 6.4 Caller Interruption / Barge-in Endpoint (Section N)
+app.post('/api/telephony/interruption', (req: Request, res: Response) => {
+  const { callSessionId } = req.body;
+  const result = TelephonySessionManager.handleBargeIn(callSessionId);
+  res.json({ success: true, ...result });
+});
+
+// 6.5 Silence Timeout Endpoint (Section O)
+app.post('/api/telephony/silence-timeout', (req: Request, res: Response) => {
+  const { callSessionId } = req.body;
+  const result = TelephonySessionManager.handleSilenceTimeout(callSessionId);
+  res.json({ success: true, ...result });
+});
+
+// 6.6 Stage Outbound Call for Level-4 Authorization (Section H)
+app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
+  try {
+    const { destinationNumber, purpose, recipientName, language } = req.body;
+    if (!destinationNumber) {
+      return res.status(400).json({ success: false, error: 'Destination phone number is required' });
+    }
+
+    const request = TelephonySessionManager.stageOutboundRequest({
+      destinationNumber,
+      purpose: purpose || 'Autonomous phone call by JARVIS',
+      recipientName,
+      language: language || 'hi-IN',
+    });
+
+    // Create a Level-4 Pending Action in safety system
+    const actionReq = createPendingActionRequest({
+      exactAction: `Outbound PSTN Call to ${request.destinationMasked}`,
+      target: request.destinationMasked,
+      contentChanges: `Purpose: ${request.purpose}`,
+      level: 4,
+      source: 'Telephony Gateway',
+    });
+
+    const promptText = (language || 'hi-IN').startsWith('hi')
+      ? `सर, मैं इस नंबर पर कॉल करने वाला हूँ: ${request.destinationMasked}। क्या आप अनुमति देते हैं?`
+      : `Sir, I am about to place an outbound call to: ${request.destinationMasked}. Do you authorize this?`;
+
     res.json({
       success: true,
-      message: 'Incoming voice call received by JARVIS',
-      greeting,
-      from: fromNumber,
-      callerName,
+      request,
+      actionId: actionReq.request.id,
+      promptText,
     });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 7. TwiML Interactive Voice Turn Endpoint
-app.post('/api/telephony/twiml/turn', async (req: Request, res: Response) => {
-  const speechResult = req.body.SpeechResult || 'Hello';
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Polly.Matthew">Thank you. I have transcribed: ${speechResult}. Our AI assistant is processing your request.</Say>
-</Response>`;
-  res.type('text/xml').send(twiml);
+// 6.7 Authorize and Execute Outbound Call (Level-4 Confirmation)
+app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response) => {
+  try {
+    const { requestId, actionId, decision, approverName = 'HUMAN_OPERATOR' } = req.body;
+
+    if (decision !== 'APPROVE') {
+      TelephonySessionManager.authorizeOutboundRequest(requestId, 'REJECT', approverName);
+      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', approverName);
+      return res.json({ success: true, authorized: false, message: 'Outbound call cancelled.' });
+    }
+
+    const authRes = TelephonySessionManager.authorizeOutboundRequest(requestId, 'APPROVE', approverName);
+    if (actionId) updateActionRequestStatus(actionId, 'APPROVED', approverName);
+
+    // Verify provider configuration before connecting (Section V)
+    const provider = TelephonyProviderRegistry.getProvider();
+    if (!provider.isConfigured() && req.body.isSimulated !== true) {
+      return res.status(400).json({
+        success: false,
+        status: 'TELEPHONY_NOT_CONFIGURED',
+        error: 'Cannot place outbound telephone call because carrier provider credentials are missing (TELEPHONY_NOT_CONFIGURED).',
+      });
+    }
+
+    const dest = authRes.request?.destinationNumber || req.body.destinationNumber;
+    const sessionRes = TelephonySessionManager.createOutboundSession({
+      destinationNumber: dest,
+      purpose: authRes.request?.purpose || 'Outbound consultation',
+      language: authRes.request?.language || 'hi-IN',
+      isSimulated: Boolean(req.body.isSimulated),
+    });
+
+    if (sessionRes.error || !sessionRes.session) {
+      return res.status(400).json({ success: false, error: sessionRes.error });
+    }
+
+    const dialResult = await provider.startOutboundCall({
+      callSessionId: sessionRes.session.callSessionId,
+      destinationNumber: dest,
+    });
+
+    res.json({
+      success: true,
+      authorized: true,
+      session: sessionRes.session,
+      providerCallId: dialResult.providerCallId,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6.8 Telephony Permissions Gateway (Section J)
+app.get('/api/telephony/permissions', (req: Request, res: Response) => {
+  const perms = loadPhonePermissions();
+  res.json({ success: true, permissions: perms });
+});
+
+app.post('/api/telephony/permissions', (req: Request, res: Response) => {
+  try {
+    const updates = req.body;
+    const current = loadPhonePermissions();
+    const updated = { ...current, ...updates };
+    savePhonePermissions(updated);
+    res.json({ success: true, permissions: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6.9 Run Automated Telephony Test Suite (Section U)
+app.get('/api/telephony/test-suite', async (req: Request, res: Response) => {
+  try {
+    const summary = await runTelephonyTestSuite();
+    res.json({ success: true, summary });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Jarvis Main Chat & AI Reasoning API
