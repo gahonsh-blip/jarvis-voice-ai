@@ -615,6 +615,31 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
     return { intent: 'emergency_resume', confidence: 1 };
   }
 
+  // YouTube Status Inquiry
+  if (
+    lower.includes('youtube status') ||
+    lower.includes('youtube का क्या status') ||
+    lower.includes('youtube ka kya status') ||
+    lower.includes('check youtube') ||
+    lower.includes('youtube channel status') ||
+    lower.includes('यूट्यूब स्टेटस') ||
+    lower.includes('youtube stats')
+  ) {
+    return { intent: 'youtube_status_inquiry', confidence: 0.96 };
+  }
+
+  // YouTube Upload Request (Requires Level-4 Human Authorization)
+  if (
+    lower.includes('upload this video') ||
+    lower.includes('upload video publicly') ||
+    lower.includes('video upload karo') ||
+    lower.includes('upload to youtube') ||
+    lower.includes('यूट्यूब पर वीडियो अपलोड') ||
+    lower.includes('publish video on youtube')
+  ) {
+    return { intent: 'youtube_upload_request', confidence: 0.96 };
+  }
+
   // YouTube Video Summarizer Command
   const ytVideoId = extractYouTubeVideoId(text);
   if (
@@ -5324,7 +5349,7 @@ app.post('/api/memory', (req: Request, res: Response) => {
 // Jarvis Main Chat & AI Reasoning API
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
-    const { message, history = [] } = req.body;
+    const { message, history = [], language = 'en-US' } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
@@ -5416,6 +5441,36 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           actionExecuted = true;
           actionDetail = { type: 'youtube_summary_error', title: 'YouTube Error', payload: summaryRes };
         }
+        break;
+      }
+      case 'youtube_status_inquiry': {
+        const ytConn = memoryState.youTubeConnection;
+        const isYtConnected = ytConn?.connected && ytConn.channelTitle;
+        const ytTokenCheck = await ensureValidYouTubeToken();
+        if (isYtConnected || ytTokenCheck.valid) {
+          const channelName = ytConn?.channelTitle || 'Connected Channel';
+          spokenResponse = language.startsWith('hi')
+            ? `YouTube चैनल "${channelName}" सक्रिय रूप से कनेक्टेड और सत्यापित है। API कोटा और टोकन स्टेटस सामान्य है।`
+            : `YouTube Channel "${channelName}" is active, verified, and ready. OAuth 2.0 token status is nominal.`;
+        } else {
+          spokenResponse = language.startsWith('hi')
+            ? 'YouTube चैनल अभी कनेक्टेड नहीं है। Settings में Google OAuth क्रेडेंशियल्स दर्ज करके "Connect YouTube" पर क्लिक करें।'
+            : 'YouTube is not currently connected. Please configure Google OAuth credentials in Settings and click "Connect YouTube".';
+        }
+        actionExecuted = true;
+        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status', payload: { connected: Boolean(isYtConnected || ytTokenCheck.valid), channel: ytConn?.channelTitle } };
+        break;
+      }
+      case 'youtube_upload_request': {
+        spokenResponse = language.startsWith('hi')
+          ? 'वीडियो तैयार है। Public upload के लिए Level-4 human approval आवश्यक है। क्या मैं इसे अधिकृत करूँ?'
+          : 'Video is staged. Public upload requires Level-4 human authorization. Would you like me to proceed with publishing?';
+        actionExecuted = true;
+        actionDetail = {
+          type: 'level4_gate_required',
+          title: 'Level 4 Authorization Required: YouTube Upload',
+          payload: { action: 'YOUTUBE_PUBLIC_UPLOAD', risk: 'HIGH', requiresConfirmation: true },
+        };
         break;
       }
       case 'tools_audit': {
@@ -5624,8 +5679,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           try {
             const systemInstruction = `You are HERMES JARVIS, an autonomous AI agent running on an Oracle Always Free ARM Cloud server, controllable via Android Telegram Bot and Web Panel.
 User's name: ${memoryState.name || 'Sir / Guest'}.
+Active Interaction Language Locale: ${language || 'en-US'}.
+Language Guideline: Respond in the user's selected language (${language || 'en-US'}). If set to Hindi (hi-IN) or Hinglish, use natural, respectful Hindi/Hinglish (e.g., 'जी सर', 'सुप्रभात'). If set to another regional language (Spanish, French, German, Japanese, Chinese, Russian, Arabic, etc.), respond naturally and fluently in that language. Otherwise, use crisp, polite British/Global English.
 Keep your responses crisp, concise, eloquent, and natural for speech synthesis (1-3 sentences unless asked for details).
-You support both English and Hindi seamlessly.
 Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freelance CRM, Social Media human-approval engine, Proactive daily briefings, and file/git tools.`;
 
             const contents = [

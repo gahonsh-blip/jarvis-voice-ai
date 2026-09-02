@@ -28,6 +28,19 @@ export type IntentCategory =
   | 'generate_quotation'
   | 'cloud_telemetry'
   | 'security_audit'
+  | 'finance_blocked'
+  | 'emergency_stop'
+  | 'emergency_resume'
+  | 'youtube_status_inquiry'
+  | 'youtube_upload_request'
+  | 'git_status_tool'
+  | 'github_repos_tool'
+  | 'list_files_tool'
+  | 'web_research_tool'
+  | 'summarize_youtube_video'
+  | 'tools_audit'
+  | 'pending_approvals'
+  | 'social_hub'
   | 'chat';
 
 export interface ActionDetail {
@@ -53,6 +66,13 @@ export interface MemoryStore {
     location?: string;
     occupation?: string;
     interests?: string[];
+  };
+  youTubeConnection?: {
+    connected: boolean;
+    channelId?: string;
+    channelTitle?: string;
+    subscriberCount?: string;
+    videoCount?: string;
   };
   notes: {
     id: string;

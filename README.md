@@ -71,6 +71,11 @@ npm run dev
 Detailed engineering and configuration guides are available in the `/docs` directory:
 
 - [📖 Architecture & Deep Systems Blueprint (docs/ARCHITECTURE.md)](./docs/ARCHITECTURE.md)
+- [🎙️ Natural Voice & Multi-Language Assistant (docs/VOICE.md)](./docs/VOICE.md)
+- [🛡️ Privacy & Permission Matrix (docs/PRIVACY.md)](./docs/PRIVACY.md)
+- [🔒 Security & Authorization Architecture (docs/SECURITY.md)](./docs/SECURITY.md)
+- [📜 Changelog & Version History (docs/CHANGELOG.md)](./docs/CHANGELOG.md)
+- [📋 System Audit & Compliance Verification Report (docs/AUDIT_REPORT.md)](./docs/AUDIT_REPORT.md)
 - [🧬 Self-Improvement & Autonomous Quality Review (docs/SELF_IMPROVEMENT.md)](./docs/SELF_IMPROVEMENT.md)
 - [⚙️ Setup & Cloud Deployment Guide (docs/SETUP.md)](./docs/SETUP.md)
 - [🔐 OAuth 2.0 & Platform Integrations Setup (docs/OAUTH.md)](./docs/OAUTH.md)

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Mic, MicOff, Volume2, Sparkles, Cpu } from 'lucide-react';
+import { Mic, MicOff, Volume2, Sparkles, Square, Globe } from 'lucide-react';
+import { getLanguageOption } from '../utils/languages';
 
 interface JarvisOrbProps {
   isListening: boolean;
@@ -8,7 +9,9 @@ interface JarvisOrbProps {
   isProcessing: boolean;
   volumeLevel: number;
   onToggleListen: () => void;
+  onStopSpeaking?: () => void;
   statusText: string;
+  language?: string;
 }
 
 export const JarvisOrb: React.FC<JarvisOrbProps> = ({
@@ -17,23 +20,23 @@ export const JarvisOrb: React.FC<JarvisOrbProps> = ({
   isProcessing,
   volumeLevel,
   onToggleListen,
+  onStopSpeaking,
   statusText,
+  language = 'auto',
 }) => {
   // Determine state color scheme
-  let stateColor = 'cyan';
   let pulseSpeed = 4;
   let ringScale = 1 + (volumeLevel / 100) * 0.4;
 
   if (isSpeaking) {
-    stateColor = 'blue';
     pulseSpeed = 1.5;
   } else if (isProcessing) {
-    stateColor = 'amber';
     pulseSpeed = 1;
   } else if (isListening) {
-    stateColor = 'emerald';
     pulseSpeed = 2;
   }
+
+  const langOpt = getLanguageOption(language);
 
   return (
     <div className="relative flex flex-col items-center justify-center p-6 select-none">
@@ -83,7 +86,7 @@ export const JarvisOrb: React.FC<JarvisOrbProps> = ({
         {/* Core Interactive Reactor Center */}
         <motion.button
           id="jarvis-core-orb-button"
-          onClick={onToggleListen}
+          onClick={isSpeaking && onStopSpeaking ? onStopSpeaking : onToggleListen}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className={`relative z-10 w-36 h-36 sm:w-40 sm:h-40 rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-500 shadow-2xl ${
@@ -112,7 +115,7 @@ export const JarvisOrb: React.FC<JarvisOrbProps> = ({
             )}
 
             <span className="mt-2 text-xs font-hud tracking-widest uppercase font-semibold text-cyan-200">
-              {isSpeaking ? 'JARVIS SPEAKING' : isProcessing ? 'THINKING' : isListening ? 'LISTENING' : 'CLICK TO TALK'}
+              {isSpeaking ? 'SPEAKING • CLICK TO STOP' : isProcessing ? 'THINKING' : isListening ? 'LISTENING' : 'CLICK TO TALK'}
             </span>
           </div>
 
@@ -121,8 +124,26 @@ export const JarvisOrb: React.FC<JarvisOrbProps> = ({
         </motion.button>
       </div>
 
+      {/* Floating Interruption & Control Bar */}
+      {isSpeaking && onStopSpeaking && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-3 flex items-center gap-2"
+        >
+          <button
+            id="jarvis-speech-interrupt-btn"
+            onClick={onStopSpeaking}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-950/90 border border-red-500/60 text-red-200 text-xs font-mono font-bold hover:bg-red-900 transition-colors shadow-lg shadow-red-900/30"
+          >
+            <Square className="w-3.5 h-3.5 fill-red-400 text-red-400" />
+            <span>रुको / STOP SPEAKING</span>
+          </button>
+        </motion.div>
+      )}
+
       {/* Dynamic Status / Subtitle Text */}
-      <div className="mt-4 text-center max-w-md">
+      <div className="mt-4 text-center max-w-md space-y-1.5">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 border border-cyan-500/30 backdrop-blur-md">
           <span
             className={`w-2 h-2 rounded-full ${
@@ -138,6 +159,13 @@ export const JarvisOrb: React.FC<JarvisOrbProps> = ({
           <p className="text-xs font-mono tracking-wider text-cyan-300 font-medium">
             {statusText}
           </p>
+        </div>
+
+        {/* Current Active Language Pill */}
+        <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-400">
+          <Globe className="w-3 h-3 text-cyan-400" />
+          <span>Active Mode:</span>
+          <span className="text-cyan-300 font-semibold">{langOpt.flag} {langOpt.name}</span>
         </div>
       </div>
     </div>

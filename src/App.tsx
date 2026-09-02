@@ -206,10 +206,18 @@ export default function App() {
         utterance.rate = voiceSettings.rate;
         utterance.pitch = voiceSettings.pitch;
         utterance.volume = voiceSettings.volume;
+        utterance.lang = voiceSettings.language;
 
         if (voiceSettings.voiceURI) {
           const selected = availableVoices.find((v) => v.voiceURI === voiceSettings.voiceURI);
           if (selected) utterance.voice = selected;
+        } else {
+          // Find matching native voice for the selected language if available
+          const langPrefix = voiceSettings.language.split('-')[0].toLowerCase();
+          const matching = availableVoices.find(
+            (v) => v.lang.toLowerCase() === voiceSettings.language.toLowerCase() || v.lang.split('-')[0].toLowerCase() === langPrefix
+          );
+          if (matching) utterance.voice = matching;
         }
 
         utterance.onstart = () => {
@@ -604,6 +612,7 @@ export default function App() {
         userName={memory.name}
         geminiConnected={geminiConnected}
         isOnline={isOnline}
+        language={voiceSettings.language}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenMemory={() => setActiveApp('memory')}
         onOpenBlueprint={() => setActiveApp('blueprint')}

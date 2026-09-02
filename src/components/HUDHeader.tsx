@@ -18,12 +18,15 @@ import {
   RotateCcw,
   CheckCircle2,
   FileText,
+  Globe,
 } from 'lucide-react';
+import { getLanguageOption } from '../utils/languages';
 
 interface HUDHeaderProps {
   userName?: string;
   geminiConnected: boolean;
   isOnline?: boolean;
+  language?: string;
   onOpenSettings: () => void;
   onOpenMemory: () => void;
   onOpenBlueprint: () => void;
@@ -41,6 +44,7 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   userName,
   geminiConnected,
   isOnline = true,
+  language = 'en-US',
   onOpenSettings,
   onOpenMemory,
   onOpenBlueprint,
@@ -274,6 +278,16 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
                 {dateStr}
               </div>
             </div>
+
+            <button
+              onClick={onOpenSettings}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 transition-colors flex items-center gap-1.5 text-xs font-mono"
+              title={`Speech Recognition & AI Language: ${getLanguageOption(language).name} (${language})`}
+            >
+              <Globe className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{getLanguageOption(language).flag}</span>
+              <span className="font-bold text-[11px] text-cyan-200 hidden sm:inline">{language.toUpperCase()}</span>
+            </button>
 
             <button
               onClick={onOpenSettings}
