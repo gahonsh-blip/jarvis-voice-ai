@@ -311,7 +311,11 @@ export function realFsDelete(filePath: string): { success: boolean; error?: stri
     }
     const stat = fs.statSync(safePath);
     if (stat.isDirectory()) {
-      fs.rmdirSync(safePath, { recursive: true });
+      if (typeof fs.rmSync === 'function') {
+        fs.rmSync(safePath, { recursive: true, force: true });
+      } else {
+        fs.rmdirSync(safePath, { recursive: true });
+      }
     } else {
       fs.unlinkSync(safePath);
     }

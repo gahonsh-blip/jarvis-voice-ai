@@ -38,6 +38,7 @@ interface HUDHeaderProps {
   onOpenSecurity: () => void;
   onOpenAutonomousTools: () => void;
   onOpenPermissionGateway: () => void;
+  onOpenMobileStatus?: () => void;
 }
 
 export const HUDHeader: React.FC<HUDHeaderProps> = ({
@@ -56,6 +57,7 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   onOpenSecurity,
   onOpenAutonomousTools,
   onOpenPermissionGateway,
+  onOpenMobileStatus,
 }) => {
   const [time, setTime] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
@@ -324,6 +326,16 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             <Shield className="w-3.5 h-3.5 text-amber-400" />
             <span>Permission Gateway (Level 4)</span>
           </button>
+
+          {onOpenMobileStatus && (
+            <button
+              onClick={onOpenMobileStatus}
+              className="px-2.5 py-1.5 rounded-lg bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-200 flex items-center gap-1.5 shrink-0 transition-colors shadow-sm"
+            >
+              <Sunrise className="w-3.5 h-3.5 text-amber-400" />
+              <span>Mobile Status (सुप्रभात)</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenTelegram}

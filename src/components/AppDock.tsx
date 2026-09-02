@@ -66,9 +66,16 @@ export const AppDock: React.FC<AppDockProps> = ({
       color: 'text-purple-400',
     },
     {
+      id: 'mobile_personal_status' as const,
+      label: 'Mobile Briefing',
+      voiceCmd: 'mobile status',
+      icon: Smartphone,
+      color: 'text-emerald-400',
+    },
+    {
       id: 'routines' as const,
       label: 'Daily Routines',
-      voiceCmd: 'morning briefing',
+      voiceCmd: 'daily routines',
       icon: Sunrise,
       color: 'text-pink-400',
     },

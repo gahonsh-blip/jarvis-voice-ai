@@ -3252,6 +3252,32 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
   }
 });
 
+app.post('/api/telegram/broadcast', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message is required' });
+
+    const targetChat = activeTelegramChatId || getCleanAdminChatId();
+    if (!targetChat || !getCleanTelegramToken()) {
+      return res.json({
+        success: true,
+        simulated: true,
+        message: 'Telegram simulated broadcast completed (Bot token or Chat ID in standby mode).',
+      });
+    }
+
+    const result = await sendRealTelegramMessage(targetChat, message);
+    return res.json({
+      success: true,
+      liveSent: Boolean(result),
+      targetChat,
+      message: 'Briefing broadcast sent to Telegram.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
 // Oracle Cloud VM Telemetry APIs
 app.get('/api/oracle-cloud', (req: Request, res: Response) => {
   const jitterCpu = Number((12 + Math.random() * 5).toFixed(1));

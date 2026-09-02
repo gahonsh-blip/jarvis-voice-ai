@@ -19,6 +19,7 @@ import { ProactiveRoutinesModal } from './components/ProactiveRoutinesModal';
 import { SecurityMatrixModal } from './components/SecurityMatrixModal';
 import { AutonomousToolsModal } from './components/AutonomousToolsModal';
 import { PermissionGateway } from './components/PermissionGateway';
+import { MobilePersonalStatusModal } from './components/MobilePersonalStatusModal';
 import { PublicInfoFooter } from './components/PublicInfoFooter';
 import {
   ChatMessage,
@@ -260,11 +261,25 @@ export default function App() {
         case 'schedule_morning_report':
           setActiveApp('routines');
           break;
+        case 'morning_briefing':
+        case 'mobile_personal_status':
+          setActiveApp('mobile_personal_status');
+          break;
         case 'cloud_telemetry':
           setActiveApp('oracle');
           break;
         case 'security_audit':
           setActiveApp('security');
+          break;
+        case 'tools_audit':
+        case 'git_status_tool':
+        case 'github_repos_tool':
+        case 'list_files_tool':
+        case 'web_research_tool':
+          setActiveApp('autonomous_tools');
+          break;
+        case 'pending_approvals':
+          setActiveApp('permission_gateway');
           break;
         case 'open_notepad':
         case 'create_file':
@@ -624,6 +639,7 @@ export default function App() {
         onOpenSecurity={() => setActiveApp('security')}
         onOpenAutonomousTools={() => setActiveApp('autonomous_tools')}
         onOpenPermissionGateway={() => setActiveApp('permission_gateway')}
+        onOpenMobileStatus={() => setActiveApp('mobile_personal_status')}
       />
 
       {/* Main Sci-Fi Dashboard */}
@@ -748,6 +764,14 @@ export default function App() {
         isOpen={activeApp === 'permission_gateway'}
         onClose={() => setActiveApp(null)}
         onSpeak={speakText}
+      />
+
+      <MobilePersonalStatusModal
+        isOpen={activeApp === 'mobile_personal_status'}
+        onClose={() => setActiveApp(null)}
+        onSpeak={speakText}
+        onOpenPermissionGateway={() => setActiveApp('permission_gateway')}
+        userName={memory.name || 'Sir'}
       />
 
       {/* Tool Modals */}
