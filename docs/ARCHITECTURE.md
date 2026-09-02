@@ -150,3 +150,10 @@ All actions within the system are strictly categorized into 4 security levels:
 | `POST` | `/api/tools/web/fetch` | Performs real HTTP fetch and title/meta extraction. |
 | `POST` | `/api/tools/email/status` | Checks SMTP / transactional email configuration. |
 | `GET` | `/api/tools/integrations/audit` | Comprehensive verification matrix of all tools. |
+
+### Public Legal & Google OAuth Compliance Endpoints
+| Method | Route | Description |
+| :--- | :--- | :--- |
+| `GET` | `/privacy` / `/privacy-policy` | Dedicated standalone HTML Privacy Policy disclosing requested scopes (`youtube.readonly`, `youtube.upload`), AES-256-GCM token encryption, human-in-the-loop authorization, and user data deletion. Accessible publicly with no authentication or JavaScript required. |
+| `GET` | `/terms` / `/terms-of-service` | Dedicated standalone HTML Terms of Service covering acceptable use, AI limitations, Level-4 gate, kill switch, and liability disclaimers. |
+

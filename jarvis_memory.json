@@ -16,12 +16,105 @@
     "version": "2.5.0-autonomous"
   },
   "stats": {
-    "totalCommands": 19,
+    "totalCommands": 33,
     "actionsExecuted": 3,
-    "lastActive": "2026-08-31T11:56:43.836Z"
+    "lastActive": "2026-09-02T06:48:11.844Z"
   },
   "processedTelegramUpdates": [],
   "socialPosts": [
+    {
+      "id": "post-yt-1788332228268",
+      "platform": "YouTube",
+      "topic": "HERMES JARVIS Autonomous Core Overview",
+      "videoTitle": "HERMES JARVIS Autonomous Core Overview",
+      "content": "Automated end-to-end technical overview from HERMES JARVIS Autonomous Core.\n\n• Architecture: Oracle Always Free ARM Cloud + Gemini AI\n• Security Layer: Level-4 Human Authorization Matrix\n• Engine: YouTube Data API v3 (videos.insert)\n• Zero Fake Success Verified.",
+      "videoDescription": "Automated end-to-end technical overview from HERMES JARVIS Autonomous Core.\n\n• Architecture: Oracle Always Free ARM Cloud + Gemini AI\n• Security Layer: Level-4 Human Authorization Matrix\n• Engine: YouTube Data API v3 (videos.insert)\n• Zero Fake Success Verified.",
+      "hashtags": [
+        "#JARVIS",
+        "#AI",
+        "#AutonomousAgent",
+        "#GoogleCloud",
+        "#YouTubeAPI",
+        "#DevOps"
+      ],
+      "creativePrompt": "High-tech JARVIS HUD telemetry showing secure cloud authorization and automated upload.",
+      "status": "pending_approval",
+      "privacyStatus": "public",
+      "targetChannel": "GAHONSH Freelancing",
+      "isTestUpload": true,
+      "videoFileName": "synthetic_jarvis_test.mp4",
+      "scheduledTime": "Instant upon Level 4 Authorization",
+      "likesSimulated": 0,
+      "executionStatus": "PENDING_APPROVAL",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "post-1788332214572",
+      "platform": "YouTube",
+      "topic": "HERMES JARVIS Autonomous Core Overview",
+      "content": "💡 Perspective on HERMES JARVIS Autonomous Core Overview:\n\n1. Building with autonomous tools saves 10+ hours per week.\n2. Zero-cost infrastructure allows rapid prototyping.\n3. Human-in-the-loop verification guarantees precision.\n\nWhat are you automating next?\n\n#ArtificialIntelligence #Engineering #DevOps #Innovation #BuildInPublic",
+      "hashtags": [
+        "#AI",
+        "#Tech",
+        "#Automation",
+        "#Freelance",
+        "#DevOps"
+      ],
+      "creativePrompt": "Modern aesthetic graphic visualizing HERMES JARVIS Autonomous Core Overview, sleek cyber-tech gradient.",
+      "status": "pending_approval",
+      "scheduledTime": "Today at 07:00 PM IST",
+      "likesSimulated": 0,
+      "executionStatus": "PENDING_APPROVAL",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "post-1788332209078",
+      "platform": "YouTube",
+      "topic": "HERMES JARVIS Autonomous Core Overview",
+      "content": "💡 Perspective on HERMES JARVIS Autonomous Core Overview:\n\n1. Building with autonomous tools saves 10+ hours per week.\n2. Zero-cost infrastructure allows rapid prototyping.\n3. Human-in-the-loop verification guarantees precision.\n\nWhat are you automating next?\n\n#ArtificialIntelligence #Engineering #DevOps #Innovation #BuildInPublic",
+      "hashtags": [
+        "#AI",
+        "#Tech",
+        "#Automation",
+        "#Freelance",
+        "#DevOps"
+      ],
+      "creativePrompt": "Modern aesthetic graphic visualizing HERMES JARVIS Autonomous Core Overview, sleek cyber-tech gradient.",
+      "status": "pending_approval",
+      "scheduledTime": "Today at 07:00 PM IST",
+      "likesSimulated": 0,
+      "executionStatus": "PENDING_APPROVAL",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "post-yt-1788326056484",
+      "platform": "YouTube",
+      "topic": "HERMES JARVIS Autonomous Video Test",
+      "videoTitle": "HERMES JARVIS Autonomous Video Test",
+      "content": "Automated end-to-end test upload from HERMES JARVIS Autonomous Core.\n\n• Video Title: HERMES JARVIS Autonomous Video Test\n• Privacy Mode: PRIVATE (Safe Testing)\n• Upload Engine: YouTube Data API v3 (videos.insert)\n• Security Layer: Level-4 Human Authorization Gateway",
+      "videoDescription": "Automated end-to-end test upload from HERMES JARVIS Autonomous Core.\n\n• Video Title: HERMES JARVIS Autonomous Video Test\n• Privacy Mode: PRIVATE (Safe Testing)\n• Upload Engine: YouTube Data API v3 (videos.insert)\n• Security Layer: Level-4 Human Authorization Gateway",
+      "hashtags": [
+        "#JARVIS",
+        "#AutonomousAI",
+        "#GoogleCloud",
+        "#YouTubeDataAPI",
+        "#TestMode"
+      ],
+      "creativePrompt": "High-tech JARVIS HUD telemetry showing secure cloud authorization and automated upload.",
+      "status": "not_published",
+      "privacyStatus": "private",
+      "targetChannel": "YouTube Channel",
+      "isTestUpload": true,
+      "scheduledTime": "Instant upon Level 4 Authorization",
+      "likesSimulated": 0,
+      "executionStatus": "NOT_PUBLISHED",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "finalTruthState": "DRAFT",
+      "errorReason": "No valid YouTube access token or refresh token available"
+    },
     {
       "id": "post-1788177406675",
       "platform": "LinkedIn",
@@ -41,7 +134,7 @@
       "executionStatus": "NOT_PUBLISHED",
       "verificationStatus": "MISSING_CREDENTIALS",
       "finalTruthState": "DRAFT",
-      "errorReason": "LINKEDIN_ACCESS_TOKEN is not configured in server environment. Post is held safely in local DRAFT queue without false claims."
+      "errorReason": "LinkedIn is not connected. Connect your Personal Profile via the \"Connect LinkedIn\" OAuth button or configure LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET. Post is held safely in local DRAFT queue without false claims."
     },
     {
       "id": "post-1",
@@ -87,6 +180,172 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "log-1788332228270",
+      "timestamp": "2026-09-02T06:57:08.270Z",
+      "action": "Stage YouTube Video: \"HERMES JARVIS Autonomous Core Overview\" (PUBLIC) - Level 4 Gate Staged",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788332214572",
+      "timestamp": "2026-09-02T06:56:54.572Z",
+      "action": "Draft YouTube Post: \"HERMES JARVIS Autonomous Core Overview\" (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788332209078",
+      "timestamp": "2026-09-02T06:56:49.078Z",
+      "action": "Draft YouTube Post: \"HERMES JARVIS Autonomous Core Overview\" (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788332176695-cgc3",
+      "timestamp": "2026-09-02T06:56:16.695Z",
+      "action": "YouTube Channel Connected via OAuth 2.0 (GAHONSH Freelancing - UChdG0AL8NdFtGHzNY-C6XnQ)",
+      "levelRequired": 1,
+      "approvedBy": "HUMAN_CONFIRMATION",
+      "status": "VERIFIED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788326059163",
+      "timestamp": "2026-09-02T05:14:19.164Z",
+      "action": "Execute Level 4 YouTube Publish (post-yt-1788326056484)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_CONFIRMATION_WEB_PANEL",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "YouTube",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "No valid YouTube access token or refresh token available",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "log-1788326056486",
+      "timestamp": "2026-09-02T05:14:16.486Z",
+      "action": "Draft YouTube Test Video: \"HERMES JARVIS Autonomous Video Test\" (Privacy: PRIVATE) - Level 4 Gate Staged",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-resume-1788325572677",
+      "timestamp": "2026-09-02T05:06:12.677Z",
+      "action": "🟢 SYSTEM RESUMED by HUD_RESUME_BUTTON: Subsystems returned to standard Level 1-4 permission mode.",
+      "levelRequired": 4,
+      "approvedBy": "HUD_RESUME_BUTTON",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-killswitch-1788325561204",
+      "timestamp": "2026-09-02T05:06:01.204Z",
+      "action": "🚨 GLOBAL KILL SWITCH TRIGGERED by HUD_KILL_SWITCH_BUTTON: Terminated all background tasks, paused polling, and cleared 0 pending PermissionGateway item(s).",
+      "levelRequired": 4,
+      "approvedBy": "HUD_KILL_SWITCH_BUTTON",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788323290600",
+      "timestamp": "2026-09-02T04:28:10.600Z",
+      "action": "EXECUTED Approved Action: Send Freelance Quotation via SMTP on Recipient: client.enterprise@techcorp.io",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788323277837",
+      "timestamp": "2026-09-02T04:27:57.837Z",
+      "action": "EXECUTED Approved Action: Send Freelance Quotation via SMTP on Recipient: client.enterprise@techcorp.io",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-resume-1788323255733",
+      "timestamp": "2026-09-02T04:27:35.733Z",
+      "action": "🟢 SYSTEM RESUMED by HUD_RESUME_BUTTON: Subsystems returned to standard Level 1-4 permission mode.",
+      "levelRequired": 4,
+      "approvedBy": "HUD_RESUME_BUTTON",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-killswitch-1788323252423",
+      "timestamp": "2026-09-02T04:27:32.423Z",
+      "action": "🚨 GLOBAL KILL SWITCH TRIGGERED by HUD_KILL_SWITCH_BUTTON: Terminated all background tasks, paused polling, and cleared 0 pending PermissionGateway item(s).",
+      "levelRequired": 4,
+      "approvedBy": "HUD_KILL_SWITCH_BUTTON",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788323148909",
+      "timestamp": "2026-09-02T04:25:48.909Z",
+      "action": "EXECUTED Approved Action: Publish to LinkedIn Personal Profile on Personal Profile URN: urn:li:person:auth_user",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788323148908",
+      "timestamp": "2026-09-02T04:25:48.909Z",
+      "action": "Execute Level 4 LinkedIn Publish (post-1788177406675)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "LinkedIn",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "LinkedIn is not connected. Connect your Personal Profile via the \"Connect LinkedIn\" OAuth button or configure LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET. Post is held safely in local DRAFT queue without false claims.",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "log-1788323139931",
+      "timestamp": "2026-09-02T04:25:39.931Z",
+      "action": "EXECUTED Approved Action: Publish to LinkedIn Personal Profile on Personal Profile URN: urn:li:person:auth_user",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788323139930",
+      "timestamp": "2026-09-02T04:25:39.930Z",
+      "action": "Execute Level 4 LinkedIn Publish (post-1788177406675)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "LinkedIn",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "LinkedIn is not connected. Connect your Personal Profile via the \"Connect LinkedIn\" OAuth button or configure LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET. Post is held safely in local DRAFT queue without false claims.",
+      "finalTruthState": "DRAFT"
+    },
     {
       "id": "audit-1788177413803",
       "timestamp": "2026-08-31T11:56:53.803Z",
@@ -212,5 +471,32 @@
       "createdAt": "2026-08-31T03:38:50.226Z"
     }
   ],
-  "schedulerState": {}
+  "schedulerState": {},
+  "youTubeConnection": {
+    "connected": true,
+    "authType": "OAUTH_2_0",
+    "channelId": "UChdG0AL8NdFtGHzNY-C6XnQ",
+    "channelTitle": "GAHONSH Freelancing",
+    "customUrl": "@gahonsh",
+    "avatarUrl": "https://yt3.ggpht.com/RG5NOUAsdcTZT65-nxyO4kLeHxnKm1i155IgQxN3DTmwydC3lWjbhE-GBIwQZRQ28m1NqPvafQ=s88-c-k-c0x00ffffff-no-rj",
+    "connectedAt": "2026-09-02T06:56:16.694Z",
+    "expiresAt": "2026-09-02T07:56:15.694Z",
+    "scopes": [
+      "https://www.googleapis.com/auth/youtube.readonly",
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "openid"
+    ],
+    "accessTokenEncrypted": {
+      "iv": "d58967ccc0444480e1499b95045589c2",
+      "content": "90b6eb031211e50f37371759d2588a50ec4d0236a25a6cef21f7a12392024d3e1dbb229b1f4f8d10f032749ae73cb21423f63225dc71cf71af898f730522d08fcedffc0e2034ba7092916eb61c84a030bcbd0e3e8787b7b9d7124fc8107d1d64f3a289e340fc8011028cfbbab6a33758d6d09b769364dea40a0230ca5ae5fa247426c6ac04c024b3843a63984eb57911618c4f5d565fdfde42303de822bf620fc5758df4d09b1dec44995f7fefe3df0a06a6de75d77e4d6229e505aa84ef0d7ea7a50a4643e29d35991377b5199d5a4241ab39df24818f546477e560e2769d6cfe28f6c472cff9e382cf1ea9bc0b1db797e5f2ccc02768e2a6adddaa18",
+      "tag": "01726f22cb267822f22fa376e1dfeb53"
+    },
+    "refreshTokenEncrypted": {
+      "iv": "d25859ab37dd75aab27292d855a61f0a",
+      "content": "8b598d27ab93665728493159d2afc54e88a55176a1260dd59936c5d8a24ed32a864aaf8ea07f1e4244e30331af5e7b44abd019579de6038800144fe287b45bcb1cac94ffd2c0312cb76187e253c1271f573897430b04d8c54a84483d84d2d18be93f4677e78b6b",
+      "tag": "61b79313e51b9b415dadf7c92143302e"
+    }
+  }
 }

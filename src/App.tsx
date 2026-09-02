@@ -19,6 +19,7 @@ import { ProactiveRoutinesModal } from './components/ProactiveRoutinesModal';
 import { SecurityMatrixModal } from './components/SecurityMatrixModal';
 import { AutonomousToolsModal } from './components/AutonomousToolsModal';
 import { PermissionGateway } from './components/PermissionGateway';
+import { PublicInfoFooter } from './components/PublicInfoFooter';
 import {
   ChatMessage,
   MemoryStore,
@@ -685,6 +686,9 @@ export default function App() {
         onSelectApp={(app) => setActiveApp(app)}
         onQuickCommand={(cmd) => handleSendCommand(cmd)}
       />
+
+      {/* Public Legal Compliance & Application Presentation Footer */}
+      <PublicInfoFooter />
 
       {/* Blueprint & Specialized Modals */}
       <BlueprintRoadmapModal

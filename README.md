@@ -71,13 +71,27 @@ npm run dev
 Detailed engineering and configuration guides are available in the `/docs` directory:
 
 - [📖 Architecture & Deep Systems Blueprint (docs/ARCHITECTURE.md)](./docs/ARCHITECTURE.md)
+- [🧬 Self-Improvement & Autonomous Quality Review (docs/SELF_IMPROVEMENT.md)](./docs/SELF_IMPROVEMENT.md)
 - [⚙️ Setup & Cloud Deployment Guide (docs/SETUP.md)](./docs/SETUP.md)
 - [🔐 OAuth 2.0 & Platform Integrations Setup (docs/OAUTH.md)](./docs/OAUTH.md)
 - [🧪 Testing & Verification Protocols (docs/TESTING.md)](./docs/TESTING.md)
 
 ---
 
-## 🛡️ 5. Security & Responsible AI Notice
+## ⚖️ 5. Legal Pages & Google OAuth Compliance
+
+HERMES JARVIS provides dedicated, publicly accessible, zero-JS dependent legal endpoints complying strictly with the Google API Services User Data Policy:
+
+| Public Route | Alias Path | Description |
+| :--- | :--- | :--- |
+| `/privacy` | `/privacy-policy` | Official Privacy Policy detailing Google OAuth scopes (`youtube.readonly`, `youtube.upload`), AES-256-GCM token encryption, Level-4 human authorization, and user data revocation controls. |
+| `/terms` | `/terms-of-service` | Official Terms of Service outlining acceptable use, human oversight requirements, AI limitations, Global Kill Switch, and liability disclaimers. |
+
+> 🔒 **Google OAuth Verification**: Google OAuth verification requires that the public privacy policy, terms of service, and homepage presentation accurately match the deployed application's identity and actual code-level scope usage without requiring authentication.
+
+---
+
+## 🛡️ 6. Security & Responsible AI Notice
 - Financial and payment execution commands are **strictly prohibited** and blocked at the parser level (`FINANCE_SECURITY_GUARD`).
 - Secret tokens and API keys are **never stored** in chat memory or logs.
 - Sensitive environment variables are masked in all diagnostic reports.

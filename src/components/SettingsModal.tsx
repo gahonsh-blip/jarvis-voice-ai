@@ -153,6 +153,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </div>
           </div>
+
+          {/* Legal & Policy Links */}
+          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div className="font-hud font-semibold text-slate-200">Legal &amp; Privacy Compliance</div>
+            <p className="text-[11px] text-slate-400">
+              HERMES JARVIS enforces Level-4 Human Authorization for all sensitive external actions.
+            </p>
+            <div className="flex items-center gap-3 pt-1">
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyan-400 hover:text-cyan-300 underline text-xs font-semibold"
+              >
+                Privacy Policy
+              </a>
+              <span className="text-slate-600">•</span>
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyan-400 hover:text-cyan-300 underline text-xs font-semibold"
+              >
+                Terms of Service
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}

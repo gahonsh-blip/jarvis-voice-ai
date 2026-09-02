@@ -23,6 +23,8 @@ export type IntentCategory =
   | 'create_social_post'
   | 'find_document'
   | 'schedule_morning_report'
+  | 'morning_briefing'
+  | 'mobile_personal_status'
   | 'generate_quotation'
   | 'cloud_telemetry'
   | 'security_audit'
@@ -102,7 +104,8 @@ export type ActiveAppWindow =
   | 'security'
   | 'autonomous_tools'
   | 'permission_gateway'
-  | 'mobile_remote';
+  | 'mobile_remote'
+  | 'mobile_personal_status';
 
 export type MainNavigationTab =
   | 'voice_core'
@@ -112,7 +115,127 @@ export type MainNavigationTab =
   | 'social_engine'
   | 'proactive_reports'
   | 'oracle_cloud'
-  | 'security_matrix';
+  | 'security_matrix'
+  | 'mobile_status';
+
+// -------------------------------------------------------------
+// MOBILE PERSONAL STATUS & HINDI MORNING BRIEFING
+// -------------------------------------------------------------
+
+export type MobilePermissionCategory =
+  | 'BATTERY_STATUS'
+  | 'WEATHER_LOCATION'
+  | 'NOTIFICATIONS'
+  | 'CALENDAR_EVENTS'
+  | 'EMAIL_INBOX'
+  | 'DEVICE_HEALTH';
+
+export interface MobileCategoryPermissionItem {
+  category: MobilePermissionCategory;
+  nameEn: string;
+  nameHi: string;
+  descriptionEn: string;
+  descriptionHi: string;
+  granted: boolean;
+  securityLevel: 'LEVEL 1 READ-ONLY' | 'LEVEL 2 CACHED' | 'LEVEL 4 HUMAN CONSENT';
+  level: 1 | 2 | 3 | 4;
+  icon: string;
+  dataCountSummary?: string;
+}
+
+export interface MobileNotificationItem {
+  id: string;
+  app: 'WhatsApp' | 'SMS' | 'Gmail' | 'Telegram' | 'System' | string;
+  sender: string;
+  summary: string;
+  timestamp: string;
+  priority: 'high' | 'normal' | 'low';
+}
+
+export interface MobileCalendarEventItem {
+  id: string;
+  title: string;
+  titleHi?: string;
+  time: string;
+  location?: string;
+  priority: 'high' | 'normal';
+  category: 'meeting' | 'task' | 'reminder' | 'deadline';
+}
+
+export interface MobileEmailSummaryItem {
+  id: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  time: string;
+  isImportant: boolean;
+}
+
+export interface MobileStatusData {
+  battery: {
+    level: number;
+    charging: boolean;
+    chargingTimeSeconds?: number;
+    dischargingTimeSeconds?: number;
+    temperatureC: number;
+    powerMode: 'Normal' | 'Power Saving' | 'Performance';
+    statusText: string;
+    available: boolean;
+  };
+  weather: {
+    location: string;
+    temperatureC: number;
+    condition: string;
+    conditionHi: string;
+    humidity: number;
+    windKmh: number;
+    feelsLikeC: number;
+    available: boolean;
+  };
+  notifications: {
+    totalCount: number;
+    criticalCount: number;
+    items: MobileNotificationItem[];
+    available: boolean;
+  };
+  calendar: {
+    todayEventsCount: number;
+    events: MobileCalendarEventItem[];
+    available: boolean;
+  };
+  email: {
+    unreadCount: number;
+    importantCount: number;
+    summaries: MobileEmailSummaryItem[];
+    available: boolean;
+  };
+  deviceHealth: {
+    ramUsageMb: number;
+    ramTotalMb: number;
+    storageFreeGb: number;
+    storageTotalGb: number;
+    deviceModel: string;
+    osVersion: string;
+    networkType: 'WiFi' | '5G' | '4G' | 'Offline';
+    available: boolean;
+  };
+  lastUpdated: string;
+  permissions: Record<MobilePermissionCategory, boolean>;
+}
+
+export interface MorningBriefingPayload {
+  titleHi: string;
+  titleEn: string;
+  greetingHi: string;
+  greetingEn: string;
+  currentTimeStr: string;
+  spokenTextHi: string;
+  spokenTextEn: string;
+  generatedAt: string;
+  dataSnapshot: MobileStatusData;
+  keyHighlights: string[];
+  speechDurationEstimateSeconds: number;
+}
 
 // -------------------------------------------------------------
 // MASTER BLUEPRINT & HERMES ARCHITECTURE
@@ -234,8 +357,12 @@ export type SocialPlatformKey = 'linkedin' | 'facebook' | 'instagram' | 'youtube
 
 export type PlatformConnectionStatus =
   | 'NOT_CONFIGURED'
+  | 'CONFIGURED'
   | 'AUTH_REQUIRED'
+  | 'AUTHORIZATION_REQUIRED'
   | 'CONNECTED'
+  | 'TOKEN_INVALID'
+  | 'API_VERIFIED'
   | 'ERROR'
   | 'EXPIRED'
   | 'VERIFIED';
@@ -271,6 +398,7 @@ export interface LinkedInOAuthStatus {
 
 export interface YouTubeOAuthStatus {
   connected: boolean;
+  status?: 'NOT_CONFIGURED' | 'CONFIGURED' | 'AUTH_REQUIRED' | 'AUTHORIZATION_REQUIRED' | 'AUTHORIZED' | 'TOKEN_INVALID' | 'API_VERIFIED' | 'ERROR' | 'CONNECTED';
   authType?: 'OAUTH_2_0' | 'STATIC_ENV_TOKEN' | 'API_KEY';
   channelId?: string;
   channelTitle?: string;
@@ -284,6 +412,9 @@ export interface YouTubeOAuthStatus {
   hasApiKey: boolean;
   redirectUri: string;
   message?: string;
+  diagnosticError?: string;
+  canPublish?: boolean;
+  isGoogleTestingModeBlocked?: boolean;
 }
 
 export interface PlatformIntegrationInfo {
@@ -323,6 +454,15 @@ export interface SocialMediaPostDraft {
   providerUrn?: string;
   verifiedAt?: string;
   finalTruthState?: 'DRAFT' | 'APPROVAL_REQUIRED' | 'APPROVED' | 'EXECUTING' | 'API_CONFIRMED' | 'VERIFIED' | 'FAILED' | 'NOT_PUBLISHED' | 'REJECTED';
+  videoTitle?: string;
+  videoDescription?: string;
+  privacyStatus?: 'private' | 'unlisted' | 'public';
+  targetChannel?: string;
+  videoUrl?: string;
+  isTestUpload?: boolean;
+  videoFileName?: string;
+  videoPayloadBase64?: string;
+  scheduledPublishTime?: string;
 }
 
 export interface ProactiveReportItem {

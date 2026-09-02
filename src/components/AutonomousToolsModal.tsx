@@ -28,6 +28,10 @@ import {
   Layers,
   ChevronRight,
   Send,
+  Video,
+  Sparkles,
+  Copy,
+  BookOpen,
 } from 'lucide-react';
 import { PermissionActionRequest, IntegrationAuditItem, EmergencyControlState } from '../types';
 import { PermissionGateway } from './PermissionGateway';
@@ -37,7 +41,7 @@ interface AutonomousToolsModalProps {
   onClose: () => void;
 }
 
-type ActiveTab = 'approvals' | 'git' | 'filesystem' | 'github' | 'web' | 'email' | 'integrations' | 'finance_guard';
+type ActiveTab = 'approvals' | 'youtube' | 'git' | 'filesystem' | 'github' | 'web' | 'email' | 'integrations' | 'finance_guard';
 
 export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('approvals');
@@ -77,6 +81,15 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
 
   // Email State
   const [emailStatus, setEmailStatus] = useState<any>(null);
+
+  // YouTube Summarizer State
+  const [ytUrl, setYtUrl] = useState<string>('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  const [ytDetailLevel, setYtDetailLevel] = useState<'concise' | 'balanced' | 'detailed'>('balanced');
+  const [ytLanguage, setYtLanguage] = useState<string>('en');
+  const [ytResult, setYtResult] = useState<any>(null);
+  const [ytSearchQuery, setYtSearchQuery] = useState<string>('');
+  const [ytCopied, setYtCopied] = useState<boolean>(false);
+  const [ytSubTab, setYtSubTab] = useState<'summary' | 'takeaways' | 'transcript'>('summary');
 
   // Integrations Audit State
   const [auditReport, setAuditReport] = useState<{
@@ -343,6 +356,46 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   };
 
+  // 6.5. YouTube Video Summarizer
+  const handleSummarizeYouTube = async (overrideUrl?: string) => {
+    const targetUrl = (overrideUrl || ytUrl).trim();
+    if (!targetUrl) {
+      showFeedback('Please provide a valid YouTube URL or Video ID.', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/tools/youtube/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: targetUrl,
+          detailLevel: ytDetailLevel,
+          language: ytLanguage,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setYtResult(data);
+        showFeedback(`Successfully summarized "${data.videoInfo?.title}" (${data.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Autonomous Engine'})`);
+      } else {
+        showFeedback(data.error || 'YouTube summarization failed', 'error');
+      }
+    } catch (err: any) {
+      showFeedback('YouTube summarizer error: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopySummary = (text: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setYtCopied(true);
+    showFeedback('Summary copied to clipboard!');
+    setTimeout(() => setYtCopied(false), 3000);
+  };
+
   // 7. Email & Integrations Audit
   const fetchEmailStatus = async () => {
     try {
@@ -455,6 +508,19 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
           </button>
 
           <button
+            onClick={() => setActiveTab('youtube')}
+            className={`px-3 py-2 rounded-lg flex items-center gap-2 shrink-0 transition-all font-semibold ${
+              activeTab === 'youtube'
+                ? 'bg-rose-950 text-rose-300 border border-rose-500/50 shadow-sm'
+                : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+          >
+            <Video className="w-4 h-4 text-rose-400" />
+            <span>YouTube Summarizer</span>
+            <span className="px-1.5 py-0.2 rounded bg-rose-900/80 text-[10px] text-rose-300 font-mono">NEW</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('git')}
             className={`px-3 py-2 rounded-lg flex items-center gap-2 shrink-0 transition-all font-semibold ${
               activeTab === 'git'
@@ -545,6 +611,301 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
           {activeTab === 'approvals' && (
             <div className="space-y-4">
               <PermissionGateway isStandalone={true} />
+            </div>
+          )}
+
+          {/* TAB 1.5: YOUTUBE VIDEO SUMMARIZER & INTELLIGENCE */}
+          {activeTab === 'youtube' && (
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Video className="w-5 h-5 text-rose-400" />
+                    Autonomous YouTube Video Intelligence & Summarizer
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    Fetches official timed transcripts & video metadata, synthesizing executive summaries, milestones, and actionable insights via Gemini 2.5 Flash.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 font-mono text-xs">
+                  <span className="px-2.5 py-1 rounded bg-rose-950/80 border border-rose-500/40 text-rose-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Gemini 2.5 Flash AI</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Sample Preset Videos */}
+              <div className="space-y-1.5 font-mono text-xs">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Quick Presets / Test Videos:</span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setYtUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+                      handleSummarizeYouTube('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 text-slate-300 text-[11px] flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>🎵 Rick Astley - Never Gonna Give You Up</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setYtUrl('https://www.youtube.com/watch?v=jNQXAC9IVRw');
+                      handleSummarizeYouTube('https://www.youtube.com/watch?v=jNQXAC9IVRw');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 text-slate-300 text-[11px] flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>🐘 YouTube First Video (Me at the zoo)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setYtUrl('https://www.youtube.com/watch?v=aircAruvnKk');
+                      handleSummarizeYouTube('https://www.youtube.com/watch?v=aircAruvnKk');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 text-slate-300 text-[11px] flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>🧠 Neural Networks Explained (3Blue1Brown)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Input Form & Controls */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder="Paste YouTube URL or Video ID (e.g. https://www.youtube.com/watch?v=...)"
+                      value={ytUrl}
+                      onChange={(e) => setYtUrl(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs focus:outline-none focus:border-rose-500 pl-9"
+                    />
+                    <Video className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={ytDetailLevel}
+                      onChange={(e) => setYtDetailLevel(e.target.value as any)}
+                      className="px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-mono text-xs focus:outline-none focus:border-rose-500"
+                    >
+                      <option value="concise">Concise (Fast)</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="detailed">In-Depth Synthesis</option>
+                    </select>
+
+                    <select
+                      value={ytLanguage}
+                      onChange={(e) => setYtLanguage(e.target.value)}
+                      className="px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-mono text-xs focus:outline-none focus:border-rose-500"
+                    >
+                      <option value="en">English</option>
+                      <option value="hi">Hindi (हिंदी)</option>
+                      <option value="hinglish">Hinglish</option>
+                      <option value="es">Spanish</option>
+                    </select>
+
+                    <button
+                      onClick={() => handleSummarizeYouTube()}
+                      disabled={loading || !ytUrl.trim()}
+                      className="px-5 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-600 disabled:opacity-50 text-white font-bold font-mono text-xs flex items-center gap-2 transition-all shadow-lg glow-rose-sm"
+                    >
+                      {loading ? (
+                        <>
+                          <RotateCw className="w-4 h-4 animate-spin" />
+                          <span>Analyzing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          <span>Summarize Video</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* YouTube Analysis Results */}
+              {ytResult && ytResult.videoInfo && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* Video Metadata Header Card */}
+                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {ytResult.videoInfo.thumbnailUrl && (
+                        <img
+                          src={ytResult.videoInfo.thumbnailUrl}
+                          alt={ytResult.videoInfo.title}
+                          className="w-24 h-16 object-cover rounded-lg border border-slate-800 shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                      <div>
+                        <h4 className="text-sm font-bold text-white leading-snug">
+                          {ytResult.videoInfo.title}
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[11px] text-slate-400">
+                          <span className="text-cyan-400 font-semibold">{ytResult.videoInfo.channel}</span>
+                          <span>•</span>
+                          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                            ⏱️ {ytResult.videoInfo.durationFormatted}
+                          </span>
+                          <span>•</span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              ytResult.videoInfo.hasTranscript
+                                ? 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
+                                : 'bg-amber-950 border border-amber-500/40 text-amber-300'
+                            }`}
+                          >
+                            {ytResult.videoInfo.hasTranscript ? '🟢 Transcript Loaded' : '🟡 Metadata Outline'}
+                          </span>
+                          <span>•</span>
+                          <span className="text-[10px] text-slate-500">
+                            Source: {ytResult.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Autonomous Engine'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <a
+                        href={ytResult.videoInfo.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-mono text-slate-300 flex items-center gap-1.5 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Watch on YouTube</span>
+                      </a>
+                      <button
+                        onClick={() => handleCopySummary(ytResult.summary || '')}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-mono text-cyan-300 flex items-center gap-1.5 transition-colors"
+                      >
+                        {ytCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{ytCopied ? 'Copied' : 'Copy Summary'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sub Tabs: Summary vs Key Takeaways vs Timestamped Transcript */}
+                  <div className="flex items-center gap-2 border-b border-slate-800 pb-2 font-mono text-xs">
+                    <button
+                      onClick={() => setYtSubTab('summary')}
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-semibold transition-colors ${
+                        ytSubTab === 'summary'
+                          ? 'bg-rose-950 text-rose-300 border border-rose-500/40'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Executive Summary</span>
+                    </button>
+                    <button
+                      onClick={() => setYtSubTab('takeaways')}
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-semibold transition-colors ${
+                        ytSubTab === 'takeaways'
+                          ? 'bg-rose-950 text-rose-300 border border-rose-500/40'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Key Takeaways</span>
+                    </button>
+                    <button
+                      onClick={() => setYtSubTab('transcript')}
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-semibold transition-colors ${
+                        ytSubTab === 'transcript'
+                          ? 'bg-rose-950 text-rose-300 border border-rose-500/40'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Timestamped Transcript ({ytResult.segments?.length || 0})</span>
+                    </button>
+                  </div>
+
+                  {/* SubTab 1: Summary */}
+                  {ytSubTab === 'summary' && (
+                    <div className="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-4 font-mono text-xs leading-relaxed text-slate-200">
+                      <div className="whitespace-pre-wrap selection:bg-rose-950 selection:text-rose-200">
+                        {ytResult.summary}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SubTab 2: Key Takeaways */}
+                  {ytSubTab === 'takeaways' && (
+                    <div className="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
+                      {ytResult.keyTakeaways && ytResult.keyTakeaways.length > 0 ? (
+                        ytResult.keyTakeaways.map((takeaway: string, idx: number) => (
+                          <div
+                            key={idx}
+                            className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 flex items-start gap-2.5 text-slate-200"
+                          >
+                            <span className="w-5 h-5 rounded bg-rose-950 border border-rose-500/40 text-rose-400 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                              {idx + 1}
+                            </span>
+                            <span className="leading-relaxed">{takeaway.replace(/^[•\-\*]\s*/, '')}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-slate-500">Key takeaways are formatted inside the Executive Summary view above.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SubTab 3: Full Timestamped Transcript */}
+                  {ytSubTab === 'transcript' && (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            placeholder="Filter transcript keywords..."
+                            value={ytSearchQuery}
+                            onChange={(e) => setYtSearchQuery(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs pl-8 focus:outline-none focus:border-rose-500"
+                          />
+                          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
+                        </div>
+                        <span className="text-[11px] text-slate-400">
+                          {ytResult.segments?.filter((s: any) =>
+                            !ytSearchQuery || s.text.toLowerCase().includes(ytSearchQuery.toLowerCase())
+                          ).length || 0} segments
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1 scrollbar-thin">
+                        {ytResult.segments && ytResult.segments.length > 0 ? (
+                          ytResult.segments
+                            .filter((s: any) =>
+                              !ytSearchQuery || s.text.toLowerCase().includes(ytSearchQuery.toLowerCase())
+                            )
+                            .map((seg: any, idx: number) => (
+                              <div
+                                key={idx}
+                                className="p-2 rounded bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 flex items-start gap-2.5 group"
+                              >
+                                <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] text-cyan-400 shrink-0 font-bold">
+                                  {seg.timestamp}
+                                </span>
+                                <span className="text-slate-300 leading-normal text-[11px] flex-1">{seg.text}</span>
+                              </div>
+                            ))
+                        ) : (
+                          <pre className="p-3 rounded bg-slate-900 text-slate-400 whitespace-pre-wrap text-xs">
+                            {ytResult.transcript || 'No transcript text available for this video.'}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

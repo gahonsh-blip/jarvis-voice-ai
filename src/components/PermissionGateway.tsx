@@ -24,8 +24,17 @@ import {
   Smartphone,
   Cpu,
   Info,
+  BatteryCharging,
+  CloudSun,
+  Bell,
+  Calendar,
 } from 'lucide-react';
-import { PermissionActionRequest, EmergencyControlState } from '../types';
+import { PermissionActionRequest, EmergencyControlState, MobilePermissionCategory } from '../types';
+import {
+  loadMobilePermissions,
+  saveMobilePermissions,
+  MOBILE_PERMISSION_DEFINITIONS,
+} from '../utils/mobileStatusEngine';
 
 interface PermissionGatewayProps {
   isOpen?: boolean;
@@ -34,6 +43,7 @@ interface PermissionGatewayProps {
   onApprove?: (request: PermissionActionRequest) => Promise<void> | void;
   onReject?: (request: PermissionActionRequest) => Promise<void> | void;
   onSpeak?: (text: string) => void;
+  onOpenMobileStatus?: () => void;
   isStandalone?: boolean;
 }
 
@@ -44,6 +54,7 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
   onApprove,
   onReject,
   onSpeak,
+  onOpenMobileStatus,
   isStandalone = false,
 }) => {
   const [pendingRequests, setPendingRequests] = useState<PermissionActionRequest[]>([]);
@@ -54,6 +65,8 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [viewFormat, setViewFormat] = useState<'formatted' | 'raw_json'>('formatted');
+  const [activeGatewayTab, setActiveGatewayTab] = useState<'external_actions' | 'mobile_privacy'>('external_actions');
+  const [mobilePerms, setMobilePerms] = useState<Record<MobilePermissionCategory, boolean>>(loadMobilePermissions());
 
   // Test Stager State
   const [stageAction, setStageAction] = useState<'linkedin_post' | 'github_issue' | 'email_quote'>('linkedin_post');
@@ -290,6 +303,45 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
         </div>
       </div>
 
+      {/* Tab Switcher: Level 4 External Actions vs Mobile Data Authorizations */}
+      <div className="px-5 py-2.5 bg-slate-950/70 border-b border-amber-900/40 flex items-center justify-between gap-2 overflow-x-auto">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveGatewayTab('external_actions')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+              activeGatewayTab === 'external_actions'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-950 font-black'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Level 4 Action Queue ({pendingRequests.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveGatewayTab('mobile_privacy')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+              activeGatewayTab === 'mobile_privacy'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-950 font-black'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Mobile Data &amp; Privacy Authorizations</span>
+          </button>
+        </div>
+
+        {onOpenMobileStatus && (
+          <button
+            onClick={onOpenMobileStatus}
+            className="px-2.5 py-1 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-mono text-[11px] flex items-center gap-1 shrink-0"
+          >
+            <span>Open Mobile Dashboard</span>
+            <ExternalLink className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
       {/* 2. FEEDBACK / STATUS NOTIFICATION BANNER */}
       {feedback && (
         <div
@@ -325,7 +377,94 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
 
       {/* 4. MAIN INTERCEPTOR BODY */}
       <div className="p-4 sm:p-6 space-y-6 overflow-y-auto max-h-[75vh]">
-        {/* Pending Requests Tab Switcher if multiple */}
+        {activeGatewayTab === 'mobile_privacy' ? (
+          <div className="space-y-6">
+            <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/40 flex items-start gap-3 text-xs font-mono text-slate-300">
+              <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-bold text-white mb-1">
+                  MOBILE DATA CATEGORY PERMISSIONS (LEVEL 1-4 PRIVACY POLICY)
+                </h4>
+                <p className="text-slate-400 leading-relaxed font-sans">
+                  JARVIS strictly requires explicit permission before reading battery, weather, notifications, calendar, or email inbox. Grant or revoke access per data category below.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {MOBILE_PERMISSION_DEFINITIONS.map((def) => {
+                const isGranted = mobilePerms[def.category];
+                return (
+                  <div
+                    key={def.category}
+                    className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                      isGranted
+                        ? 'bg-slate-950/80 border-cyan-800/60 text-slate-200'
+                        : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`p-2.5 rounded-xl border mt-0.5 shrink-0 ${
+                          isGranted
+                            ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                            : 'bg-slate-900 border-slate-800 text-slate-600'
+                        }`}
+                      >
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h5 className={`text-sm font-bold font-mono ${isGranted ? 'text-white' : 'text-slate-400'}`}>
+                            {def.nameEn} ({def.nameHi})
+                          </h5>
+                          <span
+                            className={`text-[9px] px-2 py-0.5 rounded font-mono font-bold ${
+                              def.level === 4
+                                ? 'bg-amber-950 border border-amber-500/60 text-amber-300'
+                                : 'bg-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {def.securityLevel}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 font-sans mt-0.5">
+                          {def.descriptionEn}
+                        </p>
+                        <p className="text-xs text-cyan-400/80 font-sans mt-0.5">
+                          {def.descriptionHi}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 ml-auto sm:ml-0">
+                      <button
+                        onClick={() => {
+                          const updated = { ...mobilePerms, [def.category]: !mobilePerms[def.category] };
+                          setMobilePerms(updated);
+                          saveMobilePermissions(updated);
+                          showNotification(
+                            `Permission for "${def.nameEn}" updated to: ${updated[def.category] ? 'GRANTED' : 'REVOKED'}`,
+                            'info'
+                          );
+                        }}
+                        className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all ${
+                          isGranted
+                            ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md shadow-emerald-950'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+                        }`}
+                      >
+                        {isGranted ? 'AUTHORIZED ✅' : 'REVOKED 🔒'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Pending Requests Tab Switcher if multiple */}
         {pendingRequests.length > 1 && (
           <div className="space-y-2">
             <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
@@ -663,6 +802,8 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
             </button>
           </div>
         </div>
+          </>
+        )}
 
         {/* 6. PERMANENT FINANCE SAFETY EXCLUSION NOTICE */}
         <div className="p-3.5 rounded-xl bg-slate-950 border border-rose-900/60 flex items-center gap-3 text-xs font-mono text-slate-400">

@@ -138,3 +138,22 @@ LINKEDIN_CLIENT_SECRET=your_linkedin_client_secret
 ### 3. Token Expiration & Automatic Refresh
 - YouTube OAuth issues a `refresh_token` with `access_type=offline` and `prompt=consent`.
 - The backend `ensureValidYouTubeToken()` utility automatically exchanges the `refresh_token` for a fresh `access_token` when the token is within 5 minutes of expiration without requiring operator re-authentication.
+
+---
+
+## 🏛️ 6. Google Cloud Auth Platform / Consent Screen Branding & Legal URLs
+
+When configuring your OAuth consent screen in **Google Cloud Console ➔ APIs & Services ➔ OAuth consent screen (or Branding)**, enter these exact public URLs:
+
+| Field Name in Google Cloud Console | Exact Configured URL | Requirements & Compliance |
+| :--- | :--- | :--- |
+| **App Name** | `HERMES JARVIS` | Matches application title across all pages. |
+| **User Support Email** | `gahonsh@gmail.com` | Official developer email configured in project. |
+| **App Home Page** | `https://<YOUR-APP-HOST>/` | Must display application purpose, Level-4 human authorization, and links to legal policies without requiring login. |
+| **App Privacy Policy Link** | `https://<YOUR-APP-HOST>/privacy` (or `/privacy-policy`) | Publicly accessible HTML disclosing requested scopes (`youtube.readonly`, `youtube.upload`), AES-256-GCM token storage encryption, user deletion controls, and Limited Use clause. |
+| **App Terms of Service Link** | `https://<YOUR-APP-HOST>/terms` (or `/terms-of-service`) | Publicly accessible HTML covering acceptable use, Level-4 authorization, kill switch, and liability disclaimers. |
+| **Developer Contact Email** | `gahonsh@gmail.com` | Primary maintainer contact. |
+| **Authorized Redirect URI** | `https://<YOUR-APP-HOST>/api/auth/youtube/callback` | OAuth 2.0 web client callback endpoint. |
+
+> 🔒 **Verification Note**: Google OAuth verification requires that the public privacy policy and homepage information accurately match the deployed application without requiring login, iframe embedding, or JavaScript rendering to display the core policy text.
+

@@ -17,6 +17,7 @@ import {
   Power,
   RotateCcw,
   CheckCircle2,
+  FileText,
 } from 'lucide-react';
 
 interface HUDHeaderProps {
@@ -357,6 +358,28 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             <Lock className="w-3.5 h-3.5 text-cyan-400" />
             <span>Security Matrix</span>
           </button>
+
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 shrink-0 transition-colors"
+            title="Open Public Privacy Policy"
+          >
+            <FileText className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Privacy Policy</span>
+          </a>
+
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-slate-100 flex items-center gap-1.5 shrink-0 transition-colors"
+            title="Open Public Terms of Service"
+          >
+            <FileText className="w-3.5 h-3.5 text-slate-400" />
+            <span>Terms of Service</span>
+          </a>
         </div>
       </div>
 

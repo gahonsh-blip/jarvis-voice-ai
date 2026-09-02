@@ -72,17 +72,31 @@ This document provides step-by-step verification procedures to test all integrat
 
 ---
 
+### Scenario E: Testing Legal Pages & Google OAuth Compliance
+1. Open `GET /privacy` and `GET /privacy-policy` in a browser or curl client without logging in.
+   - **Verification**: Dedicated standalone HTML response with HTTP 200, disclosing application identity (HERMES JARVIS), developer contact (`gahonsh@gmail.com`), requested scopes (`youtube.readonly`, `youtube.upload`), AES-256-GCM token encryption, Level-4 human authorization, user revocation controls, and the Google Limited Use disclosure.
+2. Open `GET /terms` and `GET /terms-of-service` without logging in.
+   - **Verification**: Dedicated standalone HTML response with HTTP 200, detailing acceptable use, YouTube terms compliance, Level-4 gate, kill switch, and liability disclaimers.
+3. Open `GET /` (Homepage).
+   - **Verification**: Homepage displays the public compliance footer with visible links to `/privacy` and `/terms`, clear application identification, and explanation of human-controlled authorization.
+
+---
+
 ## 3. Automated Validation Commands
 
 Run these terminal commands to verify the integrity and compilation of the codebase:
 
 ```bash
-# 1. Typecheck and lint
+# 1. Run automated unit test suite (Vitest)
+npm run test
+
+# 2. Typecheck and lint
 npm run lint
 
-# 2. Production build compilation test
+# 3. Production build compilation test
 npm run build
 
-# 3. Test dev server boot
+# 4. Test dev server boot
 node dist/server.cjs
 ```
+

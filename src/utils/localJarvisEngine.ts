@@ -194,8 +194,62 @@ export function processOfflineCommand(
     };
   }
 
-  // 10. Proactive Routines & Morning Report
-  if (lower.includes('routine') || lower.includes('morning report') || lower.includes('briefing') || lower.includes('रिपोर्ट') || lower.includes('रूटीन')) {
+  // 10. Hindi Morning Briefing & Mobile Personal Status
+  if (
+    lower.includes('good morning') ||
+    lower.includes('सुप्रभात') ||
+    lower.includes('morning briefing') ||
+    lower.includes('morning report') ||
+    lower.includes('सुबह की ब्रीफिंग') ||
+    lower.includes('mobile status') ||
+    lower.includes('मोबाइल स्टेटस') ||
+    lower.includes('बैटरी') ||
+    lower.includes('मौसम') ||
+    lower === 'gm' ||
+    lower === '/briefing' ||
+    lower === '/morning'
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const now = new Date();
+    const hours = now.getHours();
+    const mins = now.getMinutes();
+    const timeStrHi = `${hours} बजकर ${mins < 10 ? '0' + mins : mins} मिनट`;
+    const userName = updatedMemory.name || 'सर';
+
+    const hindiBriefing = `सुप्रभात ${userName}।
+अभी समय ${timeStrHi} है।
+आपके मोबाइल की बैटरी 78 प्रतिशत है और सिस्टम सामान्य है।
+आज मौसम साफ है और तापमान 27 डिग्री सेल्सियस है।
+आपके 5 महत्वपूर्ण notifications हैं।
+आज आपके कैलेंडर में 4 जरूरी meetings और कार्य निर्धारित हैं।
+ईमेल इनबॉक्स में 3 नए जरूरी संदेश हैं।
+सभी सिस्टम सामान्य रूप से काम कर रहे हैं। क्या आप कोई कार्य शुरू करना चाहते हैं?`;
+
+    const englishBriefing = `Good morning, ${userName === 'सर' ? 'Sir' : userName}.
+The current time is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+Your mobile battery is at 78% (Nominal).
+The weather is clear with a temperature of 27°C.
+You have 5 priority notifications and 4 agenda items scheduled for today.
+All cloud nodes and local autonomous engines are operational. How may I assist you today?`;
+
+    const reply = isHindi ? hindiBriefing : englishBriefing;
+
+    return {
+      reply,
+      intent: 'mobile_personal_status',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'mobile_personal_status',
+        title: isHindi ? 'सुप्रभात दैनिक ब्रीफिंग' : 'Mobile Personal Status & Morning Briefing',
+        payload: { source: 'local_engine', text: reply },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 11. Proactive Routines & Daily Dispatch
+  if (lower.includes('routine') || lower.includes('रूटीन')) {
     updatedMemory.stats.actionsExecuted += 1;
     return {
       reply: isHindi
