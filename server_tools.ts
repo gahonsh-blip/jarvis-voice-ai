@@ -170,6 +170,40 @@ export function createPendingActionRequest(params: {
   return { request: req };
 }
 
+export function activateEmergencyKillSwitch(
+  requestedBy: string = 'GLOBAL_KILL_SWITCH',
+  reason: string = 'Global Kill Switch Triggered by Operator'
+): { emergencyState: EmergencyState; clearedTasksCount: number } {
+  emergencyState.emergencyPaused = true;
+  emergencyState.pausedAt = new Date().toISOString();
+  emergencyState.pausedBy = requestedBy;
+  emergencyState.reason = reason;
+
+  let clearedTasksCount = 0;
+  pendingActionRequests.forEach((req) => {
+    if (req.status === 'PENDING_APPROVAL') {
+      req.status = 'REJECTED';
+      req.resolvedAt = new Date().toISOString();
+      req.resolvedBy = requestedBy;
+      req.errorReason = 'Aborted immediately by Global Kill Switch';
+      clearedTasksCount++;
+    }
+  });
+
+  return {
+    emergencyState: { ...emergencyState },
+    clearedTasksCount,
+  };
+}
+
+export function resumeSystemOperation(requestedBy: string = 'HUMAN_OPERATOR'): EmergencyState {
+  emergencyState.emergencyPaused = false;
+  emergencyState.pausedAt = undefined;
+  emergencyState.pausedBy = requestedBy;
+  emergencyState.reason = undefined;
+  return { ...emergencyState };
+}
+
 export function updateActionRequestStatus(
   id: string,
   status: PermissionActionRequest['status'],

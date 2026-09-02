@@ -269,6 +269,23 @@ export interface LinkedInOAuthStatus {
   message?: string;
 }
 
+export interface YouTubeOAuthStatus {
+  connected: boolean;
+  authType?: 'OAUTH_2_0' | 'STATIC_ENV_TOKEN' | 'API_KEY';
+  channelId?: string;
+  channelTitle?: string;
+  customUrl?: string;
+  avatarUrl?: string;
+  connectedAt?: string;
+  expiresAt?: string;
+  scopes?: string[];
+  hasClientId: boolean;
+  hasClientSecret: boolean;
+  hasApiKey: boolean;
+  redirectUri: string;
+  message?: string;
+}
+
 export interface PlatformIntegrationInfo {
   id: SocialPlatformKey;
   name: string;
@@ -282,6 +299,7 @@ export interface PlatformIntegrationInfo {
   errorMessage?: string;
   authType?: 'OAUTH_2_0' | 'STATIC_TOKEN' | 'API_KEY';
   oauthStatus?: LinkedInOAuthStatus;
+  youTubeOAuthStatus?: YouTubeOAuthStatus;
   requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean; placeholder: string }[];
   developerPortalUrl: string;
   setupInstructions: string[];

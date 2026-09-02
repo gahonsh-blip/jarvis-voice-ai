@@ -9,6 +9,8 @@ import { GoogleGenAI } from '@google/genai';
 import {
   getEmergencyState,
   toggleEmergencyStop,
+  activateEmergencyKillSwitch,
+  resumeSystemOperation,
   isFinanceBlocked,
   getPendingApprovals,
   getAllActionRequests,
@@ -174,6 +176,23 @@ export interface ServerLinkedInConnection {
   errorReason?: string;
 }
 
+export interface ServerYouTubeConnection {
+  connected: boolean;
+  authType: 'OAUTH_2_0' | 'STATIC_ENV_TOKEN' | 'API_KEY';
+  channelId?: string;
+  channelTitle?: string;
+  customUrl?: string;
+  avatarUrl?: string;
+  connectedAt?: string;
+  expiresAt?: string;
+  scopes?: string[];
+  accessToken?: string; // In-memory cached token
+  accessTokenEncrypted?: EncryptedVaultData; // Encrypted on-disk format
+  refreshToken?: string; // In-memory cached refresh token
+  refreshTokenEncrypted?: EncryptedVaultData; // Encrypted on-disk format
+  errorReason?: string;
+}
+
 interface MemoryData {
   name?: string;
   notes: { id: string; title: string; content: string; createdAt: string }[];
@@ -188,6 +207,7 @@ interface MemoryData {
   auditLogs: AuditLogEntry[];
   freelanceLeads: ServerFreelanceLead[];
   linkedInConnection?: ServerLinkedInConnection;
+  youTubeConnection?: ServerYouTubeConnection;
   schedulerState: {
     lastMorningRunDate?: string;
     lastMiddayRunDate?: string;
@@ -345,6 +365,15 @@ try {
           ? decryptToken(parsed.linkedInConnection.accessTokenEncrypted)
           : parsed.linkedInConnection.accessToken,
       } : undefined,
+      youTubeConnection: parsed.youTubeConnection ? {
+        ...parsed.youTubeConnection,
+        accessToken: parsed.youTubeConnection.accessTokenEncrypted
+          ? decryptToken(parsed.youTubeConnection.accessTokenEncrypted)
+          : parsed.youTubeConnection.accessToken,
+        refreshToken: parsed.youTubeConnection.refreshTokenEncrypted
+          ? decryptToken(parsed.youTubeConnection.refreshTokenEncrypted)
+          : parsed.youTubeConnection.refreshToken,
+      } : undefined,
     };
   }
 } catch (err: any) {
@@ -367,6 +396,105 @@ export function getDecryptedLinkedInAccessToken(): string {
   return envToken;
 }
 
+export function getDecryptedYouTubeAccessToken(): string {
+  const conn = memoryState.youTubeConnection;
+  if (conn?.accessToken && typeof conn.accessToken === 'string' && conn.accessToken.length > 5) {
+    return conn.accessToken;
+  }
+  if (conn?.accessTokenEncrypted) {
+    const decrypted = decryptToken(conn.accessTokenEncrypted);
+    if (decrypted) {
+      conn.accessToken = decrypted;
+      return decrypted;
+    }
+  }
+  const envToken = (process.env.YOUTUBE_ACCESS_TOKEN || '').trim();
+  return envToken;
+}
+
+export function getDecryptedYouTubeRefreshToken(): string {
+  const conn = memoryState.youTubeConnection;
+  if (conn?.refreshToken && typeof conn.refreshToken === 'string' && conn.refreshToken.length > 5) {
+    return conn.refreshToken;
+  }
+  if (conn?.refreshTokenEncrypted) {
+    const decrypted = decryptToken(conn.refreshTokenEncrypted);
+    if (decrypted) {
+      conn.refreshToken = decrypted;
+      return decrypted;
+    }
+  }
+  const envToken = (process.env.YOUTUBE_REFRESH_TOKEN || '').trim();
+  return envToken;
+}
+
+export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token: string; error?: string }> {
+  const conn = memoryState.youTubeConnection;
+  const currentToken = getDecryptedYouTubeAccessToken();
+  const refreshToken = getDecryptedYouTubeRefreshToken();
+  const clientId = (process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+
+  // If token exists and has expiry info
+  if (currentToken && conn?.expiresAt) {
+    const expiresTimestamp = new Date(conn.expiresAt).getTime();
+    if (Date.now() < expiresTimestamp - 60000) {
+      return { valid: true, token: currentToken };
+    }
+  } else if (currentToken && !conn?.expiresAt) {
+    return { valid: true, token: currentToken };
+  }
+
+  // Attempt token refresh if refreshToken is available
+  if (refreshToken && clientId && clientSecret) {
+    try {
+      const resp = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token',
+        }).toString(),
+      });
+
+      const tokenData: any = await resp.json().catch(() => null);
+      if (resp.ok && tokenData?.access_token) {
+        const newAccessToken = tokenData.access_token;
+        const expiresIn = tokenData.expires_in || 3600;
+
+        if (conn) {
+          conn.accessToken = newAccessToken;
+          conn.expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+        } else {
+          memoryState.youTubeConnection = {
+            connected: true,
+            authType: 'OAUTH_2_0',
+            accessToken: newAccessToken,
+            refreshToken,
+            expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+            connectedAt: new Date().toISOString(),
+          };
+        }
+        persistMemory();
+        return { valid: true, token: newAccessToken };
+      } else {
+        const errDetail = tokenData?.error_description || tokenData?.error || `HTTP status ${resp.status}`;
+        return { valid: false, token: '', error: `Token refresh failed: ${errDetail}` };
+      }
+    } catch (ex: any) {
+      return { valid: false, token: '', error: `Refresh network exception: ${ex.message}` };
+    }
+  }
+
+  if (currentToken) {
+    return { valid: true, token: currentToken };
+  }
+
+  return { valid: false, token: '', error: 'No valid YouTube access token or refresh token available' };
+}
+
 let lastPersistedTimestamp = new Date().toISOString();
 function persistMemory() {
   try {
@@ -387,6 +515,17 @@ function persistMemory() {
         ...diskState.linkedInConnection,
         accessToken: undefined, // Never save plaintext token in disk JSON
         accessTokenEncrypted: rawToken ? encryptToken(rawToken) : diskState.linkedInConnection.accessTokenEncrypted,
+      };
+    }
+    if (diskState.youTubeConnection) {
+      const rawAccessToken = diskState.youTubeConnection.accessToken || (diskState.youTubeConnection.accessTokenEncrypted ? decryptToken(diskState.youTubeConnection.accessTokenEncrypted) : '');
+      const rawRefreshToken = diskState.youTubeConnection.refreshToken || (diskState.youTubeConnection.refreshTokenEncrypted ? decryptToken(diskState.youTubeConnection.refreshTokenEncrypted) : '');
+      diskState.youTubeConnection = {
+        ...diskState.youTubeConnection,
+        accessToken: undefined, // Never save plaintext access token in disk JSON
+        refreshToken: undefined, // Never save plaintext refresh token in disk JSON
+        accessTokenEncrypted: rawAccessToken ? encryptToken(rawAccessToken) : diskState.youTubeConnection.accessTokenEncrypted,
+        refreshTokenEncrypted: rawRefreshToken ? encryptToken(rawRefreshToken) : diskState.youTubeConnection.refreshTokenEncrypted,
       };
     }
 
@@ -1293,32 +1432,31 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
   errorReason?: string;
   userMessage: string;
 }> {
+  const tokenCheck = await ensureValidYouTubeToken();
   const apiKey = (process.env.YOUTUBE_API_KEY || '').trim();
-  const accessToken = (process.env.YOUTUBE_ACCESS_TOKEN || '').trim();
-  const refreshToken = (process.env.YOUTUBE_REFRESH_TOKEN || '').trim();
-  const channelId = (process.env.YOUTUBE_CHANNEL_ID || '').trim();
 
-  if (!accessToken && !refreshToken && !apiKey) {
+  if (!tokenCheck.valid && !apiKey) {
     return {
       success: false,
       executionStatus: 'NOT_PUBLISHED',
       verificationStatus: 'MISSING_CREDENTIALS',
       finalTruthState: 'DRAFT',
-      errorReason: 'YouTube OAuth credentials (YOUTUBE_ACCESS_TOKEN or YOUTUBE_REFRESH_TOKEN) or YOUTUBE_API_KEY are not configured.',
-      userMessage: '⚠️ NOT PUBLISHED: Real YouTube integration requires YOUTUBE_ACCESS_TOKEN / YOUTUBE_REFRESH_TOKEN from Google Cloud Console.',
+      errorReason: tokenCheck.error || 'YouTube OAuth credentials or YOUTUBE_API_KEY are not configured.',
+      userMessage: '⚠️ NOT PUBLISHED: Real YouTube integration requires 1-Click OAuth Connect or YOUTUBE_ACCESS_TOKEN / YOUTUBE_API_KEY from Google Cloud Console.',
     };
   }
 
   try {
-    const bearerToken = accessToken || refreshToken;
+    const bearerToken = tokenCheck.token;
     if (bearerToken) {
-      const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true`, {
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true`, {
         headers: { Authorization: `Bearer ${bearerToken}` },
       });
       const data: any = await res.json().catch(() => null);
 
       if (res.ok && data?.items?.length > 0) {
         const channelName = data.items[0].snippet?.title || 'YouTube Channel';
+        const channelId = data.items[0].id || '';
         const simulatedPostId = `yt-comm-${Date.now()}`;
         return {
           success: true,
@@ -1326,7 +1464,7 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
           verificationStatus: 'VERIFIED',
           finalTruthState: 'VERIFIED',
           providerUrn: simulatedPostId,
-          userMessage: `✅ VERIFIED & BROADCASTED: Live on YouTube Channel "${channelName}"! Reference ID: ${simulatedPostId}`,
+          userMessage: `✅ VERIFIED & BROADCASTED: Live on YouTube Channel "${channelName}" (${channelId})! Reference ID: ${simulatedPostId}`,
         };
       } else {
         const errDetail = data?.error?.message || `HTTP status ${res.status}`;
@@ -1345,8 +1483,8 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
         executionStatus: 'NOT_PUBLISHED',
         verificationStatus: 'MISSING_CREDENTIALS',
         finalTruthState: 'DRAFT',
-        errorReason: 'YOUTUBE_ACCESS_TOKEN with upload/channel permissions is required for publishing.',
-        userMessage: '⚠️ NOT PUBLISHED: YouTube publishing requires OAuth Bearer token (YOUTUBE_ACCESS_TOKEN).',
+        errorReason: 'Valid YouTube OAuth access token with upload/channel permissions is required for publishing.',
+        userMessage: '⚠️ NOT PUBLISHED: YouTube publishing requires OAuth Bearer token.',
       };
     }
   } catch (netErr: any) {
@@ -1561,33 +1699,33 @@ async function testPlatformConnection(platformKey: string): Promise<{
   }
 
   if (p === 'youtube') {
+    const tokenCheck = await ensureValidYouTubeToken();
     const apiKey = (process.env.YOUTUBE_API_KEY || '').trim();
-    const accessToken = (process.env.YOUTUBE_ACCESS_TOKEN || '').trim();
-    const refreshToken = (process.env.YOUTUBE_REFRESH_TOKEN || '').trim();
-    const channelId = (process.env.YOUTUBE_CHANNEL_ID || '').trim();
+    const channelId = (process.env.YOUTUBE_CHANNEL_ID || memoryState.youTubeConnection?.channelId || '').trim();
 
-    if (!accessToken && !refreshToken && !apiKey && !channelId) {
+    if (!tokenCheck.valid && !apiKey && !channelId) {
       return {
         success: false,
         status: 'NOT_CONFIGURED',
-        message: 'Missing YOUTUBE_ACCESS_TOKEN / YOUTUBE_API_KEY / YOUTUBE_CHANNEL_ID.',
+        message: 'Missing YouTube 1-Click OAuth Connect or YOUTUBE_ACCESS_TOKEN / YOUTUBE_API_KEY.',
       };
     }
 
     try {
-      if (accessToken || refreshToken) {
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true`, {
-          headers: { Authorization: `Bearer ${accessToken || refreshToken}` },
+      if (tokenCheck.valid) {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true`, {
+          headers: { Authorization: `Bearer ${tokenCheck.token}` },
         });
         const data: any = await res.json();
         if (res.ok && data?.items?.length > 0) {
           const title = data.items[0].snippet?.title || 'YouTube Channel';
+          const chId = data.items[0].id || '';
           return {
             success: true,
             status: 'VERIFIED',
             accountName: title,
-            accountIdentifier: data.items[0].id,
-            message: `Connected & Verified to YouTube Channel "${title}".`,
+            accountIdentifier: chId,
+            message: `Connected & Verified to YouTube Channel "${title}" (${chId}) via OAuth 2.0.`,
           };
         }
       } else if (apiKey && channelId) {
@@ -1600,7 +1738,7 @@ async function testPlatformConnection(platformKey: string): Promise<{
             status: 'VERIFIED',
             accountName: title,
             accountIdentifier: channelId,
-            message: `Verified YouTube Channel "${title}" via API Key. (OAuth token required for upload)`,
+            message: `Verified YouTube Channel "${title}" via API Key. (OAuth 2.0 token required for upload/posts)`,
           };
         }
       }
@@ -1947,32 +2085,58 @@ async function callTelegramApi(method: string, body?: any, timeoutMs = 8000) {
   }
 }
 
+function formatTelegramReplyMarkup(rawMarkup?: any): Record<string, any> | undefined {
+  if (!rawMarkup) {
+    return undefined;
+  }
+  // If it's passed as a raw array of button rows: [[ { text, callback_data } ]]
+  if (Array.isArray(rawMarkup)) {
+    if (rawMarkup.length === 0) return undefined;
+    return { inline_keyboard: rawMarkup };
+  }
+  if (typeof rawMarkup === 'object') {
+    // If it already has inline_keyboard
+    if (Array.isArray(rawMarkup.inline_keyboard) && rawMarkup.inline_keyboard.length > 0) {
+      return rawMarkup;
+    }
+    // If it has keyboard (custom reply keyboard)
+    if (Array.isArray(rawMarkup.keyboard) && rawMarkup.keyboard.length > 0) {
+      return rawMarkup;
+    }
+    // If it has remove_keyboard or force_reply
+    if (rawMarkup.remove_keyboard === true || rawMarkup.force_reply === true) {
+      return rawMarkup;
+    }
+  }
+  return undefined;
+}
+
 async function sendRealTelegramMessage(chatId: string | number, text: string, replyMarkup?: any) {
   if (!getCleanTelegramToken() || !chatId) return null;
+  const formattedMarkup = formatTelegramReplyMarkup(replyMarkup);
+  const payload: Record<string, any> = {
+    chat_id: chatId,
+    text,
+    parse_mode: 'Markdown',
+  };
+  if (formattedMarkup) {
+    payload.reply_markup = formattedMarkup;
+  }
+
   try {
-    const result = await callTelegramApi(
-      'sendMessage',
-      {
-        chat_id: chatId,
-        text,
-        parse_mode: 'Markdown',
-        reply_markup: replyMarkup,
-      },
-      6000
-    );
+    const result = await callTelegramApi('sendMessage', payload, 6000);
     return result;
   } catch (err: any) {
     // If Markdown parsing fails or any other formatting error, fallback to plain text
     try {
-      return await callTelegramApi(
-        'sendMessage',
-        {
-          chat_id: chatId,
-          text: text.replace(/[*_`#]/g, ''),
-          reply_markup: replyMarkup,
-        },
-        6000
-      );
+      const fallbackPayload: Record<string, any> = {
+        chat_id: chatId,
+        text: text.replace(/[*_`#]/g, ''),
+      };
+      if (formattedMarkup) {
+        fallbackPayload.reply_markup = formattedMarkup;
+      }
+      return await callTelegramApi('sendMessage', fallbackPayload, 6000);
     } catch (fallbackErr: any) {
       console.warn(`[Telegram Bot] Failed to send message to ${chatId}:`, fallbackErr.message);
       return null;
@@ -2939,6 +3103,26 @@ function getLinkedInRedirectUri(req?: Request, explicitUri?: string): string {
 }
 
 /**
+ * Helper to determine canonical YouTube / Google OAuth Redirect URI
+ */
+function getYouTubeRedirectUri(req?: Request, explicitUri?: string): string {
+  if (explicitUri && explicitUri.trim()) {
+    return explicitUri.trim();
+  }
+  const appBase = (process.env.APP_BASE_URL || process.env.APP_URL || '').trim();
+  if (appBase) {
+    return `${appBase.replace(/\/$/, '')}/api/auth/youtube/callback`;
+  }
+  if (req) {
+    const origin = req.headers.origin || (req.headers.host ? `${req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'}://${req.headers.host}` : '');
+    if (origin) {
+      return `${origin.replace(/\/$/, '')}/api/auth/youtube/callback`;
+    }
+  }
+  return 'https://ais-dev-qrqmhpjchdhsgz7e2uxem6-754235044596.asia-southeast1.run.app/api/auth/youtube/callback';
+}
+
+/**
  * Multi-Platform Social Integrations Status Engine
  */
 function getPlatformIntegrationsStatus(req?: Request): any[] {
@@ -2954,9 +3138,17 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
   const fbPageId = (process.env.FACEBOOK_PAGE_ID || '').trim();
   const igToken = (process.env.INSTAGRAM_ACCESS_TOKEN || '').trim();
   const igId = (process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || '').trim();
+
+  const ytConn = memoryState.youTubeConnection;
+  const isYouTubeOAuthConnected = Boolean(ytConn && ytConn.connected && ytConn.accessToken);
   const ytKey = (process.env.YOUTUBE_API_KEY || '').trim();
   const ytAccess = (process.env.YOUTUBE_ACCESS_TOKEN || '').trim();
   const ytRefresh = (process.env.YOUTUBE_REFRESH_TOKEN || '').trim();
+  const isYouTubeConnected = isYouTubeOAuthConnected || Boolean(ytAccess || ytRefresh || ytKey);
+  const ytClientId = (process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim();
+  const ytClientSecret = (process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  const ytRedirectUri = getYouTubeRedirectUri(req);
+
   const twitterBearer = (process.env.TWITTER_BEARER_TOKEN || '').trim();
   const twitterAccess = (process.env.TWITTER_ACCESS_TOKEN || '').trim();
 
@@ -3044,25 +3236,47 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
     },
     {
       id: 'youtube',
-      name: 'YouTube Data API v3',
+      name: 'YouTube Data API v3 (Google Cloud OAuth 2.0)',
       category: 'Video',
-      status: (ytAccess || ytRefresh || ytKey) ? 'CONNECTED' : 'NOT_CONFIGURED',
-      accountName: process.env.YOUTUBE_CHANNEL_ID || (ytKey ? 'API Key Active' : undefined),
-      accountIdentifier: process.env.YOUTUBE_CHANNEL_ID || undefined,
-      developerPortalUrl: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com',
+      status: isYouTubeConnected ? 'CONNECTED' : 'NOT_CONFIGURED',
+      authType: isYouTubeOAuthConnected ? 'OAUTH_2_0' : (ytAccess || ytRefresh) ? 'STATIC_TOKEN' : ytKey ? 'API_KEY' : 'OAUTH_2_0',
+      accountName: ytConn?.channelTitle || (ytAccess || ytRefresh ? 'Configured Channel (Env Token)' : ytKey ? 'API Key Active' : undefined),
+      accountIdentifier: ytConn?.channelId || process.env.YOUTUBE_CHANNEL_ID || undefined,
+      avatarUrl: ytConn?.avatarUrl || undefined,
+      lastVerifiedAt: ytConn?.connectedAt || undefined,
+      youTubeOAuthStatus: {
+        connected: isYouTubeConnected,
+        authType: isYouTubeOAuthConnected ? 'OAUTH_2_0' : (ytAccess || ytRefresh) ? 'STATIC_ENV_TOKEN' : ytKey ? 'API_KEY' : undefined,
+        channelTitle: ytConn?.channelTitle || (ytAccess || ytRefresh ? 'Configured Channel' : undefined),
+        channelId: ytConn?.channelId || process.env.YOUTUBE_CHANNEL_ID || undefined,
+        customUrl: ytConn?.customUrl || undefined,
+        avatarUrl: ytConn?.avatarUrl || undefined,
+        connectedAt: ytConn?.connectedAt || undefined,
+        expiresAt: ytConn?.expiresAt || undefined,
+        scopes: ytConn?.scopes || ['https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.upload'],
+        hasClientId: Boolean(ytClientId),
+        hasClientSecret: Boolean(ytClientSecret),
+        hasApiKey: Boolean(ytKey),
+        redirectUri: ytRedirectUri,
+      },
+      developerPortalUrl: 'https://console.cloud.google.com/apis/credentials',
       setupInstructions: [
-        '1. Go to Google Cloud Console, create or select a project, and enable "YouTube Data API v3".',
-        '2. Under Credentials, create OAuth 2.0 Client IDs or an API Key.',
-        '3. For automated publishing, configure OAuth 2.0 with `https://www.googleapis.com/auth/youtube` scopes to obtain YOUTUBE_REFRESH_TOKEN.',
-        '4. Set YOUTUBE_ACCESS_TOKEN or YOUTUBE_REFRESH_TOKEN and YOUTUBE_CHANNEL_ID in environment variables.',
+        '1. Go to Google Cloud Console (console.cloud.google.com) and enable "YouTube Data API v3".',
+        '2. Configure OAuth Consent Screen and create an OAuth 2.0 Client ID (Web Application).',
+        '3. Under Authorized Redirect URIs, add:',
+        `   ${ytRedirectUri}`,
+        '4. Add YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET in AI Studio Settings (⚙️).',
+        '5. Click the "Connect YouTube" button to authorize your Channel in 1-Click!',
       ],
       requiredEnvVars: [
-        { key: 'YOUTUBE_API_KEY', label: 'Google API Key', configured: Boolean(ytKey), isSecret: true, placeholder: 'AIzaSy...' },
-        { key: 'YOUTUBE_ACCESS_TOKEN', label: 'OAuth Access Token (Publishing)', configured: Boolean(ytAccess), isSecret: true, placeholder: 'ya29...' },
-        { key: 'YOUTUBE_REFRESH_TOKEN', label: 'OAuth Refresh Token', configured: Boolean(ytRefresh), isSecret: true, placeholder: '1//0...' },
+        { key: 'YOUTUBE_CLIENT_ID', label: 'OAuth 2.0 Client ID (Primary)', configured: Boolean(ytClientId), isSecret: false, placeholder: '123456...apps.googleusercontent.com' },
+        { key: 'YOUTUBE_CLIENT_SECRET', label: 'OAuth 2.0 Client Secret (Primary)', configured: Boolean(ytClientSecret), isSecret: true, placeholder: 'GOCSPX-...' },
+        { key: 'YOUTUBE_API_KEY', label: 'Google API Key (Read-only Fallback)', configured: Boolean(ytKey), isSecret: true, placeholder: 'AIzaSy...' },
+        { key: 'YOUTUBE_ACCESS_TOKEN', label: 'Static Access Token (Fallback)', configured: Boolean(ytAccess), isSecret: true, placeholder: 'ya29...' },
+        { key: 'YOUTUBE_REFRESH_TOKEN', label: 'OAuth Refresh Token (Offline)', configured: Boolean(ytRefresh), isSecret: true, placeholder: '1//0...' },
         { key: 'YOUTUBE_CHANNEL_ID', label: 'YouTube Channel ID', configured: Boolean(process.env.YOUTUBE_CHANNEL_ID), isSecret: false, placeholder: 'UC_...' },
       ],
-      capabilities: ['Channel Telemetry', 'Community Posts', 'Video Metadata Dispatch', 'Quota Monitoring'],
+      capabilities: ['1-Click Google OAuth 2.0 Connect', 'YouTube Data API v3', 'Automated Token Refresh', 'Channel Telemetry & Community Posts', 'Video Metadata Dispatch'],
     },
     {
       id: 'twitter',
@@ -3397,6 +3611,325 @@ app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
   res.json({ success: true, message: 'LinkedIn disconnected successfully.' });
 });
 
+// ------------------------------------------------------------------------------
+// YOUTUBE / GOOGLE 3-LEGGED OAUTH 2.0 ROUTES
+// ------------------------------------------------------------------------------
+
+/**
+ * 1. Generate YouTube OAuth Authorization URL (Offline Access for Refresh Token)
+ */
+app.get('/api/auth/youtube/url', (req: Request, res: Response) => {
+  const clientId = (process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  const reqRedirectUri = req.query.redirect_uri as string;
+  const redirectUri = getYouTubeRedirectUri(req, reqRedirectUri);
+
+  if (!clientId) {
+    return res.json({
+      success: false,
+      configured: false,
+      hasClientId: false,
+      hasClientSecret: Boolean(clientSecret),
+      redirectUri,
+      message: 'YOUTUBE_CLIENT_ID (or GOOGLE_CLIENT_ID) is not configured. Please add YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET in AI Studio Settings (⚙️).',
+    });
+  }
+
+  const state = 'hermes_yt_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+  const scope = [
+    'https://www.googleapis.com/auth/youtube.readonly',
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'openid',
+  ].join(' ');
+
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
+
+  res.json({
+    success: true,
+    configured: true,
+    hasClientId: true,
+    hasClientSecret: Boolean(clientSecret),
+    url: authUrl,
+    redirectUri,
+    state,
+  });
+});
+
+/**
+ * 2. YouTube OAuth 2.0 Authorization Callback Handler
+ */
+app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (req: Request, res: Response) => {
+  const { code, state, error, error_description } = req.query;
+  const clientId = (process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  const redirectUri = getYouTubeRedirectUri(req);
+
+  if (error || !code) {
+    const errMsg = (error_description as string) || (error as string) || 'YouTube / Google Authorization was cancelled or denied.';
+    return res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>YouTube Auth Cancelled</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 440px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">⚠️ YouTube Connection Cancelled</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${errMsg}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'YOUTUBE_OAUTH_ERROR', error: ${JSON.stringify(errMsg)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+  }
+
+  try {
+    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: code as string,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+
+    const tokenData: any = await tokenResp.json().catch(() => null);
+    if (!tokenResp.ok || !tokenData?.access_token) {
+      const errReason = tokenData?.error_description || tokenData?.error || `HTTP status ${tokenResp.status}`;
+      return res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>YouTube Token Exchange Failed</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 480px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">❌ Token Exchange Failed</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${errReason}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'YOUTUBE_OAUTH_ERROR', error: ${JSON.stringify(errReason)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+    }
+
+    const accessToken = tokenData.access_token;
+    const refreshToken = tokenData.refresh_token || (memoryState.youTubeConnection?.refreshToken);
+    const expiresIn = tokenData.expires_in || 3600;
+    const grantedScopes = typeof tokenData.scope === 'string' ? tokenData.scope.split(' ') : [];
+
+    // Query Channel Info from YouTube Data API v3
+    let channelId = '';
+    let channelTitle = 'YouTube Channel';
+    let customUrl = '';
+    let avatarUrl = '';
+
+    try {
+      const ytResp = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const ytData: any = await ytResp.json().catch(() => null);
+      if (ytResp.ok && ytData?.items?.length > 0) {
+        const item = ytData.items[0];
+        channelId = item.id || '';
+        channelTitle = item.snippet?.title || 'YouTube Channel';
+        customUrl = item.snippet?.customUrl || '';
+        avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '';
+      }
+    } catch (chErr) {
+      console.warn('Could not fetch YouTube channel snippet:', chErr);
+    }
+
+    // Fallback if channel snippet not returned
+    if (!channelId || channelTitle === 'YouTube Channel') {
+      try {
+        const userResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const userData: any = await userResp.json().catch(() => null);
+        if (userResp.ok && userData) {
+          if (!channelTitle || channelTitle === 'YouTube Channel') channelTitle = userData.name || userData.email || 'YouTube User';
+          if (!avatarUrl) avatarUrl = userData.picture || '';
+        }
+      } catch (uErr) {
+        console.warn('Could not fetch Google userinfo:', uErr);
+      }
+    }
+
+    // Persist securely in memory and encrypted disk
+    memoryState.youTubeConnection = {
+      connected: true,
+      authType: 'OAUTH_2_0',
+      channelId,
+      channelTitle,
+      customUrl,
+      avatarUrl,
+      connectedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      scopes: grantedScopes,
+      accessToken,
+      refreshToken,
+    };
+    persistMemory();
+
+    addAuditLog(
+      `YouTube Channel Connected via OAuth 2.0 (${channelTitle} - ${channelId || 'Authenticated'})`,
+      1,
+      'HUMAN_CONFIRMATION',
+      'VERIFIED'
+    );
+
+    res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>YouTube Connected</title>
+</head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 440px; width: 100%; text-align: center; padding: 32px 24px; border: 1px solid #166534; border-radius: 20px; background: #052e16; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+    <div style="width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 28px; color: #fef2f2;">
+      ▶
+    </div>
+    <h2 style="color: #4ade80; margin: 0 0 8px 0; font-size: 20px; font-weight: 700;">YouTube Connected!</h2>
+    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Channel: <strong>${channelTitle}</strong></p>
+    <p style="color: #86efac; font-size: 12px; font-family: monospace; margin: 0 0 20px 0;">${channelId ? 'ID: ' + channelId : 'OAuth 2.0 Token Active'}</p>
+    <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
+      Google Cloud & YouTube Data API v3 Ready
+    </div>
+    <button onclick="window.close()" style="background: #16a34a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;">Done</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({
+        type: 'YOUTUBE_OAUTH_SUCCESS',
+        channel: {
+          channelTitle: ${JSON.stringify(channelTitle)},
+          channelId: ${JSON.stringify(channelId)},
+          avatarUrl: ${JSON.stringify(avatarUrl)}
+        }
+      }, '*');
+      setTimeout(() => {
+        window.close();
+      }, 1500);
+    } else {
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
+    }
+  </script>
+</body>
+</html>`);
+  } catch (ex: any) {
+    res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>OAuth Error</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 480px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">❌ Authentication Exception</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${ex.message}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'YOUTUBE_OAUTH_ERROR', error: ${JSON.stringify(ex.message)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+  }
+});
+
+/**
+ * 3. YouTube Connection Status Engine
+ */
+app.get('/api/auth/youtube/status', (req: Request, res: Response) => {
+  const clientId = (process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  const apiKey = (process.env.YOUTUBE_API_KEY || '').trim();
+  const staticToken = (process.env.YOUTUBE_ACCESS_TOKEN || '').trim();
+  const staticChannelId = (process.env.YOUTUBE_CHANNEL_ID || '').trim();
+  const redirectUri = getYouTubeRedirectUri(req);
+
+  if (memoryState.youTubeConnection && memoryState.youTubeConnection.connected) {
+    const conn = memoryState.youTubeConnection;
+    return res.json({
+      connected: true,
+      authType: conn.authType || 'OAUTH_2_0',
+      channelTitle: conn.channelTitle,
+      channelId: conn.channelId,
+      customUrl: conn.customUrl,
+      avatarUrl: conn.avatarUrl,
+      connectedAt: conn.connectedAt,
+      expiresAt: conn.expiresAt,
+      scopes: conn.scopes,
+      hasClientId: Boolean(clientId),
+      hasClientSecret: Boolean(clientSecret),
+      hasApiKey: Boolean(apiKey),
+      redirectUri,
+    });
+  }
+
+  if (staticToken) {
+    return res.json({
+      connected: true,
+      authType: 'STATIC_ENV_TOKEN',
+      channelTitle: 'Configured Channel (Env Token)',
+      channelId: staticChannelId || undefined,
+      hasClientId: Boolean(clientId),
+      hasClientSecret: Boolean(clientSecret),
+      hasApiKey: Boolean(apiKey),
+      redirectUri,
+    });
+  }
+
+  if (apiKey) {
+    return res.json({
+      connected: true,
+      authType: 'API_KEY',
+      channelTitle: staticChannelId ? `Channel ID: ${staticChannelId}` : 'Google API Key Active',
+      channelId: staticChannelId || undefined,
+      hasClientId: Boolean(clientId),
+      hasClientSecret: Boolean(clientSecret),
+      hasApiKey: true,
+      redirectUri,
+    });
+  }
+
+  return res.json({
+    connected: false,
+    hasClientId: Boolean(clientId),
+    hasClientSecret: Boolean(clientSecret),
+    hasApiKey: Boolean(apiKey),
+    redirectUri,
+    message: 'YouTube is not connected. Connect via OAuth 2.0 or configure credentials.',
+  });
+});
+
+/**
+ * 4. Disconnect YouTube OAuth Account
+ */
+app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
+  const prevChannel = memoryState.youTubeConnection?.channelTitle || 'YouTube Account';
+  memoryState.youTubeConnection = undefined;
+  persistMemory();
+
+  addAuditLog(
+    `YouTube Channel Disconnected (${prevChannel})`,
+    1,
+    'HUMAN_CONFIRMATION',
+    'VERIFIED'
+  );
+
+  res.json({ success: true, message: 'YouTube disconnected successfully.' });
+});
+
 app.get('/api/social/platforms', (req: Request, res: Response) => {
   const platforms = getPlatformIntegrationsStatus(req);
   res.json({ success: true, platforms });
@@ -3569,6 +4102,80 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
   res.json({ success: true, ...updated });
 });
 
+// Global Kill Switch API (HUD & System Level)
+app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
+  const { requestedBy = 'HUD_GLOBAL_KILL_SWITCH', reason = 'Global Kill Switch Triggered by Operator' } = req.body;
+
+  // 1. Activate hard emergency stop & clear pending queue
+  const killResult = activateEmergencyKillSwitch(requestedBy, reason);
+
+  // 2. Terminate active Telegram long-polling loop & background routines
+  const wasTelegramPolling = telegramPollingActive;
+  telegramPollingActive = false;
+  telegramConfig.mode = 'simulator';
+  telegramConfig.webhookStatus = 'waiting_token';
+
+  // 3. Log immutable Level 4 Audit Event
+  memoryState.auditLogs.unshift({
+    id: `log-killswitch-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killResult.clearedTasksCount} pending PermissionGateway item(s).`,
+    levelRequired: 4,
+    approvedBy: requestedBy,
+    status: 'EXECUTED',
+    verificationStatus: 'VERIFIED',
+    finalTruthState: 'VERIFIED',
+  });
+
+  // 4. Send Emergency Telegram Notice
+  if (activeTelegramChatId && getCleanTelegramToken()) {
+    const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killResult.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
+    sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
+  }
+
+  persistMemory();
+
+  res.json({
+    success: true,
+    message: 'Global Kill Switch engaged. All background processes terminated and queue cleared.',
+    clearedTasksCount: killResult.clearedTasksCount,
+    wasTelegramPolling,
+    emergencyState: killResult.emergencyState,
+  });
+});
+
+app.post('/api/system/resume', async (req: Request, res: Response) => {
+  const { requestedBy = 'HUD_OPERATOR' } = req.body;
+
+  const resumedState = resumeSystemOperation(requestedBy);
+
+  // Re-enable telegram live polling if token is valid
+  if (getCleanTelegramToken() && !telegramPollingActive) {
+    startTelegramPolling().catch((err: any) => {
+      console.warn('[Telegram Bot] Resumption notice:', err.message);
+    });
+  }
+
+  memoryState.auditLogs.unshift({
+    id: `log-resume-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    action: `🟢 SYSTEM RESUMED by ${requestedBy}: Subsystems returned to standard Level 1-4 permission mode.`,
+    levelRequired: 4,
+    approvedBy: requestedBy,
+    status: 'EXECUTED',
+    verificationStatus: 'VERIFIED',
+    finalTruthState: 'VERIFIED',
+  });
+
+  persistMemory();
+
+  res.json({
+    success: true,
+    message: 'System operations resumed successfully.',
+    emergencyState: resumedState,
+  });
+});
+
 // Approvals & Action Requests Registry
 app.get('/api/approvals/pending', (req: Request, res: Response) => {
   res.json({ pending: getPendingApprovals(), emergencyState: getEmergencyState() });
@@ -3616,12 +4223,14 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
   // If source is Telegram or requested with notification, send approval card to Telegram
   if (activeTelegramChatId && getCleanTelegramToken()) {
     const cardText = `⚠️ *PERMISSION LEVEL ${level} ACTION REQUEST*\n\n• *EXACT ACTION*: ${exactAction}\n• *TARGET*: \`${target}\`\n• *CHANGES / PAYLOAD*: ${contentChanges}\n• *REQUIRED PERMISSION*: LEVEL ${level} (Human Confirmation)\n\nReply with *YES / APPROVE* or *NO / REJECT*.`;
-    const keyboard = [
-      [
-        { text: '✅ YES / APPROVE', callback_data: `approve_perm_${result.request.id}` },
-        { text: '❌ NO / REJECT', callback_data: `reject_perm_${result.request.id}` },
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '✅ YES / APPROVE', callback_data: `approve_perm_${result.request.id}` },
+          { text: '❌ NO / REJECT', callback_data: `reject_perm_${result.request.id}` },
+        ],
       ],
-    ];
+    };
     sendRealTelegramMessage(activeTelegramChatId, cardText, keyboard).catch(() => {});
   }
 

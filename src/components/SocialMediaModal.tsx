@@ -76,6 +76,18 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         setOauthError(`LinkedIn OAuth error: ${event.data.error || 'Authorization cancelled'}`);
         setOauthNotice(null);
         onSpeak('LinkedIn connection was not completed, Sir.');
+      } else if (event.data?.type === 'YOUTUBE_OAUTH_SUCCESS') {
+        setIsConnectingOAuth(false);
+        setOauthError(null);
+        setOauthNotice(`✅ Successfully connected YouTube Channel "${event.data.channel?.channelTitle || 'Channel'}"!`);
+        fetchPlatforms();
+        fetchPosts();
+        onSpeak(`YouTube channel connected successfully for ${event.data.channel?.channelTitle || 'Channel'}, Sir.`);
+      } else if (event.data?.type === 'YOUTUBE_OAUTH_ERROR') {
+        setIsConnectingOAuth(false);
+        setOauthError(`YouTube OAuth error: ${event.data.error || 'Authorization cancelled'}`);
+        setOauthNotice(null);
+        onSpeak('YouTube connection was not completed, Sir.');
       }
     };
 
@@ -157,6 +169,58 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         setOauthNotice('LinkedIn personal profile disconnected.');
         fetchPlatforms();
         onSpeak('LinkedIn personal profile disconnected, Sir.');
+      }
+    } catch (err) {
+      console.warn('Disconnect error:', err);
+    }
+  };
+
+  const handleConnectYouTube = async () => {
+    setIsConnectingOAuth(true);
+    setOauthError(null);
+    setOauthNotice(null);
+
+    try {
+      const redirectUri = window.location.origin + '/api/auth/youtube/callback';
+      const res = await fetch(`/api/auth/youtube/url?redirect_uri=${encodeURIComponent(redirectUri)}`);
+      const data = await res.json();
+
+      if (!data.success || !data.url) {
+        setIsConnectingOAuth(false);
+        setOauthError(data.message || 'YOUTUBE_CLIENT_ID is missing. Please configure it in AI Studio Settings (⚙️).');
+        onSpeak('Sir, YOUTUBE_CLIENT_ID is required before launching Google OAuth. Please check settings.');
+        return;
+      }
+
+      const width = 600;
+      const height = 720;
+      const left = window.screenX + Math.max(0, (window.outerWidth - width) / 2);
+      const top = window.screenY + Math.max(0, (window.outerHeight - height) / 2);
+
+      const popup = window.open(
+        data.url,
+        'youtube_oauth_popup',
+        `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=yes`
+      );
+
+      if (!popup || popup.closed) {
+        setIsConnectingOAuth(false);
+        setOauthError('Popup window was blocked by browser. Please allow popups for this site.');
+      }
+    } catch (err: any) {
+      setIsConnectingOAuth(false);
+      setOauthError(`YouTube OAuth initiation error: ${err.message}`);
+    }
+  };
+
+  const handleDisconnectYouTube = async () => {
+    try {
+      const res = await fetch('/api/auth/youtube/disconnect', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setOauthNotice('YouTube channel disconnected.');
+        fetchPlatforms();
+        onSpeak('YouTube channel disconnected, Sir.');
       }
     } catch (err) {
       console.warn('Disconnect error:', err);
@@ -612,7 +676,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                 const testResult = testResults[p.id];
                 const isTesting = testingPlatform === p.id;
                 const isLinkedIn = p.id === 'linkedin';
+                const isYouTube = p.id === 'youtube';
                 const oauth = p.oauthStatus;
+                const ytOauth = p.youTubeOAuthStatus;
 
                 return (
                   <div
@@ -620,6 +686,8 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     className={`p-5 rounded-2xl border flex flex-col gap-4 shadow-xl transition-all ${
                       isLinkedIn && p.status === 'CONNECTED'
                         ? 'bg-slate-900 border-[#0077b5]/40 shadow-blue-950/20'
+                        : isYouTube && p.status === 'CONNECTED'
+                        ? 'bg-slate-900 border-red-700/40 shadow-red-950/20'
                         : 'bg-slate-900/90 border-slate-800'
                     }`}
                   >
@@ -630,10 +698,12 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           className={`w-11 h-11 rounded-xl flex items-center justify-center font-mono font-bold text-sm ${
                             isLinkedIn
                               ? 'bg-[#0077b5]/20 border border-[#0077b5]/40 text-[#0077b5]'
+                              : isYouTube
+                              ? 'bg-red-950/40 border border-red-700/50 text-red-400'
                               : 'bg-slate-950 border border-slate-800 text-purple-400'
                           }`}
                         >
-                          {isLinkedIn ? 'in' : p.id.slice(0, 2).toUpperCase()}
+                          {isLinkedIn ? 'in' : isYouTube ? 'YT' : p.id.slice(0, 2).toUpperCase()}
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -644,6 +714,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                             {isLinkedIn && (
                               <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-950 text-blue-300 border border-blue-800 font-semibold">
                                 Personal Profile
+                              </span>
+                            )}
+                            {isYouTube && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-red-950 text-red-300 border border-red-800 font-semibold">
+                                Google Cloud OAuth 2.0
                               </span>
                             )}
                           </div>
@@ -693,6 +768,34 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                                   <Link2 className="w-3.5 h-3.5" />
                                 )}
                                 Connect LinkedIn
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {/* YouTube OAuth 1-Click Action Buttons */}
+                        {isYouTube && (
+                          <>
+                            {ytOauth?.connected && ytOauth?.authType === 'OAUTH_2_0' ? (
+                              <button
+                                onClick={handleDisconnectYouTube}
+                                className="px-3 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-700/50 text-rose-200 text-xs font-mono flex items-center gap-1.5 transition-colors"
+                              >
+                                <LogOut className="w-3.5 h-3.5" />
+                                Disconnect
+                              </button>
+                            ) : (
+                              <button
+                                onClick={handleConnectYouTube}
+                                disabled={isConnectingOAuth}
+                                className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-lg shadow-red-950 disabled:opacity-50"
+                              >
+                                {isConnectingOAuth ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Link2 className="w-3.5 h-3.5" />
+                                )}
+                                Connect YouTube
                               </button>
                             )}
                           </>
@@ -759,6 +862,48 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                       </div>
                     )}
 
+                    {/* YouTube Connected Channel Banner */}
+                    {isYouTube && ytOauth?.connected && (
+                      <div className="p-3.5 rounded-xl bg-slate-950/80 border border-red-700/30 flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          {ytOauth.avatarUrl ? (
+                            <img
+                              src={ytOauth.avatarUrl}
+                              alt={ytOauth.channelTitle || 'Channel'}
+                              className="w-10 h-10 rounded-full border border-slate-700 object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-red-950 border border-red-700 flex items-center justify-center text-red-300 font-bold text-sm">
+                              ▶
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-100 text-xs">{ytOauth.channelTitle || 'YouTube Channel'}</span>
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                {ytOauth.authType || 'OAuth 2.0'} Active
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              Channel ID: <code className="text-red-300">{ytOauth.channelId || 'Authenticated Google Account'}</code>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleConnectYouTube}
+                            disabled={isConnectingOAuth}
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono flex items-center gap-1 transition-colors"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isConnectingOAuth ? 'animate-spin' : ''}`} />
+                            Reconnect / Refresh
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Live Test Diagnostic Output */}
                     {testResult && (
                       <div
@@ -800,6 +945,31 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                             </code>
                             <p className="text-[11px] text-slate-400">
                               Paste this exact URL into your LinkedIn Developer App under <strong>Auth ➔ OAuth 2.0 settings ➔ Authorized redirect URLs for your app</strong>.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Authorized Redirect URI Box (for Google Cloud Console / YouTube) */}
+                        {isYouTube && ytOauth?.redirectUri && (
+                          <div className="p-3.5 rounded-xl bg-red-950/30 border border-red-700/40 flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-red-200 font-mono text-xs flex items-center gap-1.5">
+                                <Link2 className="w-3.5 h-3.5 text-red-400" />
+                                Authorized Redirect URI (for Google Cloud Console):
+                              </span>
+                              <button
+                                onClick={() => handleCopyRedirectUri(ytOauth.redirectUri!)}
+                                className="px-2.5 py-1 rounded bg-red-900/60 hover:bg-red-800 border border-red-500/40 text-red-200 text-[11px] font-mono flex items-center gap-1 transition-colors"
+                              >
+                                {copiedRedirectUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                {copiedRedirectUri ? 'Copied!' : 'Copy URL'}
+                              </button>
+                            </div>
+                            <code className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-red-300 font-mono text-xs break-all select-all">
+                              {ytOauth.redirectUri}
+                            </code>
+                            <p className="text-[11px] text-slate-400">
+                              Paste this exact URI into your Google Cloud Console under <strong>APIs & Services ➔ Credentials ➔ OAuth 2.0 Client IDs ➔ Authorized redirect URIs</strong>.
                             </p>
                           </div>
                         )}

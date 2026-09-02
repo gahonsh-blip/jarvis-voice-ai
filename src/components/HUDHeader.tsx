@@ -14,6 +14,9 @@ import {
   Sliders,
   Wrench,
   AlertOctagon,
+  Power,
+  RotateCcw,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface HUDHeaderProps {
@@ -52,6 +55,74 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   const [time, setTime] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
   const [cpuSim, setCpuSim] = useState<number>(14);
+  const [isKillSwitchActive, setIsKillSwitchActive] = useState<boolean>(false);
+  const [killSwitchReason, setKillSwitchReason] = useState<string>('');
+  const [showKillModal, setShowKillModal] = useState<boolean>(false);
+  const [killNotice, setKillNotice] = useState<string | null>(null);
+  const [isOperatingKillSwitch, setIsOperatingKillSwitch] = useState<boolean>(false);
+
+  const fetchEmergencyStatus = async () => {
+    try {
+      const res = await fetch('/api/emergency/status');
+      const data = await res.json();
+      if (data && typeof data.emergencyPaused === 'boolean') {
+        setIsKillSwitchActive(data.emergencyPaused);
+        setKillSwitchReason(data.reason || '');
+      }
+    } catch {
+      // Offline fallback
+    }
+  };
+
+  useEffect(() => {
+    fetchEmergencyStatus();
+    const emergencyInterval = setInterval(fetchEmergencyStatus, 5000);
+    return () => clearInterval(emergencyInterval);
+  }, []);
+
+  const handleTriggerKillSwitch = async () => {
+    setIsOperatingKillSwitch(true);
+    try {
+      const res = await fetch('/api/system/kill-switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedBy: 'HUD_KILL_SWITCH_BUTTON', reason: 'Emergency Stop Triggered from HUD' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsKillSwitchActive(true);
+        setKillNotice(`🚨 KILL SWITCH ENGAGED: Terminated all background tasks and cleared ${data.clearedTasksCount || 0} queue item(s).`);
+        setShowKillModal(false);
+      }
+    } catch (err: any) {
+      setKillNotice(`Error engaging Kill Switch: ${err.message}`);
+    } finally {
+      setIsOperatingKillSwitch(false);
+      setTimeout(() => setKillNotice(null), 6000);
+    }
+  };
+
+  const handleResumeSystem = async () => {
+    setIsOperatingKillSwitch(true);
+    try {
+      const res = await fetch('/api/system/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedBy: 'HUD_RESUME_BUTTON' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsKillSwitchActive(false);
+        setKillNotice('🟢 System resumed safely. Normal level 1-4 permission gating active.');
+        setShowKillModal(false);
+      }
+    } catch (err: any) {
+      setKillNotice(`Error resuming system: ${err.message}`);
+    } finally {
+      setIsOperatingKillSwitch(false);
+      setTimeout(() => setKillNotice(null), 5000);
+    }
+  };
 
   useEffect(() => {
     const updateClock = () => {
@@ -74,6 +145,31 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
 
   return (
     <header className="w-full border-b border-cyan-900/40 bg-slate-950/80 backdrop-blur-md px-4 py-2.5 sticky top-0 z-40">
+      {/* Emergency Active Global Banner */}
+      {isKillSwitchActive && (
+        <div className="mb-2 p-2 rounded-xl bg-rose-950/90 border border-rose-600 text-rose-200 text-xs font-mono flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-2">
+            <AlertOctagon className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="font-bold">🚨 GLOBAL KILL SWITCH ACTIVE: ALL BACKGROUND DAEMONS &amp; QUEUES FROZEN</span>
+          </div>
+          <button
+            onClick={handleResumeSystem}
+            disabled={isOperatingKillSwitch}
+            className="px-3 py-1 rounded bg-rose-800 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1 transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Resume System
+          </button>
+        </div>
+      )}
+
+      {killNotice && (
+        <div className="mb-2 p-2 rounded-xl bg-cyan-950 border border-cyan-600 text-cyan-200 text-xs font-mono flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+          <span>{killNotice}</span>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto flex flex-col gap-2.5">
         {/* Top Tier: Logo, Core Status & Navigation Actions */}
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -145,8 +241,30 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             </button>
           </div>
 
-          {/* Right: Real-time Clock & Action Controls */}
+          {/* Right: Real-time Clock, Kill Switch & Action Controls */}
           <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
+            {/* Global Kill Switch Button */}
+            {isKillSwitchActive ? (
+              <button
+                onClick={handleResumeSystem}
+                disabled={isOperatingKillSwitch}
+                className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 border border-emerald-500 text-emerald-300 text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950 transition-all"
+                title="Deactivate Kill Switch & Resume Operations"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">RESUME SYSTEM</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowKillModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-600/70 text-rose-300 hover:text-rose-100 text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg shadow-rose-950/50 transition-all group"
+                title="Global Emergency Kill Switch"
+              >
+                <Power className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">KILL SWITCH</span>
+              </button>
+            )}
+
             <div className="text-right hidden sm:block">
               <div className="text-xs sm:text-sm font-mono font-bold tracking-widest text-cyan-300">
                 {time || '00:00:00'}
@@ -241,6 +359,51 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Kill Switch Confirmation Modal */}
+      {showKillModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-600 rounded-2xl max-w-md w-full p-6 shadow-2xl flex flex-col gap-4 font-mono">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-rose-950 border border-rose-600 flex items-center justify-center text-rose-400 shrink-0">
+                <AlertOctagon className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-rose-200">CONFIRM GLOBAL KILL SWITCH</h3>
+                <p className="text-xs text-slate-400 font-sans">Immediate Emergency Protocol</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs text-rose-200 space-y-1.5 font-sans">
+              <p className="font-bold font-mono">This action will immediately:</p>
+              <ul className="list-disc list-inside space-y-1 text-slate-300">
+                <li>Halt and terminate all active background daemons &amp; scheduler jobs</li>
+                <li>Clear &amp; reject all pending task queues in PermissionGateway</li>
+                <li>Suspend all active Telegram polling loops</li>
+                <li>Write an immutable Level 4 Emergency Audit Log</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowKillModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleTriggerKillSwitch}
+                disabled={isOperatingKillSwitch}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold font-mono flex items-center gap-2 shadow-lg shadow-rose-950 transition-colors"
+              >
+                <Power className="w-4 h-4" />
+                {isOperatingKillSwitch ? 'Engaging...' : 'ENGAGE KILL SWITCH'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
+
