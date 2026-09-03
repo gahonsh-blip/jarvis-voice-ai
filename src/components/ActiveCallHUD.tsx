@@ -20,12 +20,21 @@ import {
   AlertTriangle,
   Music,
 } from 'lucide-react';
-import { CallRecord, CallTurn, TelephonySettings } from '../types/telephony';
+import {
+  CallRecord,
+  CallTurn,
+  TelephonySettings,
+  ContactItem,
+  DEFAULT_CONTACTS,
+  isNumberInContacts,
+  getDisplayCallerName,
+} from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
 
 interface ActiveCallHUDProps {
   activeCall: CallRecord | null;
   settings: TelephonySettings;
+  contacts?: ContactItem[];
   isMuted: boolean;
   isOnHold: boolean;
   audioFilterActive: boolean;
@@ -42,6 +51,7 @@ interface ActiveCallHUDProps {
 export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
   activeCall,
   settings,
+  contacts,
   isMuted,
   isOnHold,
   audioFilterActive,
@@ -96,6 +106,14 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
   const dtmfKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
   // 1. INCOMING CALL RINGING SCREEN
+  const effectiveContacts = contacts && contacts.length > 0 ? contacts : DEFAULT_CONTACTS;
+  const isMaskActive = settings.maskUnknownCallerId !== false;
+  const isCallerInContacts = isNumberInContacts(activeCall.callerNumber, effectiveContacts);
+  const isUnknownInbound = activeCall.direction === 'inbound' && !isCallerInContacts;
+  const effectiveInboundCallerName = activeCall.direction === 'inbound'
+    ? getDisplayCallerName(activeCall.callerName, activeCall.callerNumber, effectiveContacts, isMaskActive)
+    : activeCall.callerName;
+
   if (isRingingInbound) {
     const isSpam = (activeCall.spamScore || 0) >= (settings.spamThresholdScore || 70);
 
@@ -119,7 +137,14 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
                   </span>
                 )}
               </div>
-              <h3 className="text-lg font-bold text-white leading-tight mt-0.5">{activeCall.callerName}</h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <h3 className="text-lg font-bold text-white leading-tight">{effectiveInboundCallerName}</h3>
+                {isMaskActive && isUnknownInbound && (
+                  <span className="rounded bg-cyan-950 px-1.5 py-0.5 text-[9px] font-mono text-cyan-300 border border-cyan-800 flex items-center gap-1">
+                    <Shield className="h-2.5 w-2.5 text-cyan-400" /> MASKED
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400 font-mono">{activeCall.callerNumber}</p>
             </div>
           </div>
@@ -208,7 +233,8 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
             <div>
               <h3 className="text-sm font-bold text-white">Call Terminated • Executive Summary</h3>
               <p className="text-xs text-slate-400 font-mono">
-                Duration: {formatTime(activeCall.durationSeconds || duration)} • {activeCall.recipientName || activeCall.callerName}
+                Duration: {formatTime(activeCall.durationSeconds || duration)} •{' '}
+                {activeCall.direction === 'outbound' ? activeCall.recipientName : effectiveInboundCallerName}
               </p>
             </div>
           </div>
@@ -245,7 +271,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
   }
 
   // 4. LIVE IN-CALL HUD
-  const counterpart = activeCall.direction === 'outbound' ? activeCall.recipientName : activeCall.callerName;
+  const counterpart = activeCall.direction === 'outbound' ? activeCall.recipientName : effectiveInboundCallerName;
   const counterpartNumber = activeCall.direction === 'outbound' ? activeCall.recipientNumber : activeCall.callerNumber;
 
   return (
@@ -273,7 +299,14 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
                 </span>
               )}
             </div>
-            <h4 className="text-sm font-bold text-white truncate max-w-[200px]">{counterpart}</h4>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <h4 className="text-sm font-bold text-white truncate max-w-[200px]">{counterpart}</h4>
+              {isMaskActive && isUnknownInbound && (
+                <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950 border border-cyan-800/60 px-1 py-0.2 rounded">
+                  MASKED
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

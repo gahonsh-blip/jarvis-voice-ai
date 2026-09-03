@@ -71,6 +71,7 @@ export interface TelephonySettings {
   voiceLanguage: string;
   voicePitch: number;
   voiceRate: number;
+  maskUnknownCallerId?: boolean; // Privacy-first toggle: dynamically masks caller ID names to 'Unknown Caller' if number not in contacts
 }
 
 export interface ContactItem {
@@ -127,6 +128,7 @@ export const DEFAULT_TELEPHONY_SETTINGS: TelephonySettings = {
   voiceLanguage: 'en-US',
   voicePitch: 1.0,
   voiceRate: 1.05,
+  maskUnknownCallerId: true,
 };
 
 export const DEFAULT_CONTACTS: ContactItem[] = [
@@ -307,3 +309,245 @@ export const SIMULATED_INCOMING_CALLERS: SimulatedCallerPersona[] = [
     isSpam: false,
   },
 ];
+
+/**
+ * Strips all non-digit characters from a phone number string
+ */
+export function normalizePhoneNumber(num: string | undefined | null): string {
+  if (!num) return '';
+  return num.replace(/\D/g, '');
+}
+
+/**
+ * Checks whether a given phone number matches any entry in the contacts list.
+ * Matches on full digit equality or standard 7/10-digit suffix matching (e.g., matching with/without +1 country code).
+ */
+export function isNumberInContacts(
+  number: string | undefined | null,
+  contactsList: ContactItem[]
+): boolean {
+  if (!number || !contactsList || contactsList.length === 0) return false;
+  const targetDigits = normalizePhoneNumber(number);
+  if (!targetDigits || targetDigits.length < 5) return false;
+
+  return contactsList.some((c) => {
+    const contactDigits = normalizePhoneNumber(c.number);
+    if (!contactDigits) return false;
+    if (contactDigits === targetDigits) return true;
+    if (targetDigits.length >= 7 && contactDigits.length >= 7) {
+      return targetDigits.endsWith(contactDigits) || contactDigits.endsWith(targetDigits);
+    }
+    return false;
+  });
+}
+
+/**
+ * Dynamically resolves the caller name based on privacy settings and contact list membership.
+ * When maskUnknownEnabled is true and the callerNumber is NOT in contactsList, returns 'Unknown Caller'.
+ */
+export function getDisplayCallerName(
+  callerName: string | undefined | null,
+  callerNumber: string | undefined | null,
+  contactsList: ContactItem[],
+  maskUnknownEnabled: boolean = true
+): string {
+  const raw = (callerName && callerName.trim()) || 'Unknown Caller';
+  if (!maskUnknownEnabled) {
+    return raw;
+  }
+  if (!callerNumber) {
+    return 'Unknown Caller';
+  }
+  const inContacts = isNumberInContacts(callerNumber, contactsList);
+  if (inContacts) {
+    const matched = contactsList.find((c) => {
+      const t = normalizePhoneNumber(callerNumber);
+      const cd = normalizePhoneNumber(c.number);
+      return cd === t || (t.length >= 7 && cd.length >= 7 && (t.endsWith(cd) || cd.endsWith(t)));
+    });
+    return matched ? matched.name : raw;
+  }
+  return 'Unknown Caller';
+}
+
+export const DEFAULT_CALL_RECORDS: CallRecord[] = [
+  {
+    id: 'call_rec_101',
+    direction: 'inbound',
+    callerNumber: '+1 (212) 555-8941',
+    callerName: 'Elena Rostova',
+    recipientNumber: '+1 (555) 728-4827',
+    recipientName: 'Alex (Executive)',
+    startTime: new Date(Date.now() - 3600000 * 2).toISOString(),
+    endTime: new Date(Date.now() - 3600000 * 2 + 145000).toISOString(),
+    durationSeconds: 145,
+    status: 'ended',
+    mode: 'ai_autonomous',
+    summary: 'Elena Rostova called to coordinate the Series A roadmap meeting and confirmed demo availability for Tuesday morning.',
+    sentiment: 'positive',
+    intent: 'vip_schedule_sync',
+    followUpActions: [
+      'Email executive demo link to Elena for Tuesday 10 AM EST',
+      'Prepare 2-page brief on autonomous voice agent benchmarks',
+    ],
+    transcript: [
+      {
+        id: 't1',
+        speaker: 'agent',
+        text: "Hello, you have reached Alex's AI Executive Assistant, JARVIS. How may I assist you today?",
+        timestamp: '10:14:02 AM',
+      },
+      {
+        id: 't2',
+        speaker: 'caller',
+        text: 'Hi JARVIS, it is Elena from Vanguard. Are you able to confirm Tuesday morning for our executive demo?',
+        timestamp: '10:14:08 AM',
+      },
+      {
+        id: 't3',
+        speaker: 'agent',
+        text: 'Certainly, Ms. Rostova. Alex is confirmed for Tuesday at 10:00 AM EST. I have added the session to the calendar and notified the team.',
+        timestamp: '10:14:15 AM',
+      },
+    ],
+  },
+  {
+    id: 'call_rec_102',
+    direction: 'inbound',
+    callerNumber: '+1 (800) 991-8273',
+    callerName: 'National Green Solar Solutions',
+    recipientNumber: '+1 (555) 728-4827',
+    recipientName: 'Alex (Executive)',
+    startTime: new Date(Date.now() - 3600000 * 4).toISOString(),
+    endTime: new Date(Date.now() - 3600000 * 4 + 22000).toISOString(),
+    durationSeconds: 22,
+    status: 'declined',
+    mode: 'ai_screening',
+    spamScore: 94,
+    spamKeywords: ['solar panel', 'zero-cost', 'federal grant', 'pre-selected'],
+    summary: 'Autonomous Spam Shield detected high-probability telemarketer robo-solicitation and cleanly terminated the connection.',
+    sentiment: 'negative',
+    intent: 'spam_telemarketing',
+    followUpActions: ['Blacklist +1 (800) 991-8273 from incoming trunk'],
+    transcript: [
+      {
+        id: 't1',
+        speaker: 'agent',
+        text: "Hello, Alex's AI Assistant here. Please state the purpose of your call.",
+        timestamp: '08:22:01 AM',
+      },
+      {
+        id: 't2',
+        speaker: 'caller',
+        text: 'Congratulations! You are eligible for zero-cost utility solar panel installations under federal law...',
+        timestamp: '08:22:06 AM',
+      },
+      {
+        id: 't3',
+        speaker: 'agent',
+        text: 'Unsolicited marketing is not accepted on this direct line. Goodbye.',
+        timestamp: '08:22:12 AM',
+      },
+    ],
+  },
+  {
+    id: 'call_rec_103',
+    direction: 'inbound',
+    callerNumber: '+1 (650) 334-9182',
+    callerName: 'Liam Chen',
+    recipientNumber: '+1 (555) 728-4827',
+    recipientName: 'Alex (Executive)',
+    startTime: new Date(Date.now() - 3600000 * 6).toISOString(),
+    endTime: new Date(Date.now() - 3600000 * 6 + 88000).toISOString(),
+    durationSeconds: 88,
+    status: 'ended',
+    mode: 'ai_autonomous',
+    summary: 'Recruiter Liam Chen inquired about Alex’s availability for a Founding Voice AI Architect role. JARVIS took detailed message and requested formal JD via email.',
+    sentiment: 'neutral',
+    intent: 'recruitment_inquiry',
+    followUpActions: ['Check email inbox for incoming job specification from Liam'],
+    transcript: [
+      {
+        id: 't1',
+        speaker: 'agent',
+        text: "Alex's office, JARVIS speaking. How can I direct your call?",
+        timestamp: '06:40:11 AM',
+      },
+      {
+        id: 't2',
+        speaker: 'caller',
+        text: 'Hi, Liam Chen here from NextGen AI search. Calling about a principal voice architect opportunity.',
+        timestamp: '06:40:19 AM',
+      },
+      {
+        id: 't3',
+        speaker: 'agent',
+        text: 'Alex is currently occupied. Please forward the technical specification and compensation package to Alex via email.',
+        timestamp: '06:40:27 AM',
+      },
+    ],
+  },
+  {
+    id: 'call_rec_104',
+    direction: 'inbound',
+    callerNumber: '+1 (800) 459-2041',
+    callerName: 'Dave (Apex Logistics)',
+    recipientNumber: '+1 (555) 728-4827',
+    recipientName: 'Alex (Executive)',
+    startTime: new Date(Date.now() - 3600000 * 12).toISOString(),
+    endTime: new Date(Date.now() - 3600000 * 12 + 42000).toISOString(),
+    durationSeconds: 42,
+    status: 'ended',
+    mode: 'ai_autonomous',
+    summary: 'Apex courier requested front gate security access code (#4092) and confirmed delivery of express server hardware parts.',
+    sentiment: 'positive',
+    intent: 'delivery_gate_code',
+    followUpActions: ['Retrieve hardware package from front reception'],
+    transcript: [
+      {
+        id: 't1',
+        speaker: 'caller',
+        text: 'Hey Dave here from Apex Courier, what was the gate buzzer code again?',
+        timestamp: '01:10:04 PM',
+      },
+      {
+        id: 't2',
+        speaker: 'agent',
+        text: 'Gate buzzer code is #4092. Please leave parcel at the front reception desk.',
+        timestamp: '01:10:10 PM',
+      },
+    ],
+  },
+  {
+    id: 'call_rec_105',
+    direction: 'outbound',
+    callerNumber: '+1 (555) 728-4827',
+    callerName: 'JARVIS Autonomous Voice Gateway',
+    recipientNumber: '+1 (415) 890-2134',
+    recipientName: 'Dr. Julian Wayne Clinic',
+    startTime: new Date(Date.now() - 3600000 * 24).toISOString(),
+    endTime: new Date(Date.now() - 3600000 * 24 + 180000).toISOString(),
+    durationSeconds: 180,
+    status: 'ended',
+    mode: 'ai_autonomous',
+    summary: 'Rescheduled Alex’s Tuesday routine checkup to Friday afternoon between 2:00 PM and 4:00 PM. Reception confirmed copay remains unchanged.',
+    sentiment: 'positive',
+    intent: 'appointment_reschedule',
+    followUpActions: ['Update Google Calendar with revised Friday 3:00 PM appointment slot'],
+    transcript: [
+      {
+        id: 't1',
+        speaker: 'agent',
+        text: 'Good afternoon, this is JARVIS calling on behalf of Alex to reschedule the Tuesday appointment.',
+        timestamp: '02:00:10 PM',
+      },
+      {
+        id: 't2',
+        speaker: 'callee',
+        text: 'Hello JARVIS. We have an opening with Dr. Wayne this Friday at 3:00 PM.',
+        timestamp: '02:00:19 PM',
+      },
+    ],
+  },
+];
+

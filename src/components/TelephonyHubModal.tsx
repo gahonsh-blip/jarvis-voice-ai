@@ -27,6 +27,10 @@ import {
   ArrowRight,
   RefreshCw,
   X,
+  Eye,
+  EyeOff,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   CallRecord,
@@ -37,6 +41,8 @@ import {
   DEFAULT_CONTACTS,
   CALL_SCENARIO_PRESETS,
   SIMULATED_INCOMING_CALLERS,
+  isNumberInContacts,
+  getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
@@ -158,7 +164,26 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   // Receptionist state
   const [tempSettings, setTempSettings] = useState<TelephonySettings>(settings);
   const [customIncomingName, setCustomIncomingName] = useState('');
+  const [customIncomingNumber, setCustomIncomingNumber] = useState('');
   const [customIncomingLine, setCustomIncomingLine] = useState('');
+
+  // Keep tempSettings in sync with parent settings
+  React.useEffect(() => {
+    setTempSettings(settings);
+  }, [settings]);
+
+  const effectiveContacts = contacts && contacts.length > 0 ? contacts : DEFAULT_CONTACTS;
+  const maskUnknownEnabled = tempSettings.maskUnknownCallerId !== false;
+
+  const handleToggleMaskUnknownCallerId = (checked: boolean) => {
+    const updated = { ...tempSettings, maskUnknownCallerId: checked };
+    setTempSettings(updated);
+    onUpdateSettings(updated);
+  };
+
+  const getEffectiveCallerName = (callerName: string, callerNumber: string) => {
+    return getDisplayCallerName(callerName, callerNumber, effectiveContacts, maskUnknownEnabled);
+  };
 
   // Logs state
   const [searchLog, setSearchLog] = useState('');
@@ -220,9 +245,12 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   const filteredLogs = callHistory.filter((c) => {
     if (!searchLog) return true;
     const q = searchLog.toLowerCase();
+    const effectiveCaller = c.direction === 'outbound' ? c.recipientName : getEffectiveCallerName(c.callerName, c.callerNumber);
     return (
+      effectiveCaller.toLowerCase().includes(q) ||
       c.callerName.toLowerCase().includes(q) ||
       c.recipientName.toLowerCase().includes(q) ||
+      c.callerNumber.toLowerCase().includes(q) ||
       c.summary.toLowerCase().includes(q) ||
       c.intent.toLowerCase().includes(q)
     );
@@ -600,6 +628,50 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     />
                   </div>
 
+                  {/* Privacy-First Caller ID Masking */}
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 mb-4 transition-all hover:border-cyan-500/40">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-950/90 border border-cyan-500/40">
+                          {maskUnknownEnabled ? <EyeOff className="h-4 w-4 text-cyan-400" /> : <Eye className="h-4 w-4 text-slate-400" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">Privacy-First Caller ID Masking</span>
+                            <span className={`rounded px-1.5 py-0.2 text-[9px] font-mono border ${
+                              maskUnknownEnabled
+                                ? 'bg-cyan-950 text-cyan-300 border-cyan-700'
+                                : 'bg-slate-900 text-slate-400 border-slate-700'
+                            }`}>
+                              {maskUnknownEnabled ? 'ENFORCED' : 'DISABLED'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Dynamically masks caller ID names to &apos;Unknown Caller&apos; in UI if phone number is not in contacts
+                          </div>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer ml-3 flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          id="privacy-caller-id-toggle"
+                          checked={maskUnknownEnabled}
+                          onChange={(e) => handleToggleMaskUnknownCallerId(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600" />
+                      </label>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] font-mono">
+                      <span className="text-slate-500">Contact list: {contacts.length} verified numbers</span>
+                      <span className={maskUnknownEnabled ? 'text-cyan-400 font-semibold' : 'text-slate-500'}>
+                        {maskUnknownEnabled ? '✓ Masking unknown numbers in UI' : 'Raw carrier names displayed'}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Spam Protection */}
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800 mb-4">
                     <div className="flex items-center gap-2">
@@ -642,39 +714,139 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                   </p>
 
                   <div className="space-y-2">
-                    {SIMULATED_INCOMING_CALLERS.map((persona) => (
-                      <div
-                        key={persona.id}
-                        className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-emerald-500/60 transition-all flex items-center justify-between group"
-                      >
-                        <div className="max-w-[75%]">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-white">{persona.callerName}</span>
-                            {persona.isSpam ? (
-                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-800">
-                                SPAM TEST
-                              </span>
-                            ) : (
-                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                VERIFIED
-                              </span>
+                    {SIMULATED_INCOMING_CALLERS.map((persona) => {
+                      const inContacts = isNumberInContacts(persona.callerNumber, effectiveContacts);
+                      const displayedName = getEffectiveCallerName(persona.callerName, persona.callerNumber);
+                      const isMasked = maskUnknownEnabled && !inContacts;
+
+                      return (
+                        <div
+                          key={persona.id}
+                          className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-emerald-500/60 transition-all flex items-center justify-between group"
+                        >
+                          <div className="max-w-[75%]">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-white">{displayedName}</span>
+                              {isMasked ? (
+                                <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-800 flex items-center gap-1">
+                                  <Shield className="h-2.5 w-2.5 text-cyan-400" /> MASKED
+                                </span>
+                              ) : inContacts ? (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                  CONTACT
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
+                                  UNVERIFIED
+                                </span>
+                              )}
+                              {persona.isSpam && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-800">
+                                  SPAM TEST
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-cyan-300 font-medium">{persona.scenarioTitle}</div>
+                            <div className="text-[10px] text-slate-400 line-clamp-1 italic mt-0.5">
+                              "{persona.firstLine}"
+                            </div>
+                            {isMasked && (
+                              <div className="text-[9px] font-mono text-slate-500 mt-0.5">
+                                Raw carrier ID: {persona.callerName} (masked by privacy policy)
+                              </div>
                             )}
                           </div>
-                          <div className="text-[11px] text-cyan-300 font-medium">{persona.scenarioTitle}</div>
-                          <div className="text-[10px] text-slate-400 line-clamp-1 italic mt-0.5">
-                            "{persona.firstLine}"
-                          </div>
-                        </div>
 
-                        <button
-                          onClick={() => onTriggerIncomingCall(persona)}
-                          className="flex items-center gap-1 rounded-xl bg-emerald-600/90 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-500 active:scale-95 transition-all shadow-md shadow-emerald-900/20"
-                        >
-                          <PhoneIncoming className="h-3.5 w-3.5" />
-                          Ring Now
-                        </button>
+                          <button
+                            onClick={() => onTriggerIncomingCall(persona)}
+                            className="flex items-center gap-1 rounded-xl bg-emerald-600/90 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-500 active:scale-95 transition-all shadow-md shadow-emerald-900/20"
+                          >
+                            <PhoneIncoming className="h-3.5 w-3.5" />
+                            Ring Now
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Inbound Caller Test */}
+                  <div className="mt-4 pt-4 border-t border-slate-800">
+                    <div className="text-xs font-bold text-white mb-2 flex items-center justify-between">
+                      <span>Custom Inbound Caller Test</span>
+                      <span className="text-[10px] font-mono text-cyan-400">TEST PRIVACY MASKING</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div>
+                        <label className="text-[10px] font-mono text-slate-400">Raw Carrier Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Apex Freight Dispatch"
+                          value={customIncomingName}
+                          onChange={(e) => setCustomIncomingName(e.target.value)}
+                          className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                        />
                       </div>
-                    ))}
+                      <div>
+                        <label className="text-[10px] font-mono text-slate-400">Caller Phone Number</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. +1 (555) 392-8811"
+                          value={customIncomingNumber}
+                          onChange={(e) => setCustomIncomingNumber(e.target.value)}
+                          className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="mb-2">
+                      <label className="text-[10px] font-mono text-slate-400">First Spoken Sentence</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Hi Alex, I have an urgent update regarding your logistics dispatch."
+                        value={customIncomingLine}
+                        onChange={(e) => setCustomIncomingLine(e.target.value)}
+                        className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400">UI Display:</span>
+                        <span className="font-bold text-white">
+                          {getEffectiveCallerName(
+                            customIncomingName || 'Unknown Caller',
+                            customIncomingNumber || '+1 (555) 000-0000'
+                          )}
+                        </span>
+                        {maskUnknownEnabled &&
+                          !isNumberInContacts(customIncomingNumber || '+1 (555) 000-0000', effectiveContacts) && (
+                            <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800">
+                              MASKED
+                            </span>
+                          )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const cName = customIncomingName.trim() || 'Unlisted Carrier Caller';
+                          const cNum = customIncomingNumber.trim() || '+1 (555) 992-0199';
+                          const cLine =
+                            customIncomingLine.trim() || 'Hello, I am calling with an urgent inquiry.';
+                          onTriggerIncomingCall({
+                            id: `sim_custom_${Date.now()}`,
+                            callerName: cName,
+                            callerNumber: cNum,
+                            callerRole: 'External Inbound Caller',
+                            scenarioTitle: 'Custom Simulated Caller',
+                            firstLine: cLine,
+                            callerPersonality: 'Direct, clear voice caller',
+                            goal: 'Screening and privacy verification',
+                            isSpam: false,
+                          });
+                        }}
+                        className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 active:scale-95 transition-all"
+                      >
+                        <PhoneIncoming className="h-3 w-3" />
+                        Simulate Call
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -741,8 +913,13 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                                 <PhoneIncoming className="h-3.5 w-3.5 text-emerald-400" />
                               )}
                               <span className="text-xs font-bold text-white">
-                                {isOutbound ? log.recipientName : log.callerName}
+                                {isOutbound ? log.recipientName : getEffectiveCallerName(log.callerName, log.callerNumber)}
                               </span>
+                              {!isOutbound && maskUnknownEnabled && !isNumberInContacts(log.callerNumber, effectiveContacts) && (
+                                <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/50">
+                                  MASKED
+                                </span>
+                              )}
                             </div>
                             <span className="text-[10px] font-mono text-slate-400">
                               {Math.floor(log.durationSeconds / 60)}m {log.durationSeconds % 60}s
@@ -787,9 +964,20 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                             ID: {selectedLog.id.slice(0, 8)}
                           </span>
                         </div>
-                        <h3 className="text-base font-bold text-white mt-0.5">
-                          {selectedLog.direction === 'outbound' ? selectedLog.recipientName : selectedLog.callerName}
-                        </h3>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <h3 className="text-base font-bold text-white">
+                            {selectedLog.direction === 'outbound'
+                              ? selectedLog.recipientName
+                              : getEffectiveCallerName(selectedLog.callerName, selectedLog.callerNumber)}
+                          </h3>
+                          {selectedLog.direction === 'inbound' &&
+                            maskUnknownEnabled &&
+                            !isNumberInContacts(selectedLog.callerNumber, effectiveContacts) && (
+                              <span className="rounded bg-cyan-950 px-1.5 py-0.5 text-[9px] font-mono text-cyan-300 border border-cyan-800 flex items-center gap-1">
+                                <Shield className="h-2.5 w-2.5 text-cyan-400" /> PRIVACY MASKED
+                              </span>
+                            )}
+                        </div>
                         <p className="text-xs text-slate-400 font-mono">
                           {selectedLog.direction === 'outbound' ? selectedLog.recipientNumber : selectedLog.callerNumber}
                         </p>
@@ -836,16 +1024,34 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                         Complete Verified Transcript ({selectedLog.transcript.length} turns)
                       </div>
                       <div className="max-h-56 overflow-y-auto space-y-2 rounded-xl bg-slate-950 p-3 border border-slate-800 text-xs">
-                        {selectedLog.transcript.map((t, idx) => (
-                          <div key={idx} className="flex flex-col">
-                            <span className="text-[10px] font-mono text-slate-500">
-                              {t.speaker === 'agent' ? 'JARVIS AI' : t.speaker.toUpperCase()} • {t.timestamp}
-                            </span>
-                            <span className={t.speaker === 'agent' ? 'text-cyan-200' : 'text-slate-300'}>
-                              {t.text}
-                            </span>
-                          </div>
-                        ))}
+                        {selectedLog.transcript.map((t, idx) => {
+                          let speakerLabel = 'JARVIS AI';
+                          if (t.speaker === 'agent') {
+                            speakerLabel = 'JARVIS AI';
+                          } else if (t.speaker === 'caller') {
+                            speakerLabel =
+                              selectedLog.direction === 'inbound'
+                                ? getEffectiveCallerName(selectedLog.callerName, selectedLog.callerNumber)
+                                : 'CALLER';
+                          } else if (t.speaker === 'callee') {
+                            speakerLabel = selectedLog.recipientName || 'CALLEE';
+                          } else if (t.speaker === 'whisper') {
+                            speakerLabel = 'AI WHISPER TIP';
+                          } else {
+                            speakerLabel = t.speaker.toUpperCase();
+                          }
+
+                          return (
+                            <div key={idx} className="flex flex-col">
+                              <span className="text-[10px] font-mono text-slate-500">
+                                {speakerLabel} • {t.timestamp}
+                              </span>
+                              <span className={t.speaker === 'agent' ? 'text-cyan-200' : 'text-slate-300'}>
+                                {t.text}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -957,6 +1163,42 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                         <span>POST /api/telephony/handle-turn</span>
                         <span className="text-emerald-400 text-[10px]">GEMINI BRAIN READY</span>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Privacy & Caller ID Security Configuration */}
+                  <div className="rounded-xl bg-slate-950 border border-slate-800 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-950 border border-cyan-500/40">
+                          <Lock className="h-4 w-4 text-cyan-400" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">Caller ID Privacy Shield</span>
+                            <span className={`rounded px-1.5 py-0.2 text-[9px] font-mono border ${
+                              maskUnknownEnabled
+                                ? 'bg-cyan-950 text-cyan-300 border-cyan-700'
+                                : 'bg-slate-900 text-slate-400 border-slate-700'
+                            }`}>
+                              {maskUnknownEnabled ? 'ACTIVE • ENFORCED' : 'OFF'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Mask inbound caller ID names to &apos;Unknown Caller&apos; unless matching a verified contact
+                          </div>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer ml-3 flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={maskUnknownEnabled}
+                          onChange={(e) => handleToggleMaskUnknownCallerId(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600" />
+                      </label>
                     </div>
                   </div>
 

@@ -43,6 +43,8 @@ import {
   SimulatedCallerPersona,
   DEFAULT_CONTACTS,
   DEFAULT_TELEPHONY_SETTINGS,
+  DEFAULT_CALL_RECORDS,
+  isNumberInContacts,
 } from './types/telephony';
 import { PublicInfoFooter } from './components/PublicInfoFooter';
 import {
@@ -117,16 +119,20 @@ export default function App() {
   const [callHistory, setCallHistory] = useState<CallRecord[]>(() => {
     try {
       const saved = localStorage.getItem('hermes_jarvis_call_history');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return DEFAULT_CALL_RECORDS;
     } catch {
-      return [];
+      return DEFAULT_CALL_RECORDS;
     }
   });
   const [telephonyContacts] = useState<ContactItem[]>(DEFAULT_CONTACTS);
   const [telephonySettings, setTelephonySettings] = useState<TelephonySettings>(() => {
     try {
       const saved = localStorage.getItem('hermes_jarvis_telephony_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_TELEPHONY_SETTINGS;
+      return saved ? { ...DEFAULT_TELEPHONY_SETTINGS, ...JSON.parse(saved) } : DEFAULT_TELEPHONY_SETTINGS;
     } catch {
       return DEFAULT_TELEPHONY_SETTINGS;
     }
@@ -689,6 +695,9 @@ export default function App() {
       const spamAnalysis = evaluateSpamScore(persona.firstLine, persona.callerName);
       const callId = `call_${Date.now()}`;
 
+      const isCallerInContacts = isNumberInContacts(persona.callerNumber, telephonyContacts);
+      const maskActive = telephonySettings.maskUnknownCallerId !== false;
+
       const newCall: CallRecord = {
         id: callId,
         direction: 'inbound',
@@ -720,7 +729,7 @@ export default function App() {
 
       setActiveCall(newCall);
     },
-    [memory.name, telephonySettings]
+    [memory.name, telephonySettings, telephonyContacts]
   );
 
   // Auto-persist callHistory & telephonySettings
@@ -1450,6 +1459,7 @@ export default function App() {
       <ActiveCallHUD
         activeCall={activeCall}
         settings={telephonySettings}
+        contacts={telephonyContacts}
         isMuted={isCallMuted}
         isOnHold={isCallOnHold}
         audioFilterActive={isAudioFilterActive}
