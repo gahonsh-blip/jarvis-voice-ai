@@ -23,12 +23,23 @@ import {
   ArrowRight,
   Wifi,
   ExternalLink,
+  Phone,
+  Users,
+  MessageSquare,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import {
   MobileStatusData,
   MorningBriefingPayload,
   MobilePermissionCategory,
 } from '../types';
+import {
+  MobilePermissionMatrix,
+  AndroidPermissionState,
+  AndroidBridgeStatus,
+} from '../types/mobileBridge';
+import { androidBridgeEngine } from '../utils/androidBridgeEngine';
 import {
   compileMobileStatusData,
   generateMorningBriefing,
@@ -59,6 +70,12 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   const [permissions, setPermissions] = useState<Record<MobilePermissionCategory, boolean>>(
     loadMobilePermissions()
   );
+  const [androidPerms, setAndroidPerms] = useState<MobilePermissionMatrix>(
+    androidBridgeEngine.getPermissions()
+  );
+  const [bridgeStatus, setBridgeStatus] = useState<AndroidBridgeStatus>(
+    androidBridgeEngine.getStatus()
+  );
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'briefing' | 'telemetry' | 'privacy' | 'bridge'>('briefing');
@@ -74,6 +91,8 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       setStatusData(data);
       const generated = generateMorningBriefing(data, userName);
       setBriefing(generated);
+      setAndroidPerms({ ...androidBridgeEngine.getPermissions() });
+      setBridgeStatus(androidBridgeEngine.getStatus());
     } catch (err) {
       console.warn('Failed to compile mobile status:', err);
     } finally {
@@ -85,9 +104,36 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
     if (isOpen) {
       const perms = loadMobilePermissions();
       setPermissions(perms);
+      setAndroidPerms({ ...androidBridgeEngine.getPermissions() });
+      setBridgeStatus(androidBridgeEngine.getStatus());
       refreshData();
     }
   }, [isOpen, userName]);
+
+  const handleToggleAndroidBridgePerm = (key: 'notification' | 'call' | 'contacts' | 'reply') => {
+    const current = { ...androidPerms };
+    if (key === 'notification') {
+      const next: AndroidPermissionState = current.notification_access === 'GRANTED' ? 'DENIED' : 'GRANTED';
+      current.notification_access = next;
+      androidBridgeEngine.updatePermission('notification_access', next);
+    } else if (key === 'call') {
+      const next: AndroidPermissionState = current.call_detection === 'GRANTED' ? 'DENIED' : 'GRANTED';
+      current.call_detection = next;
+      current.call_answer = next;
+      androidBridgeEngine.updatePermission('call_detection', next);
+      androidBridgeEngine.updatePermission('call_answer', next);
+    } else if (key === 'contacts') {
+      const next: AndroidPermissionState = current.contacts_lookup === 'GRANTED' ? 'DENIED' : 'GRANTED';
+      current.contacts_lookup = next;
+      androidBridgeEngine.updatePermission('contacts_lookup', next);
+    } else if (key === 'reply') {
+      const next: AndroidPermissionState = current.message_reply === 'GRANTED' ? 'DENIED' : 'GRANTED';
+      current.message_reply = next;
+      androidBridgeEngine.updatePermission('message_reply', next);
+    }
+    setAndroidPerms(current);
+    setBridgeStatus(androidBridgeEngine.getStatus());
+  };
 
   const handleTogglePermission = (cat: MobilePermissionCategory) => {
     const updated = { ...permissions, [cat]: !permissions[cat] };
@@ -321,6 +367,300 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
 
         {/* Main Content Area */}
         <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6">
+          {/* Visual Status Grid for Required Android Permissions (Notification, Call, Contacts, Reply) */}
+          <div
+            id="android-permissions-visual-grid"
+            className="p-4 sm:p-5 rounded-2xl bg-slate-950/90 border border-cyan-900/60 shadow-xl space-y-4 font-mono"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-cyan-950/90 border border-cyan-500/40 text-cyan-300">
+                  <ShieldCheck className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide">
+                      REQUIRED ANDROID PERMISSIONS MATRIX
+                    </h4>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/50 text-cyan-300 font-bold">
+                      HERMES-ANDROID-BRIDGE/2.4.0
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+                    Architectural Invariants: Zero autonomous actions • OTP/Bank redaction • Level-4 Human Consent Gate
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${
+                    bridgeStatus === 'CONNECTED'
+                      ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                      : bridgeStatus === 'LIMITED_CAPABILITY'
+                      ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+                      : 'bg-slate-900 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  BRIDGE: {bridgeStatus}
+                </span>
+
+                <button
+                  id="android-permissions-open-bridge-btn"
+                  onClick={() => setActiveTab('bridge')}
+                  className="px-3 py-1.5 rounded-xl bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  title="Switch to detailed Android Bridge diagnostic hub"
+                >
+                  <span>Bridge Hub</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* 4-Column Responsive Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* 1. Notification Permission Card */}
+              {(() => {
+                const isGranted = androidPerms.notification_access === 'GRANTED';
+                return (
+                  <div
+                    id="android-perm-card-notification"
+                    className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
+                      isGranted
+                        ? 'bg-slate-900/90 border-cyan-800/70 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800/90 opacity-80'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div
+                          className={`p-2 rounded-lg border ${
+                            isGranted
+                              ? 'bg-cyan-950 border-cyan-500/50 text-cyan-300'
+                              : 'bg-slate-900 border-slate-800 text-slate-500'
+                          }`}
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </div>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                            isGranted
+                              ? 'bg-emerald-950 border-emerald-500/60 text-emerald-300'
+                              : 'bg-rose-950 border-rose-500/60 text-rose-300'
+                          }`}
+                        >
+                          {isGranted ? 'GRANTED ✅' : 'DENIED 🔒'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h5 className="text-xs font-bold text-white">Notification Access</h5>
+                        <p className="text-[10px] text-cyan-400/90">NotificationListenerService</p>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                        Intercepts incoming WhatsApp, SMS &amp; Slack alerts. Auto-redacts confidential OTP &amp; banking data.
+                      </p>
+                    </div>
+
+                    <button
+                      id="android-perm-toggle-notification"
+                      onClick={() => handleToggleAndroidBridgePerm('notification')}
+                      className={`w-full py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        isGranted
+                          ? 'bg-slate-850 hover:bg-rose-950/60 border border-slate-750 hover:border-rose-500 text-slate-300 hover:text-rose-300'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
+                      }`}
+                    >
+                      {isGranted ? 'Revoke Access' : 'Authorize Notification'}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* 2. Call Management Card */}
+              {(() => {
+                const isCallGranted = androidPerms.call_detection === 'GRANTED';
+                const isAnswerGranted = androidPerms.call_answer === 'GRANTED';
+                const isLimited = isCallGranted && !isAnswerGranted;
+                return (
+                  <div
+                    id="android-perm-card-call"
+                    className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
+                      isCallGranted
+                        ? 'bg-slate-900/90 border-cyan-800/70 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800/90 opacity-80'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div
+                          className={`p-2 rounded-lg border ${
+                            isCallGranted
+                              ? 'bg-cyan-950 border-cyan-500/50 text-cyan-300'
+                              : 'bg-slate-900 border-slate-800 text-slate-500'
+                          }`}
+                        >
+                          <Phone className="w-4 h-4" />
+                        </div>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                            !isCallGranted
+                              ? 'bg-rose-950 border-rose-500/60 text-rose-300'
+                              : isLimited
+                              ? 'bg-amber-950 border-amber-500/60 text-amber-300'
+                              : 'bg-emerald-950 border-emerald-500/60 text-emerald-300'
+                          }`}
+                        >
+                          {!isCallGranted ? 'DENIED 🔒' : isLimited ? 'LIMITED ⚠️' : 'GRANTED ✅'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h5 className="text-xs font-bold text-white">Call Management</h5>
+                        <p className="text-[10px] text-cyan-400/90">TelecomManager • ROLE_DIALER</p>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                        Incoming ring detection &amp; Level-4 hands-free voice pickup ("हाँ / उठा लो").
+                      </p>
+                    </div>
+
+                    <button
+                      id="android-perm-toggle-call"
+                      onClick={() => handleToggleAndroidBridgePerm('call')}
+                      className={`w-full py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        isCallGranted
+                          ? 'bg-slate-850 hover:bg-rose-950/60 border border-slate-750 hover:border-rose-500 text-slate-300 hover:text-rose-300'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
+                      }`}
+                    >
+                      {isCallGranted ? 'Revoke Access' : 'Authorize Telephony'}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* 3. Contacts Lookup Card */}
+              {(() => {
+                const isGranted = androidPerms.contacts_lookup === 'GRANTED';
+                return (
+                  <div
+                    id="android-perm-card-contacts"
+                    className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
+                      isGranted
+                        ? 'bg-slate-900/90 border-cyan-800/70 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800/90 opacity-80'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div
+                          className={`p-2 rounded-lg border ${
+                            isGranted
+                              ? 'bg-cyan-950 border-cyan-500/50 text-cyan-300'
+                              : 'bg-slate-900 border-slate-800 text-slate-500'
+                          }`}
+                        >
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                            isGranted
+                              ? 'bg-emerald-950 border-emerald-500/60 text-emerald-300'
+                              : 'bg-rose-950 border-rose-500/60 text-rose-300'
+                          }`}
+                        >
+                          {isGranted ? 'GRANTED ✅' : 'DENIED 🔒'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h5 className="text-xs font-bold text-white">Contacts Lookup</h5>
+                        <p className="text-[10px] text-cyan-400/90">READ_CONTACTS • Address Book</p>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                        Matches phone numbers against phone address book so JARVIS speaks verified caller names.
+                      </p>
+                    </div>
+
+                    <button
+                      id="android-perm-toggle-contacts"
+                      onClick={() => handleToggleAndroidBridgePerm('contacts')}
+                      className={`w-full py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        isGranted
+                          ? 'bg-slate-850 hover:bg-rose-950/60 border border-slate-750 hover:border-rose-500 text-slate-300 hover:text-rose-300'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
+                      }`}
+                    >
+                      {isGranted ? 'Revoke Access' : 'Authorize Contacts'}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* 4. Inline Reply Gate Card */}
+              {(() => {
+                const isGranted = androidPerms.message_reply === 'GRANTED';
+                return (
+                  <div
+                    id="android-perm-card-reply"
+                    className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
+                      isGranted
+                        ? 'bg-slate-900/90 border-cyan-800/70 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800/90 opacity-80'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div
+                          className={`p-2 rounded-lg border ${
+                            isGranted
+                              ? 'bg-cyan-950 border-cyan-500/50 text-cyan-300'
+                              : 'bg-slate-900 border-slate-800 text-slate-500'
+                          }`}
+                        >
+                          <Send className="w-4 h-4" />
+                        </div>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                            isGranted
+                              ? 'bg-emerald-950 border-emerald-500/60 text-emerald-300'
+                              : 'bg-rose-950 border-rose-500/60 text-rose-300'
+                          }`}
+                        >
+                          {isGranted ? 'GRANTED ✅' : 'DENIED 🔒'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h5 className="text-xs font-bold text-white">Inline Reply Gate</h5>
+                        <p className="text-[10px] text-cyan-400/90">RemoteInput • Level-4 Gate</p>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                        Dispatches message replies only after explicit owner voice or tap approval ("हाँ / जवाब दो").
+                      </p>
+                    </div>
+
+                    <button
+                      id="android-perm-toggle-reply"
+                      onClick={() => handleToggleAndroidBridgePerm('reply')}
+                      className={`w-full py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        isGranted
+                          ? 'bg-slate-850 hover:bg-rose-950/60 border border-slate-750 hover:border-rose-500 text-slate-300 hover:text-rose-300'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
+                      }`}
+                    >
+                      {isGranted ? 'Revoke Access' : 'Authorize Reply Gate'}
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
           {/* TAB 1: HINDI MORNING BRIEFING CORE */}
           {activeTab === 'briefing' && briefing && (
             <div className="space-y-6">

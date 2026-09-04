@@ -410,4 +410,39 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     const activeRes = processOfflineCommand('notifications check करो', mockMemory);
     expect(activeRes.spokenText).toContain('Slack');
   });
+
+  it('Scenario 16: Required Android permissions matrix (Notification, Call, Contacts, Reply) can be queried and updated', () => {
+    // Check initial permissions retrieval
+    const initialPerms = androidBridgeEngine.getPermissions();
+    expect(initialPerms).toHaveProperty('notification_access');
+    expect(initialPerms).toHaveProperty('call_detection');
+    expect(initialPerms).toHaveProperty('contacts_lookup');
+    expect(initialPerms).toHaveProperty('message_reply');
+
+    // Update Notification
+    androidBridgeEngine.updatePermission('notification_access', 'DENIED');
+    expect(androidBridgeEngine.getPermissions().notification_access).toBe('DENIED');
+    androidBridgeEngine.updatePermission('notification_access', 'GRANTED');
+    expect(androidBridgeEngine.getPermissions().notification_access).toBe('GRANTED');
+
+    // Update Call
+    androidBridgeEngine.updatePermission('call_detection', 'DENIED');
+    androidBridgeEngine.updatePermission('call_answer', 'DENIED');
+    expect(androidBridgeEngine.getPermissions().call_detection).toBe('DENIED');
+    androidBridgeEngine.updatePermission('call_detection', 'GRANTED');
+    androidBridgeEngine.updatePermission('call_answer', 'GRANTED');
+    expect(androidBridgeEngine.getPermissions().call_detection).toBe('GRANTED');
+
+    // Update Contacts
+    androidBridgeEngine.updatePermission('contacts_lookup', 'DENIED');
+    expect(androidBridgeEngine.getPermissions().contacts_lookup).toBe('DENIED');
+    androidBridgeEngine.updatePermission('contacts_lookup', 'GRANTED');
+    expect(androidBridgeEngine.getPermissions().contacts_lookup).toBe('GRANTED');
+
+    // Update Reply
+    androidBridgeEngine.updatePermission('message_reply', 'DENIED');
+    expect(androidBridgeEngine.getPermissions().message_reply).toBe('DENIED');
+    androidBridgeEngine.updatePermission('message_reply', 'GRANTED');
+    expect(androidBridgeEngine.getPermissions().message_reply).toBe('GRANTED');
+  });
 });
