@@ -158,6 +158,7 @@ export type MainNavigationTab =
   | 'telephony_hub';
 
 export * from './types/telephony';
+export * from './types/mobileBridge';
 
 // -------------------------------------------------------------
 // MOBILE PERSONAL STATUS & HINDI MORNING BRIEFING

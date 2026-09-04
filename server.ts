@@ -5515,6 +5515,422 @@ Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hin
   }
 });
 
+// -------------------------------------------------------------
+// ANDROID MOBILE BRIDGE & NOTIFICATION/CALL ASSISTANT ENDPOINTS
+// -------------------------------------------------------------
+interface ServerMobileBridgeState {
+  status:
+    | 'MOBILE_NOT_CONNECTED'
+    | 'PERMISSION_REQUIRED'
+    | 'PARTIALLY_CONNECTED'
+    | 'CONNECTED'
+    | 'LIMITED_CAPABILITY'
+    | 'ERROR';
+  device: {
+    deviceId: string;
+    deviceName: string;
+    model: string;
+    osVersion: string;
+    bridgeVersion: string;
+    canDetectCalls: boolean;
+    canAnswerCalls: boolean;
+    telecomRoleDialer: boolean;
+    answerCallsPermission: boolean;
+    canReadNotifications: boolean;
+    canInlineReply: boolean;
+    canOpenApp: boolean;
+    canLookupContacts: boolean;
+    isSimulation: boolean;
+    connectedAt: string;
+  } | null;
+  permissions: {
+    notification_access: string;
+    call_detection: string;
+    call_answer: string;
+    message_reading: string;
+    message_reply: string;
+    contacts_lookup: string;
+    notification_history: string;
+  };
+  pendingEvent: any | null;
+  auditLogs: Array<{
+    id: string;
+    timestamp: string;
+    eventType: string;
+    application: string;
+    actionRequested: string;
+    result: string;
+    notes?: string;
+  }>;
+}
+
+const serverMobileBridgeState: ServerMobileBridgeState = {
+  status: 'MOBILE_NOT_CONNECTED',
+  device: null,
+  permissions: {
+    notification_access: 'NOT_CONFIGURED',
+    call_detection: 'NOT_CONFIGURED',
+    call_answer: 'LIMITED',
+    message_reading: 'NOT_CONFIGURED',
+    message_reply: 'LIMITED',
+    contacts_lookup: 'NOT_CONFIGURED',
+    notification_history: 'NOT_CONFIGURED',
+  },
+  pendingEvent: null,
+  auditLogs: [],
+};
+
+function recordMobileAudit(entry: {
+  eventType: string;
+  application: string;
+  actionRequested: string;
+  result: string;
+  notes?: string;
+}) {
+  serverMobileBridgeState.auditLogs.unshift({
+    id: `audit_srv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    ...entry,
+  });
+  if (serverMobileBridgeState.auditLogs.length > 200) {
+    serverMobileBridgeState.auditLogs.pop();
+  }
+}
+
+app.get('/api/mobile/bridge/status', (req: Request, res: Response) => {
+  const emergency = getEmergencyState();
+  res.json({
+    success: true,
+    status: serverMobileBridgeState.status,
+    device: serverMobileBridgeState.device,
+    permissions: serverMobileBridgeState.permissions,
+    pendingEvent: serverMobileBridgeState.pendingEvent,
+    emergencyPaused: emergency.emergencyPaused || emergency.hardKillSwitchTriggered,
+  });
+});
+
+app.post('/api/mobile/bridge/connect', (req: Request, res: Response) => {
+  try {
+    const { device, permissions } = req.body;
+    if (!device) {
+      return res.status(400).json({ success: false, error: 'Device details required' });
+    }
+
+    serverMobileBridgeState.device = {
+      deviceId: device.deviceId || `android_${Date.now()}`,
+      deviceName: device.deviceName || 'Android Device',
+      model: device.model || 'Generic Android',
+      osVersion: device.osVersion || 'Android 14',
+      bridgeVersion: device.bridgeVersion || 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: Boolean(device.canDetectCalls),
+      canAnswerCalls: Boolean(device.canAnswerCalls),
+      telecomRoleDialer: Boolean(device.telecomRoleDialer),
+      answerCallsPermission: Boolean(device.answerCallsPermission),
+      canReadNotifications: Boolean(device.canReadNotifications),
+      canInlineReply: Boolean(device.canInlineReply),
+      canOpenApp: Boolean(device.canOpenApp),
+      canLookupContacts: Boolean(device.canLookupContacts),
+      isSimulation: Boolean(device.isSimulation),
+      connectedAt: new Date().toISOString(),
+    };
+
+    if (permissions) {
+      serverMobileBridgeState.permissions = {
+        ...serverMobileBridgeState.permissions,
+        ...permissions,
+      };
+    }
+
+    const hasNotif = serverMobileBridgeState.permissions.notification_access === 'GRANTED';
+    const hasCall = serverMobileBridgeState.permissions.call_detection === 'GRANTED';
+
+    if (!hasNotif && !hasCall) {
+      serverMobileBridgeState.status = 'PERMISSION_REQUIRED';
+    } else if (!serverMobileBridgeState.device.canAnswerCalls || !serverMobileBridgeState.device.telecomRoleDialer) {
+      serverMobileBridgeState.status = 'LIMITED_CAPABILITY';
+    } else {
+      serverMobileBridgeState.status = 'CONNECTED';
+    }
+
+    recordMobileAudit({
+      eventType: 'DEVICE_CONNECTED',
+      application: 'AndroidBridge',
+      actionRequested: 'Connect Device',
+      result: 'SUCCESS',
+      notes: `Registered ${serverMobileBridgeState.device.model} (${serverMobileBridgeState.device.deviceName}) [Simulation: ${serverMobileBridgeState.device.isSimulation}]`,
+    });
+
+    res.json({
+      success: true,
+      status: serverMobileBridgeState.status,
+      device: serverMobileBridgeState.device,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/mobile/bridge/disconnect', (req: Request, res: Response) => {
+  const prevModel = serverMobileBridgeState.device?.model || 'Device';
+  serverMobileBridgeState.device = null;
+  serverMobileBridgeState.status = 'MOBILE_NOT_CONNECTED';
+  serverMobileBridgeState.pendingEvent = null;
+
+  recordMobileAudit({
+    eventType: 'DEVICE_DISCONNECTED',
+    application: 'AndroidBridge',
+    actionRequested: 'Disconnect Device',
+    result: 'SUCCESS',
+    notes: `${prevModel} disconnected`,
+  });
+
+  res.json({ success: true, status: 'MOBILE_NOT_CONNECTED' });
+});
+
+app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
+  try {
+    const { eventType, payload } = req.body;
+    if (!eventType || !payload) {
+      return res.status(400).json({ success: false, error: 'eventType and payload required' });
+    }
+
+    if (eventType === 'INCOMING_CALL') {
+      const maskedNumber = payload.callerNumber ? payload.callerNumber.replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2') : 'Unknown';
+      serverMobileBridgeState.pendingEvent = {
+        id: `call_${Date.now()}`,
+        type: 'CALL',
+        createdAt: new Date().toISOString(),
+        appName: 'Phone',
+        sender: payload.callerName || 'Unknown Caller',
+        senderNumber: maskedNumber,
+        previewText: `Incoming Call from ${payload.callerName || maskedNumber}`,
+        status: 'AWAITING_APPROVAL',
+        callId: payload.callId,
+      };
+
+      recordMobileAudit({
+        eventType: 'CALL_RECEIVED',
+        application: 'Phone',
+        actionRequested: 'Incoming Call Detection',
+        result: 'WAITING_FOR_APPROVAL',
+        notes: `Call from ${payload.callerName || 'Unknown'} (${maskedNumber})`,
+      });
+    } else if (eventType === 'INCOMING_NOTIFICATION') {
+      serverMobileBridgeState.pendingEvent = {
+        id: `notif_${Date.now()}`,
+        type: 'MESSAGE',
+        createdAt: new Date().toISOString(),
+        appName: payload.appName || 'Message',
+        sender: payload.sender || payload.title || 'Sender',
+        previewText: payload.text ? payload.text.slice(0, 100) : '[Notification Alert]',
+        status: 'AWAITING_APPROVAL',
+        hasInlineReply: Boolean(payload.hasInlineReply),
+        packageName: payload.packageName,
+      };
+
+      recordMobileAudit({
+        eventType: 'MESSAGE_RECEIVED',
+        application: payload.appName || 'Notification',
+        actionRequested: 'Incoming Notification',
+        result: 'WAITING_FOR_APPROVAL',
+        notes: `Notification from ${payload.sender || 'Sender'} on ${payload.appName}`,
+      });
+    } else if (eventType === 'CALL_ENDED') {
+      if (serverMobileBridgeState.pendingEvent?.type === 'CALL') {
+        serverMobileBridgeState.pendingEvent = null;
+      }
+    }
+
+    res.json({ success: true, pendingEvent: serverMobileBridgeState.pendingEvent });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/mobile/bridge/call/answer', (req: Request, res: Response) => {
+  const emergency = getEmergencyState();
+  if (emergency.emergencyPaused || emergency.hardKillSwitchTriggered) {
+    recordMobileAudit({
+      eventType: 'ACTION_DENIED',
+      application: 'TelecomManager',
+      actionRequested: 'Answer Call',
+      result: 'BLOCKED_EMERGENCY_STOP',
+      notes: 'Call answering blocked by Global Kill Switch',
+    });
+    return res.status(403).json({
+      success: false,
+      status: 'BLOCKED_EMERGENCY_STOP',
+      message: 'Call answering blocked by Global Kill Switch / Emergency Stop.',
+    });
+  }
+
+  if (!serverMobileBridgeState.device) {
+    return res.status(400).json({
+      success: false,
+      status: 'MOBILE_NOT_CONNECTED',
+      message: 'No Android device connected to bridge.',
+    });
+  }
+
+  if (!serverMobileBridgeState.device.canAnswerCalls) {
+    recordMobileAudit({
+      eventType: 'CAPABILITY_UNAVAILABLE',
+      application: 'TelecomManager',
+      actionRequested: 'Answer Call',
+      result: 'CALL_ANSWER_UNSUPPORTED',
+      notes: 'Device lacks call answering hardware/API capability',
+    });
+    return res.status(400).json({
+      success: false,
+      status: 'CALL_ANSWER_UNSUPPORTED',
+      message: 'Android device lacks capability or permission to answer calls.',
+    });
+  }
+
+  if (!serverMobileBridgeState.device.telecomRoleDialer && !serverMobileBridgeState.device.answerCallsPermission) {
+    recordMobileAudit({
+      eventType: 'CAPABILITY_UNAVAILABLE',
+      application: 'TelecomManager',
+      actionRequested: 'Answer Call',
+      result: 'ROLE_REQUIRED',
+      notes: 'Android Telecom Default Dialer role not granted',
+    });
+    return res.status(403).json({
+      success: false,
+      status: 'ROLE_REQUIRED',
+      message: 'Default Dialer role or ANSWER_PHONE_CALLS permission required on Android device.',
+    });
+  }
+
+  serverMobileBridgeState.pendingEvent = null;
+
+  recordMobileAudit({
+    eventType: 'CALL_ANSWERED',
+    application: 'TelecomManager',
+    actionRequested: 'Answer Call',
+    result: 'SUCCESS',
+    notes: 'Call answered after explicit human authorization',
+  });
+
+  res.json({
+    success: true,
+    status: 'ANSWERED',
+    message: 'Call answered command dispatched to Android device.',
+  });
+});
+
+app.post('/api/mobile/bridge/message/reply', (req: Request, res: Response) => {
+  const emergency = getEmergencyState();
+  if (emergency.emergencyPaused || emergency.hardKillSwitchTriggered) {
+    recordMobileAudit({
+      eventType: 'ACTION_DENIED',
+      application: 'NotificationManager',
+      actionRequested: 'Send Reply',
+      result: 'BLOCKED_EMERGENCY_STOP',
+      notes: 'Message reply blocked by Global Kill Switch',
+    });
+    return res.status(403).json({
+      success: false,
+      status: 'BLOCKED_EMERGENCY_STOP',
+      message: 'Message reply blocked by Global Kill Switch.',
+    });
+  }
+
+  const { replyText, approved } = req.body;
+  if (!approved) {
+    return res.status(403).json({
+      success: false,
+      status: 'AUTHORIZATION_REQUIRED',
+      message: 'Explicit human approval required to send message reply.',
+    });
+  }
+
+  if (!serverMobileBridgeState.device) {
+    return res.status(400).json({
+      success: false,
+      status: 'MOBILE_NOT_CONNECTED',
+      message: 'No Android device connected.',
+    });
+  }
+
+  serverMobileBridgeState.pendingEvent = null;
+
+  recordMobileAudit({
+    eventType: 'REPLY_SENT',
+    application: 'NotificationManager',
+    actionRequested: 'Send Inline Reply',
+    result: 'SUCCESS',
+    notes: `Reply dispatched [Content Redacted for Privacy]`,
+  });
+
+  res.json({
+    success: true,
+    status: 'REPLY_CONFIRMED',
+    message: 'Reply dispatched to device.',
+  });
+});
+
+app.post('/api/mobile/bridge/app/open', (req: Request, res: Response) => {
+  const { packageName } = req.body;
+  recordMobileAudit({
+    eventType: 'APP_OPENED',
+    application: packageName || 'App',
+    actionRequested: 'Open App',
+    result: 'SUCCESS',
+    notes: `Launch intent requested for ${packageName}`,
+  });
+  res.json({ success: true, message: `Launch intent sent for ${packageName}` });
+});
+
+app.get('/api/mobile/bridge/audit', (req: Request, res: Response) => {
+  res.json({ success: true, auditLogs: serverMobileBridgeState.auditLogs });
+});
+
+app.post('/api/mobile/bridge/simulate', (req: Request, res: Response) => {
+  const { type, callerName, callerNumber, appName, sender, text } = req.body;
+  if (type === 'call') {
+    const masked = callerNumber ? callerNumber.replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2') : '******1234';
+    serverMobileBridgeState.pendingEvent = {
+      id: `sim_call_${Date.now()}`,
+      type: 'CALL',
+      createdAt: new Date().toISOString(),
+      appName: 'Phone',
+      sender: callerName || 'Rahul',
+      senderNumber: masked,
+      previewText: `Incoming Call from ${callerName || 'Rahul'} (${masked})`,
+      status: 'AWAITING_APPROVAL',
+      callId: `call_${Date.now()}`,
+    };
+    recordMobileAudit({
+      eventType: 'CALL_RECEIVED',
+      application: 'Phone',
+      actionRequested: 'Simulated Incoming Call',
+      result: 'WAITING_FOR_APPROVAL',
+      notes: `[SIMULATION_ONLY] Caller: ${callerName || 'Rahul'}, Number: ${masked}`,
+    });
+  } else if (type === 'message') {
+    serverMobileBridgeState.pendingEvent = {
+      id: `sim_msg_${Date.now()}`,
+      type: 'MESSAGE',
+      createdAt: new Date().toISOString(),
+      appName: appName || 'WhatsApp',
+      sender: sender || 'Rahul',
+      previewText: text || 'Hello, are you available?',
+      status: 'AWAITING_APPROVAL',
+      hasInlineReply: true,
+      packageName: 'com.whatsapp',
+    };
+    recordMobileAudit({
+      eventType: 'MESSAGE_RECEIVED',
+      application: appName || 'WhatsApp',
+      actionRequested: 'Simulated Incoming Message',
+      result: 'WAITING_FOR_APPROVAL',
+      notes: `[SIMULATION_ONLY] App: ${appName || 'WhatsApp'}, Sender: ${sender || 'Rahul'}`,
+    });
+  }
+  res.json({ success: true, pendingEvent: serverMobileBridgeState.pendingEvent });
+});
+
 app.post('/api/memory', (req: Request, res: Response) => {
   try {
     const { name, notes, customKeyValues, statUpdate } = req.body;

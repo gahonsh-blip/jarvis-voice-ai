@@ -46,6 +46,7 @@ import {
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
+import { downloadCallHistoryCsv } from '../utils/telephonyEngine';
 import {
   PHONE_PERMISSION_DEFINITIONS,
   DEFAULT_PHONE_PERMISSIONS,
@@ -258,6 +259,10 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
 
   const selectedLog = callHistory.find((c) => c.id === selectedLogId) || callHistory[0];
 
+  const exportCallHistoryCsv = () => {
+    downloadCallHistoryCsv(callHistory);
+  };
+
   const exportCallLogs = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(callHistory, null, 2));
     const dlAnchorElem = document.createElement('a');
@@ -290,6 +295,15 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              id="export-call-history-header-btn"
+              onClick={exportCallHistoryCsv}
+              className="flex items-center gap-1.5 rounded-xl bg-slate-800 hover:bg-cyan-950 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-cyan-300 transition-all active:scale-95 shadow-sm"
+              title="Export Call History as CSV"
+            >
+              <Download className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Export Call History</span>
+            </button>
             <span
               className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${
                 providerStatus?.isConfigured
@@ -870,11 +884,20 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     />
                   </div>
                   <button
+                    id="export-call-history-logs-btn"
+                    onClick={exportCallHistoryCsv}
+                    className="flex h-9 items-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-3 text-xs font-semibold text-white shadow-md shadow-cyan-950/40 transition-all active:scale-95 whitespace-nowrap"
+                    title="Export Call History as CSV"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Export Call History</span>
+                  </button>
+                  <button
                     onClick={exportCallLogs}
-                    className="flex h-9 items-center gap-1 rounded-xl bg-slate-800 px-3 text-xs text-slate-300 hover:text-white"
+                    className="flex h-9 items-center gap-1 rounded-xl bg-slate-800 hover:bg-slate-700 px-2.5 text-xs text-slate-300 hover:text-white transition-all"
                     title="Export JSON"
                   >
-                    <Download className="h-3.5 w-3.5" /> Export
+                    JSON
                   </button>
                   <button
                     onClick={onClearHistory}

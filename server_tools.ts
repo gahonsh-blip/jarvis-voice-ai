@@ -8,6 +8,7 @@ import { exec, execSync } from 'child_process';
 // ==============================================================================
 export interface EmergencyState {
   emergencyPaused: boolean;
+  hardKillSwitchTriggered?: boolean;
   pausedAt?: string;
   pausedBy?: string;
   reason?: string;

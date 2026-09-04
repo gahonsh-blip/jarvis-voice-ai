@@ -7,6 +7,7 @@ import {
   checkHumanHandoffIntent,
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
+import { androidBridgeEngine } from './androidBridgeEngine';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
@@ -201,7 +202,249 @@ export function processOfflineCommand(
     };
   }
 
-  // 1. YouTube Channel Status Inquiries ("YouTube का क्या status है", "YouTube status", "YouTube update", "YouTube की स्थिति क्या है?")
+  // 0.5 Android Mobile Assistant: Contextual Pending Call / Message Approval & Response
+  const activePendingEvent = androidBridgeEngine.getPendingEvent();
+  if (activePendingEvent && activePendingEvent.status === 'AWAITING_APPROVAL') {
+    const evaluation = androidBridgeEngine.evaluateOwnerApproval(clean);
+
+    if (evaluation.decision === 'APPROVE') {
+      if (evaluation.targetType === 'CALL') {
+        const capability = androidBridgeEngine.evaluateCallAnswerSupport();
+        if (!capability.supported) {
+          const reply = isHindi
+            ? 'सर, इस Android device पर JARVIS को अभी call answer करने की अनुमति नहीं मिली है।'
+            : isHinglish
+            ? 'Sir, is Android device par JARVIS ko abhi call answer karne ki permission nahi mili hai.'
+            : 'Sir, JARVIS does not have permission to answer calls on this Android device yet.';
+
+          return {
+            reply,
+            spokenText: reply,
+            intent: 'answer_call',
+            actionExecuted: false,
+            actionDetail: { type: 'answer_call', title: 'Call Answering Unsupported', payload: { error: capability.reason } },
+            updatedMemory,
+            offline: true,
+          };
+        }
+
+        const answerResult = androidBridgeEngine.executeCallAnswer();
+        const reply = isHindi ? 'सर, कॉल उठा ली गई है।' : 'Sir, the call has been answered.';
+        return {
+          reply,
+          spokenText: reply,
+          intent: 'answer_call',
+          actionExecuted: answerResult.success,
+          actionDetail: { type: 'answer_call', title: 'Call Answered via Android Bridge' },
+          updatedMemory,
+          offline: true,
+        };
+      } else if (evaluation.targetType === 'MESSAGE') {
+        const replyResult = androidBridgeEngine.executeMessageReply('Approved by user');
+        const reply = isHindi
+          ? 'सर, संदेश का उत्तर सफलतापूर्वक भेज दिया गया है।'
+          : isHinglish
+          ? 'Sir, sandesh ka reply successfully bhej diya gaya hai.'
+          : 'Sir, the message reply has been dispatched.';
+
+        return {
+          reply,
+          spokenText: reply,
+          actionExecuted: replyResult.success,
+          actionDetail: { type: 'open_notepad', title: 'Message Reply Dispatched' },
+          updatedMemory,
+          offline: true,
+        };
+      }
+    } else if (evaluation.decision === 'REJECT') {
+      if (evaluation.targetType === 'CALL') {
+        androidBridgeEngine.clearPendingEvent();
+        const reply = isHindi
+          ? 'सर, कॉल अस्वीकार कर दी गई है।'
+          : 'Sir, the incoming call has been declined.';
+
+        return {
+          reply,
+          spokenText: reply,
+          intent: 'reject_call',
+          actionExecuted: true,
+          actionDetail: { type: 'reject_call', title: 'Call Declined' },
+          updatedMemory,
+          offline: true,
+        };
+      } else if (evaluation.targetType === 'MESSAGE') {
+        androidBridgeEngine.clearPendingEvent();
+        const reply = isHindi
+          ? 'सर, संदेश का उत्तर रद्द कर दिया गया है।'
+          : 'Sir, message reply cancelled.';
+
+        return {
+          reply,
+          spokenText: reply,
+          actionExecuted: true,
+          actionDetail: { type: 'open_notepad', title: 'Message Dismissed' },
+          updatedMemory,
+          offline: true,
+        };
+      }
+    }
+  }
+
+  // 0.51 Direct Call Answer / Decline Commands even outside contextual approval
+  if (
+    lower.includes('answer call') ||
+    lower.includes('कॉल उठाओ') ||
+    lower.includes('कॉल उठा लो') ||
+    lower.includes('फोन उठाओ') ||
+    lower.includes('call uthao') ||
+    lower.includes('call utha lo')
+  ) {
+    if (activePendingEvent && activePendingEvent.type === 'CALL') {
+      const capability = androidBridgeEngine.evaluateCallAnswerSupport();
+      if (!capability.supported) {
+        const reply = isHindi
+          ? 'सर, इस Android device पर JARVIS को अभी call answer करने की अनुमति नहीं मिली है।'
+          : isHinglish
+          ? 'Sir, is Android device par JARVIS ko abhi call answer karne ki permission nahi mili hai.'
+          : 'Sir, JARVIS does not have permission to answer calls on this Android device yet.';
+        return {
+          reply,
+          spokenText: reply,
+          intent: 'answer_call',
+          actionExecuted: false,
+          actionDetail: { type: 'answer_call', title: 'Call Answering Unsupported', payload: { error: capability.reason } },
+          updatedMemory,
+          offline: true,
+        };
+      }
+      const answerResult = androidBridgeEngine.executeCallAnswer();
+      const reply = isHindi ? 'सर, कॉल उठा ली गई है।' : 'Sir, the call has been answered.';
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'answer_call',
+        actionExecuted: answerResult.success,
+        actionDetail: { type: 'answer_call', title: 'Call Answered via Android Bridge' },
+        updatedMemory,
+        offline: true,
+      };
+    } else {
+      const reply = isHindi
+        ? 'सर, इस समय कोई सक्रिय incoming कॉल नहीं है।'
+        : 'Sir, there is no active incoming call to answer.';
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'answer_call',
+        actionExecuted: false,
+        actionDetail: { type: 'answer_call', title: 'No Active Call' },
+        updatedMemory,
+        offline: true,
+      };
+    }
+  }
+
+  if (
+    lower.includes('decline call') ||
+    lower.includes('reject call') ||
+    lower.includes('कॉल काटो') ||
+    lower.includes('कॉल काट दो') ||
+    lower.includes('फोन काटो') ||
+    lower.includes('कॉल मत उठाओ') ||
+    lower.includes('call kato') ||
+    lower.includes('call mat uthao')
+  ) {
+    if (activePendingEvent && activePendingEvent.type === 'CALL') {
+      androidBridgeEngine.clearPendingEvent();
+      const reply = isHindi ? 'सर, कॉल अस्वीकार कर दी गई है।' : 'Sir, the call has been declined.';
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'reject_call',
+        actionExecuted: true,
+        actionDetail: { type: 'reject_call', title: 'Call Declined via Android Bridge' },
+        updatedMemory,
+        offline: true,
+      };
+    } else {
+      const reply = isHindi
+        ? 'सर, इस समय कोई सक्रिय incoming कॉल नहीं है जिसे काटा जा सके।'
+        : 'Sir, there is no active incoming call to decline.';
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'reject_call',
+        actionExecuted: false,
+        actionDetail: { type: 'reject_call', title: 'No Active Call' },
+        updatedMemory,
+        offline: true,
+      };
+    }
+  }
+
+  // 0.6 Android Mobile Assistant Inquiries ("किसका कॉल है", "who is calling", "कोई notification आया क्या")
+  if (
+    lower.includes('किसका कॉल') ||
+    lower.includes('kiska call') ||
+    lower.includes('who is calling') ||
+    lower.includes('who is on the phone') ||
+    lower.includes('caller id') ||
+    lower.includes('कॉलर कौन है')
+  ) {
+    if (activePendingEvent && activePendingEvent.type === 'CALL') {
+      const reply = activePendingEvent.spokenAnnouncement;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'answer_call',
+        actionExecuted: true,
+        actionDetail: { type: 'answer_call', title: `Caller: ${activePendingEvent.sender}` },
+        updatedMemory,
+        offline: true,
+      };
+    } else {
+      const reply = isHindi
+        ? 'सर, इस समय कोई सक्रिय incoming कॉल नहीं है।'
+        : isHinglish
+        ? 'Sir, is samay koi active incoming call nahi hai.'
+        : 'Sir, there is no active incoming call at this moment.';
+      return {
+        reply,
+        spokenText: reply,
+        offline: true,
+      };
+    }
+  }
+
+  if (
+    lower.includes('notification') ||
+    lower.includes('नोटिफिकेशन') ||
+    lower.includes('सूचना')
+  ) {
+    if (activePendingEvent && activePendingEvent.type === 'MESSAGE') {
+      const reply = activePendingEvent.spokenAnnouncement;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'open_notepad',
+        actionExecuted: true,
+        actionDetail: { type: 'open_notepad', title: `Notification: ${activePendingEvent.appName}` },
+        updatedMemory,
+        offline: true,
+      };
+    } else {
+      const reply = isHindi
+        ? 'सर, इस समय कोई नया पेंडिंग नोटिफिकेशन नहीं है।'
+        : isHinglish
+        ? 'Sir, is samay koi pending notification nahi hai.'
+        : 'Sir, there are no pending notifications at this moment.';
+      return {
+        reply,
+        spokenText: reply,
+        offline: true,
+      };
+    }
+  }
   if (
     (lower.includes('youtube') || lower.includes('यूट्यूब')) &&
     (lower.includes('status') || lower.includes('update') || lower.includes('क्या') || lower.includes('kya status') || lower.includes('connected') || lower.includes('channel') || lower.includes('अपडेट') || lower.includes('स्थिति') || lower.includes('stats') || lower.includes('चैनल') || lower.includes('जुड़ा'))

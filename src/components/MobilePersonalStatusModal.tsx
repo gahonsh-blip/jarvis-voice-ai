@@ -36,6 +36,7 @@ import {
   saveMobilePermissions,
   MOBILE_PERMISSION_DEFINITIONS,
 } from '../utils/mobileStatusEngine';
+import { AndroidPermissionCenter } from './AndroidPermissionCenter';
 
 interface Props {
   isOpen: boolean;
@@ -60,7 +61,7 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   );
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'briefing' | 'telemetry' | 'privacy'>('briefing');
+  const [activeTab, setActiveTab] = useState<'briefing' | 'telemetry' | 'privacy' | 'bridge'>('briefing');
   const [telegramSending, setTelegramSending] = useState<boolean>(false);
   const [telegramNotice, setTelegramNotice] = useState<string | null>(null);
 
@@ -146,7 +147,11 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   const handleCopyBriefing = () => {
     if (!briefing) return;
     const text = selectedLang === 'english' ? briefing.spokenTextEn : briefing.spokenTextHi;
-    navigator.clipboard.writeText(text);
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch((err) => {
+        console.warn('Clipboard write prevented:', err);
+      });
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -268,6 +273,18 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>🛡️ Privacy Consent Matrix</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('bridge')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'bridge'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md shadow-cyan-950 font-black'
+                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>🤖 Android Call &amp; Notification Bridge</span>
             </button>
           </div>
 
@@ -679,6 +696,13 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 4: ANDROID CALL & NOTIFICATION BRIDGE */}
+          {activeTab === 'bridge' && (
+            <div className="space-y-6">
+              <AndroidPermissionCenter onSpeak={onSpeak} />
             </div>
           )}
         </div>

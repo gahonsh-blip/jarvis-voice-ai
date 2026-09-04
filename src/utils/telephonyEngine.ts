@@ -412,6 +412,102 @@ export function generateCallSummary(call: CallRecord): {
 }
 
 /**
+ * Escapes a field for RFC-4180 compliant CSV formatting
+ */
+export function escapeCsvField(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  const str = String(val);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/**
+ * Formats transcript turns into a readable single-line format for CSV
+ */
+export function formatTranscriptForCsv(transcript?: CallTurn[]): string {
+  if (!transcript || !Array.isArray(transcript) || transcript.length === 0) return '';
+  return transcript
+    .map((turn) => `[${(turn.speaker || 'UNKNOWN').toUpperCase()}]: ${turn.text ? turn.text.replace(/\r?\n/g, ' ') : ''}`)
+    .join(' | ');
+}
+
+/**
+ * Converts call history records into a clean, RFC-4180 compliant CSV string
+ */
+export function generateCallHistoryCsv(history: CallRecord[]): string {
+  const headers = [
+    'Call ID',
+    'Direction',
+    'Caller Name',
+    'Caller Number',
+    'Recipient Name',
+    'Recipient Number',
+    'Start Time',
+    'End Time',
+    'Duration (Seconds)',
+    'Status',
+    'Mode',
+    'Sentiment',
+    'Intent',
+    'Spam Score',
+    'Objective',
+    'Summary',
+    'Follow-Up Actions',
+    'AI Persona',
+    'Transcript',
+  ];
+
+  const rows = (history || []).map((call) => [
+    call.id || '',
+    call.direction || '',
+    call.callerName || '',
+    call.callerNumber || '',
+    call.recipientName || '',
+    call.recipientNumber || '',
+    call.startTime || '',
+    call.endTime || '',
+    call.durationSeconds ?? 0,
+    call.status || '',
+    call.mode || '',
+    call.sentiment || '',
+    call.intent || '',
+    call.spamScore !== undefined ? call.spamScore : '',
+    call.objective || '',
+    call.summary || '',
+    Array.isArray(call.followUpActions) ? call.followUpActions.join('; ') : '',
+    call.aiPersona || '',
+    formatTranscriptForCsv(call.transcript),
+  ]);
+
+  return [
+    headers.map(escapeCsvField).join(','),
+    ...rows.map((row) => row.map(escapeCsvField).join(',')),
+  ].join('\r\n');
+}
+
+/**
+ * Initiates browser download of the call history as a CSV file
+ */
+export function downloadCallHistoryCsv(history: CallRecord[], filename?: string): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const csvContent = generateCallHistoryCsv(history);
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const downloadName = filename || `hermes_jarvis_call_history_${new Date().toISOString().slice(0, 10)}_${Date.now()}.csv`;
+
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', downloadName);
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+/**
  * Convenience wrapper for turn processing
  */
 export async function processCallTurnWithAi(params: {
