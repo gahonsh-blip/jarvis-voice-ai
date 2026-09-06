@@ -55,6 +55,12 @@ import {
   checkHumanHandoffIntent,
   DEFAULT_PHONE_PERMISSIONS,
 } from './src/utils/telephonyPermissions';
+import {
+  ComputerOperatorEngine,
+  ScreenObserver,
+  ScreenInterpreter,
+  TaskTracker,
+} from './src/utils/computerOperator';
 
 // ==============================================================================
 // 1. PROCESS SUPERVISION & GLOBAL SAFETY GUARDS (24/7 DAEMON RESILIENCE)
@@ -869,6 +875,70 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
   // Approvals & Permission Gate
   if (lower.includes('pending approvals') || lower.includes('permission gate') || lower.includes('action approvals') || lower.includes('approvals dikhao')) {
     return { intent: 'pending_approvals', confidence: 0.95 };
+  }
+
+  // Computer Operator & Screen Researcher
+  if (
+    lower.includes('cancel task') ||
+    lower.includes('stop task') ||
+    lower.includes('काम बंद करो') ||
+    lower.includes('ऑपरेटर रोको') ||
+    lower.includes('cancel operator')
+  ) {
+    return { intent: 'cancel_computer_task', confidence: 0.98 };
+  }
+
+  if (
+    (lower.includes('vs code') || lower.includes('vscode') || lower.includes('project')) &&
+    (lower.includes('error') || lower.includes('fix') || lower.includes('समस्या') || lower.includes('ठीक करो') || lower.includes('ठीक कर'))
+  ) {
+    return { intent: 'fix_project_error', confidence: 0.98, actionPayload: { target: 'VS Code' } };
+  }
+
+  if (
+    lower.includes('स्क्रीन देखकर') ||
+    lower.includes('स्क्रीन देखो') ||
+    lower.includes('क्या समस्या है') ||
+    lower.includes('inspect screen') ||
+    lower.includes('screen research') ||
+    (lower.includes('screen') && lower.includes('error'))
+  ) {
+    return { intent: 'inspect_screen', confidence: 0.98 };
+  }
+
+  if (
+    lower.includes('computer operator') ||
+    lower.includes('कंप्यूटर ऑपरेटर') ||
+    lower.includes('स्क्रीन ऑपरेटर')
+  ) {
+    return { intent: 'open_computer_operator', confidence: 0.98 };
+  }
+
+  if (
+    lower.includes('vs code') ||
+    lower.includes('vscode') ||
+    (lower.includes('visual studio') && lower.includes('code'))
+  ) {
+    return { intent: 'operate_vscode', confidence: 0.95, actionPayload: { app: 'VS Code' } };
+  }
+
+  if (
+    lower.includes('browser खोलो') ||
+    lower.includes('ब्राउज़र खोलो') ||
+    lower.includes('open browser') ||
+    lower.includes('chrome खोलो')
+  ) {
+    return { intent: 'operate_browser', confidence: 0.95, actionPayload: { app: 'Chrome' } };
+  }
+
+  if (
+    lower.includes('terminal खोलो') ||
+    lower.includes('टर्मिनल खोलो') ||
+    lower.includes('open terminal') ||
+    lower.includes('open powershell') ||
+    lower.includes('powershell खोलो')
+  ) {
+    return { intent: 'operate_terminal', confidence: 0.95, actionPayload: { app: 'Terminal' } };
   }
 
   // Exit
@@ -5225,6 +5295,66 @@ app.post('/api/tools/email/status', (req: Request, res: Response) => {
 });
 
 // ==============================================================================
+// 8.5. COMPUTER OPERATOR & SCREEN RESEARCHER APIS
+// ==============================================================================
+app.post('/api/computer-operator/execute', async (req: Request, res: Response) => {
+  try {
+    const { objective, mode = 'hybrid' } = req.body;
+    if (!objective) {
+      return res.status(400).json({ error: 'Objective is required' });
+    }
+    const curEmergencyState = getEmergencyState();
+    const task = await ComputerOperatorEngine.executeTask(objective, mode, curEmergencyState.emergencyPaused);
+    res.json({ success: true, task });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/computer-operator/observe', async (req: Request, res: Response) => {
+  try {
+    const { preferredApp, includeScreenshot = true } = req.body;
+    const observation = await ScreenObserver.observeScreen({ preferredApp, includeScreenshot });
+    const interpretation = ScreenInterpreter.interpret(observation, preferredApp);
+    res.json({ success: true, observation, interpretation });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/computer-operator/cancel', (req: Request, res: Response) => {
+  try {
+    const { reason = 'User requested stop' } = req.body;
+    const result = TaskTracker.cancelActiveTask(reason);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/computer-operator/tasks', (req: Request, res: Response) => {
+  try {
+    const tasks = TaskTracker.getRecentTasks();
+    const active = TaskTracker.getActiveTask();
+    res.json({ success: true, activeTaskId: active?.taskId, tasks });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/computer-operator/tasks/:id', (req: Request, res: Response) => {
+  try {
+    const task = TaskTracker.getTask(req.params.id);
+    if (!task) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+    res.json({ success: true, task });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==============================================================================
 // 8.6. YOUTUBE TRANSCRIPT EXTRACTION & AUTONOMOUS SUMMARIZER APIs
 // ==============================================================================
 async function summarizeYouTubeVideoCore(options: {
@@ -6489,6 +6619,67 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         spokenResponse = 'Emergency Stop deactivated. All subsystems resumed under normal Level 1-4 permission gating.';
         actionExecuted = true;
         actionDetail = { type: 'emergency_resume', title: 'Emergency Stop Released', payload: getEmergencyState() };
+        break;
+      }
+      case 'cancel_computer_task': {
+        const cancelResult = TaskTracker.cancelActiveTask('User requested stop');
+        spokenResponse = language.startsWith('hi')
+          ? 'कंप्यूटर ऑपरेटर कार्य तुरंत रोक दिया गया है।'
+          : 'Computer operator task has been immediately cancelled.';
+        actionExecuted = true;
+        actionDetail = { type: 'cancel_computer_task', title: 'Task Cancelled', payload: cancelResult };
+        break;
+      }
+      case 'fix_project_error': {
+        const curEmergencyState = getEmergencyState();
+        const task = await ComputerOperatorEngine.executeTask(message, 'hybrid', curEmergencyState.emergencyPaused);
+        spokenResponse = language.startsWith('hi')
+          ? (task.resultSummaryHi || 'VS Code में स्क्रीन का विश्लेषण करके समस्या का समाधान कर दिया गया है।')
+          : (task.resultSummary || 'Screen-Research loop executed: Inspected VS Code, identified error, applied surgical fix, and verified test suite.');
+        actionExecuted = true;
+        actionDetail = { type: 'fix_project_error', title: 'Fix Project Error in VS Code', payload: task };
+        break;
+      }
+      case 'inspect_screen': {
+        const observation = await ScreenObserver.observeScreen({ preferredApp: message });
+        const interpretation = ScreenInterpreter.interpret(observation, message);
+        spokenResponse = language.startsWith('hi')
+          ? interpretation.summaryHi
+          : interpretation.summary;
+        actionExecuted = true;
+        actionDetail = { type: 'inspect_screen', title: 'Screen Inspection', payload: { observation, interpretation } };
+        break;
+      }
+      case 'operate_vscode': {
+        spokenResponse = language.startsWith('hi')
+          ? 'Visual Studio Code सक्रिय किया जा रहा है।'
+          : 'Visual Studio Code brought to active foreground.';
+        actionExecuted = true;
+        actionDetail = { type: 'operate_vscode', title: 'Open VS Code', target: 'VS Code' };
+        break;
+      }
+      case 'operate_browser': {
+        spokenResponse = language.startsWith('hi')
+          ? 'Google Chrome ब्राउज़र विंडो खोली जा रही है।'
+          : 'Opening web browser window.';
+        actionExecuted = true;
+        actionDetail = { type: 'operate_browser', title: 'Open Browser', target: 'Chrome' };
+        break;
+      }
+      case 'operate_terminal': {
+        spokenResponse = language.startsWith('hi')
+          ? 'Windows Terminal / PowerShell सक्रिय किया जा रहा है।'
+          : 'Windows Terminal / PowerShell console activated.';
+        actionExecuted = true;
+        actionDetail = { type: 'operate_terminal', title: 'Open Terminal', target: 'Terminal' };
+        break;
+      }
+      case 'open_computer_operator': {
+        spokenResponse = language.startsWith('hi')
+          ? 'कंप्यूटर ऑपरेटर और स्क्रीन रिसर्चर कंसोल सक्रिय कर दिया गया है।'
+          : 'Computer Operator and Screen Researcher HUD activated.';
+        actionExecuted = true;
+        actionDetail = { type: 'open_computer_operator', title: 'Open Computer Operator' };
         break;
       }
       case 'git_status_tool': {

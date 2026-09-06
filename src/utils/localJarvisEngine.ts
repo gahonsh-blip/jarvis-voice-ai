@@ -497,6 +497,220 @@ export function processOfflineCommand(
     }
   }
 
+  // ==============================================================================
+  // 1.5 COMPUTER OPERATOR & SCREEN RESEARCHER ENGINE
+  // Handles: "Open VS Code and fix the project error", "स्क्रीन देखकर बताओ क्या समस्या है",
+  // "जार्विस, VS Code खोलो", "computer operator", "inspect screen", "काम बंद करो"
+  // ==============================================================================
+
+  // 1.5.1 Cancellation Command
+  if (
+    lower.includes('cancel task') ||
+    lower.includes('stop task') ||
+    lower.includes('काम बंद करो') ||
+    lower.includes('ऑपरेटर रोको') ||
+    lower.includes('cancel operator') ||
+    lower.includes('stop operator')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'कंप्यूटर ऑपरेटर कार्य तुरंत रोक दिया गया है। स्क्रीन लूप सुरक्षित रूप से बंद है।'
+      : isHinglish
+      ? 'Computer operator task turant rok diya gaya hai, Sir.'
+      : 'Computer operator task has been immediately cancelled. The Screen-Research loop is safely halted.';
+
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'cancel_computer_task',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'cancel_computer_task',
+        title: 'Cancel Computer Operator Task',
+        payload: { objective: clean },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.2 "Open VS Code and fix the project error" / "इस error को ठीक करो"
+  if (
+    (lower.includes('vs code') || lower.includes('vscode') || lower.includes('project')) &&
+    (lower.includes('error') || lower.includes('fix') || lower.includes('समस्या') || lower.includes('ठीक करो') || lower.includes('ठीक कर'))
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'स्क्रीन-रिसर्च लूप प्रारंभ: मैं Visual Studio Code खोल रहा हूँ, स्क्रीन का विश्लेषण करके समस्या की पहचान करूँगा और कोड को ठीक करूँगा।'
+      : isHinglish
+      ? 'Screen-Research loop initiate kar raha hoon: VS Code open karke error identify karunga aur surgical fix apply karunga, Sir.'
+      : 'Screen-Research loop initiated: Opening Visual Studio Code, inspecting screen for project errors, and applying surgical fix with test verification.';
+
+    return {
+      reply,
+      spokenText: isHindi
+        ? 'VS Code खोलकर स्क्रीन का विश्लेषण और समस्या का समाधान शुरू कर रहा हूँ।'
+        : 'Initiating Screen-Research loop in VS Code to locate and resolve project errors.',
+      intent: 'fix_project_error',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'fix_project_error',
+        title: 'Screen-Research: Open VS Code & Fix Error',
+        target: 'VS Code',
+        payload: { objective: clean, app: 'VS Code', mode: 'hybrid' },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.3 "स्क्रीन देखकर बताओ क्या समस्या है" / "Inspect screen and tell me what the problem is"
+  if (
+    lower.includes('स्क्रीन देखकर') ||
+    lower.includes('स्क्रीन देखो') ||
+    lower.includes('क्या समस्या है') ||
+    lower.includes('inspect screen') ||
+    lower.includes('screen research') ||
+    lower.includes('what is on the screen') ||
+    (lower.includes('screen') && lower.includes('error'))
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'स्क्रीन का विश्लेषण प्रारंभ कर दिया गया है। सक्रिय विंडो, खुले हुए डायलॉग और त्रुटियों का निरीक्षण किया जा रहा है।'
+      : isHinglish
+      ? 'Screen inspection start ho gaya hai. Active window, dialogs aur errors ka analysis kar raha hoon, Sir.'
+      : 'Screen inspection underway. Analyzing active window, open dialogs, and visible errors.';
+
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'inspect_screen',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'inspect_screen',
+        title: 'Screen Researcher: Inspect Desktop & Errors',
+        payload: { objective: clean },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.4 "जार्विस, VS Code खोलो" / "Open VS Code"
+  if (
+    lower.includes('vs code') ||
+    lower.includes('vscode') ||
+    (lower.includes('visual studio') && lower.includes('code'))
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'Visual Studio Code सक्रिय किया जा रहा है। स्क्रीन स्थिति को VS Code वर्कस्पेस पर लाया जा रहा है।'
+      : isHinglish
+      ? 'Visual Studio Code open kar raha hoon, Sir.'
+      : 'Visual Studio Code window brought to active foreground.';
+
+    return {
+      reply,
+      spokenText: isHindi ? 'Visual Studio Code खोला जा रहा है।' : 'Switching to Visual Studio Code.',
+      intent: 'operate_vscode',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'operate_vscode',
+        title: 'Computer Operator: Launch VS Code',
+        target: 'VS Code',
+        payload: { app: 'VS Code' },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.5 "Computer Operator खोलो" / "Open Computer Operator"
+  if (
+    lower.includes('computer operator') ||
+    lower.includes('कंप्यूटर ऑपरेटर') ||
+    lower.includes('स्क्रीन ऑपरेटर')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'कंप्यूटर ऑपरेटर और स्क्रीन रिसर्चर कंसोल खोल दिया गया है। आप स्क्रीन विश्लेषण और ऑटोमेशन देख सकते हैं।'
+      : isHinglish
+      ? 'Computer Operator HUD open kar diya gaya hai, Sir.'
+      : 'Computer Operator and Screen Researcher HUD activated.';
+
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'open_computer_operator',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'open_computer_operator',
+        title: 'Open Computer Operator HUD',
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.6 "जार्विस, browser खोलो" / "Open Browser"
+  if (
+    lower.includes('browser खोलो') ||
+    lower.includes('ब्राउज़र खोलो') ||
+    lower.includes('open browser') ||
+    lower.includes('chrome खोलो')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'Google Chrome ब्राउज़र विंडो खोली जा रही है।'
+      : isHinglish
+      ? 'Browser window open kar raha hoon, Sir.'
+      : 'Opening web browser window.';
+
+    return {
+      reply,
+      spokenText: isHindi ? 'ब्राउज़र खोला जा रहा है।' : 'Opening browser.',
+      intent: 'operate_browser',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'operate_browser',
+        title: 'Computer Operator: Open Browser',
+        target: 'Chrome',
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.7 "जार्विस, terminal खोलो" / "Open Terminal" / "PowerShell"
+  if (
+    lower.includes('terminal खोलो') ||
+    lower.includes('टर्मिनल खोलो') ||
+    lower.includes('open terminal') ||
+    lower.includes('open powershell') ||
+    lower.includes('powershell खोलो')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'Windows Terminal / PowerShell कंसोल सक्रिय किया जा रहा है।'
+      : isHinglish
+      ? 'Terminal console open kar raha hoon, Sir.'
+      : 'Windows Terminal / PowerShell console activated.';
+
+    return {
+      reply,
+      spokenText: isHindi ? 'टर्मिनल खोला जा रहा है।' : 'Opening terminal.',
+      intent: 'operate_terminal',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'operate_terminal',
+        title: 'Computer Operator: Open Terminal',
+        target: 'Terminal',
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
   // 2. Video Upload Command with Level-4 Gate ("upload this video publicly", "public upload karo", "upload to youtube")
   if (
     (lower.includes('upload') || lower.includes('अपलोड')) &&

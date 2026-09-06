@@ -17,6 +17,7 @@ import {
   Wrench,
   PhoneCall,
   Navigation,
+  Monitor,
 } from 'lucide-react';
 import { ActiveAppWindow } from '../types';
 
@@ -107,6 +108,13 @@ export const AppDock: React.FC<AppDockProps> = ({
       label: 'Autonomous Tools',
       voiceCmd: 'open autonomous tools',
       icon: Wrench,
+      color: 'text-cyan-400',
+    },
+    {
+      id: 'computer_operator' as const,
+      label: 'Computer Operator',
+      voiceCmd: 'open computer operator',
+      icon: Monitor,
       color: 'text-cyan-400',
     },
     {

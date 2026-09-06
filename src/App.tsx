@@ -18,6 +18,7 @@ import { SocialMediaModal } from './components/SocialMediaModal';
 import { ProactiveRoutinesModal } from './components/ProactiveRoutinesModal';
 import { SecurityMatrixModal } from './components/SecurityMatrixModal';
 import { AutonomousToolsModal } from './components/AutonomousToolsModal';
+import { ComputerOperatorModal } from './components/ComputerOperatorModal';
 import { PermissionGateway } from './components/PermissionGateway';
 import { MobilePersonalStatusModal } from './components/MobilePersonalStatusModal';
 import { ActiveCallHUD } from './components/ActiveCallHUD';
@@ -873,6 +874,14 @@ export default function App() {
         case 'list_files_tool':
         case 'web_research_tool':
           setActiveApp('autonomous_tools');
+          break;
+        case 'open_computer_operator':
+        case 'fix_project_error':
+        case 'inspect_screen':
+        case 'operate_vscode':
+        case 'operate_terminal':
+        case 'cancel_computer_task':
+          setActiveApp('computer_operator');
           break;
         case 'pending_approvals':
           setActiveApp('permission_gateway');
