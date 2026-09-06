@@ -20,6 +20,7 @@ import { SecurityMatrixModal } from './components/SecurityMatrixModal';
 import { AutonomousToolsModal } from './components/AutonomousToolsModal';
 import { PermissionGateway } from './components/PermissionGateway';
 import { MobilePersonalStatusModal } from './components/MobilePersonalStatusModal';
+import { MobileBridgeModal } from './components/MobileBridgeModal';
 import { ActiveCallHUD } from './components/ActiveCallHUD';
 import { TelephonyHubModal } from './components/TelephonyHubModal';
 import { LocationServicesModal } from './components/LocationServicesModal';
@@ -1398,6 +1399,13 @@ export default function App() {
         isOpen={activeApp === 'permission_gateway'}
         onClose={() => setActiveApp(null)}
         onSpeak={speakText}
+      />
+
+      <MobileBridgeModal
+        isOpen={activeApp === 'mobile_bridge'}
+        onClose={() => setActiveApp(null)}
+        onSpeak={speakText}
+        activeLanguage={voiceSettings.language || 'en-US'}
       />
 
       <MobilePersonalStatusModal
