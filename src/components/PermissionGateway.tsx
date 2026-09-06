@@ -35,6 +35,7 @@ import {
   saveMobilePermissions,
   MOBILE_PERMISSION_DEFINITIONS,
 } from '../utils/mobileStatusEngine';
+import { AndroidPermissionCenter } from './AndroidPermissionCenter';
 
 interface PermissionGatewayProps {
   isOpen?: boolean;
@@ -460,6 +461,11 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
                   </div>
                 );
               })}
+            </div>
+
+            {/* Android Mobile Bridge & Permission Matrix */}
+            <div className="pt-4 border-t border-slate-800">
+              <AndroidPermissionCenter onSpeak={onSpeak} />
             </div>
           </div>
         ) : (

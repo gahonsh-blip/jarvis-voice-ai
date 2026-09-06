@@ -31,6 +31,8 @@ import {
   EyeOff,
   Lock,
   ShieldCheck,
+  Calendar,
+  Filter,
 } from 'lucide-react';
 import {
   CallRecord,
@@ -46,6 +48,12 @@ import {
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
+import {
+  downloadCallHistoryCsv,
+  filterCallRecords,
+  DateRangeFilter,
+  SentimentFilter,
+} from '../utils/telephonyEngine';
 import {
   PHONE_PERMISSION_DEFINITIONS,
   DEFAULT_PHONE_PERMISSIONS,
@@ -187,6 +195,8 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
 
   // Logs state
   const [searchLog, setSearchLog] = useState('');
+  const [filterDateRange, setFilterDateRange] = useState<DateRangeFilter>('all');
+  const [filterSentiment, setFilterSentiment] = useState<SentimentFilter>('all');
   const [selectedLogId, setSelectedLogId] = useState<string | null>(callHistory[0]?.id || null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
@@ -242,21 +252,21 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     }
   };
 
-  const filteredLogs = callHistory.filter((c) => {
-    if (!searchLog) return true;
-    const q = searchLog.toLowerCase();
-    const effectiveCaller = c.direction === 'outbound' ? c.recipientName : getEffectiveCallerName(c.callerName, c.callerNumber);
-    return (
-      effectiveCaller.toLowerCase().includes(q) ||
-      c.callerName.toLowerCase().includes(q) ||
-      c.recipientName.toLowerCase().includes(q) ||
-      c.callerNumber.toLowerCase().includes(q) ||
-      c.summary.toLowerCase().includes(q) ||
-      c.intent.toLowerCase().includes(q)
-    );
-  });
+  const filteredLogs = React.useMemo(() => {
+    return filterCallRecords(callHistory, {
+      searchQuery: searchLog,
+      dateRange: filterDateRange,
+      sentiment: filterSentiment,
+      maskUnknownEnabled,
+      contacts: effectiveContacts,
+    });
+  }, [callHistory, searchLog, filterDateRange, filterSentiment, maskUnknownEnabled, effectiveContacts]);
 
-  const selectedLog = callHistory.find((c) => c.id === selectedLogId) || callHistory[0];
+  const selectedLog = filteredLogs.find((c) => c.id === selectedLogId) || filteredLogs[0] || null;
+
+  const exportCallHistoryCsv = () => {
+    downloadCallHistoryCsv(callHistory);
+  };
 
   const exportCallLogs = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(callHistory, null, 2));
@@ -290,6 +300,15 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              id="export-call-history-header-btn"
+              onClick={exportCallHistoryCsv}
+              className="flex items-center gap-1.5 rounded-xl bg-slate-800 hover:bg-cyan-950 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-cyan-300 transition-all active:scale-95 shadow-sm"
+              title="Export Call History as CSV"
+            >
+              <Download className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Export Call History</span>
+            </button>
             <span
               className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${
                 providerStatus?.isConfigured
@@ -870,11 +889,20 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     />
                   </div>
                   <button
+                    id="export-call-history-logs-btn"
+                    onClick={exportCallHistoryCsv}
+                    className="flex h-9 items-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-3 text-xs font-semibold text-white shadow-md shadow-cyan-950/40 transition-all active:scale-95 whitespace-nowrap"
+                    title="Export Call History as CSV"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Export Call History</span>
+                  </button>
+                  <button
                     onClick={exportCallLogs}
-                    className="flex h-9 items-center gap-1 rounded-xl bg-slate-800 px-3 text-xs text-slate-300 hover:text-white"
+                    className="flex h-9 items-center gap-1 rounded-xl bg-slate-800 hover:bg-slate-700 px-2.5 text-xs text-slate-300 hover:text-white transition-all"
                     title="Export JSON"
                   >
-                    <Download className="h-3.5 w-3.5" /> Export
+                    JSON
                   </button>
                   <button
                     onClick={onClearHistory}
@@ -883,6 +911,76 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
+                </div>
+
+                {/* Filter Controls Row: Date Range & Sentiment Dropdowns */}
+                <div className="flex flex-wrap items-center gap-2 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+                  {/* Filter by Date Range */}
+                  <div className="flex-1 min-w-[130px] relative">
+                    <label htmlFor="filter-date-range" className="sr-only">
+                      Filter by Date Range
+                    </label>
+                    <div className="absolute left-2.5 top-2.5 pointer-events-none text-slate-400">
+                      <Calendar className="h-3.5 w-3.5 text-cyan-400" />
+                    </div>
+                    <select
+                      id="filter-date-range"
+                      value={filterDateRange}
+                      onChange={(e) => setFilterDateRange(e.target.value as DateRangeFilter)}
+                      className="w-full rounded-lg bg-slate-950 border border-slate-700 pl-8 pr-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer font-sans"
+                      title="Filter by Date Range"
+                    >
+                      <option value="all">Date: All Time</option>
+                      <option value="today">Date: Today</option>
+                      <option value="yesterday">Date: Yesterday</option>
+                      <option value="7d">Date: Last 7 Days</option>
+                      <option value="30d">Date: Last 30 Days</option>
+                    </select>
+                  </div>
+
+                  {/* Filter by Sentiment */}
+                  <div className="flex-1 min-w-[130px] relative">
+                    <label htmlFor="filter-sentiment" className="sr-only">
+                      Filter by Sentiment
+                    </label>
+                    <div className="absolute left-2.5 top-2.5 pointer-events-none text-slate-400">
+                      <Filter className="h-3.5 w-3.5 text-cyan-400" />
+                    </div>
+                    <select
+                      id="filter-sentiment"
+                      value={filterSentiment}
+                      onChange={(e) => setFilterSentiment(e.target.value as SentimentFilter)}
+                      className="w-full rounded-lg bg-slate-950 border border-slate-700 pl-8 pr-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer font-sans"
+                      title="Filter by Sentiment"
+                    >
+                      <option value="all">Sentiment: All</option>
+                      <option value="positive">Sentiment: Positive</option>
+                      <option value="neutral">Sentiment: Neutral</option>
+                      <option value="urgent">Sentiment: Urgent</option>
+                      <option value="negative">Sentiment: Negative</option>
+                    </select>
+                  </div>
+
+                  {/* Active Filter Counter & Reset */}
+                  <div className="flex items-center gap-1.5 pl-1">
+                    <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap">
+                      {filteredLogs.length} of {callHistory.length}
+                    </span>
+                    {(filterDateRange !== 'all' || filterSentiment !== 'all' || searchLog) && (
+                      <button
+                        id="reset-call-filters-btn"
+                        onClick={() => {
+                          setFilterDateRange('all');
+                          setFilterSentiment('all');
+                          setSearchLog('');
+                        }}
+                        className="p-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                        title="Reset all filters"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="max-h-[500px] overflow-y-auto space-y-2 pr-1">

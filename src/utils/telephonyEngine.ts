@@ -9,6 +9,7 @@ import {
   SIMULATED_INCOMING_CALLERS,
   SimulatedCallerPersona,
   ContactItem,
+  getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from './telephonyAudio';
 
@@ -412,6 +413,102 @@ export function generateCallSummary(call: CallRecord): {
 }
 
 /**
+ * Escapes a field for RFC-4180 compliant CSV formatting
+ */
+export function escapeCsvField(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  const str = String(val);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/**
+ * Formats transcript turns into a readable single-line format for CSV
+ */
+export function formatTranscriptForCsv(transcript?: CallTurn[]): string {
+  if (!transcript || !Array.isArray(transcript) || transcript.length === 0) return '';
+  return transcript
+    .map((turn) => `[${(turn.speaker || 'UNKNOWN').toUpperCase()}]: ${turn.text ? turn.text.replace(/\r?\n/g, ' ') : ''}`)
+    .join(' | ');
+}
+
+/**
+ * Converts call history records into a clean, RFC-4180 compliant CSV string
+ */
+export function generateCallHistoryCsv(history: CallRecord[]): string {
+  const headers = [
+    'Call ID',
+    'Direction',
+    'Caller Name',
+    'Caller Number',
+    'Recipient Name',
+    'Recipient Number',
+    'Start Time',
+    'End Time',
+    'Duration (Seconds)',
+    'Status',
+    'Mode',
+    'Sentiment',
+    'Intent',
+    'Spam Score',
+    'Objective',
+    'Summary',
+    'Follow-Up Actions',
+    'AI Persona',
+    'Transcript',
+  ];
+
+  const rows = (history || []).map((call) => [
+    call.id || '',
+    call.direction || '',
+    call.callerName || '',
+    call.callerNumber || '',
+    call.recipientName || '',
+    call.recipientNumber || '',
+    call.startTime || '',
+    call.endTime || '',
+    call.durationSeconds ?? 0,
+    call.status || '',
+    call.mode || '',
+    call.sentiment || '',
+    call.intent || '',
+    call.spamScore !== undefined ? call.spamScore : '',
+    call.objective || '',
+    call.summary || '',
+    Array.isArray(call.followUpActions) ? call.followUpActions.join('; ') : '',
+    call.aiPersona || '',
+    formatTranscriptForCsv(call.transcript),
+  ]);
+
+  return [
+    headers.map(escapeCsvField).join(','),
+    ...rows.map((row) => row.map(escapeCsvField).join(',')),
+  ].join('\r\n');
+}
+
+/**
+ * Initiates browser download of the call history as a CSV file
+ */
+export function downloadCallHistoryCsv(history: CallRecord[], filename?: string): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const csvContent = generateCallHistoryCsv(history);
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const downloadName = filename || `hermes_jarvis_call_history_${new Date().toISOString().slice(0, 10)}_${Date.now()}.csv`;
+
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', downloadName);
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+/**
  * Convenience wrapper for turn processing
  */
 export async function processCallTurnWithAi(params: {
@@ -437,4 +534,92 @@ export async function processCallTurnWithAi(params: {
     aiPersona: params.settings.aiPersona,
   });
 }
+
+export type DateRangeFilter = 'all' | 'today' | 'yesterday' | '7d' | '30d';
+export type SentimentFilter = 'all' | 'positive' | 'neutral' | 'negative' | 'urgent';
+
+export interface CallFilterOptions {
+  searchQuery?: string;
+  dateRange?: DateRangeFilter;
+  sentiment?: SentimentFilter;
+  maskUnknownEnabled?: boolean;
+  contacts?: ContactItem[];
+  referenceDate?: Date;
+}
+
+/**
+ * Deterministically filters call history records by date range, sentiment, and search query
+ */
+export function filterCallRecords(
+  records: CallRecord[],
+  options: CallFilterOptions = {}
+): CallRecord[] {
+  const {
+    searchQuery = '',
+    dateRange = 'all',
+    sentiment = 'all',
+    maskUnknownEnabled = true,
+    contacts = DEFAULT_CONTACTS,
+    referenceDate = new Date(),
+  } = options;
+
+  const q = searchQuery.trim().toLowerCase();
+  const refTime = referenceDate.getTime();
+
+  return records.filter((c) => {
+    // 1. Sentiment filter
+    if (sentiment !== 'all') {
+      if (!c.sentiment || c.sentiment.toLowerCase() !== sentiment.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // 2. Date Range filter
+    if (dateRange !== 'all') {
+      const callDate = new Date(c.startTime);
+      if (!isNaN(callDate.getTime())) {
+        if (dateRange === 'today') {
+          const isToday =
+            callDate.getFullYear() === referenceDate.getFullYear() &&
+            callDate.getMonth() === referenceDate.getMonth() &&
+            callDate.getDate() === referenceDate.getDate();
+          if (!isToday) return false;
+        } else if (dateRange === 'yesterday') {
+          const yesterday = new Date(referenceDate);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const isYesterday =
+            callDate.getFullYear() === yesterday.getFullYear() &&
+            callDate.getMonth() === yesterday.getMonth() &&
+            callDate.getDate() === yesterday.getDate();
+          if (!isYesterday) return false;
+        } else if (dateRange === '7d') {
+          const diffMs = refTime - callDate.getTime();
+          if (diffMs < 0 || diffMs > 7 * 24 * 60 * 60 * 1000) return false;
+        } else if (dateRange === '30d') {
+          const diffMs = refTime - callDate.getTime();
+          if (diffMs < 0 || diffMs > 30 * 24 * 60 * 60 * 1000) return false;
+        }
+      }
+    }
+
+    // 3. Search query
+    if (q) {
+      const effectiveCaller =
+        c.direction === 'outbound'
+          ? c.recipientName
+          : getDisplayCallerName(c.callerName, c.callerNumber, contacts, maskUnknownEnabled);
+      const matchesSearch =
+        effectiveCaller.toLowerCase().includes(q) ||
+        (c.callerName && c.callerName.toLowerCase().includes(q)) ||
+        (c.recipientName && c.recipientName.toLowerCase().includes(q)) ||
+        (c.callerNumber && c.callerNumber.toLowerCase().includes(q)) ||
+        (c.summary && c.summary.toLowerCase().includes(q)) ||
+        (c.intent && c.intent.toLowerCase().includes(q));
+      if (!matchesSearch) return false;
+    }
+
+    return true;
+  });
+}
+
 

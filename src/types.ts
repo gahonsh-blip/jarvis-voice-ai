@@ -57,6 +57,14 @@ export type IntentCategory =
   | 'human_handoff'
   | 'outbound_call_authorization'
   | 'location_services'
+  | 'computer_operator_task'
+  | 'inspect_screen'
+  | 'fix_project_error'
+  | 'operate_vscode'
+  | 'operate_browser'
+  | 'operate_terminal'
+  | 'cancel_computer_task'
+  | 'open_computer_operator'
   | 'chat';
 
 export interface ActionDetail {
@@ -144,7 +152,8 @@ export type ActiveAppWindow =
   | 'mobile_bridge'
   | 'mobile_personal_status'
   | 'telephony'
-  | 'location';
+  | 'location'
+  | 'computer_operator';
 
 export type MainNavigationTab =
   | 'voice_core'
@@ -156,9 +165,12 @@ export type MainNavigationTab =
   | 'oracle_cloud'
   | 'security_matrix'
   | 'mobile_status'
-  | 'telephony_hub';
+  | 'telephony_hub'
+  | 'computer_operator';
 
 export * from './types/telephony';
+export * from './types/mobileBridge';
+export * from './types/computerOperator';
 
 // -------------------------------------------------------------
 // MOBILE PERSONAL STATUS & HINDI MORNING BRIEFING

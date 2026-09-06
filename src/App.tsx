@@ -18,6 +18,7 @@ import { SocialMediaModal } from './components/SocialMediaModal';
 import { ProactiveRoutinesModal } from './components/ProactiveRoutinesModal';
 import { SecurityMatrixModal } from './components/SecurityMatrixModal';
 import { AutonomousToolsModal } from './components/AutonomousToolsModal';
+import { ComputerOperatorModal } from './components/ComputerOperatorModal';
 import { PermissionGateway } from './components/PermissionGateway';
 import { MobilePersonalStatusModal } from './components/MobilePersonalStatusModal';
 import { MobileBridgeModal } from './components/MobileBridgeModal';
@@ -88,6 +89,9 @@ import {
 } from './utils/speechTtsEngine';
 import { isSpeechInterruptionCommand } from './utils/languages';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
+import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
+import { androidBridgeEngine } from './utils/androidBridgeEngine';
+import { AndroidPendingEvent } from './types/mobileBridge';
 
 export default function App() {
   // State with offline-first localStorage hydration
@@ -156,6 +160,11 @@ export default function App() {
   const [isCallMuted, setIsCallMuted] = useState(false);
   const [isCallOnHold, setIsCallOnHold] = useState(false);
   const [isAudioFilterActive, setIsAudioFilterActive] = useState(true);
+
+  // Android Mobile Bridge & Notification/Call Assistant State
+  const [pendingMobileEvent, setPendingMobileEvent] = useState<AndroidPendingEvent | null>(() =>
+    androidBridgeEngine.getPendingEvent()
+  );
 
   // Geolocation & Geospatial Telemetry State
   const [userCoords, setUserCoords] = useState<GeoCoordinates | null>(() => {
@@ -443,6 +452,54 @@ export default function App() {
     },
     [voiceSettings, availableVoices]
   );
+
+  // Android Mobile Bridge Event Listener & Speech Announcer
+  useEffect(() => {
+    const unsubscribe = androidBridgeEngine.addListener((event) => {
+      setPendingMobileEvent(androidBridgeEngine.getPendingEvent());
+      if (event && event.status === 'AWAITING_APPROVAL' && event.spokenAnnouncement) {
+        speakText(event.spokenAnnouncement);
+      }
+    });
+    return unsubscribe;
+  }, [speakText]);
+
+  // Android Mobile Bridge Approval Callbacks
+  const handleAnswerMobileCall = useCallback(() => {
+    const capability = androidBridgeEngine.evaluateCallAnswerSupport();
+    if (!capability.supported) {
+      speakText('सर, इस Android device पर JARVIS को अभी call answer करने की अनुमति नहीं मिली है।');
+    } else {
+      androidBridgeEngine.executeCallAnswer();
+      setPendingMobileEvent(null);
+      speakText('सर, कॉल उठा ली गई है।');
+    }
+  }, [speakText]);
+
+  const handleDeclineMobileCall = useCallback(() => {
+    androidBridgeEngine.clearPendingEvent();
+    setPendingMobileEvent(null);
+    speakText('सर, कॉल अस्वीकार कर दी गई है।');
+  }, [speakText]);
+
+  const handleReplyMobileMessage = useCallback(() => {
+    androidBridgeEngine.executeMessageReply('Approved by user');
+    setPendingMobileEvent(null);
+    speakText('सर, संदेश का उत्तर सफलतापूर्वक भेज दिया गया है।');
+  }, [speakText]);
+
+  const handleOpenMobileApp = useCallback((pkg?: string) => {
+    if (pkg) {
+      androidBridgeEngine.openApplication(pkg);
+    }
+    androidBridgeEngine.clearPendingEvent();
+    setPendingMobileEvent(null);
+  }, []);
+
+  const handleDismissMobileMessage = useCallback(() => {
+    androidBridgeEngine.clearPendingEvent();
+    setPendingMobileEvent(null);
+  }, []);
 
   // Telephony call termination & summarizer
   const handleEndCall = useCallback(() => {
@@ -833,6 +890,14 @@ export default function App() {
         case 'list_files_tool':
         case 'web_research_tool':
           setActiveApp('autonomous_tools');
+          break;
+        case 'open_computer_operator':
+        case 'fix_project_error':
+        case 'inspect_screen':
+        case 'operate_vscode':
+        case 'operate_terminal':
+        case 'cancel_computer_task':
+          setActiveApp('computer_operator');
           break;
         case 'pending_approvals':
           setActiveApp('permission_gateway');
@@ -1501,6 +1566,16 @@ export default function App() {
 
       {/* Public Legal Compliance & Application Presentation Footer */}
       <PublicInfoFooter />
+
+      {/* Android Mobile Assistant Level-4 Approval Card HUD */}
+      <MobileActionApprovalCard
+        pendingEvent={pendingMobileEvent}
+        onAnswerCall={handleAnswerMobileCall}
+        onDeclineCall={handleDeclineMobileCall}
+        onReplyMessage={handleReplyMobileMessage}
+        onOpenApp={handleOpenMobileApp}
+        onDismissMessage={handleDismissMobileMessage}
+      />
 
       {/* Blueprint & Specialized Modals */}
       <BlueprintRoadmapModal

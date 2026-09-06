@@ -7,6 +7,7 @@ import {
   checkHumanHandoffIntent,
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
+import { androidBridgeEngine } from './androidBridgeEngine';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
@@ -201,7 +202,249 @@ export function processOfflineCommand(
     };
   }
 
-  // 1. YouTube Channel Status Inquiries ("YouTube का क्या status है", "YouTube status", "YouTube update", "YouTube की स्थिति क्या है?")
+  // 0.5 Android Mobile Assistant: Contextual Pending Call / Message Approval & Response
+  const activePendingEvent = androidBridgeEngine.getPendingEvent();
+  if (activePendingEvent && activePendingEvent.status === 'AWAITING_APPROVAL') {
+    const evaluation = androidBridgeEngine.evaluateOwnerApproval(clean);
+
+    if (evaluation.decision === 'APPROVE') {
+      if (evaluation.targetType === 'CALL') {
+        const capability = androidBridgeEngine.evaluateCallAnswerSupport();
+        if (!capability.supported) {
+          const reply = isHindi
+            ? 'सर, इस Android device पर JARVIS को अभी call answer करने की अनुमति नहीं मिली है।'
+            : isHinglish
+            ? 'Sir, is Android device par JARVIS ko abhi call answer karne ki permission nahi mili hai.'
+            : 'Sir, JARVIS does not have permission to answer calls on this Android device yet.';
+
+          return {
+            reply,
+            spokenText: reply,
+            intent: 'answer_call',
+            actionExecuted: false,
+            actionDetail: { type: 'answer_call', title: 'Call Answering Unsupported', payload: { error: capability.reason } },
+            updatedMemory,
+            offline: true,
+          };
+        }
+
+        const answerResult = androidBridgeEngine.executeCallAnswer();
+        const reply = isHindi ? 'सर, कॉल उठा ली गई है।' : 'Sir, the call has been answered.';
+        return {
+          reply,
+          spokenText: reply,
+          intent: 'answer_call',
+          actionExecuted: answerResult.success,
+          actionDetail: { type: 'answer_call', title: 'Call Answered via Android Bridge' },
+          updatedMemory,
+          offline: true,
+        };
+      } else if (evaluation.targetType === 'MESSAGE') {
+        const replyResult = androidBridgeEngine.executeMessageReply('Approved by user');
+        const reply = isHindi
+          ? 'सर, संदेश का उत्तर सफलतापूर्वक भेज दिया गया है।'
+          : isHinglish
+          ? 'Sir, sandesh ka reply successfully bhej diya gaya hai.'
+          : 'Sir, the message reply has been dispatched.';
+
+        return {
+          reply,
+          spokenText: reply,
+          actionExecuted: replyResult.success,
+          actionDetail: { type: 'open_notepad', title: 'Message Reply Dispatched' },
+          updatedMemory,
+          offline: true,
+        };
+      }
+    } else if (evaluation.decision === 'REJECT') {
+      if (evaluation.targetType === 'CALL') {
+        androidBridgeEngine.clearPendingEvent();
+        const reply = isHindi
+          ? 'सर, कॉल अस्वीकार कर दी गई है।'
+          : 'Sir, the incoming call has been declined.';
+
+        return {
+          reply,
+          spokenText: reply,
+          intent: 'reject_call',
+          actionExecuted: true,
+          actionDetail: { type: 'reject_call', title: 'Call Declined' },
+          updatedMemory,
+          offline: true,
+        };
+      } else if (evaluation.targetType === 'MESSAGE') {
+        androidBridgeEngine.clearPendingEvent();
+        const reply = isHindi
+          ? 'सर, संदेश का उत्तर रद्द कर दिया गया है।'
+          : 'Sir, message reply cancelled.';
+
+        return {
+          reply,
+          spokenText: reply,
+          actionExecuted: true,
+          actionDetail: { type: 'open_notepad', title: 'Message Dismissed' },
+          updatedMemory,
+          offline: true,
+        };
+      }
+    }
+  }
+
+  // 0.51 Direct Call Answer / Decline Commands even outside contextual approval
+  if (
+    lower.includes('answer call') ||
+    lower.includes('कॉल उठाओ') ||
+    lower.includes('कॉल उठा लो') ||
+    lower.includes('फोन उठाओ') ||
+    lower.includes('call uthao') ||
+    lower.includes('call utha lo')
+  ) {
+    if (activePendingEvent && activePendingEvent.type === 'CALL') {
+      const capability = androidBridgeEngine.evaluateCallAnswerSupport();
+      if (!capability.supported) {
+        const reply = isHindi
+          ? 'सर, इस Android device पर JARVIS को अभी call answer करने की अनुमति नहीं मिली है।'
+          : isHinglish
+          ? 'Sir, is Android device par JARVIS ko abhi call answer karne ki permission nahi mili hai.'
+          : 'Sir, JARVIS does not have permission to answer calls on this Android device yet.';
+        return {
+          reply,
+          spokenText: reply,
+          intent: 'answer_call',
+          actionExecuted: false,
+          actionDetail: { type: 'answer_call', title: 'Call Answering Unsupported', payload: { error: capability.reason } },
+          updatedMemory,
+          offline: true,
+        };
+      }
+      const answerResult = androidBridgeEngine.executeCallAnswer();
+      const reply = isHindi ? 'सर, कॉल उठा ली गई है।' : 'Sir, the call has been answered.';
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'answer_call',
+        actionExecuted: answerResult.success,
+        actionDetail: { type: 'answer_call', title: 'Call Answered via Android Bridge' },
+        updatedMemory,
+        offline: true,
+      };
+    } else {
+      const reply = isHindi
+        ? 'सर, इस समय कोई सक्रिय incoming कॉल नहीं है।'
+        : 'Sir, there is no active incoming call to answer.';
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'answer_call',
+        actionExecuted: false,
+        actionDetail: { type: 'answer_call', title: 'No Active Call' },
+        updatedMemory,
+        offline: true,
+      };
+    }
+  }
+
+  if (
+    lower.includes('decline call') ||
+    lower.includes('reject call') ||
+    lower.includes('कॉल काटो') ||
+    lower.includes('कॉल काट दो') ||
+    lower.includes('फोन काटो') ||
+    lower.includes('कॉल मत उठाओ') ||
+    lower.includes('call kato') ||
+    lower.includes('call mat uthao')
+  ) {
+    if (activePendingEvent && activePendingEvent.type === 'CALL') {
+      androidBridgeEngine.clearPendingEvent();
+      const reply = isHindi ? 'सर, कॉल अस्वीकार कर दी गई है।' : 'Sir, the call has been declined.';
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'reject_call',
+        actionExecuted: true,
+        actionDetail: { type: 'reject_call', title: 'Call Declined via Android Bridge' },
+        updatedMemory,
+        offline: true,
+      };
+    } else {
+      const reply = isHindi
+        ? 'सर, इस समय कोई सक्रिय incoming कॉल नहीं है जिसे काटा जा सके।'
+        : 'Sir, there is no active incoming call to decline.';
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'reject_call',
+        actionExecuted: false,
+        actionDetail: { type: 'reject_call', title: 'No Active Call' },
+        updatedMemory,
+        offline: true,
+      };
+    }
+  }
+
+  // 0.6 Android Mobile Assistant Inquiries ("किसका कॉल है", "who is calling", "कोई notification आया क्या")
+  if (
+    lower.includes('किसका कॉल') ||
+    lower.includes('kiska call') ||
+    lower.includes('who is calling') ||
+    lower.includes('who is on the phone') ||
+    lower.includes('caller id') ||
+    lower.includes('कॉलर कौन है')
+  ) {
+    if (activePendingEvent && activePendingEvent.type === 'CALL') {
+      const reply = activePendingEvent.spokenAnnouncement;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'answer_call',
+        actionExecuted: true,
+        actionDetail: { type: 'answer_call', title: `Caller: ${activePendingEvent.sender}` },
+        updatedMemory,
+        offline: true,
+      };
+    } else {
+      const reply = isHindi
+        ? 'सर, इस समय कोई सक्रिय incoming कॉल नहीं है।'
+        : isHinglish
+        ? 'Sir, is samay koi active incoming call nahi hai.'
+        : 'Sir, there is no active incoming call at this moment.';
+      return {
+        reply,
+        spokenText: reply,
+        offline: true,
+      };
+    }
+  }
+
+  if (
+    lower.includes('notification') ||
+    lower.includes('नोटिफिकेशन') ||
+    lower.includes('सूचना')
+  ) {
+    if (activePendingEvent && activePendingEvent.type === 'MESSAGE') {
+      const reply = activePendingEvent.spokenAnnouncement;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'open_notepad',
+        actionExecuted: true,
+        actionDetail: { type: 'open_notepad', title: `Notification: ${activePendingEvent.appName}` },
+        updatedMemory,
+        offline: true,
+      };
+    } else {
+      const reply = isHindi
+        ? 'सर, इस समय कोई नया पेंडिंग नोटिफिकेशन नहीं है।'
+        : isHinglish
+        ? 'Sir, is samay koi pending notification nahi hai.'
+        : 'Sir, there are no pending notifications at this moment.';
+      return {
+        reply,
+        spokenText: reply,
+        offline: true,
+      };
+    }
+  }
   if (
     (lower.includes('youtube') || lower.includes('यूट्यूब')) &&
     (lower.includes('status') || lower.includes('update') || lower.includes('क्या') || lower.includes('kya status') || lower.includes('connected') || lower.includes('channel') || lower.includes('अपडेट') || lower.includes('स्थिति') || lower.includes('stats') || lower.includes('चैनल') || lower.includes('जुड़ा'))
@@ -252,6 +495,220 @@ export function processOfflineCommand(
         offline: true,
       };
     }
+  }
+
+  // ==============================================================================
+  // 1.5 COMPUTER OPERATOR & SCREEN RESEARCHER ENGINE
+  // Handles: "Open VS Code and fix the project error", "स्क्रीन देखकर बताओ क्या समस्या है",
+  // "जार्विस, VS Code खोलो", "computer operator", "inspect screen", "काम बंद करो"
+  // ==============================================================================
+
+  // 1.5.1 Cancellation Command
+  if (
+    lower.includes('cancel task') ||
+    lower.includes('stop task') ||
+    lower.includes('काम बंद करो') ||
+    lower.includes('ऑपरेटर रोको') ||
+    lower.includes('cancel operator') ||
+    lower.includes('stop operator')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'कंप्यूटर ऑपरेटर कार्य तुरंत रोक दिया गया है। स्क्रीन लूप सुरक्षित रूप से बंद है।'
+      : isHinglish
+      ? 'Computer operator task turant rok diya gaya hai, Sir.'
+      : 'Computer operator task has been immediately cancelled. The Screen-Research loop is safely halted.';
+
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'cancel_computer_task',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'cancel_computer_task',
+        title: 'Cancel Computer Operator Task',
+        payload: { objective: clean },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.2 "Open VS Code and fix the project error" / "इस error को ठीक करो"
+  if (
+    (lower.includes('vs code') || lower.includes('vscode') || lower.includes('project')) &&
+    (lower.includes('error') || lower.includes('fix') || lower.includes('समस्या') || lower.includes('ठीक करो') || lower.includes('ठीक कर'))
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'स्क्रीन-रिसर्च लूप प्रारंभ: मैं Visual Studio Code खोल रहा हूँ, स्क्रीन का विश्लेषण करके समस्या की पहचान करूँगा और कोड को ठीक करूँगा।'
+      : isHinglish
+      ? 'Screen-Research loop initiate kar raha hoon: VS Code open karke error identify karunga aur surgical fix apply karunga, Sir.'
+      : 'Screen-Research loop initiated: Opening Visual Studio Code, inspecting screen for project errors, and applying surgical fix with test verification.';
+
+    return {
+      reply,
+      spokenText: isHindi
+        ? 'VS Code खोलकर स्क्रीन का विश्लेषण और समस्या का समाधान शुरू कर रहा हूँ।'
+        : 'Initiating Screen-Research loop in VS Code to locate and resolve project errors.',
+      intent: 'fix_project_error',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'fix_project_error',
+        title: 'Screen-Research: Open VS Code & Fix Error',
+        target: 'VS Code',
+        payload: { objective: clean, app: 'VS Code', mode: 'hybrid' },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.3 "स्क्रीन देखकर बताओ क्या समस्या है" / "Inspect screen and tell me what the problem is"
+  if (
+    lower.includes('स्क्रीन देखकर') ||
+    lower.includes('स्क्रीन देखो') ||
+    lower.includes('क्या समस्या है') ||
+    lower.includes('inspect screen') ||
+    lower.includes('screen research') ||
+    lower.includes('what is on the screen') ||
+    (lower.includes('screen') && lower.includes('error'))
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'स्क्रीन का विश्लेषण प्रारंभ कर दिया गया है। सक्रिय विंडो, खुले हुए डायलॉग और त्रुटियों का निरीक्षण किया जा रहा है।'
+      : isHinglish
+      ? 'Screen inspection start ho gaya hai. Active window, dialogs aur errors ka analysis kar raha hoon, Sir.'
+      : 'Screen inspection underway. Analyzing active window, open dialogs, and visible errors.';
+
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'inspect_screen',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'inspect_screen',
+        title: 'Screen Researcher: Inspect Desktop & Errors',
+        payload: { objective: clean },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.4 "जार्विस, VS Code खोलो" / "Open VS Code"
+  if (
+    lower.includes('vs code') ||
+    lower.includes('vscode') ||
+    (lower.includes('visual studio') && lower.includes('code'))
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'Visual Studio Code सक्रिय किया जा रहा है। स्क्रीन स्थिति को VS Code वर्कस्पेस पर लाया जा रहा है।'
+      : isHinglish
+      ? 'Visual Studio Code open kar raha hoon, Sir.'
+      : 'Visual Studio Code window brought to active foreground.';
+
+    return {
+      reply,
+      spokenText: isHindi ? 'Visual Studio Code खोला जा रहा है।' : 'Switching to Visual Studio Code.',
+      intent: 'operate_vscode',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'operate_vscode',
+        title: 'Computer Operator: Launch VS Code',
+        target: 'VS Code',
+        payload: { app: 'VS Code' },
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.5 "Computer Operator खोलो" / "Open Computer Operator"
+  if (
+    lower.includes('computer operator') ||
+    lower.includes('कंप्यूटर ऑपरेटर') ||
+    lower.includes('स्क्रीन ऑपरेटर')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'कंप्यूटर ऑपरेटर और स्क्रीन रिसर्चर कंसोल खोल दिया गया है। आप स्क्रीन विश्लेषण और ऑटोमेशन देख सकते हैं।'
+      : isHinglish
+      ? 'Computer Operator HUD open kar diya gaya hai, Sir.'
+      : 'Computer Operator and Screen Researcher HUD activated.';
+
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'open_computer_operator',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'open_computer_operator',
+        title: 'Open Computer Operator HUD',
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.6 "जार्विस, browser खोलो" / "Open Browser"
+  if (
+    lower.includes('browser खोलो') ||
+    lower.includes('ब्राउज़र खोलो') ||
+    lower.includes('open browser') ||
+    lower.includes('chrome खोलो')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'Google Chrome ब्राउज़र विंडो खोली जा रही है।'
+      : isHinglish
+      ? 'Browser window open kar raha hoon, Sir.'
+      : 'Opening web browser window.';
+
+    return {
+      reply,
+      spokenText: isHindi ? 'ब्राउज़र खोला जा रहा है।' : 'Opening browser.',
+      intent: 'operate_browser',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'operate_browser',
+        title: 'Computer Operator: Open Browser',
+        target: 'Chrome',
+      },
+      updatedMemory,
+      offline: true,
+    };
+  }
+
+  // 1.5.7 "जार्विस, terminal खोलो" / "Open Terminal" / "PowerShell"
+  if (
+    lower.includes('terminal खोलो') ||
+    lower.includes('टर्मिनल खोलो') ||
+    lower.includes('open terminal') ||
+    lower.includes('open powershell') ||
+    lower.includes('powershell खोलो')
+  ) {
+    updatedMemory.stats.actionsExecuted += 1;
+    const reply = isHindi
+      ? 'Windows Terminal / PowerShell कंसोल सक्रिय किया जा रहा है।'
+      : isHinglish
+      ? 'Terminal console open kar raha hoon, Sir.'
+      : 'Windows Terminal / PowerShell console activated.';
+
+    return {
+      reply,
+      spokenText: isHindi ? 'टर्मिनल खोला जा रहा है।' : 'Opening terminal.',
+      intent: 'operate_terminal',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'operate_terminal',
+        title: 'Computer Operator: Open Terminal',
+        target: 'Terminal',
+      },
+      updatedMemory,
+      offline: true,
+    };
   }
 
   // 2. Video Upload Command with Level-4 Gate ("upload this video publicly", "public upload karo", "upload to youtube")

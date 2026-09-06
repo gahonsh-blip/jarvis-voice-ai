@@ -118,6 +118,13 @@ export const AppDock: React.FC<AppDockProps> = ({
       color: 'text-cyan-400',
     },
     {
+      id: 'computer_operator' as const,
+      label: 'Computer Operator',
+      voiceCmd: 'open computer operator',
+      icon: Monitor,
+      color: 'text-cyan-400',
+    },
+    {
       id: 'security' as const,
       label: 'Security Matrix',
       voiceCmd: 'security audit',

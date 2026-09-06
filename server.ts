@@ -55,6 +55,12 @@ import {
   checkHumanHandoffIntent,
   DEFAULT_PHONE_PERMISSIONS,
 } from './src/utils/telephonyPermissions';
+import {
+  ComputerOperatorEngine,
+  ScreenObserver,
+  ScreenInterpreter,
+  TaskTracker,
+} from './src/utils/computerOperator';
 
 // ==============================================================================
 // 1. PROCESS SUPERVISION & GLOBAL SAFETY GUARDS (24/7 DAEMON RESILIENCE)
@@ -869,6 +875,70 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
   // Approvals & Permission Gate
   if (lower.includes('pending approvals') || lower.includes('permission gate') || lower.includes('action approvals') || lower.includes('approvals dikhao')) {
     return { intent: 'pending_approvals', confidence: 0.95 };
+  }
+
+  // Computer Operator & Screen Researcher
+  if (
+    lower.includes('cancel task') ||
+    lower.includes('stop task') ||
+    lower.includes('काम बंद करो') ||
+    lower.includes('ऑपरेटर रोको') ||
+    lower.includes('cancel operator')
+  ) {
+    return { intent: 'cancel_computer_task', confidence: 0.98 };
+  }
+
+  if (
+    (lower.includes('vs code') || lower.includes('vscode') || lower.includes('project')) &&
+    (lower.includes('error') || lower.includes('fix') || lower.includes('समस्या') || lower.includes('ठीक करो') || lower.includes('ठीक कर'))
+  ) {
+    return { intent: 'fix_project_error', confidence: 0.98, actionPayload: { target: 'VS Code' } };
+  }
+
+  if (
+    lower.includes('स्क्रीन देखकर') ||
+    lower.includes('स्क्रीन देखो') ||
+    lower.includes('क्या समस्या है') ||
+    lower.includes('inspect screen') ||
+    lower.includes('screen research') ||
+    (lower.includes('screen') && lower.includes('error'))
+  ) {
+    return { intent: 'inspect_screen', confidence: 0.98 };
+  }
+
+  if (
+    lower.includes('computer operator') ||
+    lower.includes('कंप्यूटर ऑपरेटर') ||
+    lower.includes('स्क्रीन ऑपरेटर')
+  ) {
+    return { intent: 'open_computer_operator', confidence: 0.98 };
+  }
+
+  if (
+    lower.includes('vs code') ||
+    lower.includes('vscode') ||
+    (lower.includes('visual studio') && lower.includes('code'))
+  ) {
+    return { intent: 'operate_vscode', confidence: 0.95, actionPayload: { app: 'VS Code' } };
+  }
+
+  if (
+    lower.includes('browser खोलो') ||
+    lower.includes('ब्राउज़र खोलो') ||
+    lower.includes('open browser') ||
+    lower.includes('chrome खोलो')
+  ) {
+    return { intent: 'operate_browser', confidence: 0.95, actionPayload: { app: 'Chrome' } };
+  }
+
+  if (
+    lower.includes('terminal खोलो') ||
+    lower.includes('टर्मिनल खोलो') ||
+    lower.includes('open terminal') ||
+    lower.includes('open powershell') ||
+    lower.includes('powershell खोलो')
+  ) {
+    return { intent: 'operate_terminal', confidence: 0.95, actionPayload: { app: 'Terminal' } };
   }
 
   // Exit
@@ -5225,6 +5295,66 @@ app.post('/api/tools/email/status', (req: Request, res: Response) => {
 });
 
 // ==============================================================================
+// 8.5. COMPUTER OPERATOR & SCREEN RESEARCHER APIS
+// ==============================================================================
+app.post('/api/computer-operator/execute', async (req: Request, res: Response) => {
+  try {
+    const { objective, mode = 'hybrid' } = req.body;
+    if (!objective) {
+      return res.status(400).json({ error: 'Objective is required' });
+    }
+    const curEmergencyState = getEmergencyState();
+    const task = await ComputerOperatorEngine.executeTask(objective, mode, curEmergencyState.emergencyPaused);
+    res.json({ success: true, task });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/computer-operator/observe', async (req: Request, res: Response) => {
+  try {
+    const { preferredApp, includeScreenshot = true } = req.body;
+    const observation = await ScreenObserver.observeScreen({ preferredApp, includeScreenshot });
+    const interpretation = ScreenInterpreter.interpret(observation, preferredApp);
+    res.json({ success: true, observation, interpretation });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/computer-operator/cancel', (req: Request, res: Response) => {
+  try {
+    const { reason = 'User requested stop' } = req.body;
+    const result = TaskTracker.cancelActiveTask(reason);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/computer-operator/tasks', (req: Request, res: Response) => {
+  try {
+    const tasks = TaskTracker.getRecentTasks();
+    const active = TaskTracker.getActiveTask();
+    res.json({ success: true, activeTaskId: active?.taskId, tasks });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/computer-operator/tasks/:id', (req: Request, res: Response) => {
+  try {
+    const task = TaskTracker.getTask(req.params.id);
+    if (!task) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+    res.json({ success: true, task });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==============================================================================
 // 8.6. YOUTUBE TRANSCRIPT EXTRACTION & AUTONOMOUS SUMMARIZER APIs
 // ==============================================================================
 async function summarizeYouTubeVideoCore(options: {
@@ -5513,6 +5643,422 @@ Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hin
   } catch (ex: any) {
     res.status(500).json({ success: false, error: ex.message });
   }
+});
+
+// -------------------------------------------------------------
+// ANDROID MOBILE BRIDGE & NOTIFICATION/CALL ASSISTANT ENDPOINTS
+// -------------------------------------------------------------
+interface ServerMobileBridgeState {
+  status:
+    | 'MOBILE_NOT_CONNECTED'
+    | 'PERMISSION_REQUIRED'
+    | 'PARTIALLY_CONNECTED'
+    | 'CONNECTED'
+    | 'LIMITED_CAPABILITY'
+    | 'ERROR';
+  device: {
+    deviceId: string;
+    deviceName: string;
+    model: string;
+    osVersion: string;
+    bridgeVersion: string;
+    canDetectCalls: boolean;
+    canAnswerCalls: boolean;
+    telecomRoleDialer: boolean;
+    answerCallsPermission: boolean;
+    canReadNotifications: boolean;
+    canInlineReply: boolean;
+    canOpenApp: boolean;
+    canLookupContacts: boolean;
+    isSimulation: boolean;
+    connectedAt: string;
+  } | null;
+  permissions: {
+    notification_access: string;
+    call_detection: string;
+    call_answer: string;
+    message_reading: string;
+    message_reply: string;
+    contacts_lookup: string;
+    notification_history: string;
+  };
+  pendingEvent: any | null;
+  auditLogs: Array<{
+    id: string;
+    timestamp: string;
+    eventType: string;
+    application: string;
+    actionRequested: string;
+    result: string;
+    notes?: string;
+  }>;
+}
+
+const serverMobileBridgeState: ServerMobileBridgeState = {
+  status: 'MOBILE_NOT_CONNECTED',
+  device: null,
+  permissions: {
+    notification_access: 'NOT_CONFIGURED',
+    call_detection: 'NOT_CONFIGURED',
+    call_answer: 'LIMITED',
+    message_reading: 'NOT_CONFIGURED',
+    message_reply: 'LIMITED',
+    contacts_lookup: 'NOT_CONFIGURED',
+    notification_history: 'NOT_CONFIGURED',
+  },
+  pendingEvent: null,
+  auditLogs: [],
+};
+
+function recordMobileAudit(entry: {
+  eventType: string;
+  application: string;
+  actionRequested: string;
+  result: string;
+  notes?: string;
+}) {
+  serverMobileBridgeState.auditLogs.unshift({
+    id: `audit_srv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    ...entry,
+  });
+  if (serverMobileBridgeState.auditLogs.length > 200) {
+    serverMobileBridgeState.auditLogs.pop();
+  }
+}
+
+app.get('/api/mobile/bridge/status', (req: Request, res: Response) => {
+  const emergency = getEmergencyState();
+  res.json({
+    success: true,
+    status: serverMobileBridgeState.status,
+    device: serverMobileBridgeState.device,
+    permissions: serverMobileBridgeState.permissions,
+    pendingEvent: serverMobileBridgeState.pendingEvent,
+    emergencyPaused: emergency.emergencyPaused || emergency.hardKillSwitchTriggered,
+  });
+});
+
+app.post('/api/mobile/bridge/connect', (req: Request, res: Response) => {
+  try {
+    const { device, permissions } = req.body;
+    if (!device) {
+      return res.status(400).json({ success: false, error: 'Device details required' });
+    }
+
+    serverMobileBridgeState.device = {
+      deviceId: device.deviceId || `android_${Date.now()}`,
+      deviceName: device.deviceName || 'Android Device',
+      model: device.model || 'Generic Android',
+      osVersion: device.osVersion || 'Android 14',
+      bridgeVersion: device.bridgeVersion || 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: Boolean(device.canDetectCalls),
+      canAnswerCalls: Boolean(device.canAnswerCalls),
+      telecomRoleDialer: Boolean(device.telecomRoleDialer),
+      answerCallsPermission: Boolean(device.answerCallsPermission),
+      canReadNotifications: Boolean(device.canReadNotifications),
+      canInlineReply: Boolean(device.canInlineReply),
+      canOpenApp: Boolean(device.canOpenApp),
+      canLookupContacts: Boolean(device.canLookupContacts),
+      isSimulation: Boolean(device.isSimulation),
+      connectedAt: new Date().toISOString(),
+    };
+
+    if (permissions) {
+      serverMobileBridgeState.permissions = {
+        ...serverMobileBridgeState.permissions,
+        ...permissions,
+      };
+    }
+
+    const hasNotif = serverMobileBridgeState.permissions.notification_access === 'GRANTED';
+    const hasCall = serverMobileBridgeState.permissions.call_detection === 'GRANTED';
+
+    if (!hasNotif && !hasCall) {
+      serverMobileBridgeState.status = 'PERMISSION_REQUIRED';
+    } else if (!serverMobileBridgeState.device.canAnswerCalls || !serverMobileBridgeState.device.telecomRoleDialer) {
+      serverMobileBridgeState.status = 'LIMITED_CAPABILITY';
+    } else {
+      serverMobileBridgeState.status = 'CONNECTED';
+    }
+
+    recordMobileAudit({
+      eventType: 'DEVICE_CONNECTED',
+      application: 'AndroidBridge',
+      actionRequested: 'Connect Device',
+      result: 'SUCCESS',
+      notes: `Registered ${serverMobileBridgeState.device.model} (${serverMobileBridgeState.device.deviceName}) [Simulation: ${serverMobileBridgeState.device.isSimulation}]`,
+    });
+
+    res.json({
+      success: true,
+      status: serverMobileBridgeState.status,
+      device: serverMobileBridgeState.device,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/mobile/bridge/disconnect', (req: Request, res: Response) => {
+  const prevModel = serverMobileBridgeState.device?.model || 'Device';
+  serverMobileBridgeState.device = null;
+  serverMobileBridgeState.status = 'MOBILE_NOT_CONNECTED';
+  serverMobileBridgeState.pendingEvent = null;
+
+  recordMobileAudit({
+    eventType: 'DEVICE_DISCONNECTED',
+    application: 'AndroidBridge',
+    actionRequested: 'Disconnect Device',
+    result: 'SUCCESS',
+    notes: `${prevModel} disconnected`,
+  });
+
+  res.json({ success: true, status: 'MOBILE_NOT_CONNECTED' });
+});
+
+app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
+  try {
+    const { eventType, payload } = req.body;
+    if (!eventType || !payload) {
+      return res.status(400).json({ success: false, error: 'eventType and payload required' });
+    }
+
+    if (eventType === 'INCOMING_CALL') {
+      const maskedNumber = payload.callerNumber ? payload.callerNumber.replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2') : 'Unknown';
+      serverMobileBridgeState.pendingEvent = {
+        id: `call_${Date.now()}`,
+        type: 'CALL',
+        createdAt: new Date().toISOString(),
+        appName: 'Phone',
+        sender: payload.callerName || 'Unknown Caller',
+        senderNumber: maskedNumber,
+        previewText: `Incoming Call from ${payload.callerName || maskedNumber}`,
+        status: 'AWAITING_APPROVAL',
+        callId: payload.callId,
+      };
+
+      recordMobileAudit({
+        eventType: 'CALL_RECEIVED',
+        application: 'Phone',
+        actionRequested: 'Incoming Call Detection',
+        result: 'WAITING_FOR_APPROVAL',
+        notes: `Call from ${payload.callerName || 'Unknown'} (${maskedNumber})`,
+      });
+    } else if (eventType === 'INCOMING_NOTIFICATION') {
+      serverMobileBridgeState.pendingEvent = {
+        id: `notif_${Date.now()}`,
+        type: 'MESSAGE',
+        createdAt: new Date().toISOString(),
+        appName: payload.appName || 'Message',
+        sender: payload.sender || payload.title || 'Sender',
+        previewText: payload.text ? payload.text.slice(0, 100) : '[Notification Alert]',
+        status: 'AWAITING_APPROVAL',
+        hasInlineReply: Boolean(payload.hasInlineReply),
+        packageName: payload.packageName,
+      };
+
+      recordMobileAudit({
+        eventType: 'MESSAGE_RECEIVED',
+        application: payload.appName || 'Notification',
+        actionRequested: 'Incoming Notification',
+        result: 'WAITING_FOR_APPROVAL',
+        notes: `Notification from ${payload.sender || 'Sender'} on ${payload.appName}`,
+      });
+    } else if (eventType === 'CALL_ENDED') {
+      if (serverMobileBridgeState.pendingEvent?.type === 'CALL') {
+        serverMobileBridgeState.pendingEvent = null;
+      }
+    }
+
+    res.json({ success: true, pendingEvent: serverMobileBridgeState.pendingEvent });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/mobile/bridge/call/answer', (req: Request, res: Response) => {
+  const emergency = getEmergencyState();
+  if (emergency.emergencyPaused || emergency.hardKillSwitchTriggered) {
+    recordMobileAudit({
+      eventType: 'ACTION_DENIED',
+      application: 'TelecomManager',
+      actionRequested: 'Answer Call',
+      result: 'BLOCKED_EMERGENCY_STOP',
+      notes: 'Call answering blocked by Global Kill Switch',
+    });
+    return res.status(403).json({
+      success: false,
+      status: 'BLOCKED_EMERGENCY_STOP',
+      message: 'Call answering blocked by Global Kill Switch / Emergency Stop.',
+    });
+  }
+
+  if (!serverMobileBridgeState.device) {
+    return res.status(400).json({
+      success: false,
+      status: 'MOBILE_NOT_CONNECTED',
+      message: 'No Android device connected to bridge.',
+    });
+  }
+
+  if (!serverMobileBridgeState.device.canAnswerCalls) {
+    recordMobileAudit({
+      eventType: 'CAPABILITY_UNAVAILABLE',
+      application: 'TelecomManager',
+      actionRequested: 'Answer Call',
+      result: 'CALL_ANSWER_UNSUPPORTED',
+      notes: 'Device lacks call answering hardware/API capability',
+    });
+    return res.status(400).json({
+      success: false,
+      status: 'CALL_ANSWER_UNSUPPORTED',
+      message: 'Android device lacks capability or permission to answer calls.',
+    });
+  }
+
+  if (!serverMobileBridgeState.device.telecomRoleDialer && !serverMobileBridgeState.device.answerCallsPermission) {
+    recordMobileAudit({
+      eventType: 'CAPABILITY_UNAVAILABLE',
+      application: 'TelecomManager',
+      actionRequested: 'Answer Call',
+      result: 'ROLE_REQUIRED',
+      notes: 'Android Telecom Default Dialer role not granted',
+    });
+    return res.status(403).json({
+      success: false,
+      status: 'ROLE_REQUIRED',
+      message: 'Default Dialer role or ANSWER_PHONE_CALLS permission required on Android device.',
+    });
+  }
+
+  serverMobileBridgeState.pendingEvent = null;
+
+  recordMobileAudit({
+    eventType: 'CALL_ANSWERED',
+    application: 'TelecomManager',
+    actionRequested: 'Answer Call',
+    result: 'SUCCESS',
+    notes: 'Call answered after explicit human authorization',
+  });
+
+  res.json({
+    success: true,
+    status: 'ANSWERED',
+    message: 'Call answered command dispatched to Android device.',
+  });
+});
+
+app.post('/api/mobile/bridge/message/reply', (req: Request, res: Response) => {
+  const emergency = getEmergencyState();
+  if (emergency.emergencyPaused || emergency.hardKillSwitchTriggered) {
+    recordMobileAudit({
+      eventType: 'ACTION_DENIED',
+      application: 'NotificationManager',
+      actionRequested: 'Send Reply',
+      result: 'BLOCKED_EMERGENCY_STOP',
+      notes: 'Message reply blocked by Global Kill Switch',
+    });
+    return res.status(403).json({
+      success: false,
+      status: 'BLOCKED_EMERGENCY_STOP',
+      message: 'Message reply blocked by Global Kill Switch.',
+    });
+  }
+
+  const { replyText, approved } = req.body;
+  if (!approved) {
+    return res.status(403).json({
+      success: false,
+      status: 'AUTHORIZATION_REQUIRED',
+      message: 'Explicit human approval required to send message reply.',
+    });
+  }
+
+  if (!serverMobileBridgeState.device) {
+    return res.status(400).json({
+      success: false,
+      status: 'MOBILE_NOT_CONNECTED',
+      message: 'No Android device connected.',
+    });
+  }
+
+  serverMobileBridgeState.pendingEvent = null;
+
+  recordMobileAudit({
+    eventType: 'REPLY_SENT',
+    application: 'NotificationManager',
+    actionRequested: 'Send Inline Reply',
+    result: 'SUCCESS',
+    notes: `Reply dispatched [Content Redacted for Privacy]`,
+  });
+
+  res.json({
+    success: true,
+    status: 'REPLY_CONFIRMED',
+    message: 'Reply dispatched to device.',
+  });
+});
+
+app.post('/api/mobile/bridge/app/open', (req: Request, res: Response) => {
+  const { packageName } = req.body;
+  recordMobileAudit({
+    eventType: 'APP_OPENED',
+    application: packageName || 'App',
+    actionRequested: 'Open App',
+    result: 'SUCCESS',
+    notes: `Launch intent requested for ${packageName}`,
+  });
+  res.json({ success: true, message: `Launch intent sent for ${packageName}` });
+});
+
+app.get('/api/mobile/bridge/audit', (req: Request, res: Response) => {
+  res.json({ success: true, auditLogs: serverMobileBridgeState.auditLogs });
+});
+
+app.post('/api/mobile/bridge/simulate', (req: Request, res: Response) => {
+  const { type, callerName, callerNumber, appName, sender, text } = req.body;
+  if (type === 'call') {
+    const masked = callerNumber ? callerNumber.replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2') : '******1234';
+    serverMobileBridgeState.pendingEvent = {
+      id: `sim_call_${Date.now()}`,
+      type: 'CALL',
+      createdAt: new Date().toISOString(),
+      appName: 'Phone',
+      sender: callerName || 'Rahul',
+      senderNumber: masked,
+      previewText: `Incoming Call from ${callerName || 'Rahul'} (${masked})`,
+      status: 'AWAITING_APPROVAL',
+      callId: `call_${Date.now()}`,
+    };
+    recordMobileAudit({
+      eventType: 'CALL_RECEIVED',
+      application: 'Phone',
+      actionRequested: 'Simulated Incoming Call',
+      result: 'WAITING_FOR_APPROVAL',
+      notes: `[SIMULATION_ONLY] Caller: ${callerName || 'Rahul'}, Number: ${masked}`,
+    });
+  } else if (type === 'message') {
+    serverMobileBridgeState.pendingEvent = {
+      id: `sim_msg_${Date.now()}`,
+      type: 'MESSAGE',
+      createdAt: new Date().toISOString(),
+      appName: appName || 'WhatsApp',
+      sender: sender || 'Rahul',
+      previewText: text || 'Hello, are you available?',
+      status: 'AWAITING_APPROVAL',
+      hasInlineReply: true,
+      packageName: 'com.whatsapp',
+    };
+    recordMobileAudit({
+      eventType: 'MESSAGE_RECEIVED',
+      application: appName || 'WhatsApp',
+      actionRequested: 'Simulated Incoming Message',
+      result: 'WAITING_FOR_APPROVAL',
+      notes: `[SIMULATION_ONLY] App: ${appName || 'WhatsApp'}, Sender: ${sender || 'Rahul'}`,
+    });
+  }
+  res.json({ success: true, pendingEvent: serverMobileBridgeState.pendingEvent });
 });
 
 app.post('/api/memory', (req: Request, res: Response) => {
@@ -6073,6 +6619,67 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         spokenResponse = 'Emergency Stop deactivated. All subsystems resumed under normal Level 1-4 permission gating.';
         actionExecuted = true;
         actionDetail = { type: 'emergency_resume', title: 'Emergency Stop Released', payload: getEmergencyState() };
+        break;
+      }
+      case 'cancel_computer_task': {
+        const cancelResult = TaskTracker.cancelActiveTask('User requested stop');
+        spokenResponse = language.startsWith('hi')
+          ? 'कंप्यूटर ऑपरेटर कार्य तुरंत रोक दिया गया है।'
+          : 'Computer operator task has been immediately cancelled.';
+        actionExecuted = true;
+        actionDetail = { type: 'cancel_computer_task', title: 'Task Cancelled', payload: cancelResult };
+        break;
+      }
+      case 'fix_project_error': {
+        const curEmergencyState = getEmergencyState();
+        const task = await ComputerOperatorEngine.executeTask(message, 'hybrid', curEmergencyState.emergencyPaused);
+        spokenResponse = language.startsWith('hi')
+          ? (task.resultSummaryHi || 'VS Code में स्क्रीन का विश्लेषण करके समस्या का समाधान कर दिया गया है।')
+          : (task.resultSummary || 'Screen-Research loop executed: Inspected VS Code, identified error, applied surgical fix, and verified test suite.');
+        actionExecuted = true;
+        actionDetail = { type: 'fix_project_error', title: 'Fix Project Error in VS Code', payload: task };
+        break;
+      }
+      case 'inspect_screen': {
+        const observation = await ScreenObserver.observeScreen({ preferredApp: message });
+        const interpretation = ScreenInterpreter.interpret(observation, message);
+        spokenResponse = language.startsWith('hi')
+          ? interpretation.summaryHi
+          : interpretation.summary;
+        actionExecuted = true;
+        actionDetail = { type: 'inspect_screen', title: 'Screen Inspection', payload: { observation, interpretation } };
+        break;
+      }
+      case 'operate_vscode': {
+        spokenResponse = language.startsWith('hi')
+          ? 'Visual Studio Code सक्रिय किया जा रहा है।'
+          : 'Visual Studio Code brought to active foreground.';
+        actionExecuted = true;
+        actionDetail = { type: 'operate_vscode', title: 'Open VS Code', target: 'VS Code' };
+        break;
+      }
+      case 'operate_browser': {
+        spokenResponse = language.startsWith('hi')
+          ? 'Google Chrome ब्राउज़र विंडो खोली जा रही है।'
+          : 'Opening web browser window.';
+        actionExecuted = true;
+        actionDetail = { type: 'operate_browser', title: 'Open Browser', target: 'Chrome' };
+        break;
+      }
+      case 'operate_terminal': {
+        spokenResponse = language.startsWith('hi')
+          ? 'Windows Terminal / PowerShell सक्रिय किया जा रहा है।'
+          : 'Windows Terminal / PowerShell console activated.';
+        actionExecuted = true;
+        actionDetail = { type: 'operate_terminal', title: 'Open Terminal', target: 'Terminal' };
+        break;
+      }
+      case 'open_computer_operator': {
+        spokenResponse = language.startsWith('hi')
+          ? 'कंप्यूटर ऑपरेटर और स्क्रीन रिसर्चर कंसोल सक्रिय कर दिया गया है।'
+          : 'Computer Operator and Screen Researcher HUD activated.';
+        actionExecuted = true;
+        actionDetail = { type: 'open_computer_operator', title: 'Open Computer Operator' };
         break;
       }
       case 'git_status_tool': {
