@@ -21,6 +21,18 @@ import { AutonomousToolsModal } from './components/AutonomousToolsModal';
 import { PermissionGateway } from './components/PermissionGateway';
 import { MobilePersonalStatusModal } from './components/MobilePersonalStatusModal';
 import { MobileBridgeModal } from './components/MobileBridgeModal';
+import {
+  shouldRouteToOperator,
+  isExplicitOperatorApproval,
+  isExplicitOperatorRejection,
+  planOperatorRun,
+  executePlannedOperatorRun,
+  fetchKillSwitchState,
+  describeOperatorRun,
+  formatOperatorTaskMessage,
+  type PlannedOperatorRun,
+} from './utils/operatorChatIntegration';
+import { recordOperatorAudit, isCancelCommand, type OperatorTask } from './utils/computerOperatorEngine';
 import { ActiveCallHUD } from './components/ActiveCallHUD';
 import { TelephonyHubModal } from './components/TelephonyHubModal';
 import { LocationServicesModal } from './components/LocationServicesModal';
@@ -95,6 +107,9 @@ export default function App() {
   const [speechDiagnostics, setSpeechDiagnostics] = useState<SpeechDiagnostics | null>(null);
 
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const pendingOperatorApprovalRef = useRef<{ run: PlannedOperatorRun; goal: string; taskId: string } | null>(null);
+  const operatorRunCancelledRef = useRef<boolean>(false);
+  const operatorRunActiveRef = useRef<boolean>(false);
 
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => {
     const saved = loadLocalVoiceSettings();
@@ -888,6 +903,143 @@ export default function App() {
       if (isSpeechInterruptionCommand(text)) {
         stopSpeaking();
         setStatusText('SYSTEM READY • SPEECH INTERRUPTED');
+        return;
+      }
+
+      // While a computer-operator run is live,, parallel commands are held;
+      // only cancellation is honored (existing cancel speech + explicit rejection words).
+      if (operatorRunActiveRef.current) {
+        if (isExplicitOperatorRejection(text) || isCancelCommand(text) || isSpeechInterruptionCommand(text)) {
+          operatorRunCancelledRef.current = true;
+          setStatusText('COMPUTER OPERATOR • CANCELLATION REQUESTED');
+        } else {
+          setStatusText('COMPUTER OPERATOR • RUN IN PROGRESS — WAIT, SIR');
+        }
+        return;
+      }
+
+      const pushJarvisMessage = (content: string, intent?: ChatMessage['intent'], actionExecuted?: boolean, actionDetail?: any) => {
+        const msg: ChatMessage = {
+          id: String(Date.now()),
+          role: 'jarvis',
+          content,
+          timestamp: new Date().toISOString(),
+          intent,
+          actionExecuted,
+          actionDetail,
+        };
+        setMessages((prev) => {
+          const next = [...prev, msg];
+          saveLocalChatHistory(next);
+          return next;
+        });
+      };
+
+      // Computer-Operator routing: only detected operator/research commands use the engine;
+      // every ordinary message continues to the existing backend/offline pipeline below.
+
+      if (pendingOperatorApprovalRef.current) {
+        if (isExplicitOperatorApproval(text)) {
+          const pending = pendingOperatorApprovalRef.current;
+          pendingOperatorApprovalRef.current = null;
+          operatorRunCancelledRef.current = false;
+          const killSwitch = await fetchKillSwitchState();
+          setStatusText('COMPUTER OPERATOR • AUTHORIZED — EXECUTING');
+          operatorRunActiveRef.current = true;
+          const result = await executePlannedOperatorRun(pending.goal, pending.run, {
+            taskId: pending.taskId,
+            killSwitchActive: killSwitch,
+            cancelCheck: () => operatorRunCancelledRef.current,
+            onProgress: (t: OperatorTask) => {
+              setStatusText(`COMPUTER OPERATOR • ${t.status}${t.actionIndex > 0 ? ` • step ${t.actionIndex + 1}/${t.actions.length}` : ''}`);
+            },
+          });
+          operatorRunActiveRef.current = false;
+          pushJarvisMessage(
+            formatOperatorTaskMessage(result.task),
+            undefined,
+            result.ok,
+            result.ok ? { status: result.task.status } : { status: result.task.status, error: result.task.error },
+          );
+          setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+          return;
+        }
+        if (isExplicitOperatorRejection(text)) {
+          const pending = pendingOperatorApprovalRef.current;
+          pendingOperatorApprovalRef.current = null;
+          const rejectedTask: OperatorTask = {
+            taskId: pending.taskId,
+            timestamp: new Date().toISOString(),
+            intent: 'COMPUTER_OPERATION',
+            status: 'CANCELLED',
+            state: null,
+            actions: [],
+            actionIndex: 0,
+            verificationResult: null,
+            approvalState: 'REJECTED',
+            error: 'ACTION_DENIED_BY_OWNER',
+          };
+          recordOperatorAudit(rejectedTask);
+          pushJarvisMessage('COMPUTER OPERATOR • ACTION DENIED BY OWNER, SIR. Not executed.', undefined, false, undefined);
+          setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+          return;
+        }
+        pushJarvisMessage('COMPUTER OPERATOR • PENDING APPROVAL — reply HAAN/APPROVE to authorize, or NAHI/CANCEL to deny.', undefined, false, undefined);
+        setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+        return;
+      }
+
+      const route = shouldRouteToOperator(text);
+      if (route.kind === 'OPERATOR' && !isExplicitOperatorApproval(text)) {
+        const run = await planOperatorRun(text);
+        const killSwitch = await fetchKillSwitchState();
+        setStatusText('COMPUTER OPERATOR • PLAN READY');
+        if (killSwitch) {
+          pushJarvisMessage('COMPUTER OPERATOR • GLOBAL KILL SWITCH ACTIVE — external actions blocked.', undefined, false, undefined);
+          setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+          return;
+        }
+        if (run.plan.needsApproval) {
+          pendingOperatorApprovalRef.current = { run, goal: text, taskId: String(Date.now()) };
+          pushJarvisMessage('COMPUTER OPERATOR • APPROVAL REQUIRED, SIR — ' + describeOperatorRun(run), undefined, false, undefined);
+          setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+          return;
+        }
+        if (run.plan.blockedBy) {
+          pushJarvisMessage('COMPUTER OPERATOR • ' + formatOperatorTaskMessage({
+            taskId: String(Date.now()),
+            timestamp: new Date().toISOString(),
+            intent: route.classification.intent,
+            status: 'BLOCKED',
+            state: null,
+            actions: [],
+            actionIndex: 0,
+            verificationResult: null,
+            approvalState: 'NOT_REQUIRED',
+            error: run.plan.blockedBy,
+          } as OperatorTask), undefined, false, undefined);
+          setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+          return;
+        }
+        const taskId = String(Date.now());
+        operatorRunCancelledRef.current = false;
+        operatorRunActiveRef.current = true;
+        const result = await executePlannedOperatorRun(text, run, {
+          taskId,
+          killSwitchActive: killSwitch,
+          cancelCheck: () => operatorRunCancelledRef.current,
+          onProgress: (t: OperatorTask) => {
+            setStatusText(`COMPUTER OPERATOR • ${t.status}${t.actionIndex > 0 ? ` • step ${t.actionIndex + 1}/${t.actions.length}` : ''}`);
+          },
+        });
+        operatorRunActiveRef.current = false;
+        pushJarvisMessage(
+          formatOperatorTaskMessage(result.task),
+          undefined,
+          result.ok,
+          result.ok ? { status: result.task.status } : { status: result.task.status, error: result.task.error },
+        );
+        setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
         return;
       }
 
