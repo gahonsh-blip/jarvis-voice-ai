@@ -149,6 +149,7 @@ export type ActiveAppWindow =
   | 'autonomous_tools'
   | 'permission_gateway'
   | 'mobile_remote'
+  | 'mobile_bridge'
   | 'mobile_personal_status'
   | 'telephony'
   | 'location'

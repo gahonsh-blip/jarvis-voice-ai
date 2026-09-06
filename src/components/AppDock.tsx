@@ -17,7 +17,7 @@ import {
   Wrench,
   PhoneCall,
   Navigation,
-  Monitor,
+  BellRing,
 } from 'lucide-react';
 import { ActiveAppWindow } from '../types';
 
@@ -39,6 +39,13 @@ export const AppDock: React.FC<AppDockProps> = ({
       voiceCmd: 'open dialer',
       icon: PhoneCall,
       color: 'text-cyan-300',
+    },
+    {
+      id: 'mobile_bridge' as const,
+      label: 'Mobile Bridge',
+      voiceCmd: 'mobile bridge',
+      icon: BellRing,
+      color: 'text-emerald-300',
     },
     {
       id: 'location' as const,
