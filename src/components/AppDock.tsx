@@ -18,6 +18,7 @@ import {
   PhoneCall,
   Navigation,
   BellRing,
+  Monitor,
 } from 'lucide-react';
 import { ActiveAppWindow } from '../types';
 
