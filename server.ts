@@ -69,6 +69,8 @@ import {
   interpretTelegramSend,
   type DeliveryInterpretation,
 } from './src/utils/communication/telegramDelivery';
+import { assembleAiContext } from './src/utils/memory/aiContext';
+import { mergeMemorySnapshots } from './src/utils/memory/memoryConflict';
 import { publishWithRetry } from './src/utils/social/publishRetry';
 import {
   captureScreenshot,
@@ -304,6 +306,12 @@ interface MemoryData {
     lastEveningRunDate?: string;
     lastNightRunDate?: string;
   };
+  /** Recent conversation turns, kept server-side so context survives a client reset. */
+  conversationHistory?: {
+    role: 'user' | 'jarvis';
+    content: string;
+    timestamp: string;
+  }[];
 }
 
 const defaultSocialPosts: ServerSocialPost[] = [
@@ -438,16 +446,30 @@ try {
   if (fs.existsSync(MEMORY_FILE_PATH)) {
     const raw = fs.readFileSync(MEMORY_FILE_PATH, 'utf-8');
     const parsed = JSON.parse(raw);
+    // Prefer whatever is on disk — including an intentionally empty array. The
+    // previous `length > 0` guards silently restored seed data, so deleting every
+    // note or lead and restarting brought them all back.
+    const coerceArray = <T,>(value: unknown, fallback: T[]): T[] =>
+      Array.isArray(value) ? (value as T[]) : fallback;
+    const coerceKeyValues = (
+      value: unknown,
+      fallback: Record<string, string>,
+    ): Record<string, string> =>
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, string>)
+        : fallback;
+
     memoryState = {
       ...memoryState,
       ...parsed,
-      notes: Array.isArray(parsed.notes) && parsed.notes.length > 0 ? parsed.notes : memoryState.notes,
-      customKeyValues: { ...memoryState.customKeyValues, ...(parsed.customKeyValues || {}) },
+      notes: coerceArray(parsed.notes, memoryState.notes),
+      customKeyValues: coerceKeyValues(parsed.customKeyValues, memoryState.customKeyValues),
       stats: { ...memoryState.stats, ...(parsed.stats || {}) },
-      processedTelegramUpdates: Array.isArray(parsed.processedTelegramUpdates) ? parsed.processedTelegramUpdates : [],
-      socialPosts: Array.isArray(parsed.socialPosts) && parsed.socialPosts.length > 0 ? parsed.socialPosts : memoryState.socialPosts,
-      auditLogs: Array.isArray(parsed.auditLogs) && parsed.auditLogs.length > 0 ? parsed.auditLogs : memoryState.auditLogs,
-      freelanceLeads: Array.isArray(parsed.freelanceLeads) && parsed.freelanceLeads.length > 0 ? parsed.freelanceLeads : memoryState.freelanceLeads,
+      processedTelegramUpdates: coerceArray(parsed.processedTelegramUpdates, []),
+      socialPosts: coerceArray(parsed.socialPosts, memoryState.socialPosts),
+      auditLogs: coerceArray(parsed.auditLogs, memoryState.auditLogs),
+      freelanceLeads: coerceArray(parsed.freelanceLeads, memoryState.freelanceLeads),
+      conversationHistory: coerceArray(parsed.conversationHistory, []),
       schedulerState: parsed.schedulerState || {},
       linkedInConnection: parsed.linkedInConnection ? {
         ...parsed.linkedInConnection,
@@ -6172,6 +6194,56 @@ app.get('/api/memory', (req: Request, res: Response) => {
   });
 });
 
+/**
+ * Reconcile an offline snapshot with the server. Returns the merged result and
+ * every conflict that was detected, so the client can show a human what was
+ * kept from each side instead of silently overwriting.
+ */
+app.post('/api/memory/sync', (req: Request, res: Response) => {
+  try {
+    const local = req.body?.local;
+    if (!local || typeof local !== 'object') {
+      return res.status(400).json({ success: false, error: 'A local memory snapshot is required.' });
+    }
+
+    const remote = {
+      name: memoryState.name,
+      notes: memoryState.notes,
+      customKeyValues: memoryState.customKeyValues,
+    };
+
+    const result = mergeMemorySnapshots(
+      {
+        name: local.name,
+        notes: Array.isArray(local.notes) ? local.notes : [],
+        customKeyValues: local.customKeyValues || {},
+        keyTimestamps: local.keyTimestamps,
+      },
+      remote,
+    );
+
+    // Only merge what the resolver accepted. Conflicts are reported, never
+    // silently applied over the authoritative server copy.
+    memoryState.notes = result.merged.notes;
+    if (result.merged.name !== undefined) memoryState.name = result.merged.name;
+    memoryState.customKeyValues = result.merged.customKeyValues;
+    persistMemory();
+
+    res.json({
+      success: true,
+      merged: {
+        name: memoryState.name,
+        notes: memoryState.notes,
+        customKeyValues: memoryState.customKeyValues,
+      },
+      conflicts: result.conflicts,
+      requiresAttention: result.requiresAttention,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Memory sync failed' });
+  }
+});
+
 // Mobile Personal Status & Morning Briefing Telemetry Endpoints
 app.get('/api/mobile/telemetry', (req: Request, res: Response) => {
   res.json({
@@ -7911,15 +7983,30 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const ai = getGenAI();
         if (ai) {
           try {
+            // History from the client is authoritative for this turn, but a
+            // client that has just reloaded sends none. Fall back to the copy
+            // kept on the server so the conversation continues rather than
+            // restarting, which previously made JARVIS forget the thread.
+            const clientHistory = Array.isArray(history) ? history : [];
+            const effectiveHistory =
+              clientHistory.length > 0 ? clientHistory : memoryState.conversationHistory ?? [];
+
+            const context = assembleAiContext({
+              userName: memoryState.name,
+              notes: memoryState.notes,
+              customKeyValues: memoryState.customKeyValues,
+              history: effectiveHistory,
+            });
+
             const systemInstruction = `You are HERMES JARVIS, an autonomous AI agent running on an Oracle Always Free ARM Cloud server, controllable via Android Telegram Bot and Web Panel.
-User's name: ${memoryState.name || 'Sir / Guest'}.
+${context.systemInstruction}
 Active Interaction Language Locale: ${language || 'en-US'}.
 Language Guideline: Respond in the user's selected language (${language || 'en-US'}). If set to Hindi (hi-IN) or Hinglish, use natural, respectful Hindi/Hinglish (e.g., 'जी सर', 'सुप्रभात'). If set to another regional language (Spanish, French, German, Japanese, Chinese, Russian, Arabic, etc.), respond naturally and fluently in that language. Otherwise, use crisp, polite British/Global English.
 Keep your responses crisp, concise, eloquent, and natural for speech synthesis (1-3 sentences unless asked for details).
 Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freelance CRM, Social Media human-approval engine, Proactive daily briefings, and file/git tools.`;
 
             const contents = [
-              ...history.slice(-6).map((h: any) => ({
+              ...context.turns.map((h) => ({
                 role: h.role === 'jarvis' || h.role === 'model' ? 'model' : 'user',
                 parts: [{ text: h.content || '' }],
               })),
@@ -7985,6 +8072,15 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
     if (actionExecuted) {
       memoryState.stats.actionsExecuted += 1;
     }
+
+    // Keep a bounded server-side transcript so a reloaded client still has a
+    // conversation to continue from.
+    const priorTurns = memoryState.conversationHistory ?? [];
+    memoryState.conversationHistory = [
+      ...priorTurns,
+      { role: 'user' as const, content: message, timestamp: new Date().toISOString() },
+      { role: 'jarvis' as const, content: spokenResponse, timestamp: new Date().toISOString() },
+    ].slice(-40);
 
     persistMemory();
 

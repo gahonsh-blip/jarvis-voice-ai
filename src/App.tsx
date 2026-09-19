@@ -233,15 +233,24 @@ export default function App() {
 
     console.log(`[OfflineStorage] Flushing ${queue.length} pending updates to server...`);
     try {
-      // Send current complete local memory to keep server in sync
+      // Reconcile rather than overwrite. The server reports what conflicted so
+      // the user can be told, instead of one side silently winning.
       const currentMem = loadLocalMemory();
-      const res = await fetch('/api/memory', {
+      const res = await fetch('/api/memory/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentMem),
+        body: JSON.stringify({ local: currentMem }),
       });
       if (res.ok) {
+        const data = await res.json();
         clearPendingSyncQueue();
+        if (data.requiresAttention) {
+          const count = (data.conflicts || []).filter((c: any) => c.resolution === 'flagged').length;
+          setStatusText(`SYNCED • ${count} MEMORY CONFLICT${count === 1 ? '' : 'S'} NEED REVIEW`);
+          console.warn('[OfflineStorage] Memory conflicts need review:', data.conflicts);
+        } else {
+          setStatusText('BACKEND RECONNECTED • MEMORY SYNCED');
+        }
         console.log('[OfflineStorage] Pending sync queue flushed successfully.');
       }
     } catch (err) {
@@ -252,6 +261,12 @@ export default function App() {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      // Only show the syncing state when there is actually something to flush;
+      // otherwise the label would sit on "SYNCING" with nothing in flight.
+      if (getPendingSyncQueue().length === 0) {
+        setStatusText('BACKEND RECONNECTED');
+        return;
+      }
       setStatusText('BACKEND RECONNECTED • SYNCING MEMORY');
       flushPendingSyncQueue();
     };
@@ -321,13 +336,23 @@ export default function App() {
     fetch('/api/memory')
       .then((res) => res.json())
       .then((serverData) => {
+        // React may defer the state updater, so record what needs pushing up and
+        // flush on the next tick rather than racing the commit.
+        let localOnlyCount = 0;
+
         setMemory((prevLocal) => {
           // Merge server data with any existing local memory
+          // Union notes by id instead of falling back to local notes when the
+          // server list is empty — that fallback resurrected notes the user had
+          // deliberately deleted, and local notes never reached the server.
+          const noteIds = new Set((serverData.notes || []).map((n: any) => n.id));
+          const localOnlyNotes = (prevLocal.notes || []).filter((n: any) => !noteIds.has(n.id));
+          localOnlyCount = localOnlyNotes.length;
           const merged: MemoryStore = {
             ...prevLocal,
             ...serverData,
             name: serverData.name || prevLocal.name || '',
-            notes: (serverData.notes && serverData.notes.length > 0) ? serverData.notes : prevLocal.notes,
+            notes: [...(serverData.notes || []), ...localOnlyNotes],
             customKeyValues: {
               ...prevLocal.customKeyValues,
               ...(serverData.customKeyValues || {}),
@@ -338,11 +363,23 @@ export default function App() {
               lastActive: serverData.stats?.lastActive || prevLocal.stats?.lastActive || new Date().toISOString(),
             },
           };
+          // Local-only notes exist nowhere on the server, so push them up on the
+          // next sync. Without this they would stay local forever and reappear
+          // on every reload as if the server had lost them.
+          if (localOnlyNotes.length > 0) {
+            queuePendingSync('memory_sync', merged);
+          }
           saveLocalMemory(merged);
           return merged;
         });
-        // Flush any offline queued mutations
-        flushPendingSyncQueue();
+        // Flush after the updater has committed; flushing inside the same tick
+        // would read the pre-update local memory.
+        setTimeout(() => {
+          if (localOnlyCount > 0) {
+            setStatusText(`SYNCING ${localOnlyCount} LOCAL NOTE${localOnlyCount === 1 ? '' : 'S'} TO SERVER`);
+          }
+          flushPendingSyncQueue();
+        }, 0);
       })
       .catch((err) => {
         console.warn('[OfflineStorage] Server fetch failed, running seamlessly from local offline memory:', err);

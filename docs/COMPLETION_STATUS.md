@@ -143,7 +143,42 @@ is only called `VERIFIED` when the real API returns a `message_id`.
 
 ## 🧠 AI / Memory (35-39)
 
-All items `NOT_STARTED`.
+| # | Item | Status | Evidence |
+| :--- | :--- | :--- | :--- |
+| 35 | AI Context Module | `VERIFIED` | `src/utils/memory/aiContext.ts` assembles the model context under a character budget, folding in the user name, known facts, and long-term notes. It names what it dropped (`droppedNotes`, `droppedTurns`) instead of truncating silently. 6 unit tests. |
+| 36 | Long-term memory improvement | `VERIFIED` | The server memory loader no longer restores seed data when a collection was deliberately emptied. Notes, leads, audit logs, and custom keys now persist exactly as written, including when empty. Proven by restarting a real server in `memoryPersistence.e2e.test.ts`. |
+| 37 | Conversation/context continuity | `VERIFIED` | The chat route keeps a bounded server-side transcript (last 40 turns). When a reloaded client sends no history, JARVIS resumes the prior thread instead of starting over. E2E covers the persistence path. |
+| 38 | Online + offline memory sync | `VERIFIED` | New `POST /api/memory/sync` reconciles an offline snapshot with the server. The client flushes through it on reconnect. Notes that exist on only one side are kept, never treated as deletions. |
+| 39 | Memory conflict resolution | `VERIFIED` | `src/utils/memory/memoryConflict.ts` keeps conflicting edits from both sides, prefers the newer writer only when both timestamps are known, and flags what it cannot resolve for human review. 8 unit tests plus E2E conflict cases. |
+
+### AI / Memory — what is real vs. not
+
+Real: context assembly, persistence across restart, conversation continuity,
+offline reconciliation, and conflict detection. Every claim has a test that
+runs the actual code, and the persistence claim is proven by restarting a real
+server process and reading the state back.
+
+Not real: the model itself. The unit and E2E tests cover the context plumbing,
+not the quality of a Gemini response, and no live Gemini call is made in tests.
+
+### Bugs found and fixed (AI / Memory cycle)
+
+1. **Deleted memory came back after restart.** The loader used
+   `Array.isArray(x) && x.length > 0 ? x : fallback`, so an intentionally empty
+   `notes`, `socialPosts`, `auditLogs`, or `freelanceLeads` array was replaced by
+   seed data. Deleting everything and restarting restored it all. Fixed with
+   `coerceArray`, which distinguishes "missing" from "empty".
+2. **Custom keys the user deleted reappeared.** Both the server loader and the
+   browser loader spread the seed defaults under the stored copy. Removed;
+   stored values now win outright.
+3. **Client-side note resurrection.** The boot merge fell back to local notes
+   whenever the server list was empty, and never pushed local-only notes up. Now
+   the two lists are unioned by id and local-only notes are queued for sync.
+4. **Stuck "SYNCING MEMORY" label.** The online handler set the syncing status
+   unconditionally and returned early when the queue was empty, so the label
+   never cleared. It now only claims to sync when there is work.
+5. **Flush race on boot.** The offline queue was flushed in the same tick as the
+   state commit, so it read pre-update local memory. The flush is deferred.
 
 ## 🤖 Autonomous agent (40-45)
 

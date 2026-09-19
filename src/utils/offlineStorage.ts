@@ -94,6 +94,8 @@ export function loadLocalMemory(): MemoryStore {
     if (!raw) return defaultInitialMemory;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
+      // Stored values win outright. Merging the seed defaults back in under the
+      // stored copy resurrected keys the user had deleted.
       return {
         ...defaultInitialMemory,
         ...parsed,
@@ -102,10 +104,10 @@ export function loadLocalMemory(): MemoryStore {
           ...(parsed.stats || {}),
         },
         notes: Array.isArray(parsed.notes) ? parsed.notes : defaultInitialMemory.notes,
-        customKeyValues: {
-          ...defaultInitialMemory.customKeyValues,
-          ...(parsed.customKeyValues || {}),
-        },
+        customKeyValues:
+          parsed.customKeyValues && typeof parsed.customKeyValues === 'object'
+            ? parsed.customKeyValues
+            : defaultInitialMemory.customKeyValues,
       };
     }
   } catch (err) {
