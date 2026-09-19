@@ -367,6 +367,8 @@ export interface MobilePermissionMatrix {
   message_reply: AndroidPermissionState;
   contacts_lookup: AndroidPermissionState;
   notification_history: AndroidPermissionState;
+  /** ACCESS_FINE_LOCATION — gates real GPS telemetry from the device. */
+  location_access: AndroidPermissionState;
 }
 
 export type NotificationCategory =

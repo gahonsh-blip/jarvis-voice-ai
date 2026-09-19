@@ -229,29 +229,43 @@ export function processOfflineCommand(
         }
 
         const answerResult = androidBridgeEngine.executeCallAnswer();
-        const reply = isHindi ? 'सर, कॉल उठा ली गई है।' : 'Sir, the call has been answered.';
+        // The phone has been told to answer, but has not confirmed it. Say so.
+        const reply = isHindi
+          ? 'सर, कॉल उठाने का निर्देश डिवाइस को भेज दिया गया है। डिवाइस की पुष्टि आते ही बताऊँगा।'
+          : 'Sir, the answer command has been dispatched to the device. I will confirm once the device reports back.';
         return {
           reply,
           spokenText: reply,
           intent: 'answer_call',
           actionExecuted: answerResult.success,
-          actionDetail: { type: 'answer_call', title: 'Call Answered via Android Bridge' },
+          actionDetail: {
+            type: 'answer_call',
+            title: 'Call Answer Dispatched (unconfirmed)',
+            payload: { status: answerResult.status, receipt: androidBridgeEngine.getLastReceipt() },
+          },
           updatedMemory,
           offline: true,
         };
       } else if (evaluation.targetType === 'MESSAGE') {
         const replyResult = androidBridgeEngine.executeMessageReply('Approved by user');
-        const reply = isHindi
-          ? 'सर, संदेश का उत्तर सफलतापूर्वक भेज दिया गया है।'
-          : isHinglish
-          ? 'Sir, sandesh ka reply successfully bhej diya gaya hai.'
-          : 'Sir, the message reply has been dispatched.';
+        const reply =
+          replyResult.actionType === 'OPEN_APP'
+            ? isHindi
+              ? 'सर, ऐप खोल दिया गया है। संदेश अभी भेजा नहीं गया — आपको ऐप में भेजना होगा।'
+              : 'Sir, the app has been opened. The message has NOT been sent yet — you need to send it in the app.'
+            : isHindi
+            ? 'सर, संदेश का उत्तर डिवाइस को भेज दिया गया है। डिलीवरी की पुष्टि बाकी है।'
+            : 'Sir, the reply has been handed to the device. Delivery is not yet confirmed.';
 
         return {
           reply,
           spokenText: reply,
           actionExecuted: replyResult.success,
-          actionDetail: { type: 'open_notepad', title: 'Message Reply Dispatched' },
+          actionDetail: {
+            type: 'open_notepad',
+            title: 'Message Reply Dispatched (delivery unconfirmed)',
+            payload: { status: replyResult.status, actionType: replyResult.actionType },
+          },
           updatedMemory,
           offline: true,
         };
@@ -318,13 +332,19 @@ export function processOfflineCommand(
         };
       }
       const answerResult = androidBridgeEngine.executeCallAnswer();
-      const reply = isHindi ? 'सर, कॉल उठा ली गई है।' : 'Sir, the call has been answered.';
+      const reply = isHindi
+        ? 'सर, कॉल उठाने का निर्देश डिवाइस को भेज दिया गया है। डिवाइस की पुष्टि आते ही बताऊँगा।'
+        : 'Sir, the answer command has been dispatched to the device. I will confirm once the device reports back.';
       return {
         reply,
         spokenText: reply,
         intent: 'answer_call',
         actionExecuted: answerResult.success,
-        actionDetail: { type: 'answer_call', title: 'Call Answered via Android Bridge' },
+        actionDetail: {
+          type: 'answer_call',
+          title: 'Call Answer Dispatched (unconfirmed)',
+          payload: { status: answerResult.status, receipt: androidBridgeEngine.getLastReceipt() },
+        },
         updatedMemory,
         offline: true,
       };

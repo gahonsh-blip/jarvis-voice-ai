@@ -11,6 +11,7 @@ import {
   AndroidAuditLog,
   AndroidBridgeSettings,
 } from '../types/mobileBridge';
+import { buildReceipt, makeEvidence, type ExecutionReceipt } from './executionTruth';
 
 // Storage keys
 const SETTINGS_STORAGE_KEY = 'hermes_jarvis_android_bridge_settings_v1';
@@ -25,6 +26,7 @@ export const DEFAULT_PERMISSIONS_MATRIX: MobilePermissionMatrix = {
   message_reply: 'LIMITED',
   contacts_lookup: 'NOT_CONFIGURED',
   notification_history: 'NOT_CONFIGURED',
+  location_access: 'NOT_CONFIGURED',
 };
 
 export const DEFAULT_CATEGORY_PERMISSIONS: Record<NotificationCategory, boolean> = {
@@ -288,6 +290,7 @@ export class AndroidBridgeManager {
   private pendingEventQueue: AndroidPendingEvent[] = [];
   private auditLogs: AndroidAuditLog[] = [];
   private isEmergencyStopActive = false;
+  private lastReceipt: ExecutionReceipt | null = null;
   private listeners: ((event: AndroidPendingEvent | null) => void)[] = [];
 
   constructor() {
@@ -312,16 +315,26 @@ export class AndroidBridgeManager {
   }
 
   public openApplication(packageName: string): { success: boolean; message: string } {
+    // Launching an app is a device-side effect. Without a device acknowledgement
+    // we can only say we asked for it, not that it happened.
     this.recordAudit({
       eventType: 'APP_OPENED',
       application: packageName,
       actionRequested: 'Launch Application',
       permissionState: 'GRANTED',
       authorizationState: 'HUMAN_EXPLICIT_APPROVAL',
-      result: 'SUCCESS',
-      notes: `Launched application ${packageName} on Android device`,
+      result: 'UNSUPPORTED',
+      notes: `Launch intent requested for ${packageName}; awaiting device confirmation`,
     });
-    return { success: true, message: `Application ${packageName} launched.` };
+    this.lastReceipt = buildReceipt({
+      action: 'OPEN_APP',
+      target: packageName,
+      outcome: 'DISPATCHED',
+      detailEn: `Launch intent for ${packageName} was handed to the Android device; confirmation pending.`,
+      detailHi: `${packageName} खोलने का निर्देश भेज दिया गया है; पुष्टि बाकी है।`,
+      dispatchedAt: new Date().toISOString(),
+    });
+    return { success: false, message: `Launch intent for ${packageName} dispatched; awaiting device confirmation.` };
   }
 
   private loadState(): void {
@@ -420,10 +433,15 @@ export class AndroidBridgeManager {
     const hasNotif = this.permissions.notification_access === 'GRANTED';
     const hasCall = this.permissions.call_detection === 'GRANTED';
 
-    if (!hasNotif && !hasCall) {
+    if (caps.isSimulation) {
+      // A simulated/testbed device must never be reported as a live connection.
+      this.status = 'LIMITED_CAPABILITY';
+    } else if (!hasNotif && !hasCall) {
       this.status = 'PERMISSION_REQUIRED';
     } else if (!caps.canAnswerCalls || !caps.telecomRoleDialer) {
       this.status = 'LIMITED_CAPABILITY';
+    } else if (!hasNotif || !hasCall) {
+      this.status = 'PARTIALLY_CONNECTED';
     } else {
       this.status = 'CONNECTED';
     }
@@ -434,8 +452,8 @@ export class AndroidBridgeManager {
       actionRequested: 'Device Pairing & Registration',
       permissionState: this.permissions.notification_access,
       authorizationState: 'AUTHENTICATED',
-      result: 'SUCCESS',
-      notes: `Device: ${caps.model} (${caps.deviceName}), OS: ${caps.osVersion}${caps.isSimulation ? ' [SIMULATION_ONLY]' : ''}`,
+      result: caps.isSimulation ? 'UNSUPPORTED' : 'SUCCESS',
+      notes: `Device: ${caps.model} (${caps.deviceName}), OS: ${caps.osVersion}${caps.isSimulation ? ' [SIMULATION_ONLY - not a live device]' : ''}`,
     });
 
     return { success: true, status: this.status };
@@ -833,7 +851,7 @@ export class AndroidBridgeManager {
    */
   public executeCallAnswer(): {
     success: boolean;
-    status: 'ANSWERED' | 'ROLE_REQUIRED' | 'CALL_ANSWER_UNSUPPORTED' | 'BLOCKED_EMERGENCY_STOP' | 'CALL_NOT_FOUND' | 'MOBILE_NOT_CONNECTED';
+    status: 'ANSWER_DISPATCHED' | 'ROLE_REQUIRED' | 'CALL_ANSWER_UNSUPPORTED' | 'BLOCKED_EMERGENCY_STOP' | 'CALL_NOT_FOUND' | 'MOBILE_NOT_CONNECTED';
     messageEn: string;
     messageHi: string;
   } {
@@ -897,6 +915,9 @@ export class AndroidBridgeManager {
     current.status = 'APPROVED';
     this.clearPendingEvent();
 
+    // The server has authorized the answer, but the phone has not confirmed it.
+    // We report DISPATCHED here; only the device's ACTION_RESULT can upgrade this
+    // to VERIFIED via confirmCallAnswer().
     this.recordAudit({
       eventType: 'CALL_ANSWERED',
       application: 'TelecomManager',
@@ -904,15 +925,58 @@ export class AndroidBridgeManager {
       permissionState: 'GRANTED',
       authorizationState: 'HUMAN_EXPLICIT_APPROVAL',
       result: 'SUCCESS',
-      notes: `Answered call ${current.callId} after explicit voice approval`,
+      notes: `Answer authorized for call ${current.callId}; awaiting device confirmation`,
+    });
+
+    this.lastReceipt = buildReceipt({
+      action: 'ANSWER_CALL',
+      target: current.senderNumber || current.sender,
+      outcome: 'DISPATCHED',
+      detailEn: 'Call answer authorized and handed to the Android device. Awaiting device confirmation.',
+      detailHi: 'कॉल उठाने की अनुमति दे दी गई है; डिवाइस की पुष्टि की प्रतीक्षा है।',
+      dispatchedAt: new Date().toISOString(),
+      dispatchId: current.callId,
     });
 
     return {
-      success: true,
-      status: 'ANSWERED',
-      messageEn: 'Call successfully answered.',
-      messageHi: 'कॉल उठा ली गई है।',
+      success: false,
+      status: 'ANSWER_DISPATCHED',
+      messageEn: 'Call answer authorized and dispatched to the Android device; confirmation pending.',
+      messageHi: 'कॉल उठाने का निर्देश डिवाइस को भेज दिया गया है; पुष्टि बाकी है।',
     };
+  }
+
+  /**
+   * Records the device's own confirmation that a call was answered.
+   * This is the ONLY path that can produce a verified call-answer result.
+   */
+  public confirmCallAnswer(callId: string | undefined, deviceConfirmed: boolean): ExecutionReceipt {
+    if (!deviceConfirmed) {
+      this.lastReceipt = buildReceipt({
+        action: 'ANSWER_CALL',
+        target: callId || 'unknown call',
+        outcome: 'FAILED',
+        detailEn: 'Android device reported that the call was not answered.',
+        detailHi: 'डिवाइस ने बताया कि कॉल नहीं उठाई गई।',
+        failureReason: 'DEVICE_REPORTED_NOT_ANSWERED',
+      });
+      return this.lastReceipt;
+    }
+
+    this.lastReceipt = buildReceipt({
+      action: 'ANSWER_CALL',
+      target: callId || 'unknown call',
+      outcome: 'VERIFIED',
+      detailEn: 'Android device confirmed the call is connected.',
+      detailHi: 'Android डिवाइस ने पुष्टि कर दी कि कॉल जुड़ गई है।',
+      evidence: makeEvidence('device_ack', 'Device call-state confirmation (OFFHOOK)', { ref: callId }),
+    });
+    return this.lastReceipt;
+  }
+
+  /** The most recent truthful receipt produced by this engine, if any. */
+  public getLastReceipt(): ExecutionReceipt | null {
+    return this.lastReceipt;
   }
 
   /**
@@ -973,9 +1037,11 @@ export class AndroidBridgeManager {
 
     // If notification has inline reply action supported
     if (current.hasInlineReply && this.capabilities?.canInlineReply) {
-      current.status = 'CONFIRMED';
+      current.status = 'DISPATCHED';
       this.clearPendingEvent();
 
+      // The reply text left the server. Whether WhatsApp/SMS actually delivered it
+      // is the device's business — we report DISPATCHED until the device confirms.
       this.recordAudit({
         eventType: 'REPLY_SENT',
         application: current.appName,
@@ -983,19 +1049,29 @@ export class AndroidBridgeManager {
         permissionState: 'GRANTED',
         authorizationState: 'HUMAN_EXPLICIT_APPROVAL',
         result: 'SUCCESS',
-        notes: `Inline reply sent to ${current.sender} via RemoteInput [Content Protected]`,
+        notes: `Inline reply handed to ${current.sender} via RemoteInput; awaiting device confirmation [Content Protected]`,
+      });
+
+      this.lastReceipt = buildReceipt({
+        action: 'SEND_REPLY',
+        target: `${current.sender} on ${current.appName}`,
+        outcome: 'DISPATCHED',
+        detailEn: `Reply handed to ${current.appName} through the notification RemoteInput action. Awaiting the device's own delivery confirmation.`,
+        detailHi: `${current.appName} को उत्तर भेज दिया गया है; डिवाइस की पुष्टि बाकी है।`,
+        dispatchedAt: new Date().toISOString(),
+        dispatchId: current.id,
       });
 
       return {
-        success: true,
-        status: 'REPLY_CONFIRMED',
+        success: false,
+        status: 'REPLY_DISPATCHED',
         actionType: 'INLINE_REPLY',
-        messageEn: `Reply dispatched to ${current.sender} via inline notification response.`,
-        messageHi: `उत्तर ${current.sender} को भेज दिया गया है।`,
+        messageEn: `Reply handed to ${current.appName} for ${current.sender}. Delivery is not yet confirmed by the device.`,
+        messageHi: `उत्तर ${current.sender} को भेजने के लिए ${current.appName} को दिया गया है; डिलीवरी की पुष्टि बाकी है।`,
       };
     }
 
-    // Fallback: Open Messaging Application
+    // Fallback: Open Messaging Application for the human to send it themselves
     if (this.capabilities?.canOpenApp) {
       current.status = 'DISPATCHED';
       this.clearPendingEvent();
@@ -1007,15 +1083,25 @@ export class AndroidBridgeManager {
         permissionState: 'GRANTED',
         authorizationState: 'HUMAN_EXPLICIT_APPROVAL',
         result: 'SUCCESS',
-        notes: `Opened ${current.appName} for manual dispatch`,
+        notes: `Opened ${current.appName} for manual dispatch; message was NOT sent by JARVIS`,
+      });
+
+      this.lastReceipt = buildReceipt({
+        action: 'SEND_REPLY',
+        target: `${current.sender} on ${current.appName}`,
+        outcome: 'DISPATCHED',
+        detailEn: `${current.appName} was opened with the reply prepared. JARVIS did not send it — you must press send. The message has NOT been delivered.`,
+        detailHi: `${current.appName} खोल दिया गया है। JARVIS ने संदेश नहीं भेजा — आपको भेजना होगा। संदेश अभी नहीं गया है।`,
+        dispatchedAt: new Date().toISOString(),
+        dispatchId: current.id,
       });
 
       return {
-        success: true,
+        success: false,
         status: 'REPLY_DISPATCHED',
         actionType: 'OPEN_APP',
-        messageEn: `Opened ${current.appName} with prepared response.`,
-        messageHi: `${current.appName} खोल दिया गया है ताकि आप उत्तर भेज सकें।`,
+        messageEn: `${current.appName} opened with the response prepared. The message has NOT been sent — you must confirm it in the app.`,
+        messageHi: `${current.appName} खोल दिया गया है। संदेश अभी नहीं भेजा गया — आपको ऐप में भेजना होगा।`,
       };
     }
 

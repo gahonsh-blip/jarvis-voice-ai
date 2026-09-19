@@ -61,6 +61,8 @@ import {
   ScreenInterpreter,
   TaskTracker,
 } from './src/utils/computerOperator';
+import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/androidBridgeGateway';
+import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
 
 // ==============================================================================
 // 1. PROCESS SUPERVISION & GLOBAL SAFETY GUARDS (24/7 DAEMON RESILIENCE)
@@ -90,7 +92,7 @@ process.on('SIGINT', () => {
 });
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -570,7 +572,20 @@ function persistMemory() {
       };
     }
 
-    fs.writeFileSync(MEMORY_FILE_PATH, JSON.stringify(diskState, null, 2), 'utf-8');
+    // Re-encrypting on every boot rewrites identical tokens into new ciphertext,
+    // which churns the committed memory file for no benefit. Only write when the
+    // serialized state actually changed.
+    const serialized = JSON.stringify(diskState, null, 2);
+    try {
+      if (fs.existsSync(MEMORY_FILE_PATH) && fs.readFileSync(MEMORY_FILE_PATH, 'utf-8') === serialized) {
+        lastPersistedTimestamp = new Date().toISOString();
+        return;
+      }
+    } catch {
+      // Fall through and write.
+    }
+
+    fs.writeFileSync(MEMORY_FILE_PATH, serialized, 'utf-8');
     lastPersistedTimestamp = new Date().toISOString();
   } catch (err: any) {
     console.warn('[Storage] Error writing to jarvis_memory.json:', err?.message);
@@ -5644,421 +5659,625 @@ Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hin
     res.status(500).json({ success: false, error: ex.message });
   }
 });
-
 // -------------------------------------------------------------
-// ANDROID MOBILE BRIDGE & NOTIFICATION/CALL ASSISTANT ENDPOINTS
+// ANDROID MOBILE BRIDGE — AUTHENTICATED DEVICE GATEWAY
+//
+// Replaces the previous unauthenticated, client-reported bridge state.
+// Nothing here reports a device as connected, telemetry as present, or an
+// action as successful unless the device itself supplied the evidence.
 // -------------------------------------------------------------
-interface ServerMobileBridgeState {
-  status:
-    | 'MOBILE_NOT_CONNECTED'
-    | 'PERMISSION_REQUIRED'
-    | 'PARTIALLY_CONNECTED'
-    | 'CONNECTED'
-    | 'LIMITED_CAPABILITY'
-    | 'ERROR';
-  device: {
-    deviceId: string;
-    deviceName: string;
-    model: string;
-    osVersion: string;
-    bridgeVersion: string;
-    canDetectCalls: boolean;
-    canAnswerCalls: boolean;
-    telecomRoleDialer: boolean;
-    answerCallsPermission: boolean;
-    canReadNotifications: boolean;
-    canInlineReply: boolean;
-    canOpenApp: boolean;
-    canLookupContacts: boolean;
-    isSimulation: boolean;
-    connectedAt: string;
-  } | null;
-  permissions: {
-    notification_access: string;
-    call_detection: string;
-    call_answer: string;
-    message_reading: string;
-    message_reply: string;
-    contacts_lookup: string;
-    notification_history: string;
-  };
-  pendingEvent: any | null;
-  auditLogs: Array<{
-    id: string;
-    timestamp: string;
-    eventType: string;
-    application: string;
-    actionRequested: string;
-    result: string;
-    notes?: string;
-  }>;
-}
 
-const serverMobileBridgeState: ServerMobileBridgeState = {
-  status: 'MOBILE_NOT_CONNECTED',
-  device: null,
-  permissions: {
-    notification_access: 'NOT_CONFIGURED',
-    call_detection: 'NOT_CONFIGURED',
-    call_answer: 'LIMITED',
-    message_reading: 'NOT_CONFIGURED',
-    message_reply: 'LIMITED',
-    contacts_lookup: 'NOT_CONFIGURED',
-    notification_history: 'NOT_CONFIGURED',
-  },
-  pendingEvent: null,
-  auditLogs: [],
-};
-
-function recordMobileAudit(entry: {
-  eventType: string;
-  application: string;
-  actionRequested: string;
-  result: string;
-  notes?: string;
-}) {
-  serverMobileBridgeState.auditLogs.unshift({
-    id: `audit_srv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    timestamp: new Date().toISOString(),
-    ...entry,
-  });
-  if (serverMobileBridgeState.auditLogs.length > 200) {
-    serverMobileBridgeState.auditLogs.pop();
-  }
-}
-
-app.get('/api/mobile/bridge/status', (req: Request, res: Response) => {
-  const emergency = getEmergencyState();
-  res.json({
-    success: true,
-    status: serverMobileBridgeState.status,
-    device: serverMobileBridgeState.device,
-    permissions: serverMobileBridgeState.permissions,
-    pendingEvent: serverMobileBridgeState.pendingEvent,
-    emergencyPaused: emergency.emergencyPaused || emergency.hardKillSwitchTriggered,
-  });
+const bridgeGateway = new AndroidBridgeGateway({
+  signingSecret:
+    process.env.MOBILE_BRIDGE_SECRET ||
+    process.env.APP_SECRET ||
+    process.env.SESSION_SECRET ||
+    'hermes_jarvis_mobile_bridge_dev_secret',
 });
+
+/** Fixed-window limiter that counts FAILED auth attempts only, per client IP. */
+const bridgeAuthFailures = new Map<string, { count: number; windowStart: number }>();
+const BRIDGE_AUTH_WINDOW_MS = 60_000;
+const BRIDGE_AUTH_MAX_FAILURES = Number(process.env.MOBILE_BRIDGE_MAX_AUTH_FAILURES) || 25;
+
+function bridgeAuthThrottled(ip: string): boolean {
+  const now = Date.now();
+  const entry = bridgeAuthFailures.get(ip);
+  if (!entry || now - entry.windowStart > BRIDGE_AUTH_WINDOW_MS) return false;
+  return entry.count >= BRIDGE_AUTH_MAX_FAILURES;
+}
+
+/** Returns true when the caller has now exceeded the failure budget. */
+function recordBridgeAuthFailure(ip: string): boolean {
+  const now = Date.now();
+  const entry = bridgeAuthFailures.get(ip);
+  if (!entry || now - entry.windowStart > BRIDGE_AUTH_WINDOW_MS) {
+    bridgeAuthFailures.set(ip, { count: 1, windowStart: now });
+    return 1 >= BRIDGE_AUTH_MAX_FAILURES;
+  }
+  entry.count += 1;
+  return entry.count >= BRIDGE_AUTH_MAX_FAILURES;
+}
+
+/** Clears the failure budget for an IP after a successful authentication. */
+function clearBridgeAuthFailures(ip: string): void {
+  bridgeAuthFailures.delete(ip);
+}
+
+/** Extracts the session token from either supported header. */
+function extractBridgeToken(req: Request): string | undefined {
+  const header = req.header('x-jarvis-session-token') || req.header('x-jarvis-auth-token');
+  if (header) return header.trim();
+  const auth = req.header('authorization');
+  if (auth && auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
+  return undefined;
+}
+
+interface BridgeAuthContext {
+  sessionId: string;
+}
+
+/**
+ * Gate for every bridge endpoint except pairing. Returns null and writes the
+ * error response when the caller cannot prove it holds a live session.
+ */
+function requireBridgeSession(
+  req: Request,
+  res: Response
+): BridgeAuthContext | null {
+  const ip = String(req.ip || req.socket?.remoteAddress || 'unknown');
+  if (bridgeAuthThrottled(ip)) {
+    res.status(429).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: 'Too many bridge authentication attempts. Retry later.',
+    });
+    return null;
+  }
+
+  const token = extractBridgeToken(req);
+  const check = bridgeGateway.verifyToken(token);
+  if (!check.valid || !check.session) {
+    recordBridgeAuthFailure(ip);
+    bridgeGateway.recordAudit(
+      'SESSION_REJECTED',
+      `Bridge request rejected: ${check.reason}`,
+      bridgeFailureOutcome(check.reason)
+    );
+    res.status(401).json({
+      success: false,
+      outcome: bridgeFailureOutcome(check.reason),
+      reason: check.reason,
+      error: 'A valid bridge session token is required. Pair the device first via /api/mobile/bridge/pair.',
+    });
+    return null;
+  }
+
+  clearBridgeAuthFailures(ip);
+  return { sessionId: check.session.sessionId };
+}
+
+function bridgeFailureOutcome(reason: string): ExecutionOutcome {
+  // Session problems are authorization problems, not silent failures.
+  if (reason === 'MALFORMED_TOKEN' || reason === 'UNKNOWN_SESSION' || reason === 'TOKEN_MISMATCH') return 'BLOCKED';
+  return 'FAILED';
+}
+
+function emergencyActive(): boolean {
+  const emergency = getEmergencyState();
+  return Boolean(emergency.emergencyPaused || emergency.hardKillSwitchTriggered);
+}
+
+// ---- 1. Pairing ------------------------------------------------------------
+
+app.post('/api/mobile/bridge/pair', (req: Request, res: Response) => {
+  try {
+    const ip = String(req.ip || req.socket?.remoteAddress || 'unknown');
+    if (bridgeAuthThrottled(ip)) {
+      return res.status(429).json({ success: false, error: 'Too many pairing attempts. Retry later.' });
+    }
+
+    const pairingSecret = process.env.MOBILE_BRIDGE_PAIRING_SECRET;
+    if (!pairingSecret) {
+      return res.status(503).json({
+        success: false,
+        outcome: 'NOT_CONFIGURED',
+        error:
+          'MOBILE_BRIDGE_PAIRING_SECRET is not configured on the server. Device pairing is disabled until the operator sets it.',
+      });
+    }
+
+    const provided = req.header('x-jarvis-pairing-secret') || req.body?.pairingSecret;
+    if (!provided || typeof provided !== 'string') {
+      recordBridgeAuthFailure(ip);
+      return res.status(401).json({ success: false, outcome: 'BLOCKED', error: 'Pairing secret required.' });
+    }
+
+    const expected = Buffer.from(pairingSecret, 'utf8');
+    const actual = Buffer.from(provided, 'utf8');
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+      recordBridgeAuthFailure(ip);
+      bridgeGateway.recordAudit('PAIRING_REJECTED', 'Invalid pairing secret presented', 'BLOCKED');
+      return res.status(403).json({ success: false, outcome: 'BLOCKED', error: 'Invalid pairing secret.' });
+    }
+
+    clearBridgeAuthFailures(ip);
+
+    const deviceId = String(req.body?.deviceId || '').trim();
+    if (!deviceId) {
+      return res.status(400).json({ success: false, error: 'deviceId is required for pairing.' });
+    }
+
+    // Only one device owns the bridge at a time; re-pairing replaces the link.
+    const existing = bridgeGateway.getDevice();
+    if (existing) {
+      bridgeGateway.revoke(existing.sessionId, 'Superseded by new pairing');
+    }
+
+    const issued = bridgeGateway.issueSession(deviceId, req.body?.clientLabel || 'Android Bridge');
+    bridgeGateway.recordAudit('PAIRING_ACCEPTED', `Pairing accepted for ${deviceId}`, 'VERIFIED', {
+      sessionId: issued.session.sessionId,
+      deviceId,
+    });
+
+    return res.json({
+      success: true,
+      outcome: 'VERIFIED',
+      sessionId: issued.session.sessionId,
+      sessionToken: issued.token,
+      expiresAt: issued.expiresAt,
+      note: 'Store this token on the device. Present it as X-Jarvis-Session-Token on every bridge call.',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 2. Registration / capability handshake --------------------------------
 
 app.post('/api/mobile/bridge/connect', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
   try {
-    const { device, permissions } = req.body;
-    if (!device) {
-      return res.status(400).json({ success: false, error: 'Device details required' });
+    const { device, capabilities, permissions } = req.body || {};
+    if (!device && !capabilities) {
+      return res.status(400).json({ success: false, error: 'Device capabilities are required to register.' });
+    }
+    const caps = capabilities || device || {};
+    const deviceId = String(caps.deviceId || device?.deviceId || '').trim();
+    if (!deviceId) {
+      return res.status(400).json({ success: false, error: 'deviceId is required.' });
     }
 
-    serverMobileBridgeState.device = {
-      deviceId: device.deviceId || `android_${Date.now()}`,
-      deviceName: device.deviceName || 'Android Device',
-      model: device.model || 'Generic Android',
-      osVersion: device.osVersion || 'Android 14',
-      bridgeVersion: device.bridgeVersion || 'HERMES-ANDROID-BRIDGE/2.4.0',
-      canDetectCalls: Boolean(device.canDetectCalls),
-      canAnswerCalls: Boolean(device.canAnswerCalls),
-      telecomRoleDialer: Boolean(device.telecomRoleDialer),
-      answerCallsPermission: Boolean(device.answerCallsPermission),
-      canReadNotifications: Boolean(device.canReadNotifications),
-      canInlineReply: Boolean(device.canInlineReply),
-      canOpenApp: Boolean(device.canOpenApp),
-      canLookupContacts: Boolean(device.canLookupContacts),
-      isSimulation: Boolean(device.isSimulation),
-      connectedAt: new Date().toISOString(),
-    };
-
-    if (permissions) {
-      serverMobileBridgeState.permissions = {
-        ...serverMobileBridgeState.permissions,
-        ...permissions,
-      };
-    }
-
-    const hasNotif = serverMobileBridgeState.permissions.notification_access === 'GRANTED';
-    const hasCall = serverMobileBridgeState.permissions.call_detection === 'GRANTED';
-
-    if (!hasNotif && !hasCall) {
-      serverMobileBridgeState.status = 'PERMISSION_REQUIRED';
-    } else if (!serverMobileBridgeState.device.canAnswerCalls || !serverMobileBridgeState.device.telecomRoleDialer) {
-      serverMobileBridgeState.status = 'LIMITED_CAPABILITY';
-    } else {
-      serverMobileBridgeState.status = 'CONNECTED';
-    }
-
-    recordMobileAudit({
-      eventType: 'DEVICE_CONNECTED',
-      application: 'AndroidBridge',
-      actionRequested: 'Connect Device',
-      result: 'SUCCESS',
-      notes: `Registered ${serverMobileBridgeState.device.model} (${serverMobileBridgeState.device.deviceName}) [Simulation: ${serverMobileBridgeState.device.isSimulation}]`,
+    const { device: registered, negotiation } = bridgeGateway.register({
+      sessionId: auth.sessionId,
+      deviceId,
+      deviceName: device?.deviceName,
+      model: device?.model || caps.model,
+      osVersion: device?.osVersion || caps.osVersion,
+      bridgeVersion: device?.bridgeVersion,
+      sdkInt: caps.sdkInt,
+      capabilities: caps,
+      permissions,
     });
 
-    res.json({
+    return res.json({
       success: true,
-      status: serverMobileBridgeState.status,
-      device: serverMobileBridgeState.device,
+      outcome: 'VERIFIED',
+      status: bridgeGateway.getStatus(),
+      device: {
+        deviceId: registered.deviceId,
+        deviceName: registered.deviceName,
+        model: registered.model,
+        osVersion: registered.osVersion,
+        bridgeVersion: registered.bridgeVersion,
+        isSimulation: registered.capabilities.isSimulation,
+        registeredAt: registered.registeredAt,
+      },
+      permissions: registered.permissions,
+      capabilities: {
+        available: negotiation.available,
+        unavailable: negotiation.unavailable,
+        verdicts: negotiation.verdicts,
+      },
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/mobile/bridge/disconnect', (req: Request, res: Response) => {
-  const prevModel = serverMobileBridgeState.device?.model || 'Device';
-  serverMobileBridgeState.device = null;
-  serverMobileBridgeState.status = 'MOBILE_NOT_CONNECTED';
-  serverMobileBridgeState.pendingEvent = null;
+// ---- 3. Heartbeat + telemetry ---------------------------------------------
 
-  recordMobileAudit({
-    eventType: 'DEVICE_DISCONNECTED',
-    application: 'AndroidBridge',
-    actionRequested: 'Disconnect Device',
-    result: 'SUCCESS',
-    notes: `${prevModel} disconnected`,
+app.post('/api/mobile/bridge/heartbeat', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const telemetry = (req.body?.telemetry || {}) as DeviceTelemetryInput;
+  const result = bridgeGateway.heartbeat(auth.sessionId, telemetry);
+  if (!result.accepted) {
+    return res.status(409).json({
+      success: false,
+      outcome: 'FAILED',
+      reason: result.reason,
+      error: 'Device is not registered under this session. Call /api/mobile/bridge/connect first.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    outcome: 'VERIFIED',
+    status: bridgeGateway.getStatus(),
+    lastHeartbeatAt: result.lastHeartbeatAt,
+    reconnectCount: bridgeGateway.reconnectCount(),
+    telemetryAccepted: {
+      battery: Boolean(telemetry.battery),
+      location: Boolean(telemetry.location),
+      notifications: Boolean(telemetry.notifications),
+    },
   });
-
-  res.json({ success: true, status: 'MOBILE_NOT_CONNECTED' });
 });
 
-app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
-  try {
-    const { eventType, payload } = req.body;
-    if (!eventType || !payload) {
-      return res.status(400).json({ success: false, error: 'eventType and payload required' });
-    }
+// ---- 4. Status -------------------------------------------------------------
 
-    if (eventType === 'INCOMING_CALL') {
-      const maskedNumber = payload.callerNumber ? payload.callerNumber.replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2') : 'Unknown';
-      serverMobileBridgeState.pendingEvent = {
-        id: `call_${Date.now()}`,
-        type: 'CALL',
-        createdAt: new Date().toISOString(),
-        appName: 'Phone',
-        sender: payload.callerName || 'Unknown Caller',
-        senderNumber: maskedNumber,
-        previewText: `Incoming Call from ${payload.callerName || maskedNumber}`,
-        status: 'AWAITING_APPROVAL',
-        callId: payload.callId,
-      };
-
-      recordMobileAudit({
-        eventType: 'CALL_RECEIVED',
-        application: 'Phone',
-        actionRequested: 'Incoming Call Detection',
-        result: 'WAITING_FOR_APPROVAL',
-        notes: `Call from ${payload.callerName || 'Unknown'} (${maskedNumber})`,
-      });
-    } else if (eventType === 'INCOMING_NOTIFICATION') {
-      serverMobileBridgeState.pendingEvent = {
-        id: `notif_${Date.now()}`,
-        type: 'MESSAGE',
-        createdAt: new Date().toISOString(),
-        appName: payload.appName || 'Message',
-        sender: payload.sender || payload.title || 'Sender',
-        previewText: payload.text ? payload.text.slice(0, 100) : '[Notification Alert]',
-        status: 'AWAITING_APPROVAL',
-        hasInlineReply: Boolean(payload.hasInlineReply),
-        packageName: payload.packageName,
-      };
-
-      recordMobileAudit({
-        eventType: 'MESSAGE_RECEIVED',
-        application: payload.appName || 'Notification',
-        actionRequested: 'Incoming Notification',
-        result: 'WAITING_FOR_APPROVAL',
-        notes: `Notification from ${payload.sender || 'Sender'} on ${payload.appName}`,
-      });
-    } else if (eventType === 'CALL_ENDED') {
-      if (serverMobileBridgeState.pendingEvent?.type === 'CALL') {
-        serverMobileBridgeState.pendingEvent = null;
-      }
-    }
-
-    res.json({ success: true, pendingEvent: serverMobileBridgeState.pendingEvent });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/mobile/bridge/call/answer', (req: Request, res: Response) => {
-  const emergency = getEmergencyState();
-  if (emergency.emergencyPaused || emergency.hardKillSwitchTriggered) {
-    recordMobileAudit({
-      eventType: 'ACTION_DENIED',
-      application: 'TelecomManager',
-      actionRequested: 'Answer Call',
-      result: 'BLOCKED_EMERGENCY_STOP',
-      notes: 'Call answering blocked by Global Kill Switch',
-    });
-    return res.status(403).json({
-      success: false,
-      status: 'BLOCKED_EMERGENCY_STOP',
-      message: 'Call answering blocked by Global Kill Switch / Emergency Stop.',
-    });
-  }
-
-  if (!serverMobileBridgeState.device) {
-    return res.status(400).json({
-      success: false,
-      status: 'MOBILE_NOT_CONNECTED',
-      message: 'No Android device connected to bridge.',
-    });
-  }
-
-  if (!serverMobileBridgeState.device.canAnswerCalls) {
-    recordMobileAudit({
-      eventType: 'CAPABILITY_UNAVAILABLE',
-      application: 'TelecomManager',
-      actionRequested: 'Answer Call',
-      result: 'CALL_ANSWER_UNSUPPORTED',
-      notes: 'Device lacks call answering hardware/API capability',
-    });
-    return res.status(400).json({
-      success: false,
-      status: 'CALL_ANSWER_UNSUPPORTED',
-      message: 'Android device lacks capability or permission to answer calls.',
-    });
-  }
-
-  if (!serverMobileBridgeState.device.telecomRoleDialer && !serverMobileBridgeState.device.answerCallsPermission) {
-    recordMobileAudit({
-      eventType: 'CAPABILITY_UNAVAILABLE',
-      application: 'TelecomManager',
-      actionRequested: 'Answer Call',
-      result: 'ROLE_REQUIRED',
-      notes: 'Android Telecom Default Dialer role not granted',
-    });
-    return res.status(403).json({
-      success: false,
-      status: 'ROLE_REQUIRED',
-      message: 'Default Dialer role or ANSWER_PHONE_CALLS permission required on Android device.',
-    });
-  }
-
-  serverMobileBridgeState.pendingEvent = null;
-
-  recordMobileAudit({
-    eventType: 'CALL_ANSWERED',
-    application: 'TelecomManager',
-    actionRequested: 'Answer Call',
-    result: 'SUCCESS',
-    notes: 'Call answered after explicit human authorization',
-  });
+app.get('/api/mobile/bridge/status', (req: Request, res: Response) => {
+  const device = bridgeGateway.getDevice();
+  const live = bridgeGateway.isDeviceLive();
+  const status = bridgeGateway.getStatus();
+  const session = device ? bridgeGateway.sessions.getSession(device.sessionId) : undefined;
 
   res.json({
     success: true,
-    status: 'ANSWERED',
-    message: 'Call answered command dispatched to Android device.',
+    status,
+    /** Only true when the device is paired, live, and not a simulated testbed. */
+    deviceLive: live,
+    device: device
+      ? {
+          deviceId: device.deviceId,
+          deviceName: device.deviceName,
+          model: device.model,
+          osVersion: device.osVersion,
+          bridgeVersion: device.bridgeVersion,
+          isSimulation: device.capabilities.isSimulation,
+          registeredAt: device.registeredAt,
+          lastHeartbeatAt: device.lastHeartbeatAt,
+          heartbeatCount: device.heartbeatCount,
+          reconnectCount: session?.reconnectCount ?? 0,
+        }
+      : null,
+    permissions: device?.permissions ?? null,
+    capabilities: device
+      ? {
+          available: device.negotiation.available,
+          unavailable: device.negotiation.unavailable,
+          verdicts: device.negotiation.verdicts,
+        }
+      : null,
+    telemetryPresence: {
+      battery: Boolean(device?.telemetry.battery),
+      location: Boolean(device?.telemetry.location),
+      notifications: Boolean(device?.telemetry.notifications),
+    },
+    dispatches: {
+      pending: bridgeGateway.getDispatchLedger().filter((d) => d.status === 'DISPATCHED').length,
+      confirmed: bridgeGateway.getDispatchLedger().filter((d) => d.status === 'CONFIRMED').length,
+      failed: bridgeGateway.getDispatchLedger().filter((d) => d.status === 'FAILED').length,
+      expired: bridgeGateway.getDispatchLedger().filter((d) => d.status === 'EXPIRED').length,
+    },
+    emergencyPaused: emergencyActive(),
+    reconnect: {
+      disconnectCount: bridgeGateway.getDisconnectCount(),
+      reconnectCount: bridgeGateway.reconnectCount(),
+      liveWindowSeconds: 45,
+    },
+  });
+});
+
+// ---- 5. Telemetry reads ---------------------------------------------------
+
+const TELEMETRY_KINDS = ['battery', 'location', 'notifications'] as const;
+
+app.get('/api/mobile/bridge/telemetry/:kind', (req: Request, res: Response) => {
+  const kind = String(req.params.kind) as (typeof TELEMETRY_KINDS)[number];
+  if (!TELEMETRY_KINDS.includes(kind)) {
+    return res.status(400).json({
+      success: false,
+      error: `Unknown telemetry kind "${req.params.kind}". Expected one of: ${TELEMETRY_KINDS.join(', ')}.`,
+    });
+  }
+
+  const result = bridgeGateway.readTelemetry(kind);
+  const httpStatus = result.outcome === 'VERIFIED' ? 200 : result.outcome === 'NOT_CONFIGURED' ? 404 : 400;
+  return res.status(httpStatus).json({
+    success: result.outcome === 'VERIFIED',
+    outcome: result.outcome,
+    verified: result.outcome === 'VERIFIED',
+    kind,
+    data: result.data,
+    ageSeconds: result.ageSeconds,
+    receipt: result.receipt,
+    message: result.receipt.detailEn,
+  });
+});
+
+// ---- 6. Device events (calls, notifications) ------------------------------
+
+app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const session = bridgeGateway.sessions.getSession(auth.sessionId);
+  if (!session) {
+    return res.status(401).json({ success: false, outcome: 'BLOCKED', error: 'Session no longer exists.' });
+  }
+
+  const { eventType, payload, sequence, eventTimestamp } = req.body || {};
+  if (!eventType || !payload) {
+    return res.status(400).json({ success: false, error: 'eventType and payload are required.' });
+  }
+
+  const seqCheck = bridgeGateway.sessions.acceptSequence(session, sequence, eventTimestamp);
+  if (!seqCheck.accepted) {
+    bridgeGateway.recordAudit('EVENT_REJECTED', `Event rejected: ${seqCheck.reason}`, 'BLOCKED', {
+      sessionId: auth.sessionId,
+    });
+    return res.status(409).json({ success: false, outcome: 'BLOCKED', reason: seqCheck.reason });
+  }
+
+  if (emergencyActive()) {
+    bridgeGateway.recordAudit('EVENT_BLOCKED_EMERGENCY', `Event ${eventType} refused during emergency stop`, 'BLOCKED', {
+      sessionId: auth.sessionId,
+    });
+    return res.status(423).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: 'Global Kill Switch is active; device events are not being processed.',
+    });
+  }
+
+  const maskedNumber = payload.callerNumber
+    ? String(payload.callerNumber).replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2')
+    : undefined;
+
+  if (eventType === 'INCOMING_CALL') {
+    bridgeGateway.recordAudit(
+      'CALL_RECEIVED',
+      `Incoming call from ${payload.callerName || maskedNumber || 'unknown'} (awaiting approval)`,
+      'VERIFIED',
+      { sessionId: auth.sessionId, deviceId: session.deviceId }
+    );
+  } else if (eventType === 'INCOMING_NOTIFICATION') {
+    bridgeGateway.recordAudit(
+      'NOTIFICATION_RECEIVED',
+      `Notification from ${payload.appName || payload.packageName || 'unknown app'}`,
+      'VERIFIED',
+      { sessionId: auth.sessionId, deviceId: session.deviceId }
+    );
+  } else {
+    bridgeGateway.recordAudit('EVENT_RECEIVED', `Device event ${eventType}`, 'VERIFIED', {
+      sessionId: auth.sessionId,
+      deviceId: session.deviceId,
+    });
+  }
+
+  return res.json({
+    success: true,
+    outcome: 'VERIFIED',
+    accepted: true,
+    eventType,
+    sequence: session.lastSequence,
+  });
+});
+
+// ---- 7. Action dispatch + device confirmation -----------------------------
+
+app.post('/api/mobile/bridge/call/answer', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  if (emergencyActive()) {
+    bridgeGateway.recordAudit('ACTION_DENIED', 'Call answer blocked by Global Kill Switch', 'BLOCKED', {
+      sessionId: auth.sessionId,
+    });
+    return res.status(423).json({ success: false, outcome: 'BLOCKED', error: 'Global Kill Switch is active.' });
+  }
+
+  const device = bridgeGateway.getDevice();
+  if (!device || !bridgeGateway.isDeviceLive()) {
+    return res.status(409).json({
+      success: false,
+      outcome: 'NOT_CONFIGURED',
+      error: 'No live Android device is registered with the bridge.',
+    });
+  }
+
+  const answerVerdict = device.negotiation.verdicts.find((v) => v.capability === 'CALL_ANSWER');
+  if (!answerVerdict?.available) {
+    const outcome: ExecutionOutcome = answerVerdict?.requiredGrant ? 'PERMISSION_REQUIRED' : 'NOT_AVAILABLE';
+    return res.status(403).json({
+      success: false,
+      outcome,
+      requiredGrant: answerVerdict?.requiredGrant,
+      error: answerVerdict?.reason || 'Device cannot answer calls.',
+    });
+  }
+
+  if (req.body?.approved !== true) {
+    return res.status(403).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: 'Explicit human approval (approved: true) is required to answer a call.',
+    });
+  }
+
+  const { dispatch, receipt } = bridgeGateway.dispatchAction({
+    actionType: 'ANSWER_CALL',
+    sessionId: auth.sessionId,
+    target: req.body?.callId || 'active call',
+    payloadSummary: `Answer call ${req.body?.callId || 'active'}`,
+  });
+
+  return res.json({
+    success: false,
+    outcome: 'DISPATCHED',
+    verified: false,
+    dispatchId: dispatch.dispatchId,
+    receipt,
+    message:
+      'Answer command dispatched to the device. This is NOT yet confirmed — the device must report the call state back.',
   });
 });
 
 app.post('/api/mobile/bridge/message/reply', (req: Request, res: Response) => {
-  const emergency = getEmergencyState();
-  if (emergency.emergencyPaused || emergency.hardKillSwitchTriggered) {
-    recordMobileAudit({
-      eventType: 'ACTION_DENIED',
-      application: 'NotificationManager',
-      actionRequested: 'Send Reply',
-      result: 'BLOCKED_EMERGENCY_STOP',
-      notes: 'Message reply blocked by Global Kill Switch',
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  if (emergencyActive()) {
+    bridgeGateway.recordAudit('ACTION_DENIED', 'Message reply blocked by Global Kill Switch', 'BLOCKED', {
+      sessionId: auth.sessionId,
     });
+    return res.status(423).json({ success: false, outcome: 'BLOCKED', error: 'Global Kill Switch is active.' });
+  }
+
+  const device = bridgeGateway.getDevice();
+  if (!device || !bridgeGateway.isDeviceLive()) {
+    return res.status(409).json({
+      success: false,
+      outcome: 'NOT_CONFIGURED',
+      error: 'No live Android device is registered with the bridge.',
+    });
+  }
+
+  if (req.body?.approved !== true) {
     return res.status(403).json({
       success: false,
-      status: 'BLOCKED_EMERGENCY_STOP',
-      message: 'Message reply blocked by Global Kill Switch.',
+      outcome: 'BLOCKED',
+      error: 'Explicit human approval (approved: true) is required to send a reply.',
     });
   }
 
-  const { replyText, approved } = req.body;
-  if (!approved) {
-    return res.status(403).json({
-      success: false,
-      status: 'AUTHORIZATION_REQUIRED',
-      message: 'Explicit human approval required to send message reply.',
-    });
+  const replyText = typeof req.body?.replyText === 'string' ? req.body.replyText.trim() : '';
+  if (!replyText) {
+    return res.status(400).json({ success: false, error: 'replyText is required.' });
   }
 
-  if (!serverMobileBridgeState.device) {
-    return res.status(400).json({
-      success: false,
-      status: 'MOBILE_NOT_CONNECTED',
-      message: 'No Android device connected.',
-    });
-  }
-
-  serverMobileBridgeState.pendingEvent = null;
-
-  recordMobileAudit({
-    eventType: 'REPLY_SENT',
-    application: 'NotificationManager',
-    actionRequested: 'Send Inline Reply',
-    result: 'SUCCESS',
-    notes: `Reply dispatched [Content Redacted for Privacy]`,
+  const { dispatch, receipt } = bridgeGateway.dispatchAction({
+    actionType: 'SEND_REPLY',
+    sessionId: auth.sessionId,
+    target: req.body?.notificationId || 'pending notification',
+    // Never log message bodies — metadata only.
+    payloadSummary: `Reply to ${req.body?.notificationId || 'notification'} (${replyText.length} chars, content withheld)`,
   });
 
-  res.json({
-    success: true,
-    status: 'REPLY_CONFIRMED',
-    message: 'Reply dispatched to device.',
+  return res.json({
+    success: false,
+    outcome: 'DISPATCHED',
+    verified: false,
+    dispatchId: dispatch.dispatchId,
+    receipt,
+    message:
+      'Reply dispatched to the device for delivery. Delivery is NOT confirmed until the device acknowledges it.',
+  });
+});
+
+app.post('/api/mobile/bridge/action/confirm', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const { dispatchId, confirmedStatus, detail } = req.body || {};
+  if (!dispatchId || !confirmedStatus) {
+    return res.status(400).json({ success: false, error: 'dispatchId and confirmedStatus are required.' });
+  }
+
+  const receipt = bridgeGateway.confirmAction({
+    dispatchId: String(dispatchId),
+    sessionId: auth.sessionId,
+    confirmedStatus: String(confirmedStatus),
+    detail: detail ? String(detail).slice(0, 300) : undefined,
+  });
+
+  return res.status(receipt.outcome === 'VERIFIED' ? 200 : 409).json({
+    success: receipt.outcome === 'VERIFIED',
+    outcome: receipt.outcome,
+    verified: receipt.verified,
+    receipt,
   });
 });
 
 app.post('/api/mobile/bridge/app/open', (req: Request, res: Response) => {
-  const { packageName } = req.body;
-  recordMobileAudit({
-    eventType: 'APP_OPENED',
-    application: packageName || 'App',
-    actionRequested: 'Open App',
-    result: 'SUCCESS',
-    notes: `Launch intent requested for ${packageName}`,
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const { packageName } = req.body || {};
+  if (!packageName) {
+    return res.status(400).json({ success: false, error: 'packageName is required.' });
+  }
+
+  const { dispatch, receipt } = bridgeGateway.dispatchAction({
+    actionType: 'OPEN_APP',
+    sessionId: auth.sessionId,
+    target: String(packageName),
+    payloadSummary: `Launch ${packageName}`,
   });
-  res.json({ success: true, message: `Launch intent sent for ${packageName}` });
+
+  return res.json({
+    success: false,
+    outcome: 'DISPATCHED',
+    verified: false,
+    dispatchId: dispatch.dispatchId,
+    receipt,
+    message: 'Launch intent dispatched; the device has not confirmed it yet.',
+  });
 });
+
+// ---- 8. Disconnect ---------------------------------------------------------
+
+app.post('/api/mobile/bridge/disconnect', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const device = bridgeGateway.getDevice();
+  if (!device || device.sessionId !== auth.sessionId) {
+    return res.status(409).json({ success: false, outcome: 'FAILED', error: 'This session does not own the device link.' });
+  }
+
+  bridgeGateway.revoke(auth.sessionId, req.body?.reason || 'Device requested disconnect');
+  return res.json({ success: true, outcome: 'VERIFIED', status: 'MOBILE_NOT_CONNECTED' });
+});
+
+// ---- 9. Diagnostics --------------------------------------------------------
 
 app.get('/api/mobile/bridge/audit', (req: Request, res: Response) => {
-  res.json({ success: true, auditLogs: serverMobileBridgeState.auditLogs });
+  const limit = Math.min(Number(req.query.limit) || 100, 300);
+  res.json({ success: true, entries: bridgeGateway.getAudit(limit) });
 });
 
+app.get('/api/mobile/bridge/dispatches', (req: Request, res: Response) => {
+  res.json({ success: true, dispatches: bridgeGateway.getDispatchLedger() });
+});
+
+/**
+ * Developer testbed. Every response is explicitly marked SIMULATION_ONLY and the
+ * device is refused 'CONNECTED' status, so a simulated device can never be
+ * mistaken for a real one in the HUD or in Telegram.
+ */
 app.post('/api/mobile/bridge/simulate', (req: Request, res: Response) => {
-  const { type, callerName, callerNumber, appName, sender, text } = req.body;
-  if (type === 'call') {
-    const masked = callerNumber ? callerNumber.replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2') : '******1234';
-    serverMobileBridgeState.pendingEvent = {
-      id: `sim_call_${Date.now()}`,
-      type: 'CALL',
-      createdAt: new Date().toISOString(),
-      appName: 'Phone',
-      sender: callerName || 'Rahul',
-      senderNumber: masked,
-      previewText: `Incoming Call from ${callerName || 'Rahul'} (${masked})`,
-      status: 'AWAITING_APPROVAL',
-      callId: `call_${Date.now()}`,
-    };
-    recordMobileAudit({
-      eventType: 'CALL_RECEIVED',
-      application: 'Phone',
-      actionRequested: 'Simulated Incoming Call',
-      result: 'WAITING_FOR_APPROVAL',
-      notes: `[SIMULATION_ONLY] Caller: ${callerName || 'Rahul'}, Number: ${masked}`,
-    });
-  } else if (type === 'message') {
-    serverMobileBridgeState.pendingEvent = {
-      id: `sim_msg_${Date.now()}`,
-      type: 'MESSAGE',
-      createdAt: new Date().toISOString(),
-      appName: appName || 'WhatsApp',
-      sender: sender || 'Rahul',
-      previewText: text || 'Hello, are you available?',
-      status: 'AWAITING_APPROVAL',
-      hasInlineReply: true,
-      packageName: 'com.whatsapp',
-    };
-    recordMobileAudit({
-      eventType: 'MESSAGE_RECEIVED',
-      application: appName || 'WhatsApp',
-      actionRequested: 'Simulated Incoming Message',
-      result: 'WAITING_FOR_APPROVAL',
-      notes: `[SIMULATION_ONLY] App: ${appName || 'WhatsApp'}, Sender: ${sender || 'Rahul'}`,
-    });
-  }
-  res.json({ success: true, pendingEvent: serverMobileBridgeState.pendingEvent });
+  const { type, callerName, callerNumber, appName, sender, text } = req.body || {};
+  bridgeGateway.recordAudit(
+    'SIMULATION_EVENT',
+    `[SIMULATION_ONLY] synthetic ${type || 'event'} injected for developer testing`,
+    'SIMULATION_ONLY'
+  );
+  res.json({
+    success: false,
+    outcome: 'SIMULATION_ONLY',
+    verified: false,
+    simulated: true,
+    type: type || null,
+    echo: { callerName, callerNumber, appName, sender, text },
+    message:
+      'This endpoint only records a labelled test event. It does not connect a device or deliver anything. Use /api/mobile/bridge/pair for a real device.',
+  });
 });
 
 app.post('/api/memory', (req: Request, res: Response) => {

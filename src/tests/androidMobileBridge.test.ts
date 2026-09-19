@@ -129,10 +129,48 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     expect(evalResult.decision).toBe('APPROVE');
     expect(evalResult.targetType).toBe('CALL');
 
+    // The answer is dispatched, not claimed as done: the device has not confirmed.
     const execResult = engine.executeCallAnswer();
-    expect(execResult.success).toBe(true);
-    expect(execResult.status).toBe('ANSWERED');
+    expect(execResult.success).toBe(false);
+    expect(execResult.status).toBe('ANSWER_DISPATCHED');
+    expect(execResult.messageEn).toContain('confirmation pending');
     expect(engine.getPendingEvent()).toBeNull();
+
+    const receipt = engine.getLastReceipt();
+    expect(receipt?.outcome).toBe('DISPATCHED');
+    expect(receipt?.verified).toBe(false);
+
+    // Only the device's own confirmation may promote this to VERIFIED.
+    const confirmed = engine.confirmCallAnswer('call_1', true);
+    expect(confirmed.outcome).toBe('VERIFIED');
+    expect(confirmed.verified).toBe(true);
+    expect(confirmed.evidence?.kind).toBe('device_ack');
+  });
+
+  it('Scenario 4b: Device-reported answer failure is never converted into success', () => {
+    engine.connectDevice({
+      deviceId: 'test_phone_fail',
+      deviceName: 'Android Device',
+      model: 'Android Phone',
+      osVersion: 'Android 14',
+      bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: true,
+      canAnswerCalls: true,
+      telecomRoleDialer: true,
+      answerCallsPermission: true,
+      canReadNotifications: true,
+      canInlineReply: true,
+      canOpenApp: true,
+      canLookupContacts: true,
+      isSimulation: false,
+    });
+
+    engine.handleIncomingCall({ callerName: 'Rohit' });
+    engine.executeCallAnswer();
+
+    const failed = engine.confirmCallAnswer('call_1', false);
+    expect(failed.outcome).toBe('FAILED');
+    expect(failed.verified).toBe(false);
   });
 
   it('Scenario 5: Call answer returns truthful limitation notice if Android capability or role is missing', () => {
@@ -363,8 +401,13 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     // Test answering via Hindi speech command
     const res = processOfflineCommand('हाँ, उठा लो', mockMemory);
     expect(res.intent).toBe('answer_call');
-    expect(res.spokenText).toBe('सर, कॉल उठा ली गई है।');
-    expect(res.actionExecuted).toBe(true);
+    // The reply must not claim the call was answered — only that it was dispatched.
+    expect(res.spokenText).toBe(
+      'सर, कॉल उठाने का निर्देश डिवाइस को भेज दिया गया है। डिवाइस की पुष्टि आते ही बताऊँगा।'
+    );
+    expect(res.spokenText).not.toContain('उठा ली गई');
+    expect(res.actionExecuted).toBe(false);
+    expect((res.actionDetail as any)?.title).toBe('Call Answer Dispatched (unconfirmed)');
   });
 
   it('Scenario 13: addListener receives notifications on new event and clearPendingEvent', () => {
