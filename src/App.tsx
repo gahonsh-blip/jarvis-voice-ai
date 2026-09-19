@@ -92,6 +92,8 @@ import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Brief
 import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
 import { androidBridgeEngine } from './utils/androidBridgeEngine';
 import { AndroidPendingEvent } from './types/mobileBridge';
+import { detectWakeWord } from './utils/voice/wakeWord';
+import { VoiceSession } from './utils/voice/voiceSession';
 
 export default function App() {
   // State with offline-first localStorage hydration
@@ -212,6 +214,10 @@ export default function App() {
 
   // Audio Context & Recognition References
   const recognitionRef = useRef<any>(null);
+  // Hands-free state machine (items 46-49). The recogniser events drive it; the
+  // decisions live in VoiceSession so they are testable without a microphone.
+  const voiceSessionRef = useRef<VoiceSession>(new VoiceSession());
+  const [pendingVoiceConfirm, setPendingVoiceConfirm] = useState<string | null>(null);
 
   // Synchronize state changes to localStorage
   useEffect(() => {
@@ -1283,8 +1289,15 @@ export default function App() {
         recognitionRef.current.abort();
       }
 
+      const handsFree = voiceSettings.wakeWordEnabled;
+      const session = voiceSessionRef.current;
+      if (handsFree) session.awaitWakeWord();
+      else session.wakeDetected();
+
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      // In hands-free mode the recogniser must stay open across wake word and
+      // command, otherwise the wake word would end the session immediately.
+      recognition.continuous = handsFree;
       recognition.interimResults = false;
       recognition.lang =
         voiceSettings.language === 'hinglish' || voiceSettings.language === 'auto'
@@ -1293,31 +1306,114 @@ export default function App() {
 
       recognition.onstart = () => {
         setIsListening(true);
-        setStatusText(`LISTENING (${recognition.lang})... SPEAK NOW`);
+        setStatusText(
+          handsFree
+            ? `HANDS-FREE ACTIVE • SAY "${voiceSettings.wakeWord.toUpperCase()}"`
+            : `LISTENING (${recognition.lang})... SPEAK NOW`
+        );
       };
 
       recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setIsListening(false);
-        if (transcript) {
-          handleSendCommand(transcript);
+        // With continuous recognition every result is delivered as it arrives;
+        // only the latest transcript is acted on.
+        const last = event.results[event.results.length - 1];
+        const transcript = String(last?.[0]?.transcript || '').trim();
+        if (!transcript) return;
+
+        const pending = session.snapshot.pendingCommand;
+        if (pending) {
+          // A confirmation is outstanding: this transcript is the answer.
+          const { verdict, command } = session.confirmationHeard(transcript);
+          if (verdict === 'CONFIRMED' && command) {
+            setPendingVoiceConfirm(null);
+            setStatusText('VOICE CONFIRMED • EXECUTING');
+            handleSendCommand(command);
+          } else if (verdict === 'DECLINED') {
+            setPendingVoiceConfirm(null);
+            setStatusText('VOICE ACTION CANCELLED BY OPERATOR');
+            speakText('Cancelled.', voiceSettings.language);
+          } else {
+            setStatusText('CONFIRMATION NOT UNDERSTOOD • SAY YES OR NO');
+          }
+          return;
         }
+
+        if (handsFree) {
+          const match = detectWakeWord(transcript, voiceSettings.wakeWord);
+          if (!match.detected) return;
+
+          if (!match.command) {
+            session.wakeDetected();
+            setStatusText('WAKE WORD HEARD • LISTENING FOR COMMAND');
+            return;
+          }
+          setStatusText(`WAKE WORD + COMMAND DETECTED`);
+          routeVoiceCommand(match.command);
+          return;
+        }
+
+        if (!handsFree) stopListeningInternal();
+        routeVoiceCommand(transcript);
       };
 
+      /**
+       * Decides whether a spoken command may run immediately or needs a spoken
+       * confirmation first. Sensitive commands are never dispatched on the
+       * strength of being heard.
+       */
+      function routeVoiceCommand(command: string) {
+        const decision = session.commandHeard(command);
+
+        if (decision.action === 'EXECUTE') {
+          if (!handsFree) setIsListening(false);
+          handleSendCommand(command);
+          return;
+        }
+
+        // Confirmation required. Ask out loud and wait for the reply.
+        setPendingVoiceConfirm(command);
+        setStatusText('SPOKEN CONFIRMATION REQUIRED • SAY YES OR NO');
+        const hasHindi = /[\u0900-\u097F]/.test(command);
+        speakText(
+          hasHindi
+            ? `क्या मैं "${command}" चलाऊँ? हाँ या नहीं कहें।`
+            : `Should I ${command}? Say yes or no.`,
+          voiceSettings.language
+        );
+      }
+
       recognition.onerror = (event: any) => {
+        // "no-speech" is routine in a continuous session, not a failure.
+        if (event.error === 'no-speech') return;
         console.warn('Speech recognition error:', event.error);
         setIsListening(false);
-        setStatusText('VOICE CAPTURE TIMED OUT • CLICK TO TRY AGAIN');
+        voiceSessionRef.current.reset();
+        setPendingVoiceConfirm(null);
+        setStatusText(
+          event.error === 'not-allowed'
+            ? 'MICROPHONE PERMISSION REQUIRED • GRANT ACCESS IN BROWSER'
+            : 'VOICE CAPTURE TIMED OUT • CLICK TO TRY AGAIN'
+        );
       };
 
       recognition.onend = () => {
+        // A continuous session restarts itself unless the user stopped it.
+        if (handsFree && voiceSessionRef.current.snapshot.state !== 'IDLE') {
+          try {
+            recognition.start();
+            return;
+          } catch {
+            // fall through to stopped state
+          }
+        }
         setIsListening(false);
       };
 
       recognitionRef.current = recognition;
       recognition.start();
 
-      // Simulated visualizer pulse
+      // Visualiser pulse. This is decoration only — it is not a measurement of
+      // real input level, so it must never be presented as audio evidence.
       const simPulse = setInterval(() => {
         setVolumeLevel(Math.floor(20 + Math.random() * 60));
       }, 100);
@@ -1327,12 +1423,18 @@ export default function App() {
       console.warn('Recognition start failed:', err);
       setIsListening(false);
     }
-  }, [voiceSettings.language, handleSendCommand]);
+  }, [voiceSettings.language, voiceSettings.wakeWordEnabled, voiceSettings.wakeWord, voiceSettings, handleSendCommand, speakText]);
+
+  const stopListeningInternal = useCallback(() => {
+    if (recognitionRef.current) recognitionRef.current.stop();
+  }, []);
 
   const stopListening = useCallback(() => {
+    voiceSessionRef.current.reset();
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
+    setPendingVoiceConfirm(null);
     setIsListening(false);
     setStatusText('VOICE CAPTURE STOPPED');
   }, []);
@@ -1603,6 +1705,26 @@ export default function App() {
 
       {/* Public Legal Compliance & Application Presentation Footer */}
       <PublicInfoFooter />
+
+      {/* Spoken-confirmation HUD. The command is held here and is only sent
+          when the operator says yes. */}
+      {pendingVoiceConfirm && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,32rem)] rounded-2xl border border-amber-500/50 bg-slate-950/95 backdrop-blur-md p-4 shadow-2xl">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-mono text-xs text-amber-400 mb-1">
+                SPOKEN CONFIRMATION REQUIRED
+              </p>
+              <p className="text-sm text-slate-200 break-words">"{pendingVoiceConfirm}"</p>
+              <p className="font-mono text-[11px] text-slate-500 mt-2">
+                Say "yes" to run, or "no" to cancel. Timed out or unclear replies are
+                treated as not confirmed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Android Mobile Assistant Level-4 Approval Card HUD */}
       <MobileActionApprovalCard

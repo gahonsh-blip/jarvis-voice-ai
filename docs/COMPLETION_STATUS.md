@@ -222,8 +222,28 @@ executed, so a request cannot smuggle arbitrary code into the runner.
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 46-48 | Voice system, continuous interaction, action confirmation | `PARTIAL` | Speech engine and confirmation phrasing exist; not verified end-to-end. |
-| 49-50 | Wake word, hands-free Android control | `NOT_STARTED` | Settings keys exist but no detection engine. |
+| 46 | Full voice system | `PARTIAL` | Text-to-speech, locale/voice selection, and speech recognition are wired and selectable in Settings. The browser speech APIs cannot run under Node, so no automated test exercises real audio output. The voice *logic* is covered; the audio path is not. |
+| 47 | Continuous voice interaction | `PARTIAL` | `src/utils/voice/voiceSession.ts` implements the continuous-session state machine (`IDLE → AWAITING_WAKE → LISTENING → CONFIRMING → PROCESSING`), and the recogniser now runs in `continuous` mode with auto-restart in hands-free mode. The state machine is covered by 14 unit tests. Audio capture itself is untested here, so the loop is not claimed as end-to-end verified. |
+| 48 | Voice action confirmation | `VERIFIED` | Sensitive commands are held in `CONFIRMING` and only released on a clear spoken yes. `interpretConfirmation` treats an empty reply, unrelated speech, and a mixed "yes no wait" as `UNCLEAR`, which never executes. Confirmation timeout and decline both leave the command unrun. 12 unit tests. |
+| 49 | Wake Word | `VERIFIED` | `src/utils/voice/wakeWord.ts` detects the wake phrase and returns the command that followed. It matches on word boundaries, so a word merely containing "jarvis" does not trigger. Recogniser mis-hearings (`jarviz`, `jarvish`, `जार्विस`, …) are accepted; a custom wake word replaces the built-in aliases entirely. 15 unit tests. |
+| 50 | Hands-free Android control | `NOT_AVAILABLE` | No Android device is attached in this environment. The wake word and confirmation logic exist and are tested, but the phone-side path cannot be demonstrated here. |
+
+### Voice — what is real vs. not
+
+Real and tested: wake-word detection, the continuous-session state machine, and
+the confirmation gate. These are pure logic and run under the test runner.
+
+Not verified: actual microphone capture and actual speech synthesis. The Web
+Speech API is a browser feature and is absent under Node, so the audio path
+cannot be exercised automatically. It is marked `PARTIAL` for that reason, not
+`VERIFIED`.
+
+Known limitation: the on-screen volume visualiser is decorative — it pulses on a
+timer and is not a measurement of real input level. A comment in the code says
+so, and nothing treats it as evidence.
+
+Not available: hands-free control of a physical Android device (#50). No device
+is connected to this environment.
 
 ## 🔐 Production hardening (51-60)
 
