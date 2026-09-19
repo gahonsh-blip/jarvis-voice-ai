@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   Monitor,
@@ -53,18 +53,48 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   const [targetApp, setTargetApp] = useState<'vscode' | 'terminal' | 'browser' | 'desktop'>('vscode');
   const [customDirective, setCustomDirective] = useState('');
   const [streamEvents, setStreamEvents] = useState<CommandStreamEvent[]>([]);
+  const [observationIsPreview, setObservationIsPreview] = useState(false);
   const streamEndRef = useRef<HTMLDivElement>(null);
 
   const isHindi = activeLanguage.startsWith('hi') || activeLanguage === 'hinglish';
+
+  /**
+   * Observes the screen.
+   *
+   * The agent host owns the real screen, so it gets asked first. The browser's
+   * own observer can only render an illustrative workspace view, so whatever it
+   * returns is marked as a preview and never presented as live screen state.
+   */
+  const observeScreen = useCallback(async (app: string) => {
+    try {
+      const res = await fetch('/api/computer-operator/observe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferredApp: app, includeScreenshot: false }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        if (body.observation) {
+          return { observation: body.observation as ScreenObservation, isPreview: false };
+        }
+      }
+    } catch {
+      // The host may not be reachable (e.g. static preview build).
+    }
+
+    const preview = await ScreenObserver.observeScreen({ mockWindow: app as any, includeScreenshot: false });
+    return { observation: preview, isPreview: true };
+  }, []);
 
   // Load initial screen observation and listen to task updates
   useEffect(() => {
     if (!isOpen) return;
 
     let mounted = true;
-    ScreenObserver.observeScreen({ mockWindow: targetApp, includeScreenshot: true }).then((obs) => {
+    observeScreen(targetApp).then(({ observation, isPreview }) => {
       if (mounted) {
-        setCurrentObservation(obs);
+        setCurrentObservation(observation);
+        setObservationIsPreview(isPreview);
       }
     });
 
@@ -74,6 +104,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
         setStreamEvents([...task.streamEvents]);
         if (task.currentObservation) {
           setCurrentObservation(task.currentObservation);
+          setObservationIsPreview(false);
         }
         if (task.status === 'COMPLETED' || task.status === 'FAILED' || task.status === 'CANCELLED' || task.status === 'BLOCKED') {
           setIsRunning(false);
@@ -85,7 +116,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
       mounted = false;
       unsubscribe();
     };
-  }, [isOpen, targetApp]);
+  }, [isOpen, targetApp, observeScreen]);
 
   // Auto scroll stream
   useEffect(() => {
@@ -121,14 +152,16 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   };
 
   const handleRefreshScreen = async () => {
-    const obs = await ScreenObserver.observeScreen({ mockWindow: targetApp, includeScreenshot: true });
-    setCurrentObservation(obs);
+    const { observation, isPreview } = await observeScreen(targetApp);
+    setCurrentObservation(observation);
+    setObservationIsPreview(isPreview);
   };
 
   const handleSwitchTarget = async (app: 'vscode' | 'terminal' | 'browser' | 'desktop') => {
     setTargetApp(app);
-    const obs = await ScreenObserver.observeScreen({ mockWindow: app, includeScreenshot: true });
-    setCurrentObservation(obs);
+    const { observation, isPreview } = await observeScreen(app);
+    setCurrentObservation(observation);
+    setObservationIsPreview(isPreview);
   };
 
   const interpretation = currentObservation ? ScreenInterpreter.interpret(currentObservation) : null;
@@ -306,6 +339,12 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                   {currentObservation?.screenResolution.width}x{currentObservation?.screenResolution.height}
                 </div>
               </div>
+
+              {observationIsPreview && (
+                <div className="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/40 text-amber-300 text-[11px] font-mono">
+                  ILLUSTRATIVE PREVIEW — the live desktop could not be reached, so this view is not real screen state.
+                </div>
+              )}
 
               {/* Display Canvas View */}
               <div className="relative flex-1 p-3 flex flex-col justify-between font-mono text-xs overflow-hidden">

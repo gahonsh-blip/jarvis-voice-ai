@@ -77,6 +77,8 @@ export interface ScreenObservation {
   terminalOutput?: string;
   screenResolution: { width: number; height: number };
   screenshotBase64?: string;
+  /** Absolute path of a screenshot this observation captured, when one exists. */
+  screenshot?: string;
   isAmbiguous: boolean;
   ambiguityReason?: string;
   platform: 'windows' | 'linux' | 'darwin' | 'browser';

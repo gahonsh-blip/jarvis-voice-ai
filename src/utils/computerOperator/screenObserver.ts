@@ -12,9 +12,25 @@ export interface ScreenCaptureOptions {
   mockWindow?: 'vscode' | 'terminal' | 'browser' | 'desktop' | 'error_dialog';
 }
 
+/**
+ * Pluggable observation source. The default renders the HUD's illustrative
+ * workspace view; the server swaps in a host-backed observer so observations
+ * come from the real desktop.
+ */
+export type ObservationSource = (options: ScreenCaptureOptions) => Promise<ScreenObservation>;
+
 export class ScreenObserver {
   private static lastObservation: ScreenObservation | null = null;
   private static mockTargetApp: string = 'VS Code';
+  private static source: ObservationSource | null = null;
+
+  /**
+   * Installs a real observation backend (used by the server). Passing null
+   * restores the built-in illustrative view.
+   */
+  public static setSource(source: ObservationSource | null) {
+    this.source = source;
+  }
 
   /**
    * Sets current active application for simulation / testing context
@@ -27,6 +43,12 @@ export class ScreenObserver {
    * Captures the current screen state, inspecting visible windows and UI elements
    */
   public static async observeScreen(options: ScreenCaptureOptions = {}): Promise<ScreenObservation> {
+    if (this.source) {
+      const observed = await this.source(options);
+      this.lastObservation = observed;
+      return observed;
+    }
+
     const timestamp = new Date().toISOString();
     const resolution = { width: 1920, height: 1080 };
     const preferred = options.mockWindow || (options.preferredApp ? options.preferredApp.toLowerCase() : 'vscode');
@@ -44,7 +66,9 @@ export class ScreenObserver {
       activeWindow = 'Windows PowerShell / Terminal';
       activeApplication = 'Terminal';
       windowTitle = 'Administrator: Windows PowerShell — jarvis-voice-ai';
-      terminalOutput = 'PS C:\\jarvis-voice-ai> npm test\n[vite] running vitest...\nTests: 141 passed (141)\nDuration: 5.35s';
+      // Illustrative content only — never presented as a real test result.
+      terminalOutput =
+        'SIMULATION_ONLY: illustrative terminal view. No test run was performed by this observation.';
       visibleElements = [
         {
           id: 'term_tab_1',

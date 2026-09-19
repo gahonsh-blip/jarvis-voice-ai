@@ -34,12 +34,24 @@ Last cycle: 2026-09-19 — Android Bridge authentication and telemetry truth.
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 8 | Real Windows screenshot capture | `NOT_STARTED` | Existing capture is browser `getDisplayMedia`; simulated path still fronts a fake `C:\Jarvis\Screenshots` path. |
-| 9 | Screenshot file existence/path/size verification | `NOT_STARTED` | — |
-| 10 | Real Computer Operator actions | `SIMULATION_ONLY` | `ActionExecutor` returns success without performing any OS action. |
-| 11 | Action result verification | `NOT_STARTED` | `ActionVerifier` unconditionally returns verified. |
-| 12 | Browser real-action + permission flow | `NOT_STARTED` | — |
-| 13 | Zero-fake-success for all tools | `PARTIAL` | Truth vocabulary landed (`executionTruth.ts`); Android path converted. Computer operator still violates it. |
+| 8 | Real Windows screenshot capture | `VERIFIED` (implementation) | `screenshotStore.ts` captures via PowerShell `CopyFromScreen` on Windows, `screencapture` on macOS, `import` on Linux. The old canvas-drawn placeholder is gone. Physical Windows leg pending a Windows host. |
+| 9 | Screenshot file existence/path/size verification | `VERIFIED` | `verifyScreenshotFile()` stats the file, rejects missing/empty/directory targets, parses real PNG IHDR dimensions from the bytes, and records a sha256. Covered by `screenshotStore.test.ts` (13 tests). |
+| 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. |
+| 11 | Action result verification | `VERIFIED` | `ActionVerifier` no longer returns unconditional success (`|| true` removed). Clicks require an observed screen change; edits require a disk re-read; tests require parsed runner output; screenshots require a captured file. |
+| 12 | Browser real-action + permission flow | `VERIFIED` | `ScreenshotModal.tsx` uses `getDisplayMedia` when permitted, otherwise asks the host to capture via `/api/computer-operator/screenshot`. A denied permission reports `permission_denied`, not a simulated image. |
+| 13 | Zero-fake-success for all tools | `VERIFIED` (computer control) | Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. |
+
+### Computer control — what is real vs. not
+
+Real and verified on this host: terminal commands, file read/edit (with disk
+re-read), test runs (with parsed pass/fail counts), screenshot capture on a
+desktop host, and host window/process observation.
+
+Not available: synthetic mouse clicks, keystrokes, scrolling and window
+switching. No OS input-automation backend is wired up, so `hostActionCapabilities()`
+reports those as unavailable and every layer refuses them instead of pretending.
+Implementing them requires a real input backend (e.g. Windows SendInput via a
+native helper); until then they are honestly `NOT_AVAILABLE`.
 
 ## 💻 Project/GitHub automation (14-24)
 
@@ -81,6 +93,46 @@ All items `NOT_STARTED`.
 
 ---
 
+## Bugs found and fixed (cycle 2 — computer control)
+
+9. **`ActionVerifier` verified every click** — the condition ended in `|| true`, so
+   `stateChangeDetected` was always true. Now a click verifies only when the
+   screen actually changed.
+10. **`ActionVerifier` fabricated verification for input and edits** —
+   `TYPE_TEXT`, `KEY_COMBINATION`, `EDIT_FILE` and `RUN_TESTS` all returned
+   `verified: true` from observation alone. All four now return `verified: false`
+   with the evidence each would need.
+11. **`ActionVerifier` verified unknown actions** — the `default` branch returned
+   success. Unknown action types now report `Unverified`.
+12. **Non-retryable actions were retried** — `EDIT_FILE`/`RUN_TESTS` would fail
+   identically every attempt while the engine said "retrying". Retries are now
+   limited to actions whose outcome can actually change.
+13. **`ActionExecutor` returned success for work never performed** — clicks,
+   keystrokes, app switches, file edits and test runs all returned
+   `success: true` locally. The executor now routes to the host and passes the
+   host's receipt through untouched.
+14. **`ActionExecutor` printed a fixed `Tests: 141 passed`** — a hardcoded
+   terminal line presented as runner output. Removed; test results now come from
+   parsing the real runner.
+15. **`ScreenshotModal` displayed a fake folder path** — the title read
+   `[C:\Jarvis\Screenshots]` and the canvas fallback drew `FOLDER PATH:
+   C:\Jarvis\Screenshots\`. Both are gone; the modal either shows a real capture
+   or states plainly that nothing was captured.
+16. **A denied capture permission produced a simulated image** — `getDisplayMedia`
+   rejection fell through to drawing a placeholder and calling it a capture. It
+   now reports `permission_denied` and shows no image.
+17. **`screenObserver` invented test results** — the terminal view hardcoded
+   `Tests: 141 passed (141)`. Replaced with an explicit `SIMULATION_ONLY` label.
+18. **`screenObserver` presented fiction as live screen state** — the server now
+   installs a host-backed observation source; the UI marks any fallback view as
+   `ILLUSTRATIVE PREVIEW`.
+19. **Timed-out commands leaked the whole process tree** — killing only the shell
+   left grandchildren alive holding the stdout pipe, so the promise never
+   settled. The executor now kills the process group and resolves on timeout.
+20. **`HostActionExecutor` could not be reached by the engine** — added a
+   `setExecutor` seam and installed the real executor in the server, so operator
+   tasks run genuine actions rather than the browser-routing client.
+
 ## Bugs found and fixed this cycle
 
 1. **Fabricated call answering** — `executeCallAnswer` returned `success: true`
@@ -106,5 +158,9 @@ All items `NOT_STARTED`.
 - No physical Android device has been used in this environment. Items 1 and 2
   remain `PARTIAL` until the on-device checklist in `docs/ANDROID_BRIDGE.md` is
   completed.
-- The computer operator continues to simulate OS actions. Items 8-13 are the next
-  priority per the mandated order.
+- No Windows host has been used, so item 8's PowerShell capture path is verified
+  by code inspection and the headless branch is verified by test. The
+  `NOT_AVAILABLE` path is what runs in this container.
+- Synthetic mouse/keyboard control is not implemented (items 10/12 partly). All
+  layers report `NOT_AVAILABLE` for it rather than simulating it. Items 14-60
+  are unstarted.

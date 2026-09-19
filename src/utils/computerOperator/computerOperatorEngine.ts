@@ -5,6 +5,7 @@
 // ==============================================================================
 
 import {
+  ComputerAction,
   ComputerOperatorTask,
   ComputerOperatorMode,
   ScreenObservation,
@@ -20,8 +21,38 @@ import { ActionVerifier } from './actionVerifier';
 import { TaskTracker } from './taskTracker';
 import { redactSecrets } from './credentialRedactor';
 
+/**
+ * Minimal contract the engine needs from whatever actually performs actions.
+ * Both the browser-routing `ActionExecutor` and the server-side
+ * `HostActionExecutor` satisfy it, so the engine never has to know which one
+ * it is holding.
+ */
+export interface ActionBackend {
+  executeAction(action: ComputerAction): Promise<{
+    success: boolean;
+    message: string;
+    output?: string;
+    error?: string;
+  }>;
+}
+
 export class ComputerOperatorEngine {
   private static config: ComputerOperatorConfig = { ...DEFAULT_OPERATOR_CONFIG };
+
+  /**
+   * The action backend. In the browser this stays as the HTTP-routing default;
+   * the server replaces it with a `HostActionExecutor` so actions run for real.
+   */
+  private static executor: ActionBackend = ActionExecutor;
+
+  /** Swap in a different action backend (used by the server). */
+  public static setExecutor(backend: ActionBackend): void {
+    this.executor = backend;
+  }
+
+  public static getExecutor(): ActionBackend {
+    return this.executor;
+  }
 
   public static setConfig(updates: Partial<ComputerOperatorConfig>) {
     this.config = { ...this.config, ...updates };
@@ -166,7 +197,7 @@ export class ComputerOperatorEngine {
           actionDetail: action,
         });
 
-        const execResult = await ActionExecutor.executeAction(action);
+        const execResult = await this.executor.executeAction(action);
         if (!execResult.success) {
           TaskTracker.emitEvent(task, {
             id: `evt-${Date.now()}-exec-fail-${i}`,
@@ -213,7 +244,7 @@ export class ComputerOperatorEngine {
               messageHi: verification.messageHi,
             });
             // Re-execute once
-            await ActionExecutor.executeAction(action);
+            await this.executor.executeAction(action);
           } else {
             TaskTracker.emitEvent(task, {
               id: `evt-${Date.now()}-verif-fail-${i}`,
@@ -309,7 +340,7 @@ export class ComputerOperatorEngine {
 
     // Execute the approved action
     if (task.currentAction) {
-      await ActionExecutor.executeAction(task.currentAction);
+      await this.executor.executeAction(task.currentAction);
     }
 
     task.status = 'COMPLETED';

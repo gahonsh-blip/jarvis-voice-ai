@@ -63,6 +63,28 @@ import {
 } from './src/utils/computerOperator';
 import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/androidBridgeGateway';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
+import {
+  captureScreenshot,
+  getCaptureAvailability,
+  resolveScreenshotRoot,
+} from './src/utils/computerOperator/screenshotStore';
+import { hostActionCapabilities, HostActionExecutor } from './src/utils/computerOperator/actionExecutorHost';
+import { describeHost, describeHostScreen } from './src/utils/computerOperator/hostProbe';
+import type { ComputerAction } from './src/types/computerOperator';
+
+/** Real host action executor, used by the operator endpoints. */
+const hostActionExecutor = new HostActionExecutor({ workspaceRoot: process.cwd() });
+
+// Install the real executor and a real screen observer so the operator engine
+// performs (and verifies) actions against the actual host instead of narrating
+// them. Without this the engine would fall back to the browser-routing client.
+ComputerOperatorEngine.setExecutor(hostActionExecutor);
+
+// Point the screen observer at the real host desktop instead of its built-in
+// illustrative view, so observations reflect the machine JARVIS is running on.
+ScreenObserver.setSource((options) =>
+  describeHostScreen(process.cwd(), { includeScreenshot: options.includeScreenshot })
+);
 
 // ==============================================================================
 // 1. PROCESS SUPERVISION & GLOBAL SAFETY GUARDS (24/7 DAEMON RESILIENCE)
@@ -140,7 +162,8 @@ function decryptToken(encrypted: EncryptedVaultData | string): string {
 // ==============================================================================
 // 3. DURABLE PERSISTENT STATE ENGINE & MULTI-TIER MEMORY
 // ==============================================================================
-const MEMORY_FILE_PATH = path.join(process.cwd(), 'jarvis_memory.json');
+const MEMORY_FILE_PATH =
+  process.env.JARVIS_MEMORY_FILE || path.join(process.cwd(), 'jarvis_memory.json');
 
 export interface AuditLogEntry {
   id: string;
@@ -5367,6 +5390,90 @@ app.get('/api/computer-operator/tasks/:id', (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// Real Screenshot Capture API (backlog 8/9): captures through the OS, then
+// verifies the file on disk before reporting anything.
+app.post('/api/computer-operator/screenshot', async (req: Request, res: Response) => {
+  try {
+    const { label, directory, probeOnly } = req.body || {};
+    const result = await captureScreenshot({ label, directory, probeOnly });
+
+    const statusForOutcome: Record<string, number> = {
+      VERIFIED: 200,
+      NOT_AVAILABLE: 501,
+      NOT_CONFIGURED: 503,
+      PERMISSION_REQUIRED: 403,
+      FAILED: 500,
+    };
+
+    res.status(statusForOutcome[result.receipt.outcome] || 500).json({
+      success: result.receipt.outcome === 'VERIFIED',
+      outcome: result.receipt.outcome,
+      verified: result.receipt.verified,
+      method: result.method,
+      file: result.file,
+      receipt: result.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Executes a single computer action on the real host and returns its receipt.
+app.post('/api/computer-operator/execute-action', async (req: Request, res: Response) => {
+  try {
+    const action = req.body?.action;
+    if (!action || typeof action !== 'object' || !action.type) {
+      return res.status(400).json({ success: false, outcome: 'FAILED', error: 'A computer action object is required.' });
+    }
+
+    const curEmergencyState = getEmergencyState();
+    if (curEmergencyState.emergencyPaused) {
+      return res.status(423).json({
+        success: false,
+        outcome: 'BLOCKED',
+        error: 'Global Emergency Stop is active. No computer actions will be executed.',
+      });
+    }
+
+    const execution = await hostActionExecutor.execute(action as ComputerAction);
+    const statusForOutcome: Record<string, number> = {
+      VERIFIED: 200,
+      DISPATCHED: 202,
+      BLOCKED: 403,
+      PERMISSION_REQUIRED: 403,
+      NOT_AVAILABLE: 501,
+      NOT_CONFIGURED: 503,
+      SIMULATION_ONLY: 501,
+      FAILED: 500,
+    };
+
+    res.status(statusForOutcome[execution.receipt.outcome] || 500).json({
+      success: execution.receipt.verified,
+      outcome: execution.receipt.outcome,
+      receipt: execution.receipt,
+      output: execution.output,
+      exitCode: execution.exitCode ?? null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Reports what this host can genuinely do, so the UI can disable what it cannot.
+app.get('/api/computer-operator/host-capabilities', (_req: Request, res: Response) => {
+  const host = describeHost();
+  const operatorActions = hostActionCapabilities();
+  res.json({
+    success: true,
+    host,
+    captureAvailable: getCaptureAvailability(),
+    operatorActions,
+    screenshotRoot: resolveScreenshotRoot(),
+    // Synthetic mouse/keyboard input is not wired up on any platform yet.
+    syntheticInputAvailable: false,
+  });
 });
 
 // ==============================================================================
