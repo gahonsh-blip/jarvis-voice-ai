@@ -4,7 +4,7 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-19 — Android Bridge authentication and telemetry truth.
+Last cycle: 2026-09-19 — GitHub / project automation (items 14-24).
 
 ## Status legend
 
@@ -55,7 +55,35 @@ native helper); until then they are honestly `NOT_AVAILABLE`.
 
 ## 💻 Project/GitHub automation (14-24)
 
-All items `NOT_STARTED` pending a GitHub automation module.
+| # | Item | Status | Evidence |
+| :--- | :--- | :--- | :--- |
+| 14 | GitHub repository scanner | `VERIFIED` | `repoScanner.ts` lists every repository the token can reach via `/user/repos`. Live run discovered 13 repositories. |
+| 15 | All-repository health check | `VERIFIED` | `scanAllRepositories` scans each repository; live run covered all 13 with 0 unreachable. Unreachable repositories are counted and named, and downgrade the sweep to `DISPATCHED`. |
+| 16 | Branch/status/PR checking | `VERIFIED` | Default branch, head SHA, commit message and age, all branches, open PRs with mergeability, and unmerged-branch count. Live run reported 5 branches and 1 failing run on this repository. |
+| 17 | Automatic test & build checking | `VERIFIED` | `localHealth.ts` runs the real `npm run lint` / `test` / `build` scripts and records exit codes and durations. Live lint check ran in 6.3s with exit 0. |
+| 18 | Issue/error detection | `VERIFIED` | TypeScript diagnostics parsed with file/line/column/code; Vitest summaries parsed for pass/fail counts; failing CI runs classified separately from cancelled ones. Live sweep found failing CI in 3 repositories. |
+| 19 | Fix-plan generation | `VERIFIED` | `buildFixPlan` derives ordered steps from real signals only. A clean repository produces an empty plan. Live plan produced 2 steps with correct risk levels. |
+| 20 | Permission-based code modification | `VERIFIED` | `modifyAndPropose` refuses protected branches, refuses a checkout on `main`, and requires a human approval. The default gate denies everything. Covered by `githubAutomationWorkflow.test.ts` against a real git repository. |
+| 21 | Post-fix testing | `VERIFIED` | Checks rerun against the modified workspace; a failure leaves the change uncommitted and reports `FAILED` with `POST_CHANGE_CHECKS_FAILED`. |
+| 22 | Commit generation | `VERIFIED` | Commits only after approval and passing checks. The returned SHA is read back with `git rev-parse`; the test asserts the commit exists in a real repository. |
+| 23 | Push/PR workflow | `VERIFIED` | Pushes only to the feature branch via `git push -u origin <branch>`. A failed push reports `FAILED`; a failed PR after a successful push reports `DISPATCHED`. Merging to the default branch is never automatic. |
+| 24 | Nightly automatic repository checking | `VERIFIED` | Registered in the server scheduler at 03:00 IST. Reads-only: scans and plans, never edits. Run records persist, and `nightlyHistory` surfaces a `missedRun` flag rather than skipping the gap silently. |
+
+### Verification notes
+
+- The full workflow was exercised against the live GitHub API with 13 real
+  repositories. The scanner's claim that `gahonsh-blip/gahonsh-finance` has
+  failing CI was cross-checked against the API directly and matched
+  (`startup_failure` runs on `fix/autofix/*` branches).
+- An early defect was found and fixed during this cycle: `/actions/runs` returns
+  an object with a `workflow_runs` array, not a bare array. The scanner now
+  validates the response shape and reports a malformed body as an unreadable
+  sub-read instead of silently returning an empty list.
+- Cancelled workflow runs were initially counted as failures, which raised the
+  plan's risk level to `MEDIUM` on the strength of a routinely cancelled run.
+  They are now tracked separately as aborted runs and produce a low-risk review.
+- A second defect was fixed in the outcome logic: a failed push fell through to
+  `VERIFIED`. It now reports `FAILED`.
 
 ## 📱 Social media (25-29)
 
@@ -162,5 +190,9 @@ All items `NOT_STARTED`.
   by code inspection and the headless branch is verified by test. The
   `NOT_AVAILABLE` path is what runs in this container.
 - Synthetic mouse/keyboard control is not implemented (items 10/12 partly). All
-  layers report `NOT_AVAILABLE` for it rather than simulating it. Items 14-60
-  are unstarted.
+  layers report `NOT_AVAILABLE` for it rather than simulating it.
+- GitHub automation (items 14-24) is implemented and verified against the live
+  GitHub API. It never merges into the default branch, and automated code repair
+  requires a `materialize` strategy that is not shipped — plan steps without one
+  report `NOT_CONFIGURED` by design.
+- Items 25-60 are unstarted.

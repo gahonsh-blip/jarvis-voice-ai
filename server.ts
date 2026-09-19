@@ -71,6 +71,23 @@ import {
 import { hostActionCapabilities, HostActionExecutor } from './src/utils/computerOperator/actionExecutorHost';
 import { describeHost, describeHostScreen } from './src/utils/computerOperator/hostProbe';
 import type { ComputerAction } from './src/types/computerOperator';
+import {
+  githubTokenStatus,
+  listRepositories,
+  scanRepository,
+  scanAllRepositories,
+} from './src/utils/github/repoScanner';
+import { runHealthChecks, type CheckKind } from './src/utils/github/localHealth';
+import { buildFixPlan } from './src/utils/github/fixPlanner';
+import {
+  runNightlyCheck,
+  nightlyHistory,
+  nextRunAt,
+  DEFAULT_NIGHTLY_CONFIG,
+  type NightlyRunRecord,
+} from './src/utils/github/nightlyScheduler';
+import { ApprovalQueue } from './src/utils/github/approvalQueue';
+import { PROTECTED_BRANCH_NAMES } from './src/utils/github/automationWorkflow';
 
 /** Real host action executor, used by the operator endpoints. */
 const hostActionExecutor = new HostActionExecutor({ workspaceRoot: process.cwd() });
@@ -3203,6 +3220,44 @@ function checkAndRunSchedulerJobs() {
       persistMemory();
     }
   }
+
+  // 5. Nightly Repository Check at 03:00 AM IST (item 24).
+  // Read-only: it scans repositories and prepares a plan. It never edits, commits
+  // or pushes, so it is safe to run unattended. A scan that fails is logged as
+  // FAILED rather than recorded as a successful night.
+  if (hour === 3 && minute >= 0 && minute <= 15) {
+    const schedState = memoryState.schedulerState as unknown as {
+      lastGithubNightlyRunDate?: string;
+    };
+    if (schedState.lastGithubNightlyRunDate !== todayIST) {
+      schedState.lastGithubNightlyRunDate = todayIST;
+      const logEntry = `[${new Date().toISOString()}] Started Nightly Repository Check (03:00 AM IST)`;
+      schedulerRunLog.unshift(logEntry);
+      console.log('[Scheduler]', logEntry);
+      persistMemory();
+
+      runNightlyCheck({ github: githubFetchOptions() })
+        .then((result) => {
+          recordNightlyRun(result.record);
+          addAuditLog(
+            `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+            1,
+            'AUTOMATED_SCHEDULE',
+            result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
+          );
+          console.log('[Scheduler] Nightly repository check:', result.record.outcome);
+        })
+        .catch((err: any) => {
+          console.warn('[Scheduler] Nightly repository check failed:', err?.message);
+          addAuditLog(
+            `GitHub nightly check FAILED: ${err?.message || 'unknown error'}`,
+            1,
+            'AUTOMATED_SCHEDULE',
+            'FAILED'
+          );
+        });
+    }
+  }
 }
 
 // Run scheduler tick every 30 seconds
@@ -5474,6 +5529,304 @@ app.get('/api/computer-operator/host-capabilities', (_req: Request, res: Respons
     // Synthetic mouse/keyboard input is not wired up on any platform yet.
     syntheticInputAvailable: false,
   });
+});
+
+// ==============================================================================
+// 8.5. GITHUB / PROJECT AUTOMATION APIs (backlog items 14-24)
+// ==============================================================================
+
+/** Resolves the token used for repository automation. */
+function resolveGithubToken(): string {
+  return (
+    process.env.GITHUB_AUTOMATION_TOKEN ||
+    process.env.GITHUB_TOKEN ||
+    ''
+  );
+}
+
+const githubFetchOptions = () => ({ token: resolveGithubToken() });
+
+/** Approval queue backing /api/github/approvals. */
+const githubApprovalQueue = new ApprovalQueue();
+
+/** Lightweight nightly-run history, persisted in memory state. */
+function getNightlyRuns(): NightlyRunRecord[] {
+  const anyState = memoryState as unknown as { nightlyGithubRuns?: NightlyRunRecord[] };
+  return anyState.nightlyGithubRuns ?? [];
+}
+
+function recordNightlyRun(record: NightlyRunRecord) {
+  const anyState = memoryState as unknown as { nightlyGithubRuns?: NightlyRunRecord[] };
+  const runs = [record, ...(anyState.nightlyGithubRuns ?? [])].slice(0, 30);
+  anyState.nightlyGithubRuns = runs;
+  persistMemory();
+}
+
+// Reports whether GitHub automation is usable, without making a network call.
+app.get('/api/github/status', (_req: Request, res: Response) => {
+  const token = githubTokenStatus(resolveGithubToken());
+  const runs = getNightlyRuns();
+  const history = nightlyHistory(runs, DEFAULT_NIGHTLY_CONFIG);
+  res.json({
+    success: true,
+    configured: token.configured,
+    reason: token.reason,
+    nightly: {
+      schedule: `${String(DEFAULT_NIGHTLY_CONFIG.hour).padStart(2, '0')}:${String(DEFAULT_NIGHTLY_CONFIG.minute).padStart(2, '0')} local`,
+      nextRunAt: history.nextRunAt,
+      lastRunAt: history.lastRunAt,
+      missedRun: history.missedRun,
+      runCount: runs.length,
+    },
+    protectedBranches: Array.from(PROTECTED_BRANCH_NAMES),
+    // A push or PR is only ever permitted after an explicit human approval.
+    humanApprovalRequired: true,
+  });
+});
+
+// Discovers repositories the configured token can reach.
+app.get('/api/github/repositories', async (_req: Request, res: Response) => {
+  try {
+    const result = await listRepositories(githubFetchOptions());
+    const statusForOutcome: Record<string, number> = {
+      VERIFIED: 200,
+      NOT_CONFIGURED: 503,
+      FAILED: 502,
+    };
+    res.status(statusForOutcome[result.receipt.outcome] || 200).json({
+      success: result.receipt.verified,
+      outcome: result.receipt.outcome,
+      count: result.repos.length,
+      repositories: result.repos,
+      receipt: result.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Scans one repository or every reachable repository.
+app.post('/api/github/scan', async (req: Request, res: Response) => {
+  try {
+    const { repository, all } = req.body || {};
+    const options = githubFetchOptions();
+
+    if (!all && typeof repository === 'string' && repository.trim()) {
+      const scan = await scanRepository(repository.trim(), options);
+      return res.status(scan.reachable ? 200 : 502).json({
+        success: scan.reachable,
+        outcome: scan.receipt.outcome,
+        scan,
+        receipt: scan.receipt,
+      });
+    }
+
+    const result = await scanAllRepositories(options);
+    const statusForOutcome: Record<string, number> = {
+      VERIFIED: 200,
+      DISPATCHED: 200,
+      NOT_CONFIGURED: 503,
+      FAILED: 502,
+    };
+    res.status(statusForOutcome[result.receipt.outcome] || 200).json({
+      success: result.receipt.verified,
+      outcome: result.receipt.outcome,
+      reachableCount: result.reachableCount,
+      unreachableCount: result.unreachableCount,
+      reposWithFailingCi: result.reposWithFailingCi,
+      reposWithOpenPrs: result.reposWithOpenPrs,
+      scans: result.scans.map((s) => ({
+        fullName: s.fullName,
+        reachable: s.reachable,
+        reason: s.reason,
+        defaultBranch: s.defaultBranch,
+        headSha: s.headSha,
+        headCommitMessage: s.headCommitMessage,
+        headCommitAgeHours: s.headCommitAgeHours,
+        openPullRequests: s.openPullRequests,
+        failingWorkflowRuns: s.failingWorkflowRuns,
+        abortedWorkflowRuns: s.abortedWorkflowRuns,
+        ciConfigured: s.ciConfigured,
+        unmergedBranchCount: s.unmergedBranchCount,
+        outcome: s.receipt.outcome,
+      })),
+      receipt: result.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Runs the real lint/test/build checks against this checkout.
+app.post('/api/github/health-check', async (req: Request, res: Response) => {
+  try {
+    const requested = Array.isArray(req.body?.checks) ? (req.body.checks as string[]) : undefined;
+    const valid: CheckKind[] = ['lint', 'test', 'build'];
+    const checks = requested
+      ? (requested.filter((c): c is CheckKind => valid.includes(c as CheckKind)))
+      : undefined;
+
+    if (requested && (!checks || checks.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        outcome: 'FAILED',
+        error: `checks must be a non-empty subset of: ${valid.join(', ')}`,
+      });
+    }
+
+    const report = await runHealthChecks({
+      workspace: req.body?.workspace || process.cwd(),
+      checks,
+      timeoutMs: typeof req.body?.timeoutMs === 'number' ? req.body.timeoutMs : undefined,
+    });
+
+    res.status(report.receipt.outcome === 'NOT_CONFIGURED' ? 503 : 200).json({
+      success: report.allPassed,
+      outcome: report.receipt.outcome,
+      allPassed: report.allPassed,
+      checks: report.checks.map((c) => ({
+        kind: c.kind,
+        command: c.command,
+        passed: c.passed,
+        exitCode: c.exitCode,
+        durationMs: c.durationMs,
+        timedOut: c.timedOut,
+        notConfiguredReason: c.notConfiguredReason,
+        stdoutTail: c.stdoutTail,
+        stderrTail: c.stderrTail,
+      })),
+      lint: report.lint,
+      tests: report.tests,
+      buildErrors: report.buildErrors,
+      receipt: report.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Produces a reviewable fix plan from real scan and health signals.
+app.post('/api/github/fix-plan', async (req: Request, res: Response) => {
+  try {
+    const { repository, includeLocalHealth } = req.body || {};
+    const options = githubFetchOptions();
+
+    let multiRepoScan;
+    if (typeof repository === 'string' && repository.trim()) {
+      const scan = await scanRepository(repository.trim(), options);
+      multiRepoScan = {
+        scans: [scan],
+        reachableCount: scan.reachable ? 1 : 0,
+        unreachableCount: scan.reachable ? 0 : 1,
+        reposWithFailingCi: (scan.failingWorkflowRuns?.length ?? 0) > 0 ? [scan.fullName] : [],
+        reposWithOpenPrs: (scan.openPullRequests?.length ?? 0) > 0 ? [scan.fullName] : [],
+        scannedAt: scan.scannedAt,
+        receipt: scan.receipt,
+      };
+    } else {
+      multiRepoScan = await scanAllRepositories(options);
+    }
+
+    const localHealth = includeLocalHealth
+      ? await runHealthChecks({ workspace: process.cwd(), checks: ['lint', 'test'] })
+      : undefined;
+
+    const plan = buildFixPlan({ multiRepoScan, localHealth });
+
+    res.json({
+      success: true,
+      outcome: plan.receipt.outcome,
+      nothingToDo: plan.nothingToDo,
+      highestRisk: plan.highestRisk,
+      requiresCodeChange: plan.requiresCodeChange,
+      steps: plan.steps,
+      receipt: plan.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Lists pending human approvals, and lets a human decide one.
+app.get('/api/github/approvals', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    pending: githubApprovalQueue.listPending(),
+    history: githubApprovalQueue.list().filter((a) => a.state !== 'PENDING').slice(0, 50),
+  });
+});
+
+app.post('/api/github/approvals/:id/decision', (req: Request, res: Response) => {
+  const { approved, decidedBy, reason } = req.body || {};
+  if (typeof approved !== 'boolean') {
+    return res.status(400).json({ success: false, error: 'approved must be a boolean.' });
+  }
+  if (!decidedBy || typeof decidedBy !== 'string' || !decidedBy.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: 'decidedBy is required: an approval must carry the name of the human who gave it.',
+    });
+  }
+
+  const updated = githubApprovalQueue.decide(req.params.id, approved, decidedBy.trim(), reason);
+  if (!updated) {
+    return res.status(404).json({ success: false, error: 'No such approval request.' });
+  }
+
+  addAuditLog(
+    `${approved ? 'APPROVED' : 'REJECTED'} GitHub automation action "${updated.summary}" (${updated.id}) by ${decidedBy}`,
+    4,
+    decidedBy.trim(),
+    approved ? 'VERIFIED' : 'BLOCKED'
+  );
+
+  res.json({ success: true, approval: updated });
+});
+
+// Reports the nightly schedule and recent runs.
+app.get('/api/github/nightly', (_req: Request, res: Response) => {
+  const runs = getNightlyRuns();
+  const history = nightlyHistory(runs, DEFAULT_NIGHTLY_CONFIG);
+  res.json({
+    success: true,
+    schedule: DEFAULT_NIGHTLY_CONFIG,
+    nextRunAt: history.nextRunAt,
+    lastRunAt: history.lastRunAt,
+    missedRun: history.missedRun,
+    runs,
+  });
+});
+
+// Runs the nightly check immediately. Read-only: it scans and plans, never edits.
+app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
+  try {
+    const result = await runNightlyCheck({ github: githubFetchOptions() });
+    recordNightlyRun(result.record);
+
+    addAuditLog(
+      `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+      1,
+      'AUTOMATED_SCHEDULE',
+      result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
+    );
+
+    res.status(result.receipt.verified || result.record.outcome === 'COMPLETED' ? 200 : 502).json({
+      success: result.record.outcome === 'COMPLETED',
+      outcome: result.receipt.outcome,
+      record: result.record,
+      plan: result.plan
+        ? {
+            stepCount: result.plan.steps.length,
+            highestRisk: result.plan.highestRisk,
+            requiresCodeChange: result.plan.requiresCodeChange,
+            steps: result.plan.steps,
+          }
+        : undefined,
+      receipt: result.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
 });
 
 // ==============================================================================
