@@ -28,3 +28,78 @@ No external write, upload, or broadcasting action can occur without explicit hum
   - All background polling and scheduled tasks are frozen.
   - Active network broadcasts are terminated.
   - Subsystems enter a safe, read-only standby state until explicitly unpaused via Level 4 authorization (`/resume`).
+
+---
+
+## 4. Permission Matrix (implemented)
+
+`src/utils/hardening/permissionMatrix.ts` is the single source of truth for what
+an action may do and who must approve it. `POST /api/security/evaluate` exposes a
+dry run.
+
+Entries are ordered most-restricted-first, and the **first match wins**. A
+command containing both `read` and `delete` therefore classifies as destructive,
+never as a read. The alternative — scanning for the most permissive match —
+turns any compound command into an approval bypass.
+
+An action that matches no entry is **not** treated as safe. It is refused at
+level 4 with `requiresApproval: true`, category `unknown`. An unrecognised
+capability must be added to the matrix deliberately before it can run.
+
+Approval requires a named approver. The values `system`, `auto`, `anonymous`,
+`unknown` and the empty string are rejected: an automated or unlabelled
+`approved: true` is not a human decision.
+
+## 5. Kill switch precedence
+
+`POST /api/security/evaluate` checks the emergency stop **before** the level
+check. While the switch is engaged, every action is refused with category
+`kill_switch` — including a level-1 read. Safety controls that can be reasoned
+around by lowering the requested action's risk are not controls.
+
+## 6. Secret handling
+
+`redactSecrets` in `credentialRedactor.ts` masks credentials in any text that
+leaves the system. Two patterns were found to be broken and were fixed:
+
+- The OpenAI pattern contained a stray `T3BlbkFJ` fragment inside a quantifier,
+  so it matched no key of any kind. It also carried a bare `[a-zA-Z0-9]{48,}`
+  alternative that redacted ordinary commit hashes. Both were removed.
+- The Telegram pattern began with `\b`, which cannot match after `bot` in
+  `https://api.telegram.org/bot<token>` — the only realistic location of a bot
+  token. Replaced with a `(?<![0-9])` lookbehind.
+
+`.gitignore` must contain a `.env` line and must be UTF-8. The committed file was
+UTF-16, so git honoured none of it; `git check-ignore .env` confirms the current
+file works.
+
+The token vault no longer carries a hardcoded fallback key. Without
+`APP_SECRET`/`SESSION_SECRET` it reports `NOT_CONFIGURED` and encrypts under a
+random per-process key, so tokens do not survive a restart but are never
+protected by a key that is public in the repository.
+
+## 7. Secret audit
+
+`GET /api/security/audit-secrets` scans tracked text files. It deliberately flags
+only quoted literal assignments and unmistakable token shapes. A broader version
+reused the redaction patterns and reported 100 "credentials" in `server.ts`,
+every one a reference such as `conn.accessToken = decrypted`; that volume of
+noise is indistinguishable from having no audit at all.
+
+Test-file fixtures are reported at LOW rather than CRITICAL, since a signing
+secret in a test is not a production leak.
+
+The audit is a pattern scan. A clean result means those patterns were absent, not
+that the system is secure. No third-party penetration test has been performed.
+
+## 8. Backup, restore and deployment
+
+- `GET /api/backup` returns a snapshot only if it passes its own round-trip
+  verification; otherwise it returns HTTP 500.
+- Credentials are redacted before a snapshot leaves, and prototype-polluting keys
+  are dropped.
+- `POST /api/restore` preserves keys the backup does not mention, so restoring an
+  old snapshot never silently erases newer data.
+- `GET /api/deployment/verify` reports the conditions a deployment must satisfy.
+  An `UNKNOWN` check blocks readiness rather than being assumed good: an
+  unexercised backup is not evidence that backups work.

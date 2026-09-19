@@ -71,6 +71,26 @@ import {
 } from './src/utils/communication/telegramDelivery';
 import { assembleAiContext } from './src/utils/memory/aiContext';
 import { mergeMemorySnapshots } from './src/utils/memory/memoryConflict';
+import {
+  evaluatePermission,
+  isBlockedByKillSwitch,
+  PERMISSION_MATRIX,
+  UNKNOWN_ACTION_DECISION,
+} from './src/utils/hardening/permissionMatrix';
+import {
+  createBackup,
+  restoreBackup,
+  verifyBackup,
+} from './src/utils/hardening/backupRestore';
+import {
+  runSecurityAudit,
+  isAuditClean,
+  summariseAudit,
+} from './src/utils/hardening/securityAudit';
+import {
+  verifyDeployment,
+  deploymentBlockers,
+} from './src/utils/hardening/deploymentVerification';
 import { AutonomousGoalRunner } from './src/utils/autonomous/goalRunner';
 import type { StepDescriptor } from './src/utils/autonomous/stepLibrary';
 import {
@@ -155,8 +175,31 @@ app.use(express.json({ limit: '10mb' }));
 // ==============================================================================
 // 2. SECURE SERVER-SIDE TOKEN VAULT (AES-256-GCM ENCRYPTION)
 // ==============================================================================
-const VAULT_SECRET = process.env.APP_SECRET || process.env.SESSION_SECRET || 'hermes_jarvis_oracle_arm_vault_key_2026';
-const VAULT_KEY = crypto.scryptSync(VAULT_SECRET, 'hermes_salt_vault_2026', 32);
+// The token vault key must come from the environment. A hardcoded fallback was
+// committed here previously, which means anyone with the source could decrypt
+// the vault. When no secret is configured we generate a random per-process key
+// instead: tokens then cannot be decrypted after a restart, but they are never
+// protected by a publicly-known key. Vault status is reported as NOT_CONFIGURED.
+const VAULT_SECRET = process.env.APP_SECRET || process.env.SESSION_SECRET || '';
+export const VAULT_CONFIGURED = VAULT_SECRET.length > 0;
+
+if (!VAULT_CONFIGURED) {
+  console.warn(
+    '[Vault] Neither APP_SECRET nor SESSION_SECRET is set. The token vault is NOT_CONFIGURED ' +
+      'and is using a random per-process key; stored tokens will not survive a restart.'
+  );
+}
+
+const VAULT_KEY = VAULT_CONFIGURED
+  ? crypto.scryptSync(VAULT_SECRET, 'hermes_salt_vault_2026', 32)
+  : crypto.randomBytes(32);
+
+// Number of bugs that block a production deployment. Kept as an explicit count
+// rather than a bare `false` so that a newly discovered blocking bug has an
+// obvious place to be recorded, and the deployment check reports it honestly.
+// Update this whenever a blocking bug is found or fixed; see
+// docs/COMPLETION_STATUS.md for the current list.
+const KNOWN_BLOCKING_BUGS = Number(process.env.HERMES_KNOWN_BLOCKING_BUGS ?? '0');
 
 interface EncryptedVaultData {
   iv: string;
@@ -5160,6 +5203,173 @@ app.post('/api/routines/trigger', (req: Request, res: Response) => {
   const { timeSlot } = req.body;
   const routine = proactiveReports.find((r) => r.timeSlot === timeSlot) || proactiveReports[0];
   res.json({ success: true, routine });
+});
+
+// ==============================================================================
+// PRODUCTION HARDENING APIs (backlog items 51, 52, 54, 59)
+// ==============================================================================
+
+/** Permission matrix as the running system applies it. */
+app.get('/api/security/permission-matrix', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    currentLevel: securityMatrixState.currentLevel,
+    emergencyPaused: getEmergencyState().emergencyPaused,
+    matrix: PERMISSION_MATRIX,
+    unknownActionPolicy: UNKNOWN_ACTION_DECISION,
+  });
+});
+
+/** Dry-run: classify an action and say whether it would be permitted. */
+app.post('/api/security/evaluate', (req: Request, res: Response) => {
+  const command = typeof req.body?.command === 'string' ? req.body.command : '';
+  if (!command.trim()) {
+    return res.status(400).json({ success: false, error: 'command is required.' });
+  }
+
+  // The kill switch outranks the level check: while paused, nothing autonomous
+  // runs regardless of how safe the action looks.
+  if (isBlockedByKillSwitch(getEmergencyState().emergencyPaused)) {
+    return res.json({
+      success: true,
+      decision: {
+        allowed: false,
+        requiredLevel: 4,
+        requiresApproval: true,
+        category: 'kill_switch',
+        reason: 'Emergency stop is engaged; all autonomous actions are paused.',
+      },
+    });
+  }
+
+  const decision = evaluatePermission(
+    command,
+    securityMatrixState.currentLevel,
+    req.body?.approvedBy
+  );
+  res.json({ success: true, decision });
+});
+
+/** Secret scan over this repository's own tracked files. */
+app.get('/api/security/audit-secrets', async (req: Request, res: Response) => {
+  try {
+    const { readFile } = await import('fs/promises');
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const run = promisify(execFile);
+
+    const { stdout } = await run('git', ['ls-files'], { cwd: process.cwd(), maxBuffer: 10 * 1024 * 1024 });
+    const paths = stdout.split('\n').map((p) => p.trim()).filter(Boolean);
+
+    const files = [];
+    for (const path of paths) {
+      // Only text files up to a sane size; a binary blob is not scan-worthy.
+      if (/\.(png|jpe?g|gif|ico|woff2?|ttf|eot|pdf|zip|cjs|map)$/i.test(path)) continue;
+      try {
+        const content = await readFile(path, 'utf8');
+        if (content.length > 2_000_000) continue;
+        files.push({ path, content, tracked: true });
+      } catch {
+        // Unreadable file: skip rather than fail the audit.
+      }
+    }
+
+    const report = runSecurityAudit(files);
+    const summary = summariseAudit(report);
+
+    res.json({
+      success: true,
+      clean: isAuditClean(report),
+      summary,
+      findings: report.findings.slice(0, 100),
+      scannedFiles: report.scannedFiles,
+      note: 'Scans tracked text files for credential patterns. A clean result means these patterns were absent, not that the system is proven secure.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Secret audit failed.' });
+  }
+});
+
+/** Create a validated, redacted memory backup. */
+app.get('/api/backup', (req: Request, res: Response) => {
+  const backup = createBackup(memoryState as unknown as Record<string, unknown>);
+  const integrity = verifyBackup(backup);
+  if (!integrity.ok) {
+    return res.status(500).json({
+      success: false,
+      error: 'Backup failed its own round-trip verification and was not returned.',
+      errors: integrity.errors,
+    });
+  }
+  addAuditLog(
+    `Memory backup created and round-trip verified (${backup.keyCount} keys)`,
+    3,
+    'HUMAN_OPERATOR',
+    'VERIFIED'
+  );
+  persistMemory();
+  res.json({ success: true, verified: true, backup });
+});
+
+/** Restore a previously created backup. */
+app.post('/api/restore', (req: Request, res: Response) => {
+  const result = restoreBackup(
+    memoryState as unknown as Record<string, unknown>,
+    req.body?.backup ?? req.body
+  );
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, errors: result.errors });
+  }
+
+  addAuditLog(
+    `Memory restored from backup: ${result.restoredKeys.length} keys replaced, ${result.preservedKeys.length} preserved`,
+    4,
+    'HUMAN_OPERATOR',
+    'VERIFIED'
+  );
+  persistMemory();
+  res.json({ success: true, ...result });
+});
+
+/** Deployment readiness check. Observes this process's real configuration. */
+app.get('/api/deployment/verify', async (req: Request, res: Response) => {
+  try {
+    const fsMod = await import('fs/promises');
+    const dir = path.dirname(MEMORY_FILE_PATH);
+
+    let dataDirWritable = false;
+    try {
+      const probe = path.join(dir, `.write-probe-${Date.now()}`);
+      await fsMod.writeFile(probe, 'ok');
+      await fsMod.unlink(probe);
+      dataDirWritable = true;
+    } catch {
+      dataDirWritable = false;
+    }
+
+    const backup = createBackup(memoryState as unknown as Record<string, unknown>);
+    const backupCheck = verifyBackup(backup);
+
+    const report = verifyDeployment({
+      vaultConfigured: VAULT_CONFIGURED,
+      isDevMode: process.env.NODE_ENV !== 'production',
+      port: typeof PORT === 'number' ? PORT : null,
+      dataDirWritable,
+      httpsConfigured: Boolean(process.env.HTTPS_ENABLED || process.env.TLS_CERT_PATH),
+      blockingBugs: KNOWN_BLOCKING_BUGS,
+      backupVerified: backupCheck.ok,
+    });
+
+    res.json({
+      success: true,
+      ...report,
+      blockers: deploymentBlockers(report),
+      note: 'A deployment is ready only when every check passes. UNKNOWN checks block readiness rather than being assumed good.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Deployment verification failed.' });
+  }
 });
 
 // Security Matrix APIs

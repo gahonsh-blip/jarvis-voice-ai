@@ -4,7 +4,7 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-19 — Social media publishing (items 25-29).
+Last cycle: 2026-09-19 — Production hardening (items 51-60) plus a full green suite (43 files / 623 tests) and a clean build.
 
 ## Status legend
 
@@ -247,9 +247,41 @@ is connected to this environment.
 
 ## 🔐 Production hardening (51-60)
 
-| # | Item | Status |
-| :--- | :--- | :--- |
-| 51-60 | Security audit, permission matrix, kill switch, secret audit, E2E suites, deploy, backup, docs | `NOT_STARTED` |
+| # | Item | Status | Evidence |
+| :--- | :--- | :--- | :--- |
+| 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. |
+| 52 | Permission matrix finalization | `VERIFIED` | `src/utils/hardening/permissionMatrix.ts` holds one ordered matrix that all callers share. The first matching entry wins, so a command containing both `read` and `delete` classifies as destructive. An unrecognised action is refused at level 4 and requires approval — it is never defaulted to safe. `POST /api/security/evaluate` exposes it. 19 unit tests plus E2E. |
+| 53 | Kill-switch testing | `VERIFIED` | `POST /api/security/evaluate` checks the emergency stop before the level check, so an engaged kill switch blocks even a level-1 read action with category `kill_switch`. E2E toggles the switch on, asserts the block, then releases it. `isBlockedByKillSwitch` unit-tested both ways. |
+| 54 | Secret/token protection audit | `PARTIAL` | Two real bugs found and fixed this cycle (see below): a malformed OpenAI key regex that matched no key at all, and a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line. `git check-ignore` now confirms `.env` is ignored. The vault secret is no longer hardcoded. No credential rotation was performed against live providers here. |
+| 55 | Real-device E2E test suite | `NOT_AVAILABLE` | No Android device or Windows host is attached in this environment. The server-side legs are covered by E2E tests; the on-device checklist remains in `docs/ANDROID_BRIDGE.md`. |
+| 56 | Offline-mode E2E tests | `VERIFIED` | `src/tests/offlineOnline.e2e.test.ts` boots a real server with `GEMINI_API_KEY` blanked and asserts health, memory read/write round-trip, local intent classification, a verified backup, and that permissions stay enforced offline. 6 offline tests. |
+| 57 | Online-mode E2E tests | `VERIFIED` | Same file. Confirms core endpoints answer, and that each integration status endpoint with `configured: false` never reports `connected: true` or `status: connected`. 2 online tests. |
+| 58 | Production deployment verification | `VERIFIED` | `src/utils/hardening/deploymentVerification.ts` + `GET /api/deployment/verify` check vault secret, production build, listening port, writable data dir, HTTPS, blocking-bug count and backup verification against this process's real state. An `UNKNOWN` check blocks readiness rather than being assumed good. Confirmed both directions: ready with a full environment, not ready with blockers named. 11 unit tests plus E2E. |
+| 59 | Backup/restore procedure | `VERIFIED` | `src/utils/hardening/backupRestore.ts` + `GET /api/backup` / `POST /api/restore`. A backup is refused (HTTP 500) unless it passes its own round-trip verification. Credentials are redacted before a snapshot leaves. Restore preserves keys the backup does not mention, so an old restore never silently erases newer data. Prototype-polluting keys are rejected. 15 unit tests plus E2E. |
+| 60 | Final documentation | `PARTIAL` | This document plus `docs/SECURITY.md` are current for the hardening work. Items 51, 54, 55 and 60 stay `PARTIAL`/`NOT_AVAILABLE` because the external legs (live credential rotation, physical-device hardware, third-party audit) have not been exercised. |
+
+### Bugs found and fixed this cycle (hardening)
+
+1. **The OpenAI key redaction pattern matched nothing.** It contained a stray
+   `T3BlbkFJ` fragment inside a quantifier, so every real `sk-…` key passed
+   through unredacted. A live sample key confirmed `null` before the fix. The
+   pattern also carried a bare `[a-zA-Z0-9]{48,}` alternative that redacted
+   ordinary commit hashes, destroying audit output. Both are gone.
+2. **The Telegram token pattern never matched inside a URL.** The leading `\b`
+   cannot match after `bot` in `https://api.telegram.org/bot<token>`, which is
+   the only place a bot token realistically appears. Replaced with a digit
+   lookbehind.
+3. **`.gitignore` was UTF-16 encoded, so git ignored every line.** `git
+   check-ignore .env` exited 1, meaning a real `.env` would have been committed.
+   Rewritten as UTF-8; `git check-ignore` now confirms it.
+4. **The token vault key was hardcoded in source.** `VAULT_SECRET` fell back to a
+   literal string committed in `server.ts`, so anyone with the repository could
+   decrypt stored tokens. The fallback is removed; without `APP_SECRET` the
+   vault reports `NOT_CONFIGURED` and uses a random per-process key.
+5. **The first secret audit reported 100 fake credentials.** It reused the broad
+   redaction patterns, so every `conn.accessToken = decrypted` was reported as a
+   leak, burying the real findings. Rewritten to flag only quoted literals and
+   unmistakable token shapes: the same run now returns 0 CRITICAL and 0 HIGH.
 
 ---
 
@@ -332,4 +364,13 @@ is connected to this environment.
   one is `UNVERIFIED`. Only the LinkedIn path has live API wiring — YouTube,
   Instagram and Facebook report `MISSING_CREDENTIALS` here, and no production
   social account was used, so items 25 and 26 stay `PARTIAL`.
-- Items 30-60 are unstarted.
+- Items 30-34 (communication), 35-39 (AI/memory), 40-45 (autonomous) and
+  46-50 (voice logic) are implemented and tested; their physical-device legs
+  remain `PARTIAL`, as recorded in their sections above.
+- Hardening (items 51-60) is complete except where hardware or an external
+  party is required. Items 51, 54 and 60 stay `PARTIAL`, and item 55 stays
+  `NOT_AVAILABLE`, because no third-party audit, live credential rotation, or
+  physical device was available in this environment.
+- The `server.ts` token vault reports `NOT_CONFIGURED` unless `APP_SECRET` or
+  `SESSION_SECRET` is set. With no secret, tokens are encrypted under a random
+  per-process key and will not survive a restart.

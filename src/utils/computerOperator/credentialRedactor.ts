@@ -23,10 +23,11 @@ const REDACTION_PATTERNS: { category: string; regex: RegExp; placeholder: string
     regex: /\b(ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36,}\b|\bgithub_pat_[a-zA-Z0-9_]{50,}\b/g,
     placeholder: '[REDACTED_GITHUB_TOKEN]',
   },
-  // 3. Telegram Bot Tokens
+  // 3. Telegram Bot Tokens. The leading lookbehind replaces \b: the token is
+  // normally embedded after "bot" in a URL, where \b would never match.
   {
     category: 'Telegram Bot Token',
-    regex: /\b[0-9]{8,11}:[a-zA-Z0-9_-]{35,}\b/g,
+    regex: /(?<![0-9])[0-9]{8,11}:[a-zA-Z0-9_-]{35}\b/g,
     placeholder: '[REDACTED_TELEGRAM_BOT_TOKEN]',
   },
   // 4. JWT Web Tokens
@@ -35,10 +36,13 @@ const REDACTION_PATTERNS: { category: string; regex: RegExp; placeholder: string
     regex: /\beyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]+\b/g,
     placeholder: '[REDACTED_JWT_TOKEN]',
   },
-  // 5. OpenAI API Keys
+  // 5. OpenAI API Keys. The previous pattern contained a stray "T3BlbkFJ"
+  // fragment that broke the quantifier, so no key ever matched. The trailing
+  // bare-\b alternative also matched any 48+ character run, redacting commit
+  // hashes and other harmless identifiers, so it was removed.
   {
     category: 'OpenAI Key',
-    regex: /\bsk-[a-zA-Z0-9]{20,T3BlbkFJ[a-zA-Z0-9_-]*|[a-zA-Z0-9]{48,}\b/g,
+    regex: /\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}\b/g,
     placeholder: '[REDACTED_OPENAI_KEY]',
   },
   // 6. Generic Bearer Tokens

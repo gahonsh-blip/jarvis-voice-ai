@@ -259,6 +259,122 @@ describe('scheduled autonomous tasks', () => {
   });
 });
 
+describe('production hardening endpoints', () => {
+  it('serves the permission matrix and refuses unknown actions', async () => {
+    const matrix = await fetch(`${base()}/api/security/permission-matrix`).then((r) => r.json());
+    expect(matrix.success).toBe(true);
+    expect(matrix.matrix.length).toBeGreaterThan(0);
+
+    const unknown = await fetch(`${base()}/api/security/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'flibbertigibbet the widget' }),
+    }).then((r) => r.json());
+    expect(unknown.decision.allowed).toBe(false);
+    expect(unknown.decision.category).toBe('unknown');
+  });
+
+  it('blocks an approval-required action without a named approver', async () => {
+    const res = await fetch(`${base()}/api/security/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'send a message to Rahul' }),
+    }).then((r) => r.json());
+    expect(res.decision.allowed).toBe(false);
+  });
+
+  it('allows a read-only action', async () => {
+    const res = await fetch(`${base()}/api/security/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'check the battery status' }),
+    }).then((r) => r.json());
+    expect(res.decision.allowed).toBe(true);
+  });
+
+  it('reports the kill switch as blocking every action while engaged', async () => {
+    const on = await fetch(`${base()}/api/emergency/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestedBy: 'E2E', reason: 'hardening test' }),
+    }).then((r) => r.json());
+
+    // The toggle may land either way depending on prior state; normalise to ON.
+    if (!on.emergencyPaused) {
+      await fetch(`${base()}/api/emergency/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedBy: 'E2E' }),
+      });
+    }
+
+    const blocked = await fetch(`${base()}/api/security/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'check the battery status' }),
+    }).then((r) => r.json());
+    expect(blocked.decision.allowed).toBe(false);
+    expect(blocked.decision.category).toBe('kill_switch');
+
+    // Release so later tests are unaffected.
+    const status = await fetch(`${base()}/api/emergency/status`).then((r) => r.json());
+    if (status.emergencyPaused) {
+      await fetch(`${base()}/api/emergency/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedBy: 'E2E' }),
+      });
+    }
+  });
+
+  it('creates a backup that passes its own round-trip verification', async () => {
+    const res = await fetch(`${base()}/api/backup`).then((r) => r.json());
+    expect(res.success).toBe(true);
+    expect(res.verified).toBe(true);
+    expect(res.backup.format).toBe('hermes-jarvis-memory');
+    expect(res.backup.keyCount).toBeGreaterThan(0);
+  });
+
+  it('scans tracked files for credentials and reports its scope', async () => {
+    const res = await fetch(`${base()}/api/security/audit-secrets`).then((r) => r.json());
+    expect(res.success).toBe(true);
+    expect(res.scannedFiles).toBeGreaterThan(0);
+    expect(res).toHaveProperty('clean');
+    expect(res).toHaveProperty('summary');
+  });
+
+  it('restores a backup and preserves keys it does not mention', async () => {
+    const { backup } = await fetch(`${base()}/api/backup`).then((r) => r.json());
+    const res = await fetch(`${base()}/api/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backup }),
+    }).then((r) => r.json());
+    expect(res.success).toBe(true);
+    expect(Array.isArray(res.restoredKeys)).toBe(true);
+  });
+
+  it('rejects a restore of a malformed backup', async () => {
+    const res = await fetch(`${base()}/api/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backup: { format: 'nonsense' } }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('reports deployment blockers honestly instead of claiming readiness', async () => {
+    const res = await fetch(`${base()}/api/deployment/verify`).then((r) => r.json());
+    expect(res.success).toBe(true);
+    expect(Array.isArray(res.checks)).toBe(true);
+    // In this test environment no vault secret and no TLS are configured, so
+    // readiness must be false and the blockers must say why.
+    expect(res.ready).toBe(false);
+    expect(res.blockers.length).toBeGreaterThan(0);
+    expect(res.blockers.join(' ').toLowerCase()).toMatch(/vault|https|build/);
+  });
+});
+
 describe('kill switch gates autonomous execution', () => {
   it('blocks a goal run while the kill switch is active, then resumes', async () => {
     const toggle = () =>
