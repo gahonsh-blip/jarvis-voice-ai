@@ -71,6 +71,14 @@ import {
 } from './src/utils/communication/telegramDelivery';
 import { assembleAiContext } from './src/utils/memory/aiContext';
 import { mergeMemorySnapshots } from './src/utils/memory/memoryConflict';
+import { AutonomousGoalRunner } from './src/utils/autonomous/goalRunner';
+import type { StepDescriptor } from './src/utils/autonomous/stepLibrary';
+import {
+  dueGoals,
+  nextScheduledOccurrence,
+  type ScheduledGoal,
+  type ScheduledGoalRecord,
+} from './src/utils/autonomous/schedule';
 import { publishWithRetry } from './src/utils/social/publishRetry';
 import {
   captureScreenshot,
@@ -3312,7 +3320,7 @@ function getISTCurrentHourMinute(): { hour: number; minute: number } {
 
 let schedulerRunLog: string[] = [];
 
-function checkAndRunSchedulerJobs() {
+async function checkAndRunSchedulerJobs() {
   const todayIST = getISTDateString();
   const { hour, minute } = getISTCurrentHourMinute();
 
@@ -3407,10 +3415,106 @@ function checkAndRunSchedulerJobs() {
         });
     }
   }
+
+  // 6. Scheduled autonomous tasks (item 43). Tasks that require approval never
+  // run unattended: they are recorded as needing a human instead. A task on the
+  // list is planned and run through the same verified loop as a manual goal.
+  // Times are interpreted in IST, matching the rest of this tick.
+  if (scheduledGoals.length > 0) {
+    const schedState = memoryState.schedulerState as unknown as {
+      lastAutonomousGoalRuns?: Record<string, string>;
+    };
+    if (!schedState.lastAutonomousGoalRuns) schedState.lastAutonomousGoalRuns = {};
+
+    for (const goal of dueGoals(scheduledGoals as ScheduledGoal[], schedState.lastAutonomousGoalRuns, {
+      minuteOfDay: hour * 60 + minute,
+      date: todayIST,
+    })) {
+      const today = todayIST;
+      schedState.lastAutonomousGoalRuns[goal.id] = today;
+
+      if (goal.requiresApproval) {
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" (${goal.id}) is due but requires human approval; it was NOT run unattended.`,
+          3,
+          'AUTOMATED_SCHEDULE',
+          'PENDING'
+        );
+        scheduledGoalRuns.unshift({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: 'PERMISSION_REQUIRED',
+          verified: false,
+          stepsDone: 0,
+          stepsTotal: Array.isArray(goal.steps) ? goal.steps.length : 0,
+          at: new Date().toISOString(),
+        });
+        persistMemory();
+        continue;
+      }
+
+      const { buildGoalSteps } = await import('./src/utils/autonomous/stepLibrary');
+      const { steps, rejected } = buildGoalSteps(goal.steps as StepDescriptor[]);
+      if (rejected.length > 0) {
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" rejected: unsupported step kind(s) ${rejected.join(', ')}`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        persistMemory();
+        continue;
+      }
+
+      try {
+        const runner = new AutonomousGoalRunner();
+        const result = await runner.run(goal.name, steps);
+        scheduledGoalRuns.unshift({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: result.outcome,
+          verified: result.verified,
+          stepsDone: result.steps.filter((s) => s.status === 'DONE').length,
+          stepsTotal: result.steps.length,
+          at: new Date().toISOString(),
+        });
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          result.outcome === 'VERIFIED' ? 'VERIFIED' : 'FAILED'
+        );
+      } catch (err: any) {
+        scheduledGoalRuns.unshift({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: 'FAILED',
+          verified: false,
+          stepsDone: 0,
+          stepsTotal: steps.length,
+          at: new Date().toISOString(),
+        });
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" FAILED: ${err?.message || 'unknown error'}`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+      }
+      if (scheduledGoalRuns.length > 100) scheduledGoalRuns.length = 100;
+      persistMemory();
+    }
+  }
 }
 
-// Run scheduler tick every 30 seconds
-const schedulerInterval = setInterval(checkAndRunSchedulerJobs, 30000);
+// Run scheduler tick every 30 seconds. The tick is async now, so a rejected
+// promise would otherwise surface as an unhandled rejection and crash the
+// process; log it and keep the schedule alive.
+const schedulerInterval = setInterval(() => {
+  checkAndRunSchedulerJobs().catch((err: unknown) => {
+    console.warn('[Scheduler] Tick failed:', err instanceof Error ? err.message : err);
+  });
+}, 30000);
 schedulerInterval.unref();
 
 // ==============================================================================
@@ -6242,6 +6346,227 @@ app.post('/api/memory/sync', (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Memory sync failed' });
   }
+});
+
+// ==============================================================================
+// AUTONOMOUS GOAL RUNNER (backlog items 40-45)
+// ==============================================================================
+
+export interface ScheduledGoalSpec {
+  id: string;
+  name: string;
+  atMinuteOfDay: number;
+  steps: Array<Record<string, unknown>>;
+  requiresApproval?: boolean;
+  enabled: boolean;
+}
+
+/**
+ * Recurring autonomous goals. Empty by default: nothing runs on a schedule
+ * until the operator registers something, so the system never acts on its own
+ * initiative without a deliberate choice.
+ */
+const scheduledGoals: ScheduledGoalSpec[] = [];
+const scheduledGoalRuns: ScheduledGoalRecord[] = [];
+
+/** Bounded in-memory audit trail of autonomous runs, newest first. */
+const goalRunHistory: Array<{
+  goal: string;
+  outcome: ExecutionOutcome;
+  verified: boolean;
+  steps: Array<{ id: string; status: string; detail: string }>;
+  audit: unknown[];
+  startedAt: string;
+  finishedAt: string;
+}> = [];
+
+app.get('/api/autonomous/goals', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    runs: goalRunHistory.slice(0, 20),
+  });
+});
+
+/**
+ * Run a goal through the plan → execute → verify loop.
+ *
+ * Steps are supplied by the caller as declarative descriptors. Only a small set
+ * of built-in, verifiable step kinds is accepted: an arbitrary code payload from
+ * the network is never executed. A step that needs approval pauses the run and
+ * reports `awaitingApproval` instead of proceeding.
+ */
+app.post('/api/autonomous/goals/run', async (req: Request, res: Response) => {
+  const goal = typeof req.body?.goal === 'string' ? req.body.goal.trim() : '';
+  if (!goal) {
+    return res.status(400).json({ success: false, error: 'A goal description is required.' });
+  }
+
+  if (emergencyActive()) {
+    bridgeGateway.recordAudit('ACTION_DENIED', 'Autonomous goal blocked by Global Kill Switch', 'BLOCKED');
+    return res.status(423).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: 'Global Kill Switch is active. Autonomous execution is frozen.',
+    });
+  }
+
+  const requestedSteps = Array.isArray(req.body?.steps) ? req.body.steps : [];
+  if (requestedSteps.length === 0) {
+    return res.status(400).json({ success: false, error: 'At least one step is required.' });
+  }
+
+  const { buildGoalSteps } = await import('./src/utils/autonomous/stepLibrary');
+  const { steps, rejected } = buildGoalSteps(requestedSteps);
+  if (rejected.length > 0) {
+    return res.status(400).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: `Unsupported step kind(s): ${rejected.join(', ')}`,
+      supported: 'See GET /api/autonomous/goals/step-kinds',
+    });
+  }
+
+  const startedAt = new Date().toISOString();
+  const runner = new AutonomousGoalRunner({
+    // Approval must arrive from the request, and must name the approver. An
+    // anonymous `approved: true` is not a human decision.
+    approve: req.body?.approver
+      ? () => req.body?.approved === true
+      : undefined,
+  });
+
+  const result = await runner.run(goal, steps);
+  const finishedAt = new Date().toISOString();
+
+  if (result.verified) {
+    memoryState.stats.actionsExecuted += 1;
+  }
+
+  goalRunHistory.unshift({
+    goal,
+    outcome: result.outcome,
+    verified: result.verified,
+    steps: result.steps.map((s) => ({ id: s.id, status: s.status, detail: s.detail })),
+    audit: result.audit,
+    startedAt,
+    finishedAt,
+  });
+  if (goalRunHistory.length > 50) goalRunHistory.length = 50;
+
+  addAuditLog(
+    `Autonomous goal "${goal}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
+    2,
+    req.body?.approver ? `HUMAN:${String(req.body.approver).slice(0, 40)}` : 'AUTONOMOUS',
+    result.outcome === 'VERIFIED' ? 'VERIFIED' : result.outcome === 'FAILED' ? 'FAILED' : 'PENDING'
+  );
+  persistMemory();
+
+  return res.json({
+    success: result.verified,
+    goal,
+    outcome: result.outcome,
+    verified: result.verified,
+    awaitingApproval: result.awaitingApproval ?? false,
+    steps: result.steps,
+    audit: result.audit,
+    receipt: result.receipt,
+  });
+});
+
+app.get('/api/autonomous/goals/step-kinds', async (_req: Request, res: Response) => {
+  const { SUPPORTED_STEP_KINDS } = await import('./src/utils/autonomous/stepLibrary');
+  res.json({ success: true, kinds: SUPPORTED_STEP_KINDS });
+});
+
+// ==============================================================================
+// SCHEDULED AUTONOMOUS TASKS (backlog item 43)
+// ==============================================================================
+
+app.get('/api/autonomous/schedule', (req: Request, res: Response) => {
+  const lastRuns = (memoryState.schedulerState as unknown as {
+    lastAutonomousGoalRuns?: Record<string, string>;
+  }).lastAutonomousGoalRuns || {};
+  const istParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const part = (type: string) => istParts.find((p) => p.type === type)?.value || '0';
+  const clock = {
+    minuteOfDay: Number(part('hour')) * 60 + Number(part('minute')),
+    date: `${part('year')}-${part('month')}-${part('day')}`,
+  };
+
+  res.json({
+    success: true,
+    timezone: 'Asia/Kolkata',
+    goals: scheduledGoals.map((g) => {
+      const { nextRunAt, missedRun } = nextScheduledOccurrence(
+        g as ScheduledGoal,
+        lastRuns[g.id],
+        clock
+      );
+      return { ...g, lastRunDate: lastRuns[g.id] || null, nextRunAt, missedRun };
+    }),
+    runs: scheduledGoalRuns.slice(0, 20),
+  });
+});
+
+app.post('/api/autonomous/schedule', (req: Request, res: Response) => {
+  const id = typeof req.body?.id === 'string' ? req.body.id.trim() : '';
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const atMinuteOfDay = Number(req.body?.atMinuteOfDay);
+
+  if (!id || !name) {
+    return res.status(400).json({ success: false, error: 'id and name are required.' });
+  }
+  if (!Number.isInteger(atMinuteOfDay) || atMinuteOfDay < 0 || atMinuteOfDay > 1439) {
+    return res.status(400).json({
+      success: false,
+      error: 'atMinuteOfDay must be an integer between 0 and 1439.',
+    });
+  }
+  if (!Array.isArray(req.body?.steps) || req.body.steps.length === 0) {
+    return res.status(400).json({ success: false, error: 'At least one step is required.' });
+  }
+
+  const spec: ScheduledGoalSpec = {
+    id,
+    name,
+    atMinuteOfDay,
+    steps: req.body.steps,
+    requiresApproval: req.body?.requiresApproval === true,
+    enabled: req.body?.enabled !== false,
+  };
+
+  const existing = scheduledGoals.findIndex((g) => g.id === id);
+  if (existing >= 0) scheduledGoals[existing] = spec;
+  else scheduledGoals.push(spec);
+
+  addAuditLog(
+    `Scheduled autonomous task "${name}" (${id}) ${existing >= 0 ? 'updated' : 'registered'} to run daily at minute ${atMinuteOfDay}`,
+    3,
+    'HUMAN_OPERATOR',
+    'VERIFIED'
+  );
+  persistMemory();
+
+  res.status(existing >= 0 ? 200 : 201).json({ success: true, goal: spec });
+});
+
+app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
+  const index = scheduledGoals.findIndex((g) => g.id === req.params.id);
+  if (index < 0) {
+    return res.status(404).json({ success: false, error: 'No such scheduled task.' });
+  }
+  const [removed] = scheduledGoals.splice(index, 1);
+  addAuditLog(`Scheduled autonomous task "${removed.name}" (${removed.id}) removed`, 3, 'HUMAN_OPERATOR', 'VERIFIED');
+  persistMemory();
+  res.json({ success: true, removed: removed.id });
 });
 
 // Mobile Personal Status & Morning Briefing Telemetry Endpoints

@@ -182,7 +182,41 @@ not the quality of a Gemini response, and no live Gemini call is made in tests.
 
 ## 🤖 Autonomous agent (40-45)
 
-All items `NOT_STARTED`.
+| # | Item | Status | Evidence |
+| :--- | :--- | :--- | :--- |
+| 40 | Goal → Plan → Execute → Verify loop | `VERIFIED` | `src/utils/autonomous/goalRunner.ts` runs steps one at a time and requires each step's own verifier before it is `DONE`. A run ends `VERIFIED` only when every step verified. 11 unit tests. |
+| 41 | Multi-step task execution | `VERIFIED` | The runner carries a shared state object between steps and stops a run when a step fails, so later steps never execute against state that was never produced. Proven end-to-end by `autonomousGoals.e2e.test.ts`, which drives real HTTP routes and then checks the filesystem independently. |
+| 42 | Task recovery after failure | `VERIFIED` | Retry is opt-in per step (`retryable`, `maxAttempts`), so a non-idempotent step is never retried by default. A thrown error is captured as a step failure rather than crashing the run. Covered by the retry and throw unit tests. |
+| 43 | Scheduled autonomous tasks | `VERIFIED` | `src/utils/autonomous/schedule.ts` computes due-ness in an explicit timezone and flags a missed window rather than skipping silently. The server scheduler tick runs due tasks through the same verified loop. A task marked `requiresApproval` is never run unattended — it is recorded as `PERMISSION_REQUIRED`. 10 unit tests plus 3 E2E tests. |
+| 44 | Human approval checkpoints | `VERIFIED` | A step marked `requiresApproval` pauses the run when no approval channel exists, reporting `awaitingApproval` instead of assuming consent. Approval requires a named approver; an anonymous `approved: true` is not a human decision. Covered by unit and E2E tests, including that the gated file is genuinely not written. |
+| 45 | Complete audit trail | `VERIFIED` | Every transition (`STEP_STARTED`, `STEP_SUCCEEDED`, `STEP_FAILED`, `STEP_RETRYING`, `STEP_SKIPPED`, `APPROVAL_REQUESTED`, `APPROVAL_DECIDED`, `RUN_FINISHED`) is recorded on the run and returned by the API. Runs are also written to the server's audit log and kept in a bounded history. |
+
+### Autonomous agent — what is real vs. not
+
+Real: the plan/execute/verify loop, retry policy, pauses for approval, scheduled
+execution, and the audit trail. The E2E tests start a real server, call real
+routes, and confirm file steps against the filesystem afterwards rather than
+trusting the response body.
+
+Bounded on purpose: the runner accepts only a fixed set of step kinds
+(`fs.mkdir`, `fs.writeFile`, `fs.appendFile`, `fs.readFile`, `run.command`).
+`run.command` is restricted to an allow-list (`git`, `node`, `npm`, `npx`).
+A descriptor naming anything else is rejected with `BLOCKED` rather than
+executed, so a request cannot smuggle arbitrary code into the runner.
+
+### Bugs found and fixed (autonomous cycle)
+
+1. **Unhandled rejection risk in the scheduler.** Item 43 needed the schedule
+   tick to be async. An async `setInterval` callback whose promise rejects is an
+   unhandled rejection, which can terminate the process. The interval now
+   catches and logs.
+2. **Inconsistent timezone.** Scheduled tasks originally read server-local time
+   while the rest of the tick used IST, so a task could fire at the wrong hour
+   on a non-IST host. The schedule maths now takes an explicit clock, and the
+   endpoint reports `timezone: Asia/Kolkata`.
+3. **Missing steps hidden after a failure.** A run that stopped early listed
+   only the steps it had reached. The remaining steps are now returned as
+   `PENDING` with a reason, so the report shows the whole plan.
 
 ## 🎙️ Voice (46-50)
 
