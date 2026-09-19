@@ -24,6 +24,12 @@ export const EXECUTION_OUTCOMES = [
   'BLOCKED',
   /** Handed to the remote system; confirmation not received yet. */
   'DISPATCHED',
+  /**
+   * The remote system accepted the request but did not confirm the result
+   * (e.g. a 2xx with no identifier, or an ambiguous timeout after send). The
+   * action may have taken effect. Never treat this as either success or failure.
+   */
+  'UNVERIFIED',
   /** Independently confirmed to have taken effect. The only success state. */
   'VERIFIED',
   /** Attempted and it did not work. */
@@ -87,6 +93,8 @@ export function outcomeLabel(outcome: ExecutionOutcome): string {
       return 'VERIFIED';
     case 'DISPATCHED':
       return 'DISPATCHED (awaiting device confirmation)';
+    case 'UNVERIFIED':
+      return 'UNVERIFIED (accepted but not confirmed)';
     case 'SIMULATION_ONLY':
       return 'SIMULATION_ONLY';
     case 'PERMISSION_REQUIRED':
@@ -108,6 +116,8 @@ export function outcomeLabelHi(outcome: ExecutionOutcome): string {
       return 'पुष्टि हो गई';
     case 'DISPATCHED':
       return 'भेज दिया (डिवाइस की पुष्टि बाकी है)';
+    case 'UNVERIFIED':
+      return 'असत्यापित (स्वीकार हुआ, पुष्टि नहीं)';
     case 'SIMULATION_ONLY':
       return 'केवल सिमुलेशन';
     case 'PERMISSION_REQUIRED':

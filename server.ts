@@ -63,6 +63,7 @@ import {
 } from './src/utils/computerOperator';
 import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/androidBridgeGateway';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
+import { publishWithRetry } from './src/utils/social/publishRetry';
 import {
   captureScreenshot,
   getCaptureAvailability,
@@ -208,12 +209,12 @@ export interface ServerSocialPost {
   status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'not_published' | 'failed' | string;
   scheduledTime?: string;
   likesSimulated?: number;
-  executionStatus?: 'DRAFT' | 'PENDING_APPROVAL' | 'QUEUED' | 'EXECUTING' | 'SUCCESS' | 'FAILED' | 'VERIFIED' | 'NOT_PUBLISHED';
+  executionStatus?: 'DRAFT' | 'PENDING_APPROVAL' | 'QUEUED' | 'EXECUTING' | 'SUCCESS' | 'FAILED' | 'VERIFIED' | 'NOT_PUBLISHED' | 'UNVERIFIED';
   verificationStatus?: 'VERIFIED' | 'UNVERIFIED' | 'MISSING_CREDENTIALS' | 'PROVIDER_ERROR' | 'STANDBY';
   errorReason?: string;
   providerUrn?: string;
   verifiedAt?: string;
-  finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED';
+  finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED' | 'UNVERIFIED';
   videoTitle?: string;
   videoDescription?: string;
   privacyStatus?: 'private' | 'unlisted' | 'public';
@@ -1457,6 +1458,16 @@ let proactiveReports = [
 // ==============================================================================
 
 /**
+ * Base URL for the LinkedIn REST API.
+ *
+ * Overridable so the real publish path can be exercised end-to-end against a
+ * local server. Defaults to the live API.
+ */
+function getLinkedInApiBaseUrl(): string {
+  return (process.env.LINKEDIN_API_BASE_URL || 'https://api.linkedin.com').replace(/\/+$/, '');
+}
+
+/**
  * 1. LINKEDIN VERIFICATION & PUBLISHING ENGINE (Official REST Posts API - Personal Member Profile)
  */
 async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
@@ -1503,7 +1514,7 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
   try {
     let targetAuthor = configuredUrn;
     if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
-      const meRes = await fetch('https://api.linkedin.com/v2/userinfo', {
+      const meRes = await fetch(`${getLinkedInApiBaseUrl()}/v2/userinfo`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (meRes.ok) {
@@ -1554,56 +1565,118 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
       isReshareDisabledByAuthor: false,
     };
 
-    const res = await fetch('https://api.linkedin.com/rest/posts', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'LinkedIn-Version': '202501',
-        'X-Restli-Protocol-Version': '2.0.0',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(postPayload),
+    // The POST to LinkedIn is retried only for failures that are safe to repeat.
+    // A timeout after the request was sent is ambiguous: the retry helper stops
+    // and reports UNVERIFIED rather than risking a duplicate post.
+    const publishAttempt = async (): Promise<
+      { ok: true; providerId: string } | { ok: false; status?: number; message: string; error?: unknown }
+    > => {
+      // `globalThis.Response` because the bare name refers to Express's type here.
+      let res: globalThis.Response;
+      try {
+        res = await fetch(`${getLinkedInApiBaseUrl()}/rest/posts`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'LinkedIn-Version': '202501',
+            'X-Restli-Protocol-Version': '2.0.0',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(postPayload),
+        });
+      } catch (netErr) {
+        return {
+          ok: false,
+          message: netErr instanceof Error ? netErr.message : 'network error',
+          error: netErr,
+        };
+      }
+
+      const xRestliId = res.headers.get('x-restli-id') || res.headers.get('location') || '';
+      const resData: any = await res.json().catch(() => null);
+
+      // LinkedIn returns the created post's URN in x-restli-id. A 2xx without a
+      // URN is not evidence of a post, so it is reported as unverified rather
+      // than being handed a fabricated identifier.
+      const confirmedUrn = res.status === 201
+        ? (xRestliId || resData?.id || '').trim()
+        : res.ok
+          ? String(resData?.id ?? '').trim()
+          : '';
+
+      if (confirmedUrn) return { ok: true, providerId: confirmedUrn };
+
+      if (res.ok) {
+        // Signal the caller that the request succeeded without an identifier.
+        return { ok: true, providerId: '' };
+      }
+
+      // Treat any other non-ok response as a typed failure so the retry helper can
+      // classify it from the status code.
+      return { ok: false, status: res.status, message: resData?.message || `HTTP ${res.status}` };
+    };
+
+    const { result: publishOutcome, receipt: publishReceipt } = await publishWithRetry({
+      label: 'linkedin',
+      attempt: publishAttempt,
     });
 
-    const xRestliId = res.headers.get('x-restli-id') || res.headers.get('location') || '';
-    const resData: any = await res.json().catch(() => null);
-
-    if (res.status === 201 || (res.ok && (xRestliId || resData?.id))) {
-      const postId = xRestliId || resData?.id || `urn:li:share:${Date.now()}`;
+    if (publishOutcome.published) {
       return {
         success: true,
         executionStatus: 'SUCCESS',
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
-        providerUrn: postId,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on LinkedIn personal member profile! Post URN: ${postId}`,
-      };
-    } else if (res.status === 401 || res.status === 403) {
-      if (oauthConn) {
-        oauthConn.connected = false;
-        oauthConn.errorReason = 'OAuth token rejected or missing w_member_social scope. Please reconnect.';
-        persistMemory();
-      }
-      const errDetail = resData?.message || `HTTP ${res.status}`;
-      return {
-        success: false,
-        executionStatus: 'FAILED',
-        verificationStatus: 'PROVIDER_ERROR',
-        finalTruthState: 'FAILED',
-        errorReason: `LinkedIn Auth/Permission Error: ${errDetail}`,
-        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Please ensure 'w_member_social' permission is approved and reconnect.`,
-      };
-    } else {
-      const errDetail = resData?.message || (resData?.serviceErrorCode ? `Code ${resData.serviceErrorCode}: ${resData.message}` : `HTTP status ${res.status}`);
-      return {
-        success: false,
-        executionStatus: 'FAILED',
-        verificationStatus: 'PROVIDER_ERROR',
-        finalTruthState: 'FAILED',
-        errorReason: `LinkedIn API error: ${errDetail}`,
-        userMessage: `❌ PUBLISHING FAILED: LinkedIn returned error (${errDetail}). Post saved as DRAFT.`,
+        providerUrn: publishOutcome.providerId,
+        userMessage: `✅ VERIFIED & PUBLISHED: Live on LinkedIn personal member profile! Post URN: ${publishOutcome.providerId}`,
       };
     }
+
+    // A rejected token must clear the connection so the UI asks for a reconnect.
+    if (publishOutcome.failureKind === 'AUTH' || publishOutcome.failureKind === 'PERMISSION') {
+      if (oauthConn) {
+        oauthConn.connected = false;
+        oauthConn.errorReason =
+          publishOutcome.failureKind === 'AUTH'
+            ? 'OAuth token rejected. Please reconnect.'
+            : 'OAuth token rejected or missing w_member_social scope. Please reconnect.';
+        persistMemory();
+      }
+    }
+
+    const attempts = publishOutcome.attempts.length;
+    const errDetail = publishOutcome.errorReason || 'unknown error';
+
+    if (publishReceipt.outcome === 'UNVERIFIED') {
+      return {
+        success: false,
+        executionStatus: 'UNVERIFIED',
+        verificationStatus: 'UNVERIFIED',
+        finalTruthState: 'UNVERIFIED',
+        errorReason: errDetail,
+        userMessage: `⚠️ UNVERIFIED: ${errDetail} Check LinkedIn manually before retrying, to avoid posting twice.`,
+      };
+    }
+
+    if (publishOutcome.failureKind === 'AUTH' || publishOutcome.failureKind === 'PERMISSION') {
+      return {
+        success: false,
+        executionStatus: 'FAILED',
+        verificationStatus: 'PROVIDER_ERROR',
+        finalTruthState: 'FAILED',
+        errorReason: `LinkedIn auth/permission error: ${errDetail}`,
+        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Ensure 'w_member_social' is approved, then reconnect.`,
+      };
+    }
+
+    return {
+      success: false,
+      executionStatus: 'FAILED',
+      verificationStatus: 'PROVIDER_ERROR',
+      finalTruthState: 'FAILED',
+      errorReason: `LinkedIn publish failed after ${attempts} attempt(s): ${errDetail}`,
+      userMessage: `❌ PUBLISHING FAILED: ${errDetail} (${attempts} attempt(s)). Post saved as DRAFT.`,
+    };
   } catch (netErr: any) {
     return {
       success: false,
@@ -2492,13 +2565,15 @@ async function executeApprovedAction(
   } else if (platLower.includes('twitter') || platLower.includes('x')) {
     result = await verifyAndPublishToTwitter(post);
   } else {
-    // Internal Telegram Channel or local channel
-    post.status = 'published';
-    post.executionStatus = 'SUCCESS';
-    post.verificationStatus = 'VERIFIED';
-    post.finalTruthState = 'VERIFIED';
-    post.likesSimulated = Math.floor(25 + Math.random() * 40);
-    post.verifiedAt = new Date().toISOString();
+    // Internal channel with no external provider to confirm against. The
+    // broadcast is recorded as dispatched, not verified: there is no platform
+    // response to verify it with. Engagement counts are deliberately omitted
+    // rather than generated, since invented numbers read as real metrics.
+    post.status = 'not_published';
+    post.executionStatus = 'NOT_PUBLISHED';
+    post.verificationStatus = 'STANDBY';
+    post.finalTruthState = 'NOT_PUBLISHED';
+    post.verifiedAt = undefined;
 
     const internalAudit: AuditLogEntry = {
       id: actionLogId,
@@ -2506,19 +2581,21 @@ async function executeApprovedAction(
       action: `Execute Level 4 ${post.platform} Broadcast (${post.id})`,
       levelRequired: 4,
       approvedBy,
-      status: 'VERIFIED',
+      status: 'NOT_PUBLISHED',
       targetPlatform: post.platform,
-      verificationStatus: 'VERIFIED',
-      finalTruthState: 'VERIFIED',
+      verificationStatus: 'STANDBY',
+      finalTruthState: 'NOT_PUBLISHED',
+      errorReason:
+        'No external provider is configured for this channel, so the broadcast could not be verified. No engagement metrics are reported.',
     };
     memoryState.auditLogs.unshift(internalAudit);
     persistMemory();
 
     return {
-      success: true,
+      success: false,
       post,
       auditEntry: internalAudit,
-      userMessage: `✅ Verified and broadcasted to ${post.platform} channel.`,
+      userMessage: `⚠️ NOT_VERIFIED: ${post.platform} has no configured provider to confirm against. Nothing was reported as published, and no engagement metrics are shown.`,
     };
   }
 

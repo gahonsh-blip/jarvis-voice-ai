@@ -4,7 +4,7 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-19 — GitHub / project automation (items 14-24).
+Last cycle: 2026-09-19 — Social media publishing (items 25-29).
 
 ## Status legend
 
@@ -89,7 +89,36 @@ native helper); until then they are honestly `NOT_AVAILABLE`.
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 25-29 | Auth, real API, approval workflow, publish verification, retry | `NOT_STARTED` | LinkedIn/YouTube OAuth scaffolding exists; publish verification not implemented. |
+| 25 | Social account authentication | `PARTIAL` | LinkedIn OAuth connect/callback and token storage exist and are exercised against the API. YouTube/Instagram/Facebook credential checks report `MISSING_CREDENTIALS` when unset. No live production accounts were authorised in this environment, so end-to-end auth against real accounts is unverified. |
+| 26 | Real platform API integration | `PARTIAL` | LinkedIn publishes through the official REST Posts API (`/rest/posts`). A 2xx is only accepted as a post when the platform returns an identifier (`x-restli-id`/`location`). YouTube/Instagram/Facebook paths exist but have no live credentials here. |
+| 27 | Draft → approval → publish workflow | `VERIFIED` | `src/utils/social/publishRetry.ts` models the state machine and rejects illegal jumps. `DRAFT → PUBLISHED` is refused, `APPROVED` requires a named approver, and `PUBLISHED` requires a provider identifier. 14 workflow unit tests. |
+| 28 | Published-post verification | `VERIFIED` | The provider's own identifier is the only accepted proof. A 2xx with no identifier yields `UNVERIFIED`, never `VERIFIED`. Proven end-to-end by `socialPublish.e2e.test.ts`, which starts the real server against a mock LinkedIn. |
+| 29 | Failure / retry handling | `VERIFIED` | `publishWithRetry` retries only failures it can show happened before the request was sent (5xx, rate limit, refused connection). Ambiguous and unrecognised failures — a dropped connection, a generic `fetch failed`, anything unclassified — are not retried, because the post may already exist; they report `UNVERIFIED`. 15 retry unit tests plus 7 E2E tests. |
+
+Key honesty properties, each covered by a test:
+
+- A confirmed post stores the platform URN and reports `VERIFIED`.
+- A 2xx without a URN reports `UNVERIFIED` and the post is not marked published.
+- A dropped connection reports `UNVERIFIED` and is never retried (no double post).
+- An unrecognised failure also reports `UNVERIFIED` and is never retried.
+- A 401/403 is not retried and reports the credential gap as `PERMISSION_REQUIRED`.
+- A channel with no configured provider reports `NOT_PUBLISHED`. It no longer
+  fabricates engagement metrics — the previous `Math.random()` like-counts and
+  the `"broadcasted"` success message were removed.
+
+Bugs found and fixed while building this:
+
+- A 2xx response was initially given a synthetic `urn:li:share:${Date.now()}`
+  fallback and reported as published. Any post id the platform did not supply is
+  now treated as unconfirmed.
+- `classifyPublishFailure` read the error code from the top-level object only.
+  Node's `fetch` wraps the real cause on `error.cause`, so a dropped connection
+  after send looked like an unknown error and was retried three times, which
+  would double-post. The classifier now unwraps `cause` and treats a bare
+  `fetch failed` as ambiguous.
+- A 403 was classified as an authentication failure; it is now
+  `PERMISSION`, so the recovery advice names the missing scope rather than a bad
+  token.
 
 ## 📩 Communication (30-34)
 
@@ -195,4 +224,9 @@ All items `NOT_STARTED`.
   GitHub API. It never merges into the default branch, and automated code repair
   requires a `materialize` strategy that is not shipped — plan steps without one
   report `NOT_CONFIGURED` by design.
-- Items 25-60 are unstarted.
+- Social publishing (items 25-29) is honest about what it can confirm. LinkedIn
+  posts are only `VERIFIED` when the platform returns a post URN; a 2xx without
+  one is `UNVERIFIED`. Only the LinkedIn path has live API wiring — YouTube,
+  Instagram and Facebook report `MISSING_CREDENTIALS` here, and no production
+  social account was used, so items 25 and 26 stay `PARTIAL`.
+- Items 30-60 are unstarted.
