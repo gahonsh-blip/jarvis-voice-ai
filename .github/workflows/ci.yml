@@ -1,0 +1,45 @@
+name: CI
+
+# Validation-only workflow. Installs dependencies, then typechecks, runs the
+# test suite and produces the production build. It never deploys, creates
+# commits, pushes, merges or touches secrets — it only reports a green/red check.
+on: [push, pull_request, workflow_dispatch]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: typecheck · tests · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck / lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Verify build artifact
+        run: |
+          test -f dist/server.cjs
+          echo "Build artifact present: dist/server.cjs ($(du -h dist/server.cjs | cut -f1))"
