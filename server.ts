@@ -63,6 +63,12 @@ import {
 } from './src/utils/computerOperator';
 import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/androidBridgeGateway';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
+import {
+  buildDeliveryReceipt,
+  classifyTelegramError,
+  interpretTelegramSend,
+  type DeliveryInterpretation,
+} from './src/utils/communication/telegramDelivery';
 import { publishWithRetry } from './src/utils/social/publishRetry';
 import {
   captureScreenshot,
@@ -2671,6 +2677,15 @@ function getCleanAdminChatId(): string | null {
   return raw.length > 0 ? raw : null;
 }
 
+/**
+ * Telegram API host. Overridable so the real send path can be pointed at a
+ * local server in tests; production leaves it unset and uses Telegram.
+ */
+function getTelegramApiBase(): string {
+  const override = (process.env.TELEGRAM_API_BASE_URL || '').trim().replace(/\/+$/, '');
+  return override.length > 0 ? override : 'https://api.telegram.org';
+}
+
 const initialTelegramToken = getCleanTelegramToken();
 const initialAdminChatId = getCleanAdminChatId();
 
@@ -2714,7 +2729,7 @@ async function callTelegramApi(method: string, body?: any, timeoutMs = 8000) {
   }, timeoutMs);
 
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    const res = await fetch(`${getTelegramApiBase()}/bot${token}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -2777,36 +2792,71 @@ function formatTelegramReplyMarkup(rawMarkup?: any): Record<string, any> | undef
   return undefined;
 }
 
-async function sendRealTelegramMessage(chatId: string | number, text: string, replyMarkup?: any) {
-  if (!getCleanTelegramToken() || !chatId) return null;
-  const formattedMarkup = formatTelegramReplyMarkup(replyMarkup);
-  const payload: Record<string, any> = {
-    chat_id: chatId,
-    text,
-    parse_mode: 'Markdown',
-  };
-  if (formattedMarkup) {
-    payload.reply_markup = formattedMarkup;
+/**
+ * Send a message and report exactly what can be confirmed about it.
+ *
+ * Uses the strict sender so real failures (a blocked bot, a bad token) surface
+ * and are classified, rather than being collapsed into "nothing to send".
+ */
+async function deliverTelegramMessage(
+  chatId: string | number | null | undefined,
+  text: string,
+  replyMarkup?: any,
+): Promise<DeliveryInterpretation> {
+  if (!getCleanTelegramToken() || !chatId) {
+    return interpretTelegramSend(null);
   }
+  try {
+    return interpretTelegramSend(await sendTelegramMessageStrict(chatId, text, replyMarkup));
+  } catch (err) {
+    return classifyTelegramError(err);
+  }
+}
+
+
+/**
+ * Send a Telegram message, throwing on failure.
+ *
+ * Markdown is attempted first. The plain-text fallback runs only when the first
+ * failure looks like a formatting/parse error — retrying plain text after a 403
+ * or 401 is pointless, and swallowing those errors is how a blocked bot came to
+ * look like a successful send.
+ */
+async function sendTelegramMessageStrict(
+  chatId: string | number,
+  text: string,
+  replyMarkup?: any,
+): Promise<any> {
+  const formattedMarkup = formatTelegramReplyMarkup(replyMarkup);
+  const payload: Record<string, any> = { chat_id: chatId, text, parse_mode: 'Markdown' };
+  if (formattedMarkup) payload.reply_markup = formattedMarkup;
 
   try {
-    const result = await callTelegramApi('sendMessage', payload, 6000);
-    return result;
+    return await callTelegramApi('sendMessage', payload, 6000);
   } catch (err: any) {
-    // If Markdown parsing fails or any other formatting error, fallback to plain text
-    try {
-      const fallbackPayload: Record<string, any> = {
-        chat_id: chatId,
-        text: text.replace(/[*_`#]/g, ''),
-      };
-      if (formattedMarkup) {
-        fallbackPayload.reply_markup = formattedMarkup;
-      }
-      return await callTelegramApi('sendMessage', fallbackPayload, 6000);
-    } catch (fallbackErr: any) {
-      console.warn(`[Telegram Bot] Failed to send message to ${chatId}:`, fallbackErr.message);
-      return null;
-    }
+    const isParseError = /parse|entities|markdown/i.test(String(err?.message ?? ''));
+    if (!isParseError) throw err;
+
+    const fallbackPayload: Record<string, any> = {
+      chat_id: chatId,
+      text: text.replace(/[*_`#]/g, ''),
+    };
+    if (formattedMarkup) fallbackPayload.reply_markup = formattedMarkup;
+    return await callTelegramApi('sendMessage', fallbackPayload, 6000);
+  }
+}
+
+/**
+ * Legacy send helper. Returns `null` on any failure so existing fire-and-forget
+ * callers never throw. Use `deliverTelegramMessage` when the outcome matters.
+ */
+async function sendRealTelegramMessage(chatId: string | number, text: string, replyMarkup?: any) {
+  if (!getCleanTelegramToken() || !chatId) return null;
+  try {
+    return await sendTelegramMessageStrict(chatId, text, replyMarkup);
+  } catch (err: any) {
+    console.warn(`[Telegram Bot] Failed to send message to ${chatId}:`, err?.message);
+    return null;
   }
 }
 
@@ -3626,19 +3676,25 @@ app.post('/api/telegram/test-live', async (req: Request, res: Response) => {
 
     try {
       const botInfo = await callTelegramApi('getMe', undefined, 5000);
-      let notificationSent = false;
+      const hadChatId = Boolean(activeTelegramChatId);
 
-      if (activeTelegramChatId) {
-        const testMsg = `🔔 *HERMES JARVIS TEST SIGNAL*\n\nMobile gateway is online and securely authenticated from your web control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Cloud Node*: Oracle Always Free ARM64`;
-        const sendRes = await sendRealTelegramMessage(activeTelegramChatId, testMsg);
-        notificationSent = Boolean(sendRes);
-      }
+      const delivery = await deliverTelegramMessage(
+        activeTelegramChatId,
+        `🔔 *HERMES JARVIS TEST SIGNAL*\n\nMobile gateway is online and securely authenticated from your web control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Cloud Node*: Oracle Always Free ARM64`,
+      );
 
       return res.json({
-        success: true,
+        // The bot itself is reachable, but a delivery is only a success when
+        // Telegram confirmed it.
+        success: delivery.delivered,
+        botReachable: true,
         bot: botInfo,
-        notificationSent,
+        notificationSent: delivery.delivered,
+        deliveryOutcome: delivery.outcome,
+        messageId: delivery.messageId,
+        message: delivery.errorReason,
         activeChatId: activeTelegramChatId,
+        chatIdKnown: hadChatId,
       });
     } catch (apiErr: any) {
       return res.json({
@@ -3670,20 +3726,21 @@ app.post('/api/telegram/broadcast', async (req: Request, res: Response) => {
     if (!message) return res.status(400).json({ error: 'Message is required' });
 
     const targetChat = activeTelegramChatId || getCleanAdminChatId();
-    if (!targetChat || !getCleanTelegramToken()) {
-      return res.json({
-        success: true,
-        simulated: true,
-        message: 'Telegram simulated broadcast completed (Bot token or Chat ID in standby mode).',
-      });
-    }
+    const interpretation = await deliverTelegramMessage(targetChat, message);
 
-    const result = await sendRealTelegramMessage(targetChat, message);
+    const receipt = buildDeliveryReceipt(interpretation, String(targetChat ?? 'unconfigured'));
     return res.json({
-      success: true,
-      liveSent: Boolean(result),
+      // Only a verified delivery is a success. Anything else is reported with
+      // its true outcome so the UI cannot claim the briefing went out.
+      success: interpretation.delivered,
+      outcome: interpretation.outcome,
+      executed: true,
+      verified: receipt.verified,
+      liveSent: interpretation.delivered,
+      messageId: interpretation.messageId,
       targetChat,
-      message: 'Briefing broadcast sent to Telegram.',
+      errorReason: interpretation.errorReason,
+      message: receipt.detailEn,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });

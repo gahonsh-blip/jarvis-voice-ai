@@ -88,6 +88,9 @@ beforeAll(async () => {
 
   jarvis = spawn('npx', ['tsx', 'server.ts'], {
     cwd: process.cwd(),
+    // Detached so the whole group can be killed. `npx tsx` spawns tsx as a
+    // child, and killing only the wrapper leaves the server listening.
+    detached: true,
     env: {
       ...process.env,
       PORT: String(JARVIS_PORT),
@@ -104,10 +107,19 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  if (jarvis) {
-    jarvis.kill('SIGTERM');
+  if (jarvis?.pid) {
+    // Negative pid signals the whole process group, so the tsx child dies too.
+    try {
+      process.kill(-jarvis.pid, 'SIGTERM');
+    } catch {
+      jarvis.kill('SIGTERM');
+    }
     await new Promise((r) => setTimeout(r, 500));
-    if (!jarvis.killed) jarvis.kill('SIGKILL');
+    try {
+      process.kill(-jarvis.pid, 'SIGKILL');
+    } catch {
+      // already gone
+    }
   }
   if (linkedin) await new Promise<void>((resolve) => linkedin!.close(() => resolve()));
   fs.rmSync(path.dirname(memoryFile), { recursive: true, force: true });

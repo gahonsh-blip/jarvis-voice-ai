@@ -124,8 +124,22 @@ Bugs found and fixed while building this:
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 30 | Real Telegram delivery | `PARTIAL` | Bot polling and send endpoints exist; delivery verification not implemented. |
-| 31-34 | Notification reply, call detection E2E, call answering, message approval | `PARTIAL` | Approval gates and truthful dispatch semantics verified server-side; physical leg pending. |
+| 30 | Real Telegram delivery | `PARTIAL` | Delivery is now verified against Telegram's returned `message_id`. A confirmed send is `VERIFIED`; a 2xx without an id is `UNVERIFIED`; a blocked bot reports `PERMISSION_REQUIRED`. Evidence: `src/utils/communication/telegramDelivery.ts`, `src/tests/telegramDelivery.test.ts` (10 tests), `src/tests/telegramDelivery.e2e.test.ts` (3 tests against a real server with a local Telegram stand-in). The physical leg — a message reaching a real phone over api.telegram.org — still needs the operator's bot token and a real send. |
+| 31 | Real notification reply | `PARTIAL` | Reply route requires an explicit `approved: true` and reports `DISPATCHED`, never success, until the device confirms. Delivery on a real handset is unverified. |
+| 32 | Call detection E2E | `PARTIAL` | Call state is reported from device telemetry, and the E2E suite covers the telemetry chain. No physical call has been detected by this host. |
+| 33 | Call answering | `PERMISSION_REQUIRED` | Answering is refused unless the device holds the dialer role; the refusal names the required grant. No real call has been answered. |
+| 34 | Message sending with approval | `PARTIAL` | Approval gate verified server-side (`approved: true` required, kill switch honoured). Real-device delivery unverified. |
+
+### Communication — what is real vs. not
+
+Real: the send path, the delivery verification, the approval gate, the kill
+switch, and the honest outcome vocabulary. Every one of these is exercised
+against a live JARVIS process in the E2E test.
+
+Not real: Telegram's servers and a physical Android handset. Those cannot be
+reached from this host. The Telegram E2E test swaps the API host for a local
+stand-in via `TELEGRAM_API_BASE_URL`, which is unset in production. A message
+is only called `VERIFIED` when the real API returns a `message_id`.
 
 ## 🧠 AI / Memory (35-39)
 
