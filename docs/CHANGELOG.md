@@ -4,6 +4,31 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-21 02:25 (20:55 UTC) — The Oracle Cloud modal stopped inventing VM metrics
+
+### 🛡️ Truthfulness
+- `src/components/OracleCloudModal.tsx` presented unmeasured hardware numbers as
+  if they came from the server. Its uptime card printed
+  `{vmStatus?.uptimeHours || 342} hours continuous` — a `||`, so even a reported
+  0 was rewritten to 342 — under a hardcoded `ONLINE` badge. The SSH card showed
+  `Public IP: 129.154.42.108` and offered a copyable
+  `ssh -i ~/.ssh/oracle_arm_key ubuntu@129.154.42.108`. The header always
+  advertised `VM.Standard.A1.Flex`, 4 OCPUs, 24 GB RAM, 200 GB storage, and the
+  disk card said `of 200 GB`, even with no `/api/oracle-cloud/status` response.
+- New `src/utils/vmTelemetryDisplay.ts` normalises every value for display:
+  `normalizeUptimeHours`, `normalizePublicIp`, `normalizeMetricPercent`
+  (clamped to 0-100), `normalizeGigabytes`, `normalizeVmStatus`, and
+  `buildSshCommand`. Absent values render as an explicit `UNKNOWN` or em dash,
+  and the SSH card no longer offers a command for an address the server never
+  reported.
+
+### 🧪 Tests
+- `src/tests/vmTelemetryDisplay.test.ts` (6 tests) covers the normalisers, and
+  `src/tests/toolSurfaceTruthfulness.test.ts` gained an Oracle-modal source
+  guard (18 tests in the file). Negative-validated: restoring `|| 342`,
+  `|| '129.154.42.108'` and the constant `ONLINE` fails exactly 3 of the 18;
+  the fix was then restored.
+
 ## [Unreleased] - 2026-09-21 02:19 (20:49 UTC) — Sample telemetry can no longer be spoken as a real reading
 
 ### 🛡️ Truthfulness
