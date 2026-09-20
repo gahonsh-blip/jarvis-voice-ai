@@ -4,7 +4,16 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 23:05 IST — PermissionGuard direct test coverage.
+Last cycle: 2026-09-20 23:35 IST — git tools no longer fabricate state.
+`realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned
+`success: true` on every git failure, inventing branch `main`, three commit
+subjects and `"Diff tool nominal."` Fixed; the HUD, `/api/tools/git/*` and the
+`git_status_tool` intent now surface UNKNOWN. Guarded by
+`src/tests/gitToolsTruthfulness.test.ts` (6 tests, negative-validated). This
+downgraded item 13 from `VERIFIED` to `PARTIAL` — the zero-fake-success claim
+had never actually been audited repo-wide.
+
+Previous cycle: 2026-09-20 23:05 IST — PermissionGuard direct test coverage.
 `src/utils/computerOperator/permissionGuard.ts` is the computer-operator safety
 surface that all Level 1-4 decisions flow through, but it had no test that called
 it directly (only indirect exercise via the engine). Added
@@ -110,7 +119,7 @@ files / 675 tests, clean lint, clean build.
 | 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. The file routes' workspace boundary was not actually sound until 2026-09-20 22:05 IST: `safeResolvePath` used a bare string-prefix test, so a sibling directory sharing the root's name prefix escaped the workspace. Now segment-checked (see Last cycle), guarded by `src/tests/workspacePathContainment.test.ts`. The computer-operator permission gate itself also has direct coverage now: `src/tests/permissionGuard.test.ts` (9 tests, 2026-09-20 23:05 IST) asserts the emergency-stop block, the finance exclusion, the destructive-command and security-bypass guards, the Level 4 human gate, and that a blocked action must never be read as "no approval needed". |
 | 11 | Action result verification | `VERIFIED` | `ActionVerifier` no longer returns unconditional success (`|| true` removed). Clicks require an observed screen change; edits require a disk re-read; tests require parsed runner output; screenshots require a captured file. |
 | 12 | Browser real-action + permission flow | `VERIFIED` | `ScreenshotModal.tsx` uses `getDisplayMedia` when permitted, otherwise asks the host to capture via `/api/computer-operator/screenshot`. A denied permission reports `permission_denied`, not a simulated image. |
-| 13 | Zero-fake-success for all tools | `VERIFIED` (computer control) | Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. |
+| 13 | Zero-fake-success for all tools | `PARTIAL` | Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. **2026-09-20 23:35 IST — the claim did not hold repo-wide:** `realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned `success: true` on *every* git failure with invented data (branch `main`, three fabricated commit subjects, `"Diff tool nominal."`), which propagated to the Autonomous Tools HUD, `/api/tools/git/*` and the `git_status_tool` voice intent. Fixed; guarded by `src/tests/gitToolsTruthfulness.test.ts` (6 tests, negative-validated: 4 of 6 fail with the fix reverted). Remaining scope before this can return to `VERIFIED`: the same audit has not yet been run across every tool surface. |
 
 ### Computer control — what is real vs. not
 

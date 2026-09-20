@@ -4,6 +4,23 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-20 23:35 — Git tools stop fabricating repository state
+
+### 🛡️ Truthfulness
+- `realGitStatus`, `realGitLog` and `realGitDiff` (`server_tools.ts`) caught every
+  git failure and returned `success: true` with invented data: branch `main`,
+  three fabricated commit subjects, and `"Diff tool nominal."` They now return
+  `success: false` with the real underlying error.
+- `server.ts` `git_status_tool` renders `Git: UNKNOWN` instead of a default
+  branch; `AutonomousToolsModal.tsx` renders an explicit unavailability message
+  instead of passing off an empty string as "no uncommitted differences".
+
+### 🧪 Tests
+- Added `src/tests/gitToolsTruthfulness.test.ts` (6 tests). Negative-validated:
+  with the `server_tools.ts` fix reverted, 4 of the 6 fail.
+
+---
+
 ## [Unreleased] - 2026-09-20 23:05 — PermissionGuard direct test coverage
 
 ### 🧪 Automated Testing

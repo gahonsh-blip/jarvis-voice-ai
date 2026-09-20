@@ -486,3 +486,79 @@ The `sk-`/`ghp_`/`AIza` strings that appear in the diff are synthetic fixtures i
 Final slot-5 commits: `b3885ac` (fix + tests), `4c8e6ce` (docs), `5e43c3f`
 (report). The report commit's first push was rejected non-fast-forward, then it
 was rebased cleanly and pushed as `2858f23..5e43c3f`. No force-push.
+
+---
+
+# HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+
+Slot:        WORK  |  IST time: 23:35 (fire #6)
+Window date: 2026-09-20   Window slots completed so far: 5 (this run makes 6)
+
+Completed:
+- #13 Zero-fake-success for all tools — audited the git tool surface and found the
+  claim did not hold. `realGitStatus`, `realGitLog`, `realGitDiff` in
+  `server_tools.ts` returned `success: true` on EVERY git failure, inventing
+  branch `main`, three commit subjects ("...permission-gated autonomous
+  assistant", "...linkedin...", "...initialize workspace structure") and
+  `"Diff tool nominal."`. Fixed in `server_tools.ts`; callers corrected in
+  `server.ts` (`git_status_tool` -> `Git: UNKNOWN`) and
+  `src/components/AutonomousToolsModal.tsx` (diff render no longer passes an
+  empty string off as "no uncommitted differences"). Evidence:
+  `src/tests/gitToolsTruthfulness.test.ts`, 6 tests, 6 passed. Item status
+  deliberately DOWNGRADED from VERIFIED to PARTIAL — the repo-wide audit is not
+  finished.
+
+In Progress:
+- #13 Zero-fake-success for all tools — git surface done; every other tool
+  surface in `server_tools.ts` / `server.ts` still needs the same audit before
+  this can return to VERIFIED.
+
+Remaining:
+- #10 Real Computer Operator actions — synthetic mouse/keyboard still
+  NOT_AVAILABLE (no hardware); permission-gate coverage already added 23:05.
+- Backlog items 14-60 unchanged this slot.
+
+Bugs Found:
+- Fabricated git state on failure (above). Found by reading the `catch` blocks in
+  `server_tools.ts`, then confirming with a stub `git` on PATH that exits 127:
+  STATUS/LOG/DIFF all reported `success: true` with invented data before the fix.
+
+Bugs Fixed:
+- Git fabrication. Verification: `npx vitest run src/tests/gitToolsTruthfulness.test.ts`
+  -> 6 passed. Negative validation: stashed the `server_tools.ts` fix, re-ran ->
+  4 of 6 FAILED (`expected true to be false` on the failure-path assertions),
+  restored the fix -> 6 passed.
+
+Tests:    730 passed / 730, 50 files (npx vitest run) — includes the 6 new tests
+Lint:     PASS — `npm run lint` (tsc --noEmit), exit 0
+Build:    PASS — `npm run build`, exit 0, dist/server.cjs 816197 bytes
+E2E:      NOT RUN — no device/Android target in this sandbox
+Security: `.env` not staged and not committed; no token/key in the diff. A
+          dedicated audit tool was NOT RUN.
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 -> PARTIAL, Last cycle line),
+               docs/CHANGELOG.md (new 23:35 entry)
+Branch:  feature/hermes-full-completion
+Commit:  ff8f1da (fix) + docs commit
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE YET (opened at finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; dist/server.cjs is the verified artifact.
+
+Blocked:
+- #10 synthetic mouse/keyboard input — requires real display/GUI hardware.
+- Android / device E2E items — require a physical device or emulator.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- Continue #13: audit the remaining tool surfaces in `server_tools.ts` and
+  `server.ts` for other fabricated-success fallbacks, since that is where this
+  slot's real bug was found.
+
+हिंदी सारांश (एक पंक्ति):
+- गिट टूल्स अब असफल होने पर झूठी सफलता और नकली ब्रांच/कमिट नहीं दिखाते — असली
+  त्रुटि रिपोर्ट करते हैं; 6 नए टेस्ट पास, पूरा सूट 730/730 हरा।
