@@ -1,22 +1,49 @@
 {
   "window_date": "2026-09-20",
   "window_started_at": "2026-09-20T05:51:23Z",
-  "last_slot_at": "2026-09-20T17:00:00Z",
-  "slots_completed": 4,
-  "current_item": 10,
-  "current_item_title": "Real Computer Operator actions (file routes workspace boundary)",
-  "current_item_status": "VERIFIED",
-  "last_commit": "1a54aae",
+  "last_slot_at": "2026-09-20T17:56:00Z",
+  "slots_completed": 5,
+  "current_item": 54,
+  "current_item_title": "Secret/token protection audit",
+  "current_item_status": "PARTIAL",
+  "last_commit": "5e43c3f",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {"item": 1, "reason": "physical Android device required"},
-    {"item": 2, "reason": "physical Android device required"},
-    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
-    {"item": 50, "reason": "physical Android device required"},
-    {"item": 55, "reason": "physical Android device / Windows host required"}
+    {
+      "item": 1,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 2,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 8,
+      "reason": "Windows host required for the PowerShell capture leg"
+    },
+    {
+      "item": 50,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 55,
+      "reason": "physical Android device / Windows host required"
+    },
+    {
+      "item": 25,
+      "reason": "live provider credentials required"
+    },
+    {
+      "item": 26,
+      "reason": "live provider credentials required"
+    },
+    {
+      "item": 30,
+      "reason": "live provider credentials required"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 4 (22:05 IST WORK, fire #4). Fixed a real path-containment escape in server_tools.ts safeResolvePath: it used absolute.startsWith(PROJECT_ROOT), which a prefix-sibling directory (/.../jarvis-voice-ai-EXT) satisfies, so '../jarvis-voice-ai-EXT/x' escaped the workspace. Now segment-wise containment via escapesRoot. Regression test src/tests/workspacePathContainment.test.ts (9 tests). Negative-validated: reverting the fix fails 4 of 9. TRAP CONFIRMED AGAIN: local clone fetch refspec lists only main, so branching from local main yielded a commit 26 behind origin/feature/hermes-full-completion; fixed by explicit refspec fetch + cherry-pick (28f5f94 -> e594ad2). First push rejected non-fast-forward; no force-push. Commits e594ad2 (fix+test) and 6a57558 (docs/report) pushed. Gates OBSERVED on tip: lint exit 0, vitest 47 files / 691 tests passed, build exit 0 (dist/server.cjs 815943 bytes)."
+  "notes": "Slot 5 (22:35 IST WORK, fire #5). Item 54 PARTIAL, advanced. Fixed a caller-ID masking privacy leak: maskPhoneNumber in src/utils/telephonyPermissions.ts returned '+9198765*****' for '+91 9876543210' (country code + 8 subscriber digits exposed) while the sibling helper in androidBridgeEngine.ts correctly masked as '+91 ******3210'. Telephony helper now emits the canonical form (blank -> 'Unknown / Private', <=4 digits -> '****'). New coverage src/tests/telephonyPermissions.test.ts (24 tests). Negative-validated on tree: restoring old implementation fails 8 of 24. Docs updated: COMPLETION_STATUS.md item 54 + Last cycle, CHANGELOG.md, SECURITY.md (new 'Caller-ID masking' subsection). Gates OBSERVED on tip 5e43c3f: lint exit 0, vitest 48 files / 715 tests passed, build exit 0 (dist/server.cjs 816011 bytes). Commits b3885ac (fix+test), 4c8e6ce (docs), 5e43c3f (report) pushed. TRAPS: (a) stale-ref trap again, fixed with explicit refspec fetch; (b) remote advanced to 2858f23 (another slot's computer-operator test, NOT reflected in this state file) so the first push of the report commit was rejected non-fast-forward; rebased cleanly, no force-push. (c) a STALE .git/rebase-merge directory left by an earlier slot blocked git rebase; verified via reflog that the rebase had already been applied manually, backed up refs, removed only the metadata dir. NOTE: slots_completed incremented 4->5 per the state file, but the remote branch shows one extra pushed commit (2858f23) whose slot did not update state - the count may undercount by one."
 }
