@@ -1,37 +1,22 @@
 {
   "window_date": "2026-09-20",
   "window_started_at": "2026-09-20T05:51:23Z",
-  "last_slot_at": "2026-09-20T21:06:54Z",
-  "slots_completed": 12,
+  "last_slot_at": "2026-09-20T21:44:00Z",
+  "slots_completed": 13,
   "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools (Oracle VCN firewall posture no longer asserted unprobed)",
+  "current_item_title": "Zero-fake-success for all tools (UI status badges no longer assert unmeasured state)",
   "current_item_status": "PARTIAL",
-  "last_commit": "afb1784",
+  "last_commit": "3f9be68",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 2,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 8,
-      "reason": "Windows host required for the PowerShell capture leg"
-    },
-    {
-      "item": 50,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 55,
-      "reason": "physical Android device / Windows host required"
-    }
+    { "item": 1, "reason": "physical Android device required" },
+    { "item": 2, "reason": "physical Android device required" },
+    { "item": 8, "reason": "Windows host required for the PowerShell capture leg" },
+    { "item": 50, "reason": "physical Android device required" },
+    { "item": 55, "reason": "physical Android device / Windows host required" }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "SLOT 12 (02:36 IST, 21:06 UTC) - WORK SLOT. Addressed the gap slot 10 recorded in server.ts:1412 / OracleCloudModal.tsx:213: oracleCloudState.firewallRules declared all five VCN ingress rules (22/80/443/3000/8443) active:true while the modal drew an unconditional green check per rule under the heading 'Zero Accidental Ingress'. Nothing in this process probes a port, so this was an invented security posture. FIX (commit d1ae25b): active is now boolean|null, every declared rule ships active:null; new pure helpers resolveFirewallRuleState() -> OBSERVED_OPEN|OBSERVED_CLOSED|NOT_PROBED and summarizeFirewallObservation() -> {probedCount,total,verified} in src/utils/vmTelemetryDisplay.ts; the modal renders NOT_PROBED as a label instead of a tick and the 'Zero Accidental Ingress' claim now sits behind firewallSummary.verified (false until every rule carries a real observation), else the heading reads 'Ingress NOT_PROBED (0/5 rules observed)'. Four further plausible defaults removed from the same modal: hardcoded 'CPU LOAD (4 OCPUs)', 'of {bootVolumeGb ?? 200} GB', hardcoded 'Ubuntu 24.04 LTS (Minimal ARM64)' footer (now the reported os field else UNKNOWN), and the Always Free '₹0 / Forever Free' checklist relabelled 'PROGRAMME LIMITS (NOT VERIFIED FOR THIS INSTANCE)'. NEGATIVE-VALIDATED: sed-replacing active:null with active:true in server.ts made src/tests/toolSurfaceTruthfulness.test.ts fail exactly 'the Oracle firewall rules are not asserted active without a probe' (1 failed | 19 passed); server.ts restored from /tmp/server.ts.orig and the 12-insertion working diff re-verified intact, then 20/20 passed. GATES OBSERVED on tip d1ae25b: targeted 3 files / 32 tests passed; npm run lint (tsc --noEmit) exit 0; npx vitest run 56 files / 795 tests passed (19.32s); npm run build exit 0, dist/server.cjs 816.6 kb. Docs commit afb1784 (COMPLETION_STATUS.md Last-cycle block + item 13 row entry, CHANGELOG.md, automation/reports/hermes-window-log.md) pushed d1ae25b..afb1784. STILL OPEN: slot 10 also flagged server.ts:1390-1391 seeding status RUNNING and publicIp 129.154.42.108; those are now rendered through the slot 9/10 normalisers in the modal (so the modal no longer invents them), but whether /api/oracle-cloud/status actually serves those seeds is UNKNOWN - the route was NOT run this slot. Item 13 REMAINS PARTIAL: the audit is pattern/test-driven, not a per-tool inventory of server_tools.ts / server.ts, and no physical device has exercised the live telemetry branch (UNVERIFIED). NEXT SLOT: (a) run /api/oracle-cloud/status and decide whether the seeded status/publicIp must be removed, or (b) continue the item 13 inventory on the next unaudited surface (server_tools.ts tool result strings, remaining Autonomous Tools HUD panels)."
+  "notes": "SLOT 13 (03:07 IST, 21:37 UTC) - WORK SLOT. Continued the item 13 zero-fake-success inventory onto the UI status-badge surfaces, chosen because these panels are read by a human at the moment they approve an external action. FOUND (all three asserted unmeasured state): (1) PermissionGateway.tsx printed a literal 'Payload Checksum: Verified SHA-Safe' on every approval card while nothing hashed the payload; (2) ProactiveRoutinesModal.tsx footer hardcoded 'Telegram Push Ready' and 'Cron Scheduler: Active on Oracle ARM Node' whether or not any bot or daemon was reachable; (3) BlueprintRoadmapModal.tsx seeded completionPercentage:100 plus a '100% Free Architecture Verified' header BEFORE /api/blueprint was fetched, so a failed fetch left a fabricated complete panel on screen. FIX (commit a8c1422): new pure module src/utils/checksumTruth.ts with fnv1a32Hex(), payloadChecksumLine() (computes FNV-1a32 over the real payload, labels it 'local integrity marker, not SHA-2' and returns NONE for empty), telegramPushLabel() and cronSchedulerLabel() (both return UNKNOWN until the endpoint answers). ProactiveRoutinesModal now also fetches /api/daemon/status into a tri-state daemonOnline (null until answered). TREE GREEN BEFORE PUSH: targeted fabricatedStatusClaims.test.ts 8/8 passed, npm run lint exit 0, pushed at a8c1422 BEFORE the long verification per the slot-budget rule. NEGATIVE-VALIDATED: sed-restoring all four fabrications against the guard produced exactly 3 failed | 5 passed; files restored from /tmp backups and 8/8 passed again. FULL GATES OBSERVED ON a8c1422: npx vitest run 57 files / 803 tests passed (19.71s); npm run lint (tsc --noEmit) exit 0; npm run build exit 0, dist/server.cjs 816.6 kb, dist/assets index-BO99vQTI.js 981.10 kB (chunk-size warning only). SECURITY: git check-ignore -v .env -> .gitignore:4 .env; git status --short clean; no token written to any file (push used the remote URL form only, token never echoed). REMOTE: the automation credentials expose github_token (40 chars), not GITHUB_TOKEN; the first push attempt against $GITHUB_TOKEN prompted for a password and was interrupted - use ${github_token} in the remote URL. Docs commit 3f9be68 pushed a8c1422..3f9be68. PR: none opened or refreshed this slot (NOT DONE - no PR observed for this branch). DEPLOYMENT NOT ATTEMPTED - no deployment target observed. Item 13 REMAINS PARTIAL: this is still a pattern-driven sweep over surfaces the previous slots happened to name, not a per-tool inventory; remaining unaudited surfaces include server_tools.ts tool result strings, other Autonomous Tools HUD panels, and the /api/oracle-cloud/status seed question carried over from slot 12. NEXT SLOT: (a) run /api/oracle-cloud/status and settle whether the seeded status RUNNING / publicIp 129.154.42.108 must be removed at the route, or (b) continue the item 13 inventory across server_tools.ts tool result strings. NOTE: window_date intentionally left at 2026-09-20 because the window spans midnight IST and the finalization slot's idempotency guard keys on that value."
 }
