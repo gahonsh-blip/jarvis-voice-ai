@@ -439,6 +439,10 @@ Next Slot:
 ---
 
 Process note (durable, for the next slot):
+NOTE: two slots appended process notes at the same position; both are kept.
+
+Slot 5 (23:05 IST) note (from the other slot's report):
+
 This slot again found the local clone's main stale, and the remote
 feature/hermes-full-completion advanced during the run (b3885ac to 4c8e6ce to 5e43c3f)
 while this slot was working. The first git push was rejected as
@@ -447,3 +451,38 @@ git reset --hard origin/feature/hermes-full-completion, then git cherry-pick
 the slot's single commit onto the new tip. No force-push was used. Also note:
 git rebase fails in this sandbox unless git config user.name/user.email are
 set locally first — set them before any history operation.
+
+Slot 5 (22:35 IST) note (this slot):
+
+This slot hit the stale-ref trap AGAIN and it cost real time. The local clone's
+fetch refspec lists only `main`, so `origin/feature/hermes-full-completion` was
+absent and the initial local base was 29 commits behind the real tip; the first
+push was rejected non-fast-forward. Correct procedure, now confirmed twice:
+`git fetch origin feature/hermes-full-completion:refs/remotes/origin/feature/hermes-full-completion`
+(explicit refspec), then `git reset --hard` to that ref and `cherry-pick` the
+local work. Also: the baseline gates measured before that fetch were meaningless
+(13 files/226 tests on the stale tree vs 47 files/691 tests on the real one) —
+never trust pre-fetch counts. And `git identity` was unset in this fresh sandbox;
+`git config user.name/user.email` had to be set before any commit.
+
+---
+
+### Correction — slot 5, 22:35 IST (append-only; supersedes the counts above)
+
+The slot-5 section above recorded `48 files / 715 tests passed`. That was
+measured **before** the report commit was rebased onto the real remote tip.
+The remote had advanced to `2858f23` (another slot's computer-operator
+`PermissionGuard` test file), which the rebase pulled in. The counts measured on
+the **pushed** tree `5e43c3f` are:
+
+- `npm run lint` (`tsc --noEmit`) — exit 0
+- `npx vitest run` — **49 files / 724 tests passed**
+- `npm run build` — exit 0, `dist/server.cjs` 816011 bytes
+- `git check-ignore -v .env` — `.gitignore:4:.env` (ignored); no secret in diff
+
+The `sk-`/`ghp_`/`AIza` strings that appear in the diff are synthetic fixtures in
+`src/tests/credentialRedactor.test.ts`, not real credentials.
+
+Final slot-5 commits: `b3885ac` (fix + tests), `4c8e6ce` (docs), `5e43c3f`
+(report). The report commit's first push was rejected non-fast-forward, then it
+was rebased cleanly and pushed as `2858f23..5e43c3f`. No force-push.
