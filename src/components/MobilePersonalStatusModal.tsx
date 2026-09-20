@@ -259,9 +259,15 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
             {statusData && (
               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono">
                 <BatteryCharging className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-slate-300">{statusData.battery.level}%</span>
+                <span className="text-slate-300">
+                  {statusData.battery.available ? `${statusData.battery.level}%` : 'Battery N/A'}
+                </span>
                 <span className="text-slate-500">•</span>
-                <span className="text-cyan-300">{statusData.weather.temperatureC}°C</span>
+                <span className="text-cyan-300">
+                  {statusData.weather.available && Number.isFinite(statusData.weather.temperatureC)
+                    ? `${statusData.weather.temperatureC}°C`
+                    : 'Weather N/A'}
+                </span>
               </div>
             )}
 
@@ -664,6 +670,13 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
           {/* TAB 1: HINDI MORNING BRIEFING CORE */}
           {activeTab === 'briefing' && briefing && (
             <div className="space-y-6">
+              {briefing.dataSnapshot.isSample && (
+                <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/50 text-amber-200 text-xs font-mono">
+                  This briefing includes SAMPLE fixture content (notifications, calendar, email) because
+                  no Android device is connected. The spoken text and highlights label those sections as
+                  sample data. Server-health claims are not made.
+                </div>
+              )}
               {/* Top Hero Card: Actionable Play & Broadcast */}
               <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950/60 border border-cyan-500/40 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
@@ -749,6 +762,14 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
 
           {/* TAB 2: MOBILE TELEMETRY CARDS */}
           {activeTab === 'telemetry' && statusData && (
+            <div className="space-y-4">
+              {statusData.isSample && (
+                <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/50 text-amber-200 text-xs font-mono">
+                  SAMPLE DATA — no Android device is connected, so notification, calendar, email and
+                  device-memory values on this tab are illustrative fixtures, not readings from your
+                  phone. Battery and weather are labelled separately per card.
+                </div>
+              )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Card 1: Battery */}
               <div className="p-4 rounded-2xl bg-slate-950 border border-cyan-900/50 flex flex-col justify-between space-y-3">
@@ -759,26 +780,36 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white font-mono">BATTERY TELEMETRY</h4>
-                      <p className="text-[10px] text-slate-400 font-mono">Web Battery API</p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        {statusData.battery.available ? 'Web Battery API' : 'Unavailable — no battery API'}
+                      </p>
                     </div>
                   </div>
                   <span className="text-lg font-bold text-emerald-400 font-mono">
-                    {statusData.battery.level}%
+                    {statusData.battery.available ? `${statusData.battery.level}%` : 'N/A'}
                   </span>
                 </div>
 
-                <div className="space-y-1.5 font-mono text-xs text-slate-300">
-                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-emerald-500 h-full rounded-full transition-all"
-                      style={{ width: `${statusData.battery.level}%` }}
-                    />
+                {statusData.battery.available ? (
+                  <div className="space-y-1.5 font-mono text-xs text-slate-300">
+                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-full rounded-full transition-all"
+                        style={{ width: `${statusData.battery.level}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-slate-400 pt-1">
+                      <span>State: {statusData.battery.charging ? '⚡ Charging' : '🔋 On Battery'}</span>
+                      <span>
+                        Temp: {Number.isFinite(statusData.battery.temperatureC) ? `${statusData.battery.temperatureC}°C` : 'not reported'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-[11px] text-slate-400 pt-1">
-                    <span>State: {statusData.battery.charging ? '⚡ Charging' : '🔋 On Battery'}</span>
-                    <span>Temp: {statusData.battery.temperatureC}°C</span>
+                ) : (
+                  <div className="font-mono text-[11px] text-amber-300/90">
+                    No battery reading is available in this runtime. Values are sample data, not a measurement.
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Card 2: Weather */}
@@ -794,16 +825,22 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                     </div>
                   </div>
                   <span className="text-lg font-bold text-amber-400 font-mono">
-                    {statusData.weather.temperatureC}°C
+                    {statusData.weather.available ? `${statusData.weather.temperatureC}°C` : 'N/A'}
                   </span>
                 </div>
 
                 <div className="font-mono text-xs text-slate-300 space-y-1">
                   <div className="text-cyan-300 font-semibold">{statusData.weather.condition} ({statusData.weather.conditionHi})</div>
-                  <div className="flex justify-between text-[11px] text-slate-400">
-                    <span>Humidity: {statusData.weather.humidity}%</span>
-                    <span>Wind: {statusData.weather.windKmh} km/h</span>
-                  </div>
+                  {statusData.weather.available ? (
+                    <div className="flex justify-between text-[11px] text-slate-400">
+                      <span>Humidity: {statusData.weather.humidity}%</span>
+                      <span>Wind: {statusData.weather.windKmh} km/h</span>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-amber-300/90">
+                      No data
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -816,7 +853,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white font-mono">NOTIFICATIONS DIGEST</h4>
-                      <p className="text-[10px] text-slate-400 font-mono">Priority Alerts Filtered</p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        {statusData.notifications.isSample ? 'SAMPLE DATA — not this device' : 'Priority Alerts Filtered'}
+                      </p>
                     </div>
                   </div>
                   <span className="text-lg font-bold text-rose-400 font-mono">
@@ -829,6 +868,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                   <div className="text-[11px] text-slate-400 truncate">
                     Top alert: {statusData.notifications.items[0]?.summary || 'No critical alerts'}
                   </div>
+                  {statusData.notifications.isSample && (
+                    <div className="text-[10px] text-amber-300/90">Fixture — no device notifications were read.</div>
+                  )}
                 </div>
               </div>
 
@@ -841,7 +883,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white font-mono">CALENDAR AGENDA</h4>
-                      <p className="text-[10px] text-slate-400 font-mono">Today's Schedule</p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        {statusData.calendar.isSample ? 'SAMPLE DATA — not this device' : "Today's Schedule"}
+                      </p>
                     </div>
                   </div>
                   <span className="text-lg font-bold text-purple-400 font-mono">
@@ -856,6 +900,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                   <div className="text-[11px] text-slate-400">
                     Next: {statusData.calendar.events[0]?.time || 'Open schedule'}
                   </div>
+                  {statusData.calendar.isSample && (
+                    <div className="text-[10px] text-amber-300/90">Fixture — no device calendar was read.</div>
+                  )}
                 </div>
               </div>
 
@@ -868,7 +915,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white font-mono">EMAIL DIGEST</h4>
-                      <p className="text-[10px] text-slate-400 font-mono">Inbox Priority</p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        {statusData.email.isSample ? 'SAMPLE DATA — not this device' : 'Inbox Priority'}
+                      </p>
                     </div>
                   </div>
                   <span className="text-lg font-bold text-blue-400 font-mono">
@@ -883,6 +932,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                   <div className="text-[11px] text-slate-400 truncate">
                     {statusData.email.summaries[0]?.subject || 'No unread priority emails'}
                   </div>
+                  {statusData.email.isSample && (
+                    <div className="text-[10px] text-amber-300/90">Fixture — no device inbox was read.</div>
+                  )}
                 </div>
               </div>
 
@@ -899,20 +951,29 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                     </div>
                   </div>
                   <span className="text-lg font-bold text-cyan-400 font-mono">
-                    {Math.round((statusData.deviceHealth.ramUsageMb / statusData.deviceHealth.ramTotalMb) * 100)}% RAM
+                    {statusData.deviceHealth.available
+                      ? `${Math.round((statusData.deviceHealth.ramUsageMb / statusData.deviceHealth.ramTotalMb) * 100)}% RAM`
+                      : 'N/A'}
                   </span>
                 </div>
 
-                <div className="font-mono text-xs text-slate-300 space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-400">
-                    <span>RAM: {statusData.deviceHealth.ramUsageMb}MB / {statusData.deviceHealth.ramTotalMb}MB</span>
-                    <span>Storage Free: {statusData.deviceHealth.storageFreeGb}GB</span>
+                {statusData.deviceHealth.available ? (
+                  <div className="font-mono text-xs text-slate-300 space-y-1">
+                    <div className="flex justify-between text-[11px] text-slate-400">
+                      <span>RAM: {statusData.deviceHealth.ramUsageMb}MB / {statusData.deviceHealth.ramTotalMb}MB</span>
+                      <span>Storage Free: {statusData.deviceHealth.storageFreeGb}GB</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-semibold">
+                      Network: {statusData.deviceHealth.networkType}
+                    </div>
                   </div>
-                  <div className="text-[10px] text-emerald-400 font-semibold">
-                    Network: {statusData.deviceHealth.networkType} (Nominal link)
+                ) : (
+                  <div className="font-mono text-[11px] text-amber-300/90">
+                    No device memory or storage reading is available here. Values are sample data.
                   </div>
-                </div>
+                )}
               </div>
+            </div>
             </div>
           )}
 

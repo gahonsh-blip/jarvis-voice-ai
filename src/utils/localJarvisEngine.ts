@@ -1636,18 +1636,20 @@ export function processOfflineCommand(
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    // No subsystem probe runs here, so this branch reports the clock and says
+    // so plainly instead of asserting that systems are healthy.
     const reply = isHindi
-      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। सिस्टम डायग्नोस्टिक्स सामान्य हैं।`
+      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। मैंने डायग्नोस्टिक्स नहीं चलाए हैं।`
       : isHinglish
-      ? `Abhi time ${timeStr} hai, date ${dateStr}. Systems nominal.`
-      : `The current system time is ${timeStr} on ${dateStr}. Systems are operational.`;
+      ? `Abhi time ${timeStr} hai, date ${dateStr}. Maine diagnostics nahi chalaye.`
+      : `The current system time is ${timeStr} on ${dateStr}. I have not run any system diagnostics.`;
 
     return {
       reply,
       spokenText: reply,
       intent: 'system_diagnostic',
       actionExecuted: true,
-      actionDetail: { type: 'system_diagnostic', title: 'Diagnostics Nominal' },
+      actionDetail: { type: 'system_diagnostic', title: 'Clock reported (no diagnostics run)' },
       updatedMemory,
       offline: true,
     };
@@ -1668,11 +1670,12 @@ export function processOfflineCommand(
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    // Answering the clock is not a health check; do not claim system health.
     const reply = isHindi
-      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। सभी सिस्टम सामान्य हैं।`
+      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है।`
       : isHinglish
-      ? `Abhi time ${timeStr} hai, date ${dateStr}. Systems nominal.`
-      : `The current system time is ${timeStr} on ${dateStr}. Systems are operational.`;
+      ? `Abhi time ${timeStr} hai, date ${dateStr}.`
+      : `The current system time is ${timeStr} on ${dateStr}.`;
 
     return {
       reply,

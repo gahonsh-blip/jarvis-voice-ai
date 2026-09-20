@@ -235,6 +235,8 @@ export interface MobileStatusData {
     powerMode: 'Normal' | 'Power Saving' | 'Performance';
     statusText: string;
     available: boolean;
+    /** True when these values are illustrative fixtures, not a measurement. */
+    isSample?: boolean;
   };
   weather: {
     location: string;
@@ -245,23 +247,31 @@ export interface MobileStatusData {
     windKmh: number;
     feelsLikeC: number;
     available: boolean;
+    /** True when these values are illustrative fixtures, not a measurement. */
+    isSample?: boolean;
   };
   notifications: {
     totalCount: number;
     criticalCount: number;
     items: MobileNotificationItem[];
     available: boolean;
+    /** True when these items are sample fixtures, not this device's notifications. */
+    isSample?: boolean;
   };
   calendar: {
     todayEventsCount: number;
     events: MobileCalendarEventItem[];
     available: boolean;
+    /** True when these items are sample fixtures, not this device's calendar. */
+    isSample?: boolean;
   };
   email: {
     unreadCount: number;
     importantCount: number;
     summaries: MobileEmailSummaryItem[];
     available: boolean;
+    /** True when these items are sample fixtures, not this device's inbox. */
+    isSample?: boolean;
   };
   deviceHealth: {
     ramUsageMb: number;
@@ -272,9 +282,13 @@ export interface MobileStatusData {
     osVersion: string;
     networkType: 'WiFi' | '5G' | '4G' | 'Offline';
     available: boolean;
+    /** True when these values are illustrative fixtures, not a measurement. */
+    isSample?: boolean;
   };
   lastUpdated: string;
   permissions: Record<MobilePermissionCategory, boolean>;
+  /** True when any section above is fixture data rather than a real reading. */
+  isSample?: boolean;
 }
 
 export interface MorningBriefingPayload {

@@ -238,6 +238,7 @@ export async function getRealOrSimulatedBattery(): Promise<{
   powerMode: 'Normal' | 'Power Saving' | 'Performance';
   statusText: string;
   available: boolean;
+  isSample: boolean;
 }> {
   if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
     try {
@@ -249,24 +250,30 @@ export async function getRealOrSimulatedBattery(): Promise<{
         charging: isCharging,
         chargingTimeSeconds: b.chargingTime,
         dischargingTimeSeconds: b.dischargingTime,
-        temperatureC: isCharging ? 33.5 : 29.8,
+        // The Web Battery API exposes no temperature; report the measured level
+        // only rather than inventing a plausible °C figure.
+        temperatureC: NaN,
         powerMode: pct < 20 ? 'Power Saving' : 'Normal',
         statusText: isCharging ? `Charging (${pct}%)` : `Discharging (${pct}%)`,
         available: true,
+        isSample: false,
       };
     } catch {
       // ignore
     }
   }
 
-  // Graceful fallback for browsers without getBattery API
+  // No Web Battery API in this runtime: report the state as unavailable and
+  // mark the placeholder values as sample data so no caller can present them
+  // as a real reading.
   return {
     level: 78,
     charging: false,
     temperatureC: 28.5,
     powerMode: 'Normal',
-    statusText: '78% (Nominal)',
-    available: true,
+    statusText: 'SAMPLE (no battery API available)',
+    available: false,
+    isSample: true,
   };
 }
 
@@ -282,6 +289,7 @@ export async function getRealOrEstimatedWeather(userLocation: string = 'Delhi'):
   windKmh: number;
   feelsLikeC: number;
   available: boolean;
+  isSample: boolean;
 }> {
   try {
     // Open-Meteo free public API for Delhi/New Delhi coords (28.6139, 77.2090)
@@ -319,21 +327,26 @@ export async function getRealOrEstimatedWeather(userLocation: string = 'Delhi'):
         windKmh: wind,
         feelsLikeC: temp + 1,
         available: true,
+        isSample: false,
       };
     }
   } catch {
     // Fallback on network timeout
   }
 
+  // No weather provider answered. Report the condition as unavailable with
+  // sample placeholder values that are clearly flagged, instead of presenting
+  // invented 27°C / 48% figures as a current reading.
   return {
     location: userLocation || 'Delhi, India',
     temperatureC: 27,
-    condition: 'Clear Sky',
-    conditionHi: 'साफ मौसम',
+    condition: 'SAMPLE — no weather source connected',
+    conditionHi: 'नमूना — कोई मौसम स्रोत जुड़ा नहीं है',
     humidity: 48,
     windKmh: 12,
     feelsLikeC: 28,
-    available: true,
+    available: false,
+    isSample: true,
   };
 }
 
@@ -345,6 +358,9 @@ export async function compileMobileStatusData(userLocation?: string): Promise<Mo
   const battery = await getRealOrSimulatedBattery();
   const weather = await getRealOrEstimatedWeather(userLocation);
 
+  // Notifications, calendar and email have no real device source in this
+  // runtime — the SAMPLE_* fixtures stand in for them. They are flagged as
+  // sample data so the UI can label them rather than imply a real inbox.
   const data: MobileStatusData = {
     battery,
     weather,
@@ -353,17 +369,20 @@ export async function compileMobileStatusData(userLocation?: string): Promise<Mo
       criticalCount: permissions.NOTIFICATIONS ? SAMPLE_NOTIFICATIONS.filter((n) => n.priority === 'high').length : 0,
       items: permissions.NOTIFICATIONS ? SAMPLE_NOTIFICATIONS : [],
       available: permissions.NOTIFICATIONS,
+      isSample: true,
     },
     calendar: {
       todayEventsCount: permissions.CALENDAR_EVENTS ? SAMPLE_CALENDAR_EVENTS.length : 0,
       events: permissions.CALENDAR_EVENTS ? SAMPLE_CALENDAR_EVENTS : [],
       available: permissions.CALENDAR_EVENTS,
+      isSample: true,
     },
     email: {
       unreadCount: permissions.EMAIL_INBOX ? SAMPLE_EMAILS.length : 0,
       importantCount: permissions.EMAIL_INBOX ? SAMPLE_EMAILS.filter((e) => e.isImportant).length : 0,
       summaries: permissions.EMAIL_INBOX ? SAMPLE_EMAILS : [],
       available: permissions.EMAIL_INBOX,
+      isSample: true,
     },
     deviceHealth: {
       ramUsageMb: 3840,
@@ -374,9 +393,11 @@ export async function compileMobileStatusData(userLocation?: string): Promise<Mo
       osVersion: 'Android 15 / Web Runtime',
       networkType: typeof navigator !== 'undefined' && navigator.onLine ? 'WiFi' : 'Offline',
       available: permissions.DEVICE_HEALTH,
+      isSample: true,
     },
     lastUpdated: new Date().toISOString(),
     permissions,
+    isSample: true,
   };
 
   if (typeof window !== 'undefined') {
@@ -413,18 +434,23 @@ export function generateMorningBriefing(
     const bat = data.battery;
     const chargeNote = bat.charging ? 'और चार्जिंग चालू है' : '';
     hiParts.push(`आपके मोबाइल की बैटरी ${bat.level} प्रतिशत है ${chargeNote}।`.trim());
+  } else if (perms.BATTERY_STATUS) {
+    hiParts.push('बैटरी की रीडिंग इस डिवाइस पर उपलब्ध नहीं है।');
   } else {
-    hiParts.push('बैटरी स्थिति की अनुमति प्रतीक्षारत है।');
+    hiParts.push('बैटरी स्थिति की अनुमति बंद है।');
   }
 
   if (perms.WEATHER_LOCATION && data.weather.available) {
     const w = data.weather;
     hiParts.push(`आज ${w.location} में मौसम ${w.conditionHi} है और तापमान ${w.temperatureC} डिग्री सेल्सियस है।`);
+  } else if (perms.WEATHER_LOCATION) {
+    hiParts.push('मौसम की जानकारी उपलब्ध नहीं है — कोई मौसम स्रोत जुड़ा नहीं है।');
   }
 
   if (perms.NOTIFICATIONS && data.notifications.available) {
     const notifs = data.notifications;
-    hiParts.push(`आपके मोबाइल पर ${notifs.totalCount} महत्वपूर्ण notifications हैं, जिनमें ${notifs.criticalCount} उच्च प्राथमिकता वाले संदेश हैं।`);
+    const sampleNote = notifs.isSample ? ' (नमूना डेटा, असली डिवाइस से नहीं)' : '';
+    hiParts.push(`आपके मोबाइल पर ${notifs.totalCount} नमूना सूचनाएं हैं, जिनमें ${notifs.criticalCount} उच्च प्राथमिकता वाली हैं${sampleNote}।`);
   } else if (!perms.NOTIFICATIONS) {
     hiParts.push('सूचनाओं (Notifications) की अनुमति बंद है।');
   }
@@ -433,7 +459,8 @@ export function generateMorningBriefing(
     const events = data.calendar.events;
     if (events.length > 0) {
       const eventListStr = events.map((e) => `${e.titleHi || e.title} (${e.time})`).join(', ');
-      hiParts.push(`आज आपके कैलेंडर में ${events.length} जरूरी कार्य हैं: ${eventListStr}।`);
+      const label = data.calendar.isSample ? 'नमूना कैलेंडर प्रविष्टियां' : 'जरूरी कार्य';
+      hiParts.push(`आज आपके कैलेंडर में ${events.length} ${label} हैं: ${eventListStr}।`);
     } else {
       hiParts.push('आज के कैलेंडर में कोई नई बैठक निर्धारित नहीं है।');
     }
@@ -441,10 +468,11 @@ export function generateMorningBriefing(
 
   if (perms.EMAIL_INBOX && data.email.available) {
     const emails = data.email;
-    hiParts.push(`ईमेल इनबॉक्स में ${emails.unreadCount} नए संदेश हैं, जिनमें ${emails.importantCount} जरूरी हैं।`);
+    const label = emails.isSample ? 'नमूना ईमेल' : 'नए संदेश';
+    hiParts.push(`ईमेल इनबॉक्स में ${emails.unreadCount} ${label} हैं, जिनमें ${emails.importantCount} जरूरी हैं।`);
   }
 
-  hiParts.push('ओरेकल क्लाउड सर्वर और सभी सिस्टम सामान्य रूप से काम कर रहे हैं। क्या आप कोई कार्य शुरू करना चाहते हैं?');
+  hiParts.push('ओरेकल क्लाउड सर्वर की स्थिति इस ब्रीफिंग में जांची नहीं गई है। क्या आप कोई कार्य शुरू करना चाहते हैं?');
 
   const spokenTextHi = hiParts.join('\n');
 
@@ -455,36 +483,43 @@ export function generateMorningBriefing(
 
   if (perms.BATTERY_STATUS && data.battery.available) {
     enParts.push(`Your mobile battery is at ${data.battery.level}%${data.battery.charging ? ' and actively charging' : ''}.`);
+  } else if (perms.BATTERY_STATUS) {
+    enParts.push('No battery reading is available on this device.');
   }
 
   if (perms.WEATHER_LOCATION && data.weather.available) {
     enParts.push(`Weather in ${data.weather.location} is currently ${data.weather.condition.toLowerCase()} with a temperature of ${data.weather.temperatureC}°C.`);
+  } else if (perms.WEATHER_LOCATION) {
+    enParts.push('Weather is unavailable — no weather source is connected.');
   }
 
   if (perms.NOTIFICATIONS && data.notifications.available) {
-    enParts.push(`You have ${data.notifications.totalCount} mobile notifications, including ${data.notifications.criticalCount} priority alerts.`);
+    const note = data.notifications.isSample ? ' (sample data, not read from this device)' : '';
+    enParts.push(`You have ${data.notifications.totalCount} sample notifications, including ${data.notifications.criticalCount} priority alerts${note}.`);
   }
 
   if (perms.CALENDAR_EVENTS && data.calendar.available && data.calendar.events.length > 0) {
     const ev = data.calendar.events.map((e) => `${e.title} at ${e.time}`).join('; ');
-    enParts.push(`Today's scheduled agenda includes: ${ev}.`);
+    const label = data.calendar.isSample ? 'Sample calendar entries' : "Today's scheduled agenda includes";
+    enParts.push(`${label}: ${ev}.`);
   }
 
   if (perms.EMAIL_INBOX && data.email.available) {
-    enParts.push(`Your email inbox has ${data.email.unreadCount} unread messages.`);
+    const label = data.email.isSample ? 'sample email summaries' : 'unread messages';
+    enParts.push(`Your email inbox has ${data.email.unreadCount} ${label}.`);
   }
 
-  enParts.push('All Oracle cloud nodes and local autonomous engines are operational. How may I assist you today?');
+  enParts.push('This briefing did not check Oracle cloud node health. How may I assist you today?');
 
   const spokenTextEn = enParts.join('\n');
 
   const keyHighlights = [
-    `🔋 Battery: ${data.battery.level}% (${data.battery.charging ? 'Charging' : 'Nominal'})`,
-    `🌤️ Weather: ${data.weather.temperatureC}°C, ${data.weather.condition}`,
-    `🔔 Notifications: ${data.notifications.totalCount} alerts (${data.notifications.criticalCount} priority)`,
-    `📅 Calendar: ${data.calendar.todayEventsCount} events scheduled`,
-    `📧 Email: ${data.email.unreadCount} unread messages`,
-    `☁️ Server: Oracle ARM Always Free (100% Uptime)`,
+    `🔋 Battery: ${data.battery.available ? `${data.battery.level}% (${data.battery.charging ? 'Charging' : 'On battery'})` : 'NOT AVAILABLE'}`,
+    `🌤️ Weather: ${data.weather.available ? `${data.weather.temperatureC}°C, ${data.weather.condition}` : 'NOT AVAILABLE'}`,
+    `🔔 Notifications: ${data.notifications.available ? `${data.notifications.totalCount}${data.notifications.isSample ? ' (sample)' : ''} alerts (${data.notifications.criticalCount} priority)` : 'NOT AVAILABLE'}`,
+    `📅 Calendar: ${data.calendar.available ? `${data.calendar.todayEventsCount}${data.calendar.isSample ? ' (sample)' : ''} events scheduled` : 'NOT AVAILABLE'}`,
+    `📧 Email: ${data.email.available ? `${data.email.unreadCount}${data.email.isSample ? ' (sample)' : ''} unread messages` : 'NOT AVAILABLE'}`,
+    `☁️ Server: NOT CHECKED (no Oracle health probe ran for this briefing)`,
   ];
 
   return {

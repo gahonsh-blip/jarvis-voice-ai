@@ -183,6 +183,22 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       expect(result.reply).toContain('current system time');
     });
 
+    it('should not claim systems are healthy when only a clock value was produced', () => {
+      const diagnostic = processOfflineCommand('what is the current time and date', initialMemory, 'en-US');
+      const timeOnly = processOfflineCommand('what time is it', initialMemory, 'en-US');
+
+      for (const result of [diagnostic, timeOnly]) {
+        expect(result.reply ?? '').not.toMatch(/operational/i);
+        expect(result.reply ?? '').not.toMatch(/nominal/i);
+        expect(result.reply ?? '').not.toMatch(/सामान्य हैं/);
+        expect(result.spokenText ?? '').not.toMatch(/operational/i);
+      }
+
+      expect(diagnostic.reply).toMatch(/not run any system diagnostics/i);
+      expect(timeOnly.reply).toMatch(/^The current system time is/);
+      expect(timeOnly.actionDetail?.title).not.toMatch(/Diag/i);
+    });
+
     it('should handle volume up and volume down controls', () => {
       const up = processOfflineCommand('volume up', initialMemory, 'en-US');
       expect(up.intent).toBe('volume_up');
