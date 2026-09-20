@@ -781,3 +781,60 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - Oracle Cloud मॉडल अब VM की बनी-बनाई uptime/IP/status नहीं दिखाता — जो रिपोर्ट नहीं हुई वह
   UNKNOWN दिखती है; 791 टेस्ट पास, lint और build स्वच्छ, बदलाव पुश हो गया।
+
+---
+
+## Slot 9 — 2026-09-21 01:35 IST fire (WORK) — commits 20:49 / 20:52 UTC
+
+**Item #13 zero-fake-success — sample-fixture speech gap closed. Status `PARTIAL`.**
+
+The gap that slots 7 and 8 both recorded as outstanding is closed in this slot:
+`compileMobileStatusData()` returns placeholder sections flagged `isSample: true`
+that nevertheless carry `available: true` (battery 91%, 7 notifications, 4
+events, 9 emails), and `processOfflineCommand()` in
+`src/utils/localJarvisEngine.ts` decided what to speak from `available` alone.
+A device-less briefing therefore narrated fixtures as measurements. Every mobile
+section now also gates on `isSample`, and the weather branch reads
+`mobileStatus.weather` rather than the fixed 27C / 48% / 'New Delhi' constants
+(`grep -c "isSample !== true"` = 5). `MobilePersonalStatusModal.tsx` additionally
+stamped "Real-Time Generated Telemetry" on the briefing card regardless of
+`statusData.isSample`; the badge now reads "Generated from sample fixtures" or
+"Generated from live telemetry reads".
+
+**Negative validation (real, observed):** with the `isSample` gate reverted to
+`true`, `src/tests/localJarvisEngine.test.ts` fails with
+`expected 'Good morning...Device battery is at 91%...You have 7 priority
+notifications...' not to match /91%|27C|7 priority|4 events|9/`. The fix was
+restored immediately and the test passes again, so the guard is load-bearing.
+
+**One wrong assertion, corrected rather than weakened.** The first version of the
+new test required the sample counts to be absent from the spoken text. That is
+the wrong invariant: `generateMorningBriefing()` deliberately speaks them inside
+a label — "2 sample notifications, including 1 priority alerts (sample data, not
+read from this device)". The test now asserts the label, which is what actually
+prevents fake success. No assertion was deleted or loosened to get green.
+
+**Gates observed** (tip `dbd3385` then `3b14abf`): `npm run lint` (tsc --noEmit)
+exit 0; `npx vitest run` 55 files / 781 tests passed; `npm run build` exit 0,
+`dist/server.cjs` 835675 bytes. Targeted pointer+engine suites 46/46.
+
+**Metadata drift found, recorded not hidden.** Slot time labels in
+`docs/COMPLETION_STATUS.md` and `docs/CHANGELOG.md` run ahead of the commit
+timestamps `date` reports — the 20:12 UTC commit is labelled "00:15 IST" and the
+20:32 UTC commit "02:10 IST". This is report metadata only, no code reads it; it
+is now stated in "Known limitations" rather than silently re-stamped.
+
+**State overlap, disclosed honestly.** The state branch commit at
+`2026-09-20T20:16:58Z` records "slot 8 (01:35 IST), last_slot_at 20:15:00Z" with
+`current_item_status: PARTIAL` — but the 20:49 UTC commits in this slot moved the
+item forward after that record was written. So slot 8's run and this run cover
+the same fire; `slots_completed: 9` is the intended bookkeeping (8 persisted + 1)
+and this note explains the overlap rather than pretending two clean slots ran.
+
+**Honest ceiling:** `PARTIAL`, not `VERIFIED`. The audit is pattern- and
+test-driven, not a per-tool inventory of `server_tools.ts` / `server.ts`, and the
+live-telemetry branch has never run against a physical device.
+
+हिंदी सारांश (एक पंक्ति):
+- नकली (sample) मोबाइल फिक्स्चर अब कभी असली माप बनकर नहीं बोले जाएंगे; नेगेटिव टेस्ट से
+  साबित, पूरा सूट 781/781 हरा।
