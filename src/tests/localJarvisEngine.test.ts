@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { processOfflineCommand, LocalProcessingResult } from '../utils/localJarvisEngine';
-import { MemoryStore } from '../types';
+import { MemoryStore, MobileStatusData } from '../types';
+import { DEFAULT_MOBILE_PERMISSIONS } from '../utils/mobileStatusEngine';
 
 describe('Local Jarvis Offline Engine - Core Command Processing', () => {
   let initialMemory: MemoryStore;
@@ -155,6 +156,26 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
 
       const resultStatus = processOfflineCommand('mobile status', initialMemory, 'en-US');
       expect(resultStatus.intent).toBe('mobile_personal_status');
+    });
+
+    it('should not speak sample fixture telemetry as measured readings', () => {
+      const sampleStatus = {
+        lastUpdated: new Date().toISOString(),
+        battery: { level: 91, charging: false, temperatureC: 33, powerMode: 'Normal', statusText: 'SAMPLE', available: true, isSample: true },
+        weather: { location: 'New Delhi', temperatureC: 27, condition: 'SAMPLE', conditionHi: 'नमूना', humidity: 48, windKmh: 9, feelsLikeC: 28, available: true, isSample: true },
+        notifications: { totalCount: 7, criticalCount: 2, items: [], available: true, isSample: true },
+        calendar: { todayEventsCount: 4, events: [], available: true, isSample: true },
+        email: { unreadCount: 9, importantCount: 3, summaries: [], available: true, isSample: true },
+        deviceHealth: { ramUsageMb: 0, ramTotalMb: 8192, storageFreeGb: 0, storageTotalGb: 128, deviceModel: 'SAMPLE', osVersion: 'SAMPLE', networkType: 'Offline', available: false, isSample: true },
+        permissions: { ...DEFAULT_MOBILE_PERMISSIONS },
+      } as MobileStatusData;
+
+      const result = processOfflineCommand('mobile status', initialMemory, 'en-US', sampleStatus);
+      expect(result.actionExecuted).toBe(true);
+      expect(result.reply).not.toMatch(/91%|27°C|7 priority|4 events|9 unread/);
+      expect(result.reply).toMatch(/No battery reading is available/);
+      expect(result.reply).toMatch(/no weather source is connected/i);
+      expect(result.reply).toMatch(/Notifications could not be read/);
     });
   });
 

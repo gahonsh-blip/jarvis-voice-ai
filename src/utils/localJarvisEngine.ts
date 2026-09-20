@@ -832,8 +832,8 @@ export function processOfflineCommand(
 
     // No weather source means no reading. Previously each field fell back to a
     // constant (27°C, 48%, 'New Delhi'), so the reply presented invented
-    // readings as current conditions.
-    if (!weatherData) {
+    // readings as current conditions. A fixture sample counts as no source.
+    if (!weatherData || weatherData.isSample === true || weatherData.available === false) {
       const unavailable = isHindi
         ? 'अभी कोई मौसम स्रोत कनेक्टेड नहीं है, इसलिए मौसम या तापमान का डेटा उपलब्ध नहीं है।'
         : isHinglish
@@ -909,11 +909,16 @@ export function processOfflineCommand(
       DEVICE_HEALTH: false,
     };
 
-    const batteryAvailable = perms.BATTERY_STATUS && mobileStatus?.battery?.available !== false;
-    const weatherAvailable = perms.WEATHER_LOCATION && mobileStatus?.weather?.available !== false;
-    const notifsAvailable = perms.NOTIFICATIONS && mobileStatus?.notifications?.available !== false;
-    const calAvailable = perms.CALENDAR_EVENTS && mobileStatus?.calendar?.available !== false;
-    const mailAvailable = perms.EMAIL_INBOX && mobileStatus?.email?.available !== false;
+    // `available` alone is not enough: the mobile status engine returns
+    // placeholder fixtures with available === true for notifications, calendar,
+    // email and device health whenever the permission flag is set. Speaking
+    // those numbers would present invented readings as measured ones, so an
+    // isSample section is never treated as a real data source here.
+    const batteryAvailable = perms.BATTERY_STATUS && mobileStatus?.battery?.available !== false && mobileStatus?.battery?.isSample !== true;
+    const weatherAvailable = perms.WEATHER_LOCATION && mobileStatus?.weather?.available !== false && mobileStatus?.weather?.isSample !== true;
+    const notifsAvailable = perms.NOTIFICATIONS && mobileStatus?.notifications?.available !== false && mobileStatus?.notifications?.isSample !== true;
+    const calAvailable = perms.CALENDAR_EVENTS && mobileStatus?.calendar?.available !== false && mobileStatus?.calendar?.isSample !== true;
+    const mailAvailable = perms.EMAIL_INBOX && mobileStatus?.email?.available !== false && mobileStatus?.email?.isSample !== true;
 
     const batteryLvl = mobileStatus?.battery?.level ?? null;
     const tempC = mobileStatus?.weather?.temperatureC ?? null;
@@ -939,6 +944,10 @@ export function processOfflineCommand(
       hiLines.push(`बैटरी ${batteryLvl}% है और स्थिति सामान्य है।`);
       enLines.push(`Device battery is at ${batteryLvl}%.`);
       hinglishLines.push(`Battery ${batteryLvl}% charge hai.`);
+    } else if (perms.BATTERY_STATUS) {
+      hiLines.push('बैटरी की रीडिंग इस रनटाइम पर उपलब्ध नहीं है।');
+      enLines.push('No battery reading is available in this runtime.');
+      hinglishLines.push('Battery reading is runtime par available nahi hai.');
     } else {
       hiLines.push('बैटरी डेटा अनुमति बंद है।');
       enLines.push('Battery telemetry access is not permitted.');
@@ -950,6 +959,10 @@ export function processOfflineCommand(
       hiLines.push(`मौसम ${condition} है, तापमान ${tempC}°C है।`);
       enLines.push(`Weather is ${condition} at ${tempC}°C.`);
       hinglishLines.push(`Weather ${condition} hai, temperature ${tempC}°C.`);
+    } else if (perms.WEATHER_LOCATION) {
+      hiLines.push('मौसम की जानकारी उपलब्ध नहीं है — कोई मौसम स्रोत कनेक्टेड नहीं है।');
+      enLines.push('Weather is not available — no weather source is connected.');
+      hinglishLines.push('Weather data available nahi hai — koi weather source connected nahi hai.');
     } else {
       hiLines.push('मौसम और लोकेशन अनुमति बंद है।');
       enLines.push('Weather location access is disabled.');
@@ -961,6 +974,10 @@ export function processOfflineCommand(
       hiLines.push(`${notifCount} महत्वपूर्ण नोटिफिकेशन्स हैं।`);
       enLines.push(`You have ${notifCount} priority notifications.`);
       hinglishLines.push(`${notifCount} important notifications hain.`);
+    } else if (perms.NOTIFICATIONS) {
+      hiLines.push('नोटिफिकेशन्स इस रनटाइम पर पढ़े नहीं जा सके — कोई डिवाइस स्रोत जुड़ा नहीं है।');
+      enLines.push('Notifications could not be read — no device notification source is connected.');
+      hinglishLines.push('Notifications read nahi ho sake — koi device source connected nahi hai.');
     } else {
       hiLines.push('नोटिफिकेशन अनुमति अभी बंद है।');
       enLines.push('Notification access permission is not granted.');
@@ -972,11 +989,15 @@ export function processOfflineCommand(
       hiLines.push(`आज ${calCount} इवेंट्स निर्धारित हैं।`);
       enLines.push(`${calCount} events scheduled today.`);
       hinglishLines.push(`Aaj ${calCount} meetings scheduled hain.`);
+    } else if (perms.CALENDAR_EVENTS) {
+      enLines.push('No calendar reading is available — no device calendar source is connected.');
     }
     if (mailAvailable) {
       hiLines.push(`इनबॉक्स में ${mailCount} जरूरी ईमेल्स हैं।`);
       enLines.push(`${mailCount} unread emails in inbox.`);
       hinglishLines.push(`Inbox me ${mailCount} unread emails hain.`);
+    } else if (perms.EMAIL_INBOX) {
+      enLines.push('No inbox reading is available — no device email source is connected.');
     }
 
     // No device attached means no telemetry. Say so rather than asserting

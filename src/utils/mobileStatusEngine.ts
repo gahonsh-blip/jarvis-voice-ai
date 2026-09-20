@@ -356,7 +356,10 @@ export async function getRealOrEstimatedWeather(userLocation: string = 'Delhi'):
 export async function compileMobileStatusData(userLocation?: string): Promise<MobileStatusData> {
   const permissions = loadMobilePermissions();
   const battery = await getRealOrSimulatedBattery();
-  const weather = await getRealOrEstimatedWeather(userLocation);
+  // The weather provider is keyed to fixed coordinates (New Delhi). When the
+  // caller does not supply a location we cannot claim the reading is for the
+  // user's own city, so report it as the fixed reference point it is.
+  const weather = await getRealOrEstimatedWeather(userLocation || 'New Delhi (fixed reference point)');
 
   // Notifications, calendar and email have no real device source in this
   // runtime — the SAMPLE_* fixtures stand in for them. They are flagged as

@@ -733,7 +733,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                     <Sparkles className="w-4 h-4 text-cyan-400" />
                     JARVIS Spoken Script Output ({selectedLang === 'english' ? 'English Spoken Mode' : 'हिन्दी वक्तव्य'})
                   </span>
-                  <span className="text-[10px] text-slate-500 font-mono">Real-Time Generated Telemetry</span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {statusData?.isSample ? 'Generated from sample fixtures' : 'Generated from live telemetry reads'}
+                  </span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800/80 font-sans text-sm sm:text-base leading-relaxed text-slate-100 whitespace-pre-wrap">

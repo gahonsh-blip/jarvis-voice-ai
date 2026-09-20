@@ -284,6 +284,25 @@ describe('Mobile Personal Status Engine & Hindi Morning Briefing Suite', () => {
         expect(Number.isNaN(battery.temperatureC)).toBe(true);
       }
     });
+
+    it('labels sample notifications/email counts as sample data, never as measured counts', () => {
+      const base = minimalStatus();
+      const briefing = generateMorningBriefing(base, 'Sir');
+
+      // minimalStatus carries fixture counts (2 notifications, 3 emails)
+      // flagged isSample. They may be mentioned, but only while labelled as
+      // sample content; the unlabelled phrasing claims a real device read.
+      expect(briefing.spokenTextEn).not.toMatch(/You have 2 priority notifications\./);
+      expect(briefing.spokenTextEn).not.toMatch(/inbox has 3 unread emails/);
+      expect(briefing.spokenTextEn).toContain('2 sample notifications');
+      expect(briefing.spokenTextEn).toContain('sample data, not read from this device');
+      expect(briefing.spokenTextEn).toMatch(/3 sample email summaries/);
+    });
+
+    it('does not claim the weather reading is for the user city when no location was supplied', async () => {
+      const statusData = await compileMobileStatusData();
+      expect(statusData.weather.location).toMatch(/fixed reference point/);
+    });
   });
 });
 
