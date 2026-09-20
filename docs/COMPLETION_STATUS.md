@@ -4,7 +4,54 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 23:55 UTC — second secret-redaction leak sweep (item 54).
+Last cycle: 2026-09-21 01:05 IST — zero-fake-success audit widened to the UI and
+sample data (item 13). Two more hardcoded claims removed:
+`SecurityMatrixModal.tsx` always rendered `Security Matrix Status: 100%
+Operational` in its footer even when `/api/security` had never answered — it now
+renders the fetched level or states that the state is unavailable;
+`mobileStatusEngine.ts` `SAMPLE_NOTIFICATIONS` carried a Gmail entry asserting
+`Always Free ARM VM health check: 100% nominal uptime`, an invented monitoring
+result now reworded as a maintenance notice. Also, in the same cycle, the
+offline intent engine `src/utils/localJarvisEngine.ts` was found to report state
+it never measured, and fixed: the `mobile_personal_status` briefing defaulted
+all permissions to `true` and every reading to a plausible constant (78% battery,
+27°C, 5 notifications, 3 events, 2 emails) so a briefing with no phone attached
+looked measured; the dedicated weather inquiry answered 27°C / 48% / `New Delhi`
+with no weather provider wired up; and the `how are you` intent answered
+`All systems nominal. Ready to assist.` while performing no health check. The
+briefing now defaults permissions to `false`, the fields are nullable and the
+briefing says no phone is connected; the weather inquiry returns
+`actionExecuted: false` with an explicit "no weather source is connected"; the
+`how are you` intent says it cannot health-check itself. Four assertions that
+pinned the old fabricated strings were rewritten to assert the honest replies
+(`localJarvisEngine.test.ts`, `conversationalPipelineRegression.test.ts`,
+`voiceAndHindiModes.test.ts`) and `src/tests/toolSurfaceTruthfulness.test.ts`
+gained five guards over the engine source. Negative-validated: restoring
+`temperatureC ?? 27` makes the telemetry guard fail; restored after.
+
+Still open before item 13 can return to `VERIFIED`: the sweep is text- and
+pattern-driven, so it can only prove the *audited* strings are gone. The
+`SAMPLE_*` fixtures in `mobileStatusEngine.ts` are still sample data rendered
+through `compileMobileStatusData`, and the UI consumes them without a
+"sample data" label — that is an honesty gap, not yet fixed. A tool-by-tool
+inventory of the remaining surfaces has not been completed.
+
+Previous cycle: 2026-09-21 00:15 IST — zero-fake-success audit widened to the intent
+handlers and the scheduler (item 13). Four more fabricated-success surfaces were
+found and fixed in `server.ts`: `find_document` (both Telegram and voice paths)
+answered *every* query with a hardcoded `/workspace/storage/documents/<query>`
+path, an invented `42.5 KB` size and a made-up summary; the 09:00 IST morning
+briefing hardcoded `Cloud nodes on Oracle Always Free ARM VM are 100% nominal`,
+`2 leads` and `1 draft`; `schedule_morning_report` claimed phone delivery
+whether or not a Telegram chat was linked; `generate_quotation` and the voice
+`create_social_post` claimed to have produced artifacts that were never
+created. `find_document` now uses the new `realFsSearch()` in `server_tools.ts`,
+which walks the workspace and returns real relative paths and byte sizes or an
+explicit "not found"/"unavailable" answer. Guarded by
+`src/tests/documentSearchTruthfulness.test.ts` (4 tests, negative-validated:
+3 of 4 fail with the fix reverted).
+
+Previous cycle: 2026-09-20 23:55 UTC — second secret-redaction leak sweep (item 54).
 A live probe of the shared redactor (`src/utils/computerOperator/credentialRedactor.ts`)
 found six more token families passing through `redactSecrets` byte-for-byte:
 Google OAuth client secrets (`GOCSPX-`), Discord bot tokens, GitLab access tokens
@@ -136,7 +183,7 @@ files / 675 tests, clean lint, clean build.
 | 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. The file routes' workspace boundary was not actually sound until 2026-09-20 22:05 IST: `safeResolvePath` used a bare string-prefix test, so a sibling directory sharing the root's name prefix escaped the workspace. Now segment-checked (see Last cycle), guarded by `src/tests/workspacePathContainment.test.ts`. The computer-operator permission gate itself also has direct coverage now: `src/tests/permissionGuard.test.ts` (9 tests, 2026-09-20 23:05 IST) asserts the emergency-stop block, the finance exclusion, the destructive-command and security-bypass guards, the Level 4 human gate, and that a blocked action must never be read as "no approval needed". |
 | 11 | Action result verification | `VERIFIED` | `ActionVerifier` no longer returns unconditional success (`|| true` removed). Clicks require an observed screen change; edits require a disk re-read; tests require parsed runner output; screenshots require a captured file. |
 | 12 | Browser real-action + permission flow | `VERIFIED` | `ScreenshotModal.tsx` uses `getDisplayMedia` when permitted, otherwise asks the host to capture via `/api/computer-operator/screenshot`. A denied permission reports `permission_denied`, not a simulated image. |
-| 13 | Zero-fake-success for all tools | `PARTIAL` | Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. **2026-09-20 23:35 IST — the claim did not hold repo-wide:** `realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned `success: true` on *every* git failure with invented data (branch `main`, three fabricated commit subjects, `"Diff tool nominal."`), which propagated to the Autonomous Tools HUD, `/api/tools/git/*` and the `git_status_tool` voice intent. Fixed; guarded by `src/tests/gitToolsTruthfulness.test.ts` (6 tests, negative-validated: 4 of 6 fail with the fix reverted). Remaining scope before this can return to `VERIFIED`: the same audit has not yet been run across every tool surface. |
+| 13 | Zero-fake-success for all tools | `PARTIAL` | **2026-09-21 01:05 IST — third widening, UI + offline intent engine.** `SecurityMatrixModal.tsx` footer hardcoded `Security Matrix Status: 100% Operational` regardless of whether `/api/security` answered; now renders the fetched level or says the state is unavailable. `mobileStatusEngine.ts` `SAMPLE_NOTIFICATIONS` asserted `Always Free ARM VM health check: 100% nominal uptime` as a notification body; reworded to a maintenance notice. `src/utils/localJarvisEngine.ts`: the `mobile_personal_status` briefing defaulted every permission to `true` and every reading to a plausible constant (78% battery, 27C, 5 notifications, 3 events, 2 emails), so a no-phone briefing looked measured; the weather inquiry answered 27C / 48% / 'New Delhi' with no provider; `how are you` answered `All systems nominal. Ready to assist.` with no health check. Fixed: permissions now default `false`, unmeasured fields are nullable and the briefing reports no phone connected, the weather inquiry returns `actionExecuted: false`, and the greeting refuses to claim health. Guarded by `src/tests/toolSurfaceTruthfulness.test.ts` (14 tests over `server.ts` and the engine source; negative-validated: restoring `temperatureC ?? 27` fails the telemetry guard and the code was restored). Four assertions pinning the old strings were rewritten (`localJarvisEngine.test.ts`, `conversationalPipelineRegression.test.ts`, `voiceAndHindiModes.test.ts`). **Still NOT `VERIFIED`** - the sweep is pattern-driven, so it shows the audited strings are gone, not that every surface is honest. Known remaining gap: the `SAMPLE_*` fixtures in `mobileStatusEngine.ts` are sample data that `compileMobileStatusData` renders as if real and the UI does not label them as samples. A tool-by-tool inventory of all surfaces is still outstanding. |  Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. **2026-09-20 23:35 IST — the claim did not hold repo-wide:** `realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned `success: true` on *every* git failure with invented data (branch `main`, three fabricated commit subjects, `"Diff tool nominal."`), which propagated to the Autonomous Tools HUD, `/api/tools/git/*` and the `git_status_tool` voice intent. Fixed; guarded by `src/tests/gitToolsTruthfulness.test.ts` (6 tests, negative-validated: 4 of 6 fail with the fix reverted). Remaining scope before this can return to `VERIFIED`: the same audit has not yet been run across every tool surface. |
 
 ### Computer control — what is real vs. not
 
