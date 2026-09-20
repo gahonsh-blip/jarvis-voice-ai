@@ -54,7 +54,7 @@ export interface TelephonyTurn {
 export interface TelephonySession {
   callSessionId: string;
   direction: 'inbound' | 'outbound';
-  callerIdentifier: string; // Masked for privacy (e.g. "+91 98765*****")
+  callerIdentifier: string; // Masked for privacy (e.g. "+91 ******3210")
   callerRawNumber: string; // Raw provider number, untrusted
   callerVerified: boolean;
   recipientIdentifier: string;
