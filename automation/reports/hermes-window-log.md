@@ -49,3 +49,58 @@ Format per slot:
     prompt is intended for use.
 - Reason recorded here so a future slot does not "helpfully" reintroduce the
   merge step.
+
+## 2026-09-20T06:20Z — slot 1 (WORK, manual verification dispatch)
+
+- Item worked: #54 Secret/token protection audit (remains `PARTIAL`; this slot
+  closed four real redaction gaps, not the whole item)
+- Status: PARTIAL
+- What landed (commit `70439da`):
+  - `src/utils/computerOperator/credentialRedactor.ts`: added Stripe, Slack,
+    npm, Hugging Face and SendGrid token patterns.
+  - `src/utils/computerOperatorEngine.ts`: its private `redactSecrets` now runs
+    the engine's broad legacy pattern and then defers to the shared credential
+    engine, so the operator path is a superset instead of a second, diverging
+    implementation.
+- Tests: `credentialRedactor.test.ts` +39 lines, `computerOperatorEngine.test.ts`
+  +14 lines
+- Docs: `docs/COMPLETION_STATUS.md`, `docs/SECURITY.md`
+- Commit: `70439da` → `70952e5`  Push: ok (origin/feature/hermes-full-completion)
+- Slot outcome: the run was **killed by the 1800s platform cap** during the
+  push phase and reported FAILED, but the push had already completed. The cut
+  happened after the push, before the report — exactly the failure mode the
+  prompt warns about.
+
+### Independent re-verification by the deploying agent (same day)
+
+Not trusting the killed run's claims, the deploying agent re-ran the gates on
+commit `70952e5` from a clean checkout:
+
+| Gate | Command | Observed result |
+| :--- | :--- | :--- |
+| Lint | `npm run lint` | exit 0 |
+| Tests | `npx vitest run` | **43 files passed (43), 630 tests passed (630)** |
+| Build | `npm run build` | exit 0, `dist/server.cjs` = 812,364 bytes |
+
+The run's claim of "43 files / 630 tests" is therefore independently confirmed.
+- Notes / blockers: the run overran its budget. The prompt already caps work at
+  ~17 minutes and reserves ~5 for the report; the observed overrun came from
+  `npm ci` on a cold cache plus a long test suite. The prompt's Phase A.6 now
+  installs dependencies explicitly and up front so the budget is spent on work,
+  not on an untracked dependency install.
+
+## 2026-09-20T06:40Z — conflict resolution (not a scheduled slot)
+
+- Two branches diverged on this file: the human policy correction (`f94be0f`,
+  removing automated merge-to-main) and the deploying agent's cap-hardening
+  commit (`2c771df`). Both are additive history, so they were merged by hand
+  rather than one overwriting the other.
+- Policy now in force: **the automation never merges to `main`.** It opens a
+  conflict-free, non-draft PR with the observed gate results and reports
+  `Main merge: NOT MERGED — awaiting human approval`.
+- The deploying agent accepts this correction. The merge step it authored was
+  wrong: the owner's text authorized an autonomous merge, but a standing
+  repository instruction already reserved the `main` merge for a human decision
+  after reading the report, and the narrower human policy governs.
+- The cap-hardening changes (push early, commit the report) are kept — they are
+  orthogonal to the merge question.

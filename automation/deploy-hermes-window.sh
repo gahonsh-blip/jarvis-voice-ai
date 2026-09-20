@@ -7,6 +7,10 @@
 # The platform caps a single run at 1800s, so the 21:00->05:00 IST window is
 # built from 16 back-to-back 30-minute slots rather than one long run.
 #
+# POLICY: the automation NEVER merges to main. It opens/refreshes a PR with the
+# observed gate results and stops there; the merge is a human decision made
+# after reading the final report.
+#
 # Note: PATCH on an existing automation can change name/trigger/enabled/timeout
 # but NOT the prompt. To change the prompt, delete the automation and re-run
 # this script (a new id is created).

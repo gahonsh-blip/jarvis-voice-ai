@@ -157,7 +157,20 @@ Rules:
 
 ---
 
-## D. Phase D — Implement, test, fix (target: ~17 minutes)
+## D. Phase D — Implement, test, fix (target: ~15 minutes)
+
+**Budget discipline (learned the hard way).** A cold `npm ci` plus the full
+suite can consume most of a slot on its own. Order the work so the valuable part
+is protected:
+
+- Phase A.6 already ran `npm ci` — do not repeat it.
+- Make the change.
+- Run the **targeted** test file for the area you touched, then `npm run lint`.
+- Commit and push (Phase E.3) **now** — the tree is green at this point.
+- Only then run the full `npx vitest run` and `npm run build` for the report.
+  If the cap kills you here, the work is already safely on the remote.
+
+Never let the first push be the last thing you do.
 
 1. **Read before you write.** Find and reuse the existing implementation. The
    repo already contains Ollama/local Gemma, the provider/memory/tool/permission/
@@ -205,6 +218,13 @@ Rules:
 3. Push **only that branch**: `git push -u origin feature/hermes-full-completion`.
    Never `main`. Never force-push. Never rewrite history. Never delete branches.
    If the push is rejected, report it and stop — do not force.
+
+   **Push as early as you safely can.** Observed in practice: a run that spent
+   its whole budget and then pushed in the final minutes was killed by the
+   1800-second cap *during* the push. It survived, but only by luck. So: commit
+   and push the moment the tree is green, **before** the final long verification
+   and before the documentation polish. Send the docs as a second small commit
+   and push again immediately. Two early pushes beat one late push.
 4. **Persist window state** (append/update, then push only the state branch):
    ```bash
    mkdir -p /tmp/state
@@ -312,6 +332,21 @@ Aim to be done by **05:00 IST**; the platform will hard-kill the run at the
 ---
 
 ## G. Phase G — Report (always; never skip)
+
+**Commit and push the report, do not just print it.** A report that only exists
+in the run's final message is lost when the cap kills the run — which has already
+happened once. Write the file, commit it, and push it:
+
+```bash
+mkdir -p automation/reports
+# append this slot's section to automation/reports/hermes-window-log.md
+git add automation/reports/hermes-window-log.md
+git commit -m "docs(hermes): window report <IST date> <HH:MM>"
+git push origin feature/hermes-full-completion
+```
+
+Do this **before** the long final message, so the durable record exists even if
+you are cut off mid-sentence.
 
 Write to `/tmp/hermes-window-report.md`, then include it in your final message.
 Append this cycle's section to `automation/reports/hermes-window-log.md` on the
