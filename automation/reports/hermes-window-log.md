@@ -365,3 +365,94 @@ real branch tip. The fix: fetch the owned branch with an explicit refspec
 or read `git ls-remote`, then re-base the work with `git cherry-pick`. The first
 push attempt was rejected as non-fast-forward; no force-push was used. This
 confirms the trap recorded by slot 3.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:35
+Window date: 2026-09-20   Window slots completed so far: 5
+
+Completed:
+- #54 Secret/token protection audit (PARTIAL, advanced) — found and fixed a
+  caller-ID masking privacy leak. `maskPhoneNumber` in
+  `src/utils/telephonyPermissions.ts` returned `+9198765*****` for
+  `+91 9876543210`, exposing the country code plus eight of the ten subscriber
+  digits, while the sibling helper in `src/utils/androidBridgeEngine.ts` masked
+  the same input as `+91 ******3210`. The telephony helper now emits the
+  canonical `+91 ******3210` form (blank → `Unknown / Private`, ≤4 digits →
+  `****`). New coverage: `src/tests/telephonyPermissions.test.ts`, 24 tests
+  passed. Docs updated: `docs/COMPLETION_STATUS.md` (item 54 + Last cycle),
+  `docs/CHANGELOG.md`, `docs/SECURITY.md`.
+
+In Progress:
+- None. The item remains PARTIAL by its own definition (an ongoing audit); this
+  slot closed one concrete finding within it.
+
+Remaining:
+- #54 remains PARTIAL (audit is continuous, not a one-shot task).
+- Most other open items are hardware/credential gated (see Blocked).
+- #60 Final documentation (PARTIAL) will close at the finalization slot.
+
+Bugs Found:
+- Caller-ID masking leak in `src/utils/telephonyPermissions.ts`. Found by adding
+  direct tests for the masking contract and comparing against the canonical
+  format that `androidBridgeEngine.ts` (and the `TelephonySession` type comment)
+  already documented.
+
+Bugs Fixed:
+- `maskPhoneNumber` now hides every subscriber digit except the last four.
+  Verified by negative validation on this tree: restoring the original
+  implementation fails 8 of 24 tests; the fix passes 24 of 24.
+
+Tests:    48 files / 715 tests passed (full `npx vitest run`, observed on tip).
+          Targeted `src/tests/telephonyPermissions.test.ts`: 24/24 passed.
+Lint:     `tsc --noEmit` exit 0 (observed).
+Build:    exit 0; `dist/server.cjs` 816011 bytes (observed).
+E2E:      NOT RUN this slot (no E2E file touched; full suite includes the
+          `*.e2e.test.ts` files and they passed as part of the 715).
+Security: `git check-ignore -v .env` → `.gitignore:4:.env` (ignored). No secret,
+          key or token in the diff. No `.env`, `node_modules` or stray debug
+          file staged.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, docs/SECURITY.md
+Branch:  feature/hermes-full-completion
+Commit:  4c8e6ce (docs) on top of b3885ac (fix + tests)
+Push:    succeeded — origin/feature/hermes-full-completion
+         1a54aae..b3885ac then b3885ac..4c8e6ce
+
+PR:         none opened this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; the verified artifact is the deployment unit
+
+Blocked:
+- #1/#2/#50/#55 — physical Android device required
+- #8 — Windows host required for the PowerShell capture leg
+- #25/#26/#30 — live provider credentials required
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #54 Secret/token protection audit — continue the credential/privacy audit; it is
+  the highest-value non-hardware item still open. Candidate: audit other
+  privacy-masking helpers (notification previews, logs, telemetry) for the same
+  "leaks more than documented" class.
+
+हिंदी सारांश (एक पंक्ति):
+- कॉलर-आईडी मास्किंग में गोपनीयता लीक ठीक किया गया — अब केवल देश कोड और अंतिम
+  चार अंक दिखते हैं; lint, 715 टेस्ट और build सभी पास।
+
+---
+
+Process note (durable, for the next slot):
+This slot hit the stale-ref trap AGAIN and it cost real time. The local clone's
+fetch refspec lists only `main`, so `origin/feature/hermes-full-completion` was
+absent and the initial local base was 29 commits behind the real tip; the first
+push was rejected non-fast-forward. Correct procedure, now confirmed twice:
+`git fetch origin feature/hermes-full-completion:refs/remotes/origin/feature/hermes-full-completion`
+(explicit refspec), then `git reset --hard` to that ref and `cherry-pick` the
+local work. Also: the baseline gates measured before that fetch were meaningless
+(13 files/226 tests on the stale tree vs 47 files/691 tests on the real one) —
+never trust pre-fetch counts. And `git identity` was unset in this fresh sandbox;
+`git config user.name/user.email` had to be set before any commit.
