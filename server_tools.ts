@@ -229,7 +229,14 @@ function safeResolvePath(relativePath: string): { safePath: string; error?: stri
   try {
     const cleaned = path.normalize(relativePath).replace(/^(\.\.[\/\\])+/, '');
     const absolute = path.resolve(PROJECT_ROOT, cleaned);
-    if (!absolute.startsWith(PROJECT_ROOT)) {
+    // Containment must be decided on path segments, never on a raw string prefix:
+    // "/root-sibling".startsWith("/root") is true, yet lies outside the root.
+    const relative = path.relative(PROJECT_ROOT, absolute);
+    const escapesRoot =
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative);
+    if (escapesRoot) {
       return { safePath: '', error: 'Access denied: Path is outside authorized workspace root.' };
     }
     return { safePath: absolute };
