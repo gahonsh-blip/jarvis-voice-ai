@@ -5,6 +5,8 @@ import {
   normalizeVmStatus,
   normalizeMetricPercent,
   buildSshCommand,
+  resolveFirewallRuleState,
+  summarizeFirewallObservation,
 } from '../utils/vmTelemetryDisplay';
 
 describe('vmTelemetryDisplay — the Oracle modal never invents a value', () => {
@@ -58,5 +60,47 @@ describe('vmTelemetryDisplay — the Oracle modal never invents a value', () => 
     // No address reported means no command to copy — not the hardcoded default.
     expect(buildSshCommand(undefined)).toBeNull();
     expect(buildSshCommand('')).toBeNull();
+  });
+
+  it('treats a firewall rule as unprobed until a real observation exists', () => {
+    // The server no longer sets `active: true` for rules it never tested, so a
+    // plain boolean still maps to an observation but null/stale values do not.
+    expect(resolveFirewallRuleState(true)).toBe('OBSERVED_OPEN');
+    expect(resolveFirewallRuleState(false)).toBe('OBSERVED_CLOSED');
+    expect(resolveFirewallRuleState(null)).toBe('NOT_PROBED');
+    expect(resolveFirewallRuleState(undefined)).toBe('NOT_PROBED');
+    // A truthy non-boolean must not be mistaken for an observation.
+    expect(resolveFirewallRuleState('true')).toBe('NOT_PROBED');
+    expect(resolveFirewallRuleState(1)).toBe('NOT_PROBED');
+  });
+
+  it('only claims verified ingress when every rule was actually observed', () => {
+    const declared = [
+      { active: null },
+      { active: null },
+      { active: null },
+      { active: null },
+      { active: null },
+    ];
+    // This is the shape the server returns today: five declared, zero observed.
+    expect(summarizeFirewallObservation(declared)).toEqual({
+      verified: false,
+      probedCount: 0,
+      total: 5,
+    });
+    expect(summarizeFirewallObservation([{ active: true }, { active: true }])).toEqual({
+      verified: true,
+      probedCount: 2,
+      total: 2,
+    });
+    // One unobserved rule withholds the whole claim.
+    expect(summarizeFirewallObservation([{ active: true }, { active: null }])).toEqual({
+      verified: false,
+      probedCount: 1,
+      total: 2,
+    });
+    // An empty list is not a verified claim either.
+    expect(summarizeFirewallObservation([])).toEqual({ verified: false, probedCount: 0, total: 0 });
+    expect(summarizeFirewallObservation(undefined)).toEqual({ verified: false, probedCount: 0, total: 0 });
   });
 });

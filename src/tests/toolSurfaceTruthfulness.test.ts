@@ -105,6 +105,31 @@ describe('the truth-telling replacements are actually present', () => {
   it('the integrations matrix exposes metricsSource rather than a fixed status', () => {
     expect(flat).toContain('metricsSource: oracleCloudState.metricsSource');
   });
+
+  it('the Oracle firewall rules are not asserted active without a probe', () => {
+    // Every declared rule must be reported as never probed. The server cannot
+    // observe VCN reachability, so a `firewallRules` entry with `active: true`
+    // is an invented security claim.
+    const rulesBlock = flat.match(/firewallRules:\s*\[[\s\S]*?\]/)?.[0] ?? '';
+    expect(rulesBlock).toContain('active: null');
+    expect(rulesBlock).not.toMatch(/active:\s*true/);
+  });
+
+  it('the modal does not render "Zero Accidental Ingress" unconditionally', () => {
+    const modalFlat = fs
+      .readFileSync(path.resolve(process.cwd(), 'src/components/OracleCloudModal.tsx'), 'utf8')
+      .replace(/\s+/g, ' ');
+    // The claim must sit behind the verified summary: it appears in the source
+    // only after the guard that requires every rule to have been observed.
+    expect(modalFlat).toContain('firewallSummary.verified ? (');
+    expect(modalFlat).toContain('Ingress NOT_PROBED (');
+    const guardAt = modalFlat.indexOf('firewallSummary.verified ? (');
+    const claimAt = modalFlat.indexOf('Zero Accidental Ingress');
+    expect(guardAt).toBeGreaterThanOrEqual(0);
+    expect(claimAt).toBeGreaterThan(guardAt);
+    // Unprobed rules must render as a state, not a green check.
+    expect(modalFlat).toContain('resolveFirewallRuleState(rule.active)');
+  });
 });
 
 describe('the Oracle Cloud modal renders the payload, never a plausible default', () => {

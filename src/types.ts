@@ -346,7 +346,11 @@ export interface OracleVMStatus {
   };
   metricsSource?: 'live_host' | 'unavailable';
   metricsSampledAt?: string | null;
-  firewallRules: { port: number; proto: 'tcp' | 'udp'; label: string; active: boolean }[];
+  // `active` is a tri-state observation, not a configuration echo: `true`/`false`
+  // mean a port was actually observed open/closed, `null` means it was never
+  // probed. The server sets `null` for every rule because nothing here contacts
+  // the Oracle VCN, so the UI must not render an unverified rule as a pass.
+  firewallRules: { port: number; proto: 'tcp' | 'udp'; label: string; active: boolean | null }[];
 }
 
 export interface TelegramBotMessage {

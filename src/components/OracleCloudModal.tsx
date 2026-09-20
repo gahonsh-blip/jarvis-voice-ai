@@ -22,6 +22,8 @@ import {
   normalizeMetricPercent,
   normalizeGigabytes,
   buildSshCommand,
+  resolveFirewallRuleState,
+  summarizeFirewallObservation,
 } from '../utils/vmTelemetryDisplay';
 
 interface Props {
@@ -75,6 +77,9 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const ramUsedGb = normalizeGigabytes(vmStatus?.metrics?.ramUsedGb);
   const ramTotalGb = normalizeGigabytes(vmStatus?.metrics?.ramTotalGb);
   const diskUsage = normalizeMetricPercent(vmStatus?.metrics?.diskUsage);
+  // The declared rules carry no observation until a probe actually reports one,
+  // so this summary reads `verified: false` until then and the panel says so.
+  const firewallSummary = summarizeFirewallObservation(vmStatus?.firewallRules);
 
   if (!isOpen) return null;
 
@@ -95,7 +100,7 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Shape: {vmStatus?.shape ?? 'VM.Standard.A1.Flex'} (Ampere A1 ARM64) • {vmStatus?.ocpu ?? 4} OCPUs • {vmStatus?.ramGb ?? 24} GB RAM • {vmStatus?.bootVolumeGb ?? 200} GB Storage
+                Shape: {vmStatus?.shape ?? 'UNKNOWN'} (Ampere A1 ARM64) • {vmStatus?.ocpu ?? 'UNKNOWN'} OCPUs • {vmStatus?.ramGb ?? 'UNKNOWN'} GB RAM • {vmStatus?.bootVolumeGb ?? 'UNKNOWN'} GB Storage
               </p>
             </div>
           </div>
@@ -114,7 +119,7 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col gap-2">
               <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-                <span>CPU LOAD (4 OCPUs)</span>
+                <span>CPU LOAD</span>
                 <Cpu className="w-4 h-4 text-cyan-400" />
               </div>
               <div className="text-2xl font-mono font-bold text-slate-100">
@@ -154,7 +159,7 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
               </div>
               <div className="text-2xl font-mono font-bold text-slate-100">
                 {diskUsage != null ? `${diskUsage}%` : '—'}{' '}
-                <span className="text-sm font-normal text-slate-400">of {vmStatus?.bootVolumeGb ?? 200} GB</span>
+                <span className="text-sm font-normal text-slate-400">of {vmStatus?.bootVolumeGb ?? UNKNOWN} GB</span>
               </div>
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
@@ -199,55 +204,86 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Ingress Security Firewall Table */}
+          {/* Ingress Security Firewall Table.
+              The server reports a rule's `active` as null unless a port probe
+              actually observed it, and it never probes. An unprobed rule must
+              not render as a pass, so the icon follows the observed state and
+              the heading only claims zero accidental ingress when every rule
+              carries a real observation. */}
           <div className="flex flex-col gap-2">
             <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center justify-between">
-              <span>Security Ingress Firewall Rules (Oracle VCN)</span>
-              <span className="text-emerald-400 flex items-center gap-1">
-                <Lock className="w-3.5 h-3.5" />
-                Zero Accidental Ingress
-              </span>
+              <span>Security Ingress Firewall Rules (Oracle VCN — declared)</span>
+              {firewallSummary.verified ? (
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5" />
+                  Zero Accidental Ingress
+                </span>
+              ) : (
+                <span className="text-amber-400 flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5" />
+                  Ingress NOT_PROBED ({firewallSummary.probedCount}/{firewallSummary.total} rules observed)
+                </span>
+              )}
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 font-mono text-xs">
-              {vmStatus?.firewallRules.map((rule) => (
-                <div
-                  key={rule.port}
-                  className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 font-bold">
-                        Port {rule.port}
-                      </span>
-                      <span className="text-slate-400">{rule.proto.toUpperCase()}</span>
+              {vmStatus?.firewallRules.map((rule) => {
+                const state = resolveFirewallRuleState(rule.active);
+                return (
+                  <div
+                    key={rule.port}
+                    className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 font-bold">
+                          Port {rule.port}
+                        </span>
+                        <span className="text-slate-400">{rule.proto.toUpperCase()}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">{rule.label}</p>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">{rule.label}</p>
+                    {state === 'OBSERVED_OPEN' ? (
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : state === 'OBSERVED_CLOSED' ? (
+                      <X className="w-4 h-4 text-rose-400 shrink-0" />
+                    ) : (
+                      <span className="text-[10px] text-amber-400 shrink-0 font-bold">
+                        {state}
+                      </span>
+                    )}
                   </div>
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* Zero-Cost Guarantee Guidelines */}
+          {/* Zero-Cost Reference Guidelines. These are the Always Free programme
+              limits, not a verification of this instance: nothing here queries
+              the Oracle billing/entitlement API, so the panel is labelled as a
+              reference and the text describes programme policy ("within the
+              Always Free allowance") rather than asserting our instance was
+              checked. */}
           <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-xs text-slate-300 flex flex-col gap-2">
             <span className="font-mono text-emerald-300 font-bold flex items-center gap-2">
               <ShieldCheck className="w-4 h-4" />
-              ORACLE ALWAYS FREE ₹0 VERIFICATION CHECKLIST
+              ORACLE ALWAYS FREE ₹0 — PROGRAMME LIMITS (NOT VERIFIED FOR THIS INSTANCE)
             </span>
             <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-300">
-              <li>Ampere A1 Compute Shape (up to 4 OCPUs and 24 GB RAM) is guaranteed Always Free.</li>
-              <li>Boot Volume allocated is 200 GB (within the free 200 GB limit).</li>
-              <li>Outbound bandwidth limit: 10 TB / month (Far above personal Jarvis usage).</li>
-              <li>No paid databases or paid load balancers enabled. Zero surprise invoices.</li>
+              <li>Ampere A1 Compute Shape provides up to 4 OCPUs and 24 GB RAM within the Always Free allowance.</li>
+              <li>The Always Free boot volume allowance is up to 200 GB.</li>
+              <li>Outbound bandwidth allowance is 10 TB / month.</li>
+              <li>Always Free does not include paid databases or paid load balancers.</li>
             </ul>
+            <p className="text-[10px] text-amber-400 font-mono">
+              Billing entitlement for this instance is not queried by this server — treated as NOT_PROBED.
+            </p>
           </div>
         </div>
 
         {/* Footer */}
         <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
-          <span>Ubuntu 24.04 LTS (Minimal ARM64)</span>
+          <span className="text-slate-500">OS: {vmStatus?.os ?? UNKNOWN}</span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"

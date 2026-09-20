@@ -1409,12 +1409,19 @@ let oracleCloudState = {
   },
   metricsSource: 'unavailable' as 'live_host' | 'unavailable',
   metricsSampledAt: null as string | null,
+  // This list is the *declared* VCN ingress configuration. It is not a
+  // measurement: nothing in this process contacts the Oracle VCN, opens an
+  // inbound socket, or can observe whether a port is reachable from the
+  // internet, so `active` is null for every rule (never probed). The previous
+  // version set `active: true` on all five, which the modal rendered as five
+  // green checkmarks under a "Zero Accidental Ingress" heading — an
+  // unconditional security claim about ports that were never tested.
   firewallRules: [
-    { port: 22, proto: 'tcp' as const, label: 'SSH Remote Terminal (Restricted IP)', active: true },
-    { port: 80, proto: 'tcp' as const, label: 'HTTP Web Panel (Nginx Proxy)', active: true },
-    { port: 443, proto: 'tcp' as const, label: 'HTTPS SSL Encrypted Panel', active: true },
-    { port: 3000, proto: 'tcp' as const, label: 'JARVIS Applet Core Engine', active: true },
-    { port: 8443, proto: 'tcp' as const, label: 'Telegram Webhook Ingress Gateway', active: true },
+    { port: 22, proto: 'tcp' as const, label: 'SSH Remote Terminal (Restricted IP)', active: null },
+    { port: 80, proto: 'tcp' as const, label: 'HTTP Web Panel (Nginx Proxy)', active: null },
+    { port: 443, proto: 'tcp' as const, label: 'HTTPS SSL Encrypted Panel', active: null },
+    { port: 3000, proto: 'tcp' as const, label: 'JARVIS Applet Core Engine', active: null },
+    { port: 8443, proto: 'tcp' as const, label: 'Telegram Webhook Ingress Gateway', active: null },
   ],
 };
 

@@ -58,3 +58,37 @@ export function buildSshCommand(publicIp: unknown): string | null {
   const ip = normalizePublicIp(publicIp);
   return ip ? `ssh -i ~/.ssh/oracle_arm_key ubuntu@${ip}` : null;
 }
+
+/**
+ * Observed state of one declared ingress rule. `NOT_PROBED` is the default and
+ * the only honest answer for a rule this server never tested: nothing here
+ * contacts the Oracle VCN or opens a socket, so the server cannot know whether a
+ * port is reachable from the internet.
+ */
+export type FirewallRuleState = 'OBSERVED_OPEN' | 'OBSERVED_CLOSED' | 'NOT_PROBED';
+
+/**
+ * Map a rule's `active` flag onto a state that distinguishes observation from
+ * assumption. Only a literal boolean counts as an observation; a missing or
+ * non-boolean value stays `NOT_PROBED` so the caller cannot render a checkmark
+ * for a rule that was never tested.
+ */
+export function resolveFirewallRuleState(active: unknown): FirewallRuleState {
+  if (active === true) return 'OBSERVED_OPEN';
+  if (active === false) return 'OBSERVED_CLOSED';
+  return 'NOT_PROBED';
+}
+
+/**
+ * One-line summary of a rule set for the panel heading. It only claims ingress
+ * is verified when *every* rule carries a real observation, which no rule does
+ * today — the heading therefore states the unprobed truth instead of
+ * "Zero Accidental Ingress".
+ */
+export function summarizeFirewallObservation(
+  rules: Array<{ active?: unknown }> | null | undefined,
+): { verified: boolean; probedCount: number; total: number } {
+  const list = Array.isArray(rules) ? rules : [];
+  const probedCount = list.filter((rule) => resolveFirewallRuleState(rule?.active) !== 'NOT_PROBED').length;
+  return { verified: list.length > 0 && probedCount === list.length, probedCount, total: list.length };
+}
