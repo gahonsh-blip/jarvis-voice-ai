@@ -4,17 +4,18 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 — Oracle Cloud telemetry honesty fix. `GET
-/api/oracle-cloud`, the Telegram cloud-telemetry reply and the voice
-`cloud_telemetry` path fabricated CPU/RAM/disk numbers: `oracleCloudState.metrics`
-sat at hardcoded constants (14.8% CPU, 3.4 GB RAM, 18.2% disk) and the endpoint
-re-jittered CPU/RAM with `Math.random()` on every request, so JARVIS spoke
-invented load figures as if they were live telemetry. Metrics are now sampled
-from the real daemon host via `src/utils/hardening/hostTelemetry.ts`; anything
-not measurable (bandwidth, temperature) reports `null`/unavailable instead of a
-plausible constant. Covered by `src/tests/hostTelemetry.test.ts` (6 tests). Full
-suite 44 files / 636 tests, clean lint, clean build. No new backlog item could be
-advanced (see "Known limitations").
+Last cycle: 2026-09-20 21:05 IST — Notification privacy honesty fix. Item 4 was
+recorded `VERIFIED` on the strength of the *server-side* gating, but the
+sensitive-content matcher itself was broken: the Hindi OTP pattern decoded to the
+garbled literal `ओटगीपीप` rather than `ओटीपी`, so a Hindi OTP notification was
+not classified as sensitive and its body could be exposed through the bridge.
+The matcher is corrected (plus the `ओटपी` variant) and the engine now has direct
+test coverage (`src/tests/mobileNotificationPrivacy.test.ts`, 39 tests) covering
+sensitivity detection, app categorisation, policy resolution, identity/hashing,
+content exposure and ingestion. Negative-validated: reverting the matcher makes
+the Hindi-OTP test fail. A dead ternary in `exposeNotificationContent` was also
+removed (clarity only; behaviour unchanged for non-empty previews). Full suite 45
+files / 675 tests, clean lint, clean build.
 
 ## Status legend
 
@@ -35,7 +36,7 @@ advanced (see "Known limitations").
 | 1 | Real Android Mobile Bridge connection | `PARTIAL` | Authenticated pairing + capability handshake verified by `androidBridge.e2e.test.ts` (real server process). Physical device leg unverified. |
 | 2 | Android → JARVIS → Server E2E test | `PARTIAL` | Full server-side chain verified E2E. Device-to-server leg needs hardware. |
 | 3 | Real Android battery/status telemetry | `VERIFIED` (server) | Device-reported telemetry only; fabricated defaults removed. |
-| 4 | Real Android notifications integration | `VERIFIED` (server) | Notification listener gated and replay-protected. |
+| 4 | Real Android notifications integration | `VERIFIED` (server) | Notification listener gated and replay-protected. Sensitive-content filter is now tested: `src/tests/mobileNotificationPrivacy.test.ts` (39 tests). A garbled Hindi OTP matcher that let Hindi OTP bodies through was found and fixed 2026-09-20 21:05 IST. |
 | 5 | Real Android location/GPS integration | `VERIFIED` (server) | `ACCESS_FINE_LOCATION` gating with real coordinates accepted. |
 | 6 | Mobile Bridge auth/session verification | `VERIFIED` | HMAC tokens, constant-time compare, expiry, replay rejection, revocation. |
 | 7 | Mobile Bridge reconnect/disconnect | `VERIFIED` (server) | Reconnect counting, idle expiry, revocation on disconnect and re-pair. |

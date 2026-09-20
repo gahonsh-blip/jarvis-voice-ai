@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-20 — Notification privacy fix
+
+### 🛡️ Security & Truth Invariants
+- **Hindi OTP notifications were not classified as sensitive**: the sensitive-content matcher's Hindi OTP pattern decoded to the garbled literal `ओटगीपीप` instead of `ओटीपी`, so the body of a Hindi OTP notification could be exposed through the mobile bridge. The matcher is corrected and the `ओटपी` variant added (`src/utils/mobileNotificationPrivacy.ts`).
+- Removed a dead ternary in `exposeNotificationContent` (clarity only).
+
+### 🧪 Automated Testing
+- Added `src/tests/mobileNotificationPrivacy.test.ts` (39 tests) covering sensitivity detection, app categorisation, policy resolution, identity/hashing, content exposure and ingestion. Negative-validated: reverting the matcher fails the Hindi-OTP test.
+- Full suite: 45 files / 675 tests passing; clean lint; clean build.
+
+---
+
 ## [v2.4.0] - Natural Voice Assistant + Hindi Mode Upgrade
 
 ### 🎙️ Natural Voice & Multilingual Experience
