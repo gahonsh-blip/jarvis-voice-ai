@@ -368,91 +368,82 @@ confirms the trap recorded by slot 3.
 
 ---
 
+## Slot 2026-09-20 23:05 IST (WORK, slot 5)
+
 HERMES JARVIS — AUTONOMOUS WINDOW REPORT
-Slot:        WORK  |  IST time: 22:35
+Slot:        WORK  |  IST time: 23:05
 Window date: 2026-09-20   Window slots completed so far: 5
 
 Completed:
-- #54 Secret/token protection audit (PARTIAL, advanced) — found and fixed a
-  caller-ID masking privacy leak. `maskPhoneNumber` in
-  `src/utils/telephonyPermissions.ts` returned `+9198765*****` for
-  `+91 9876543210`, exposing the country code plus eight of the ten subscriber
-  digits, while the sibling helper in `src/utils/androidBridgeEngine.ts` masked
-  the same input as `+91 ******3210`. The telephony helper now emits the
-  canonical `+91 ******3210` form (blank → `Unknown / Private`, ≤4 digits →
-  `****`). New coverage: `src/tests/telephonyPermissions.test.ts`, 24 tests
-  passed. Docs updated: `docs/COMPLETION_STATUS.md` (item 54 + Last cycle),
-  `docs/CHANGELOG.md`, `docs/SECURITY.md`.
+- #10 Real Computer Operator actions — added direct, negative-validated test
+  coverage for the computer-operator permission gate (the Level 1-4 safety
+  surface). New file: src/tests/permissionGuard.test.ts (9 tests).
+  Evidence: npx vitest run src/tests/permissionGuard.test.ts -> 1 file / 9 tests
+  passed. Negative validation: neutralising the captcha branch of the
+  security-bypass guard -> 1 failed / 8 passed; restore -> 9 passed.
 
 In Progress:
-- None. The item remains PARTIAL by its own definition (an ongoing audit); this
-  slot closed one concrete finding within it.
+- #10 remains VERIFIED (subset) — the synthetic mouse/keyboard leg is still
+  NOT_AVAILABLE (no desktop input device in this sandbox).
 
 Remaining:
-- #54 remains PARTIAL (audit is continuous, not a one-shot task).
-- Most other open items are hardware/credential gated (see Blocked).
-- #60 Final documentation (PARTIAL) will close at the finalization slot.
+- #1 Android Bridge — BLOCKED (no physical Android device attached).
+- #50/#55 hands-free Android control + real-device E2E — NOT_AVAILABLE (hardware).
+- #51 Complete security audit — PARTIAL; #54 Secret/token protection audit —
+  PARTIAL; #60 Final documentation — PARTIAL.
 
 Bugs Found:
-- Caller-ID masking leak in `src/utils/telephonyPermissions.ts`. Found by adding
-  direct tests for the masking contract and comparing against the canonical
-  format that `androidBridgeEngine.ts` (and the `TelephonySession` type comment)
-  already documented.
+- No production bug this slot. Inspected the one plausible latent risk: a
+  permanently blocked action (finance / security bypass) returns
+  allowed: false, requiresHumanApproval: false. A caller that branched on
+  requiresHumanApproval first could read that as "safe to proceed". Checked
+  the only caller, computerOperatorEngine.ts:158-187 — it branches on allowed
+  first, so the action becomes BLOCKED. Not a bug; now pinned by a test.
 
 Bugs Fixed:
-- `maskPhoneNumber` now hides every subscriber digit except the last four.
-  Verified by negative validation on this tree: restoring the original
-  implementation fails 8 of 24 tests; the fix passes 24 of 24.
+- None (no production code changed this slot).
 
-Tests:    48 files / 715 tests passed (full `npx vitest run`, observed on tip).
-          Targeted `src/tests/telephonyPermissions.test.ts`: 24/24 passed.
-Lint:     `tsc --noEmit` exit 0 (observed).
-Build:    exit 0; `dist/server.cjs` 816011 bytes (observed).
-E2E:      NOT RUN this slot (no E2E file touched; full suite includes the
-          `*.e2e.test.ts` files and they passed as part of the 715).
-Security: `git check-ignore -v .env` → `.gitignore:4:.env` (ignored). No secret,
-          key or token in the diff. No `.env`, `node_modules` or stray debug
-          file staged.
+Tests:    49 files / 724 tests passed (npx vitest run, exit 0)
+Lint:     exit 0 (tsc --noEmit, npm run lint)
+Build:    exit 0 (npm run build; dist/server.cjs 816,011 bytes)
+E2E:      NOT RUN this slot (server-side E2E suites pass as part of the 49-file run)
+Security: No .env staged; no credentials in diff; no node_modules/dist tracked.
+          git check-ignore -v .env -> .gitignore:2:.env
 
-Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, docs/SECURITY.md
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 10 row),
+               docs/CHANGELOG.md
 Branch:  feature/hermes-full-completion
-Commit:  4c8e6ce (docs) on top of b3885ac (fix + tests)
-Push:    succeeded — origin/feature/hermes-full-completion
-         1a54aae..b3885ac then b3885ac..4c8e6ce
+Commit:  2858f23 (test) + docs commit
+Push:    succeeded — 4c8e6ce..2858f23 feature/hermes-full-completion
 
-PR:         none opened this slot
+PR:         not opened/refreshed this slot (work slot, not finalization)
 Main merge: NOT MERGED — awaiting human approval (never auto-merge)
-Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
-            in this environment; the verified artifact is the deployment unit
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified artifact
+            (dist/server.cjs, 816,011 bytes) is the deployment unit available.
 
 Blocked:
-- #1/#2/#50/#55 — physical Android device required
-- #8 — Windows host required for the PowerShell capture leg
-- #25/#26/#30 — live provider credentials required
+- #1 Android Bridge — requires a physical Android device.
+- #55 real-device E2E — requires an Android device or Windows host.
 
 Human Approval Required:
 - None this slot.
 
 Next Slot:
-- #54 Secret/token protection audit — continue the credential/privacy audit; it is
-  the highest-value non-hardware item still open. Candidate: audit other
-  privacy-masking helpers (notification previews, logs, telemetry) for the same
-  "leaks more than documented" class.
+- #51/#54 security audit continuation — the highest non-hardware item still
+  PARTIAL; audit a further credential/secret pattern set.
 
 हिंदी सारांश (एक पंक्ति):
-- कॉलर-आईडी मास्किंग में गोपनीयता लीक ठीक किया गया — अब केवल देश कोड और अंतिम
-  चार अंक दिखते हैं; lint, 715 टेस्ट और build सभी पास।
+- कंप्यूटर ऑपरेटर के सुरक्षा गार्ड के लिए 9 नए टेस्ट जोड़े गए, नेगेटिव-वैलिडेट किए; lint, tests और build सभी पास।
 
 ---
 
 Process note (durable, for the next slot):
-This slot hit the stale-ref trap AGAIN and it cost real time. The local clone's
-fetch refspec lists only `main`, so `origin/feature/hermes-full-completion` was
-absent and the initial local base was 29 commits behind the real tip; the first
-push was rejected non-fast-forward. Correct procedure, now confirmed twice:
-`git fetch origin feature/hermes-full-completion:refs/remotes/origin/feature/hermes-full-completion`
-(explicit refspec), then `git reset --hard` to that ref and `cherry-pick` the
-local work. Also: the baseline gates measured before that fetch were meaningless
-(13 files/226 tests on the stale tree vs 47 files/691 tests on the real one) —
-never trust pre-fetch counts. And `git identity` was unset in this fresh sandbox;
-`git config user.name/user.email` had to be set before any commit.
+This slot again found the local clone's main stale, and the remote
+feature/hermes-full-completion advanced during the run (b3885ac to 4c8e6ce)
+while this slot was working. The first git push was rejected as
+non-fast-forward. Resolution: fetch the owned branch with an explicit refspec,
+git reset --hard origin/feature/hermes-full-completion, then git cherry-pick
+the slot's single commit onto the new tip. No force-push was used. Also note:
+git rebase fails in this sandbox unless git config user.name/user.email are
+set locally first — set them before any history operation.

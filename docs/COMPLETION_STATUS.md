@@ -4,7 +4,26 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 22:35 IST — Caller-ID masking privacy leak. There were two
+Last cycle: 2026-09-20 23:05 IST — PermissionGuard direct test coverage.
+`src/utils/computerOperator/permissionGuard.ts` is the computer-operator safety
+surface that all Level 1-4 decisions flow through, but it had no test that called
+it directly (only indirect exercise via the engine). Added
+`src/tests/permissionGuard.test.ts` (9 tests) covering the global emergency stop,
+the finance-exclusion guard (`FINANCE_KEYWORDS`, English and Hindi), the
+destructive-command guard, the security-bypass guard (`captcha`, `dump
+credentials`, `disable antivirus`), the Level 4 human gate (including
+`publish`/`broadcast`/`push --force`), safe local actions, and the
+`isApprovalRequired` helper — plus the security invariant that a permanently
+blocked finance action returns `requiresHumanApproval: false` and must be treated
+as `BLOCKED`, never as "no approval needed". Verified the caller in
+`computerOperatorEngine.ts` honours this (it branches on `allowed` first, so a
+finance action becomes `BLOCKED`, not `NEEDS_APPROVAL`); no latent bug there.
+Negative-validated: neutralising the `captcha` branch of the security-bypass
+guard makes 1 of 9 tests fail; restoring it makes all 9 pass. No production code
+was changed by this slot. Gates observed on tip: lint exit 0, vitest 49 files /
+724 tests passed, build exit 0 (`dist/server.cjs`, 816,011 bytes).
+
+Prior cycle: 2026-09-20 22:35 IST — Caller-ID masking privacy leak. There were two
 `maskPhoneNumber` implementations. The one in `src/utils/telephonyPermissions.ts`
 (the telephony permission/safety surface) revealed far more of the number than
 its sibling: for `+91 9876543210` it returned `+9198765*****`, exposing the
@@ -88,7 +107,7 @@ files / 675 tests, clean lint, clean build.
 | :--- | :--- | :--- | :--- |
 | 8 | Real Windows screenshot capture | `VERIFIED` (implementation) | `screenshotStore.ts` captures via PowerShell `CopyFromScreen` on Windows, `screencapture` on macOS, `import` on Linux. The old canvas-drawn placeholder is gone. Physical Windows leg pending a Windows host. |
 | 9 | Screenshot file existence/path/size verification | `VERIFIED` | `verifyScreenshotFile()` stats the file, rejects missing/empty/directory targets, parses real PNG IHDR dimensions from the bytes, and records a sha256. Covered by `screenshotStore.test.ts` (13 tests). |
-| 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. The file routes' workspace boundary was not actually sound until 2026-09-20 22:05 IST: `safeResolvePath` used a bare string-prefix test, so a sibling directory sharing the root's name prefix escaped the workspace. Now segment-checked (see Last cycle), guarded by `src/tests/workspacePathContainment.test.ts`. |
+| 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. The file routes' workspace boundary was not actually sound until 2026-09-20 22:05 IST: `safeResolvePath` used a bare string-prefix test, so a sibling directory sharing the root's name prefix escaped the workspace. Now segment-checked (see Last cycle), guarded by `src/tests/workspacePathContainment.test.ts`. The computer-operator permission gate itself also has direct coverage now: `src/tests/permissionGuard.test.ts` (9 tests, 2026-09-20 23:05 IST) asserts the emergency-stop block, the finance exclusion, the destructive-command and security-bypass guards, the Level 4 human gate, and that a blocked action must never be read as "no approval needed". |
 | 11 | Action result verification | `VERIFIED` | `ActionVerifier` no longer returns unconditional success (`|| true` removed). Clicks require an observed screen change; edits require a disk re-read; tests require parsed runner output; screenshots require a captured file. |
 | 12 | Browser real-action + permission flow | `VERIFIED` | `ScreenshotModal.tsx` uses `getDisplayMedia` when permitted, otherwise asks the host to capture via `/api/computer-operator/screenshot`. A denied permission reports `permission_denied`, not a simulated image. |
 | 13 | Zero-fake-success for all tools | `VERIFIED` (computer control) | Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. |
