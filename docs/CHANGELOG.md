@@ -4,6 +4,28 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-21 02:10 — Notification redaction can no longer be switched off
+
+### 🔒 Privacy
+- A prior slot made `handleIncomingNotification()`'s sensitive-content guard
+  conditional on the new setting `sensitiveFilteringEnabled`. With it off, the
+  raw body was kept in `pendingEvent.rawText` and pushed to every bridge
+  listener via `notifyListeners()` — so an OTP, bank or credential body could be
+  held in memory and broadcast, contradicting the absolute guarantee in
+  `docs/MOBILE_CALL_NOTIFICATION.md`. The guard is unconditional again and the
+  field is removed from `AndroidBridgeSettings` / `DEFAULT_BRIDGE_SETTINGS`
+  (`src/types/mobileBridge.ts`), so a legacy persisted `false` cannot re-open it.
+  `blockHealthNotificationsByDefault` (default `true`) is kept — it only widens
+  what is announced.
+
+### 🧪 Tests
+- `src/tests/androidBridgePrivacySettings.test.ts` — 5 tests, covering the
+  health-category block and unconditional OTP redaction. Negative-validated:
+  neutralising the health gate fails the health test; re-introducing the
+  settings gate fails the legacy-override test.
+
+---
+
 ## [Unreleased] - 2026-09-21 01:40 — Host telemetry can no longer report an impossible CPU load
 
 ### 🛡️ Truthfulness

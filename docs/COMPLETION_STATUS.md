@@ -4,7 +4,28 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-21 01:40 IST — zero-fake-success audit reached the host
+Last cycle: 2026-09-21 02:10 IST — Android notification privacy (item 4) was
+re-audited after the 2026-09-21 01:05 IST slot left `sensitiveFilteringEnabled` as an
+owner-controllable switch. That change was wrong and has been reverted in
+substance: with filtering off, `handleIncomingNotification()` stored the raw
+body in `pendingEvent.rawText` and called `notifyListeners(pendingMsg)`, so a
+raw OTP, bank or credential body would have been held in memory and pushed to
+every registered bridge listener — contradicting the absolute "never read
+aloud, never written to logs" guarantee in `docs/MOBILE_CALL_NOTIFICATION.md`.
+No UI or API ever exposed that field, so it was not a feature; it was a footgun
+reachable only by a persisted localStorage value or a direct call. The
+redaction guard in `src/utils/androidBridgeEngine.ts` is now unconditional
+again (no settings gate), and the never-documented `sensitiveFilteringEnabled`
+field is removed from `AndroidBridgeSettings` /
+`DEFAULT_BRIDGE_SETTINGS` in `src/types/mobileBridge.ts`, so a legacy persisted
+`false` is ignored rather than silently disabling the guard. The remaining
+privacy toggle, `blockHealthNotificationsByDefault` (default `true`), is kept
+because it only *widens* what is announced and defaults to blocking.
+Guarded by `src/tests/androidBridgePrivacySettings.test.ts` (5 tests), both new
+assertions negative-validated: neutralising the health gate fails the health
+test, and re-introducing the settings gate fails the legacy-override test.
+
+Previous cycle: 2026-09-21 01:40 IST — zero-fake-success audit reached the host
 telemetry (item 13). `getHostCpuUsagePercent()` in
 `src/utils/hardening/hostTelemetry.ts` read `os.cpuUsage`, which is not a Node
 API on any runtime we can observe (`os.cpuUsage === undefined` on node
@@ -192,7 +213,7 @@ files / 675 tests, clean lint, clean build.
 | 1 | Real Android Mobile Bridge connection | `PARTIAL` | Authenticated pairing + capability handshake verified by `androidBridge.e2e.test.ts` (real server process). Physical device leg unverified. |
 | 2 | Android → JARVIS → Server E2E test | `PARTIAL` | Full server-side chain verified E2E. Device-to-server leg needs hardware. |
 | 3 | Real Android battery/status telemetry | `VERIFIED` (server) | Device-reported telemetry only; fabricated defaults removed. |
-| 4 | Real Android notifications integration | `VERIFIED` (server) | Notification listener gated and replay-protected. Sensitive-content filter is now tested: `src/tests/mobileNotificationPrivacy.test.ts` (39 tests). A garbled Hindi OTP matcher that let Hindi OTP bodies through was found and fixed 2026-09-20 21:05 IST. |
+| 4 | Real Android notifications integration | `VERIFIED` (server) | Notification listener gated and replay-protected. Sensitive-content filter is now tested: `src/tests/mobileNotificationPrivacy.test.ts` (39 tests). A garbled Hindi OTP matcher that let Hindi OTP bodies through was found and fixed 2026-09-20 21:05 IST. 2026-09-21 02:10 IST: a regression introduced by the 01:05 IST slot had made the redaction guard switchable off via `sensitiveFilteringEnabled`; that was reverted (guard is unconditional, field removed) and is pinned by `src/tests/androidBridgePrivacySettings.test.ts` (5 tests), negative-validated. |
 | 5 | Real Android location/GPS integration | `VERIFIED` (server) | `ACCESS_FINE_LOCATION` gating with real coordinates accepted. |
 | 6 | Mobile Bridge auth/session verification | `VERIFIED` | HMAC tokens, constant-time compare, expiry, replay rejection, revocation. |
 | 7 | Mobile Bridge reconnect/disconnect | `VERIFIED` (server) | Reconnect counting, idle expiry, revocation on disconnect and re-pair. |
