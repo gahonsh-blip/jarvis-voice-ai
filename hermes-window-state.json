@@ -1,37 +1,22 @@
 {
   "window_date": "2026-09-20",
   "window_started_at": "2026-09-20T05:51:23Z",
-  "last_slot_at": "2026-09-20T17:36:39Z",
-  "slots_completed": 5,
-  "current_item": 10,
-  "current_item_title": "Real Computer Operator actions (PermissionGuard safety surface)",
-  "current_item_status": "VERIFIED",
-  "last_commit": "b2d07c50fa90a51aa945062d00259f2bb5510485",
+  "last_slot_at": "2026-09-20T18:30:00Z",
+  "slots_completed": 6,
+  "current_item": 13,
+  "current_item_title": "Zero-fake-success for all tools (git surface audited)",
+  "current_item_status": "PARTIAL",
+  "last_commit": "268aac3",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 2,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 8,
-      "reason": "Windows host required for the PowerShell capture leg"
-    },
-    {
-      "item": 50,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 55,
-      "reason": "physical Android device / Windows host required"
-    }
+    {"item": 1, "reason": "physical Android device required"},
+    {"item": 2, "reason": "physical Android device required"},
+    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
+    {"item": 50, "reason": "physical Android device required"},
+    {"item": 55, "reason": "physical Android device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 5 (23:05 IST WORK, fire #5). Added the first DIRECT test of the computer-operator permission gate: src/tests/permissionGuard.test.ts (9 tests) covering emergency stop, finance exclusion (EN+HI), destructive-command guard, security-bypass guard, Level 4 human gate, safe local actions, isApprovalRequired. Also pinned the invariant that a permanently blocked action returns allowed=false AND requiresHumanApproval=false, so callers must branch on allowed first; verified the only caller computerOperatorEngine.ts:158 branches on allowed first, so such actions become BLOCKED not NEEDS_APPROVAL - no latent bug. Negative-validated IN THIS RUN: neutralising the captcha branch gives 1 failed / 8 passed; restoring gives 9 passed. No production code changed. Gates OBSERVED on tip: lint exit 0, vitest 49 files / 724 tests passed, build exit 0 (dist/server.cjs 816011 bytes). Commits 2858f23 (test) and 447c375 (docs+report) and e861ab5 (report ref correction) pushed. TRAP RECONFIRMED: remote feature branch advanced twice mid-slot (b3885ac -> 4c8e6ce -> 5e43c3f); first push rejected as non-fast-forward; resolved by explicit-refspec fetch + reset --hard + cherry-pick -X theirs for the report-log conflict; no force-push. ALSO: git cherry-pick reports an empty/duplicate patch when the commit is already upstream - check the remote tip before assuming a failure. FINAL TIP NOTE: remote feature branch advanced twice more during report corrections (e861ab5 -> 1363fd5 -> b2d07c5); each time resolved by explicit-refspec fetch + reset --hard origin/<branch> + cherry-pick the local commit, then push. No force-push at any point. Two or THREE pushes per slot are normal here: expect the remote to move between commit and push and do NOT treat a rejected push as failure."
+  "notes": "Slot 6 (23:35 IST WORK, fire #6). Audited the git tool surface against the item-13 'zero-fake-success' claim and found it did NOT hold: realGitStatus/realGitLog/realGitDiff in server_tools.ts returned success:true on EVERY git failure with invented data (branch 'main', three fabricated commit subjects, 'Diff tool nominal.'). Reproduced with a stub git on PATH exiting 127. Fixed the catch blocks; server.ts git_status_tool now renders 'Git: UNKNOWN' on failure; AutonomousToolsModal.tsx diff render shows an explicit unavailability message instead of passing an empty string off as 'no uncommitted differences'. Added src/tests/gitToolsTruthfulness.test.ts (6 tests). NEGATIVE-VALIDATED IN THIS RUN: stashing the server_tools.ts fix -> 4 of 6 fail; restoring -> 6 pass. Item 13 DOWNGRADED from VERIFIED to PARTIAL because the repo-wide audit is incomplete. Gates OBSERVED on tip: lint exit 0, npx vitest run 50 files / 730 tests passed, build exit 0 (dist/server.cjs 816197 bytes). Commits ff8f1da and 268aac3 pushed; both fast-forward, no force-push needed this slot. NEXT: continue item 13 by auditing the remaining tool surfaces in server_tools.ts / server.ts for other fabricated-success fallbacks."
 }
