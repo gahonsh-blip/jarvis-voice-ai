@@ -7,7 +7,7 @@ evidence. Anything simulated or hardware-dependent is marked accordingly.
 Last cycle: 2026-09-20 — Secret-redaction hardening. A live probe found five
 real token families (Stripe, Slack, npm, Hugging Face, SendGrid) passing through
 `redactSecrets` unchanged; patterns added and covered by 6 new tests. Full suite
-43 files / 629 tests, clean lint, clean build. All 60 backlog items were already
+43 files / 630 tests, clean lint, clean build. All 60 backlog items were already
 implemented, so no new item could be advanced this cycle (see "Known
 limitations").
 
