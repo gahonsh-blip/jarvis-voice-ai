@@ -3,6 +3,35 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-21 04:06 (22:36 UTC) — Oracle instance run state and address are no longer seeded as observed facts
+
+### Truthfulness
+- `oracleCloudState` in `server.ts` seeded a constant `status: 'RUNNING'` and a
+  literal `publicIp`. Both are OCI control-plane facts that this process never
+  queries, and a seeded value is indistinguishable from a measurement once it
+  passes through the UI normalisers — so the modal rendered an observed run state
+  and offered the address as a copyable `ssh` command. Both now seed `null`.
+- Added `src/utils/hardening/ociInstanceTruth.ts`. It records only what is provable
+  in-process: a hostname match against the declared instance proves this process is
+  *running on* that instance, which is a lower bound ("the instance is up") and is
+  labelled as such. The exact lifecycle state and any public address stay
+  unobserved and are named `NOT_OBSERVED` / `not observed`.
+- The Telegram status reply, the `/api/oracle-cloud` integrations matrix and
+  `OracleCloudModal.tsx` all render these fields through `describeRunState` /
+  `describePublicIp`. `statusObservedAt` records when a status was really read.
+- Removed the hardcoded `+342` hour uptime offset and the `Math.random()` jitter
+  around constants (14.8% CPU, 3.4 GB RAM); `uptimeHours` is now the measured
+  daemon uptime and the specs in the modal header are labelled as the declared plan.
+
+### Testing
+- `src/tests/ociInstanceTruth.test.ts` (new) plus the Oracle block in
+  `src/tests/toolSurfaceTruthfulness.test.ts`: 33 tests across the two files,
+  all passing. Negative-validated — restoring the literal address fails exactly
+  2 tests and 33/33 pass with the fix.
+- Full suite: 59 files / 824 tests passing; clean lint; clean build
+  (`dist/server.cjs` 822.0 kb).
+
+---
 ## [Unreleased] - 2026-09-21 03:07 (21:37 UTC) — approval and routine surfaces no longer assert unmeasured state
 
 ### 🛡️ Truthfulness
