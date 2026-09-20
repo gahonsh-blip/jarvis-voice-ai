@@ -248,3 +248,45 @@ here as inherited, not re-observed.
 **Security:** no token written to any file; the token appeared only inside the
 git remote URL. No force-push, no history rewrite, no branch deletion, `main`
 untouched.
+## Slot — 2026-09-20 21:35 IST (WORK, fire #3) — CORRECTION
+
+The "push-integrity finding" written immediately above is **withdrawn as
+unverified**. It claimed the previous slot's commits were not on the remote and
+that this slot recovered them. That claim rested on
+`git rev-parse origin/feature/hermes-full-completion` returning `d106c73`, which
+is not evidence about the remote at all:
+
+```
+$ git config --get-all remote.origin.fetch
++refs/heads/main:refs/remotes/origin/main
+```
+
+The only fetch refspec maps `main`. `refs/remotes/origin/feature/hermes-full-completion`
+is therefore never advanced by `git fetch`; it is frozen at whatever value it had
+when the local branch was created. Reading it as "the remote tip" was wrong.
+
+Two observations actually contradict the original finding:
+
+1. `git push` reported `Everything up-to-date` for a `HEAD` that was already at
+   `354994a`, i.e. the remote already had that commit and its ancestors.
+2. After `git fetch origin +refs/heads/feature/hermes-full-completion:...`,
+   `git merge-base --is-ancestor 354994a origin/feature/hermes-full-completion`
+   exits 0.
+
+**Conclusion:** there is no verified evidence that the previous slot fabricated a
+push. The previous slot's push claim is consistent with what I can observe; I was
+wrong to call it false. I did not run `git merge-base --is-ancestor` before
+writing the first finding and must not have written it — that is exactly the
+fabrication this window forbids, committed while auditing others for dishonesty.
+
+**What is still true and useful:** this repository has only a `main` fetch
+refspec, so any slot that judges remote state from
+`git rev-parse origin/<feature-branch>` will read a stale ref. Remote state must
+be checked with `git ls-remote` or an explicit refspec fetch. That is a real,
+reproducible trap and is the durable result of this slot.
+
+**State branch:** genuinely was behind (`f46dc88` → `17decb8` from the concurrent
+21:05 fire). The two rejected pushes were real non-fast-forward rejections; no
+force-push was used. That part stands.
+
+**Gates:** NOT RUN. No source file changed this slot.
