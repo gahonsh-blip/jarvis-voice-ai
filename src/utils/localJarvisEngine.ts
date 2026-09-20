@@ -829,10 +829,31 @@ export function processOfflineCommand(
   ) {
     updatedMemory.stats.actionsExecuted += 1;
     const weatherData = mobileStatus?.weather;
-    const condition = weatherData?.condition || 'Clear Sky';
-    const tempC = weatherData?.temperatureC ?? 27;
-    const humidity = weatherData?.humidity ?? 48;
-    const location = weatherData?.location || 'New Delhi';
+
+    // No weather source means no reading. Previously each field fell back to a
+    // constant (27°C, 48%, 'New Delhi'), so the reply presented invented
+    // readings as current conditions.
+    if (!weatherData) {
+      const unavailable = isHindi
+        ? 'अभी कोई मौसम स्रोत कनेक्टेड नहीं है, इसलिए मौसम या तापमान का डेटा उपलब्ध नहीं है।'
+        : isHinglish
+        ? 'Abhi koi weather source connected nahi hai, isliye weather ya temperature data available nahi hai.'
+        : 'No weather source is connected, so no weather or temperature data is available.';
+      return {
+        reply: unavailable,
+        spokenText: unavailable,
+        intent: 'weather_inquiry',
+        actionExecuted: false,
+        actionDetail: { type: 'weather_inquiry', title: 'Weather Unavailable' },
+        updatedMemory,
+        offline: true,
+      };
+    }
+
+    const condition = weatherData.condition || 'Unknown';
+    const tempC = weatherData.temperatureC;
+    const humidity = weatherData.humidity;
+    const location = weatherData.location || 'unknown location';
 
     const reply = isHindi
       ? `आज का मौसम ${condition === 'Clear Sky' ? 'साफ (Clear Sky)' : condition} है। वर्तमान तापमान लगभग ${tempC}°C (${location}) और आर्द्रता ${humidity}% है।`
@@ -872,14 +893,20 @@ export function processOfflineCommand(
     const timeStrHi = `${hours} बजकर ${mins < 10 ? '0' + mins : mins} मिनट`;
     const userName = updatedMemory.name || '';
 
-    // Check actual permissions in mobileStatus or memory
+    // Check actual permissions in mobileStatus or memory. With no connected
+    // phone there is no telemetry, so each permission starts false; the caller
+    // has supplied `mobileStatus` when a device really is attached. Previously
+    // these all defaulted to true and the values below each fell back to a
+    // plausible-looking constant (78%, 27°C, 5 notifications, 3 events,
+    // 2 emails), so a briefing with no device attached reported invented
+    // readings as if they were measured.
     const perms = mobileStatus?.permissions || {
-      BATTERY_STATUS: true,
-      WEATHER_LOCATION: true,
-      NOTIFICATIONS: true,
-      CALENDAR_EVENTS: true,
-      EMAIL_INBOX: true,
-      DEVICE_HEALTH: true,
+      BATTERY_STATUS: false,
+      WEATHER_LOCATION: false,
+      NOTIFICATIONS: false,
+      CALENDAR_EVENTS: false,
+      EMAIL_INBOX: false,
+      DEVICE_HEALTH: false,
     };
 
     const batteryAvailable = perms.BATTERY_STATUS && mobileStatus?.battery?.available !== false;
@@ -888,12 +915,12 @@ export function processOfflineCommand(
     const calAvailable = perms.CALENDAR_EVENTS && mobileStatus?.calendar?.available !== false;
     const mailAvailable = perms.EMAIL_INBOX && mobileStatus?.email?.available !== false;
 
-    const batteryLvl = mobileStatus?.battery?.level ?? 78;
-    const tempC = mobileStatus?.weather?.temperatureC ?? 27;
-    const condition = isHindi ? (mobileStatus?.weather?.conditionHi || 'साफ') : (mobileStatus?.weather?.condition || 'Clear');
-    const notifCount = mobileStatus?.notifications?.totalCount ?? 5;
-    const calCount = mobileStatus?.calendar?.todayEventsCount ?? 3;
-    const mailCount = mobileStatus?.email?.unreadCount ?? 2;
+    const batteryLvl = mobileStatus?.battery?.level ?? null;
+    const tempC = mobileStatus?.weather?.temperatureC ?? null;
+    const condition = isHindi ? (mobileStatus?.weather?.conditionHi || null) : (mobileStatus?.weather?.condition || null);
+    const notifCount = mobileStatus?.notifications?.totalCount ?? null;
+    const calCount = mobileStatus?.calendar?.todayEventsCount ?? null;
+    const mailCount = mobileStatus?.email?.unreadCount ?? null;
 
     let hiLines: string[] = [];
     let enLines: string[] = [];
@@ -952,16 +979,20 @@ export function processOfflineCommand(
       hinglishLines.push(`Inbox me ${mailCount} unread emails hain.`);
     }
 
-    hiLines.push('सभी क्लाउड और स्थानीय सिस्टम सामान्य रूप से सक्रिय हैं।');
-    enLines.push('All cloud nodes and local services are nominal.');
-    hinglishLines.push('All systems online aur ready hain.');
+    // No device attached means no telemetry. Say so rather than asserting
+    // health nobody measured.
+    if (!mobileStatus) {
+      hiLines.push('कोई फ़ोन जुड़ा नहीं है, इसलिए बैटरी, मौसम और टास्क डेटा उपलब्ध नहीं है।');
+      enLines.push('No phone is connected, so battery, weather and task telemetry are not available.');
+      hinglishLines.push('Koi phone connected nahi hai, isliye battery, weather aur task data available nahi hai.');
+    }
 
     const reply = isHindi ? hiLines.join('\n') : isHinglish ? hinglishLines.join('\n') : enLines.join(' ');
     const spokenText = isHindi
-      ? `${greetingHi} ${batteryAvailable ? `बैटरी ${batteryLvl} प्रतिशत है।` : ''} ${weatherAvailable ? `मौसम ${condition} है।` : ''} ${notifsAvailable ? `${notifCount} नए नोटिफिकेशन्स हैं।` : ''} सभी सिस्टम सामान्य हैं।`
+      ? `${greetingHi} ${batteryAvailable ? `बैटरी ${batteryLvl} प्रतिशत है।` : ''} ${weatherAvailable ? `मौसम ${condition} है।` : ''} ${notifsAvailable ? `${notifCount} नए नोटिफिकेशन्स हैं।` : ''}`
       : isHinglish
-      ? `${greetingHinglish} ${batteryAvailable ? `Battery ${batteryLvl}% hai.` : ''} ${weatherAvailable ? `Weather ${condition} hai.` : ''} ${notifsAvailable ? `${notifCount} new notifications hain.` : ''} All systems ready.`
-      : `${greetingEn} ${batteryAvailable ? `Battery is at ${batteryLvl}%.` : ''} ${weatherAvailable ? `Weather is ${condition} at ${tempC} degrees.` : ''} ${notifsAvailable ? `You have ${notifCount} priority notifications.` : ''} All systems operational.`;
+      ? `${greetingHinglish} ${batteryAvailable ? `Battery ${batteryLvl}% hai.` : ''} ${weatherAvailable ? `Weather ${condition} hai.` : ''} ${notifsAvailable ? `${notifCount} new notifications hain.` : ''}`
+      : `${greetingEn} ${batteryAvailable ? `Battery is at ${batteryLvl}%.` : ''} ${weatherAvailable ? `Weather is ${condition} at ${tempC} degrees.` : ''} ${notifsAvailable ? `You have ${notifCount} priority notifications.` : ''}`;
 
     return {
       reply,
@@ -1698,10 +1729,10 @@ export function processOfflineCommand(
     lower.includes('आप कैसे हैं')
   ) {
     const reply = isHindi
-      ? `सभी सिस्टम सुचारू रूप से कार्यरत हैं।`
+      ? `मैं अपनी स्वयं की स्वास्थ्य जाँच नहीं कर सकता, इसलिए "सब ठीक है" कहना असत्य होगा। आपने जो पूछा उसके लिए मैं तैयार हूँ।`
       : isHinglish
-      ? `All systems smoothly running hain aur sucharu roop se active hain.`
-      : `All systems nominal. Ready to assist.`;
+      ? `Main apni health khud check nahi kar sakta, isliye "sab theek hai" kehna galat hoga. Aapke agle command ke liye ready hoon.`
+      : `I cannot health-check myself, so I will not claim all systems are nominal. Ready for your next command.`;
 
     return {
       reply,

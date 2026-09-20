@@ -56,6 +56,46 @@ describe('intent and status surfaces never fabricate success', () => {
   });
 });
 
+describe('the offline intent engine does not fabricate telemetry or health', () => {
+  const engineSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/utils/localJarvisEngine.ts'),
+    'utf8',
+  );
+  const engineFlat = engineSource.replace(/\s+/g, ' ');
+
+  it('the morning briefing does not fall back to invented telemetry constants', () => {
+    // Each of these was a `?? <plausible constant>` default, so a briefing with
+    // no phone attached reported 78% battery, 27°C, 5 notifications, 3 events
+    // and 2 emails as if measured.
+    expect(engineFlat).not.toMatch(/battery\?\.level\s*\?\?\s*\d/);
+    expect(engineFlat).not.toMatch(/temperatureC\s*\?\?\s*\d/);
+    expect(engineFlat).not.toMatch(/humidity\s*\?\?\s*\d/);
+    expect(engineFlat).not.toMatch(/totalCount\s*\?\?\s*\d/);
+    expect(engineFlat).not.toMatch(/todayEventsCount\s*\?\?\s*\d/);
+    expect(engineFlat).not.toMatch(/unreadCount\s*\?\?\s*\d/);
+  });
+
+  it('the weather inquiry does not invent a reading when no source is connected', () => {
+    // It used to answer 27°C / 48% / 'New Delhi' with no weather provider.
+    expect(engineFlat).not.toContain("condition || 'Clear Sky'");
+    expect(engineFlat).not.toContain("location || 'New Delhi'");
+  });
+
+  it('the morning briefing does not default every permission to granted', () => {
+    expect(engineFlat).not.toMatch(/BATTERY_STATUS: true, WEATHER_LOCATION: true, NOTIFICATIONS: true/);
+  });
+
+  it('the morning briefing does not assert unmeasured system health', () => {
+    expect(engineFlat).not.toContain('All cloud nodes and local services are nominal');
+    expect(engineFlat).not.toContain('All systems operational.');
+  });
+
+  it('the how-are-you intent does not claim all systems are nominal', () => {
+    expect(engineFlat).not.toContain('All systems nominal. Ready to assist.');
+    expect(flat).not.toContain('All systems nominal. Ready to assist.');
+  });
+});
+
 describe('the truth-telling replacements are actually present', () => {
   it('check_project routes through the real git reader', () => {
     expect(flat).toContain("intentData.intent === 'check_project'");

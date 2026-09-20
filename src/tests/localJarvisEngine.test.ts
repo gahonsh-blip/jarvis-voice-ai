@@ -223,10 +223,13 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       expect(result.reply).toContain('HERMES JARVIS');
     });
 
-    it('should respond to system status question "how are you"', () => {
+    it('should respond to system status question "how are you" without claiming unmeasured health', () => {
       const result = processOfflineCommand('how are you', initialMemory, 'en-US');
       expect(result.intent).toBe('chat');
-      expect(result.reply).toContain('All systems nominal');
+      // This handler used to answer "All systems nominal." It performs no
+      // health check, so it must say so instead of asserting health.
+      expect(result.reply).not.toContain('All systems nominal');
+      expect(result.reply).toContain('cannot health-check');
     });
 
     it('should handle unmapped queries gracefully using offline fallback response', () => {

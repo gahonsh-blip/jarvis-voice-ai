@@ -45,13 +45,16 @@ describe('HERMES JARVIS - Conversational Pipeline Regression Test Suite', () => 
       expect(result.actionDetail?.payload?.timeStr).toBeDefined();
     });
 
-    it('C. "आज का मौसम बताओ" provides meteorological telemetry without canned greeting', () => {
+    it('C. "आज का मौसम बताओ" reports no reading when no weather source is connected', () => {
       const input = 'आज का मौसम बताओ';
       const result = processOfflineCommand(input, initialMemory, 'hi-IN');
       expect(result.intent).toBe('weather_inquiry');
-      expect(result.actionExecuted).toBe(true);
       expect(result.reply).not.toContain(CANNED_GREETING_SUBSTRING);
-      expect(result.reply).toMatch(/मौसम|तापमान|Sky|°C/);
+      // With no mobileStatus there is no weather source. The handler used to
+      // fill in 27°C / 48% / 'New Delhi' and print them as current conditions.
+      expect(result.actionExecuted).toBe(false);
+      expect(result.reply).toContain('मौसम स्रोत कनेक्टेड नहीं');
+      expect(result.reply).not.toMatch(/27°C|48%/);
     });
 
     it('D. "YouTube की स्थिति क्या है?" queries channel connectivity without canned greeting', () => {
@@ -133,12 +136,14 @@ describe('HERMES JARVIS - Conversational Pipeline Regression Test Suite', () => 
       expect(data.reply).toMatch(/समय|बजे/);
     });
 
-    it('Live /api/chat: C. "आज का मौसम बताओ" produces weather telemetry', async () => {
+    it('Live /api/chat: C. "आज का मौसम बताओ" does not invent weather telemetry', async () => {
       const data = await queryLiveApi('आज का मौसम बताओ', 'hi-IN');
       if (!data) return;
       expect(data.intent).toBe('weather_inquiry');
       expect(data.reply).not.toContain(CANNED_GREETING_SUBSTRING);
-      expect(data.reply).toMatch(/मौसम|तापमान|Sky|°C/);
+      // No weather provider is wired into this sandbox, so a real reading
+      // cannot exist; the reply must say so rather than print 27°C / 48%.
+      expect(data.reply).not.toMatch(/27°C|48%/);
     });
 
     it('Live /api/chat: D. "YouTube की स्थिति क्या है?" produces YouTube status', async () => {
