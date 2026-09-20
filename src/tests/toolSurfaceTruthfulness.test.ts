@@ -106,3 +106,34 @@ describe('the truth-telling replacements are actually present', () => {
     expect(flat).toContain('metricsSource: oracleCloudState.metricsSource');
   });
 });
+
+describe('the Oracle Cloud modal renders the payload, never a plausible default', () => {
+  const modalSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/OracleCloudModal.tsx'),
+    'utf8',
+  );
+  const modalFlat = modalSource.replace(/\s+/g, ' ');
+
+  it('the uptime card carries no hardcoded 342-hour fallback', () => {
+    // `{vmStatus?.uptimeHours || 342}` also rewrote a measured 0 into 342.
+    expect(modalFlat).not.toContain('|| 342');
+    expect(modalFlat).not.toMatch(/uptimeHours\s*\|\|/);
+  });
+
+  it('the SSH card carries no hardcoded address', () => {
+    expect(modalFlat).not.toContain('129.154.42.108');
+    expect(modalFlat).not.toMatch(/publicIp\s*\|\|/);
+  });
+
+  it('the status card reports the server state, not a constant ONLINE', () => {
+    expect(modalFlat).not.toMatch(/>\s*ONLINE\s*</);
+    expect(modalFlat).toContain('runState ?? UNKNOWN');
+  });
+
+  it('the normalisers are actually used for the metric cards', () => {
+    expect(modalFlat).toContain('normalizeUptimeHours(vmStatus?.uptimeHours)');
+    expect(modalFlat).toContain('normalizePublicIp(vmStatus?.publicIp)');
+    expect(modalFlat).toContain('normalizeVmStatus(vmStatus?.status)');
+    expect(modalFlat).toContain('normalizeMetricPercent(vmStatus?.metrics?.cpuUsage)');
+  });
+});

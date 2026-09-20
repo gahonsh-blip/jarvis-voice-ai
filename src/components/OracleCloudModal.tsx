@@ -15,11 +15,22 @@ import {
   Zap,
 } from 'lucide-react';
 import { OracleVMStatus } from '../types';
+import {
+  normalizeUptimeHours,
+  normalizePublicIp,
+  normalizeVmStatus,
+  normalizeMetricPercent,
+  normalizeGigabytes,
+  buildSshCommand,
+} from '../utils/vmTelemetryDisplay';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
+
+/** Renders a value that was never reported as an explicit unknown. */
+const UNKNOWN = 'UNKNOWN';
 
 export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [vmStatus, setVmStatus] = useState<OracleVMStatus | null>(null);
@@ -47,12 +58,23 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const handleCopySSH = () => {
-    if (vmStatus?.publicIp) {
-      navigator.clipboard.writeText(`ssh -i ~/.ssh/oracle_arm_key ubuntu@${vmStatus.publicIp}`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+    // Copy only a command that targets an address the server actually reported.
+    const command = buildSshCommand(vmStatus?.publicIp);
+    if (!command) return;
+    navigator.clipboard.writeText(command);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
+
+  // Every one of these is null when the payload did not carry a usable value.
+  const publicIp = normalizePublicIp(vmStatus?.publicIp);
+  const sshCommand = buildSshCommand(vmStatus?.publicIp);
+  const uptimeHours = normalizeUptimeHours(vmStatus?.uptimeHours);
+  const runState = normalizeVmStatus(vmStatus?.status);
+  const cpuUsage = normalizeMetricPercent(vmStatus?.metrics?.cpuUsage);
+  const ramUsedGb = normalizeGigabytes(vmStatus?.metrics?.ramUsedGb);
+  const ramTotalGb = normalizeGigabytes(vmStatus?.metrics?.ramTotalGb);
+  const diskUsage = normalizeMetricPercent(vmStatus?.metrics?.diskUsage);
 
   if (!isOpen) return null;
 
@@ -73,7 +95,7 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Shape: VM.Standard.A1.Flex (Ampere A1 ARM64) • 4 OCPUs • 24 GB RAM • 200 GB Storage
+                Shape: {vmStatus?.shape ?? 'VM.Standard.A1.Flex'} (Ampere A1 ARM64) • {vmStatus?.ocpu ?? 4} OCPUs • {vmStatus?.ramGb ?? 24} GB RAM • {vmStatus?.bootVolumeGb ?? 200} GB Storage
               </p>
             </div>
           </div>
@@ -96,12 +118,12 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <Cpu className="w-4 h-4 text-cyan-400" />
               </div>
               <div className="text-2xl font-mono font-bold text-slate-100">
-                {vmStatus?.metrics.cpuUsage != null ? `${vmStatus.metrics.cpuUsage}%` : '—'}
+                {cpuUsage != null ? `${cpuUsage}%` : '—'}
               </div>
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
                   className="bg-cyan-400 h-full transition-all duration-300"
-                  style={{ width: `${vmStatus?.metrics.cpuUsage ?? 0}%` }}
+                  style={{ width: `${cpuUsage ?? 0}%` }}
                 />
               </div>
             </div>
@@ -112,15 +134,15 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <Server className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="text-2xl font-mono font-bold text-slate-100">
-                {vmStatus?.metrics.ramUsedGb != null ? vmStatus.metrics.ramUsedGb : '—'}{' '}
+                {ramUsedGb != null ? ramUsedGb : '—'}{' '}
                 <span className="text-sm font-normal text-slate-400">
-                  / {vmStatus?.metrics.ramTotalGb ?? '?'} GB
+                  / {ramTotalGb ?? '?'} GB
                 </span>
               </div>
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
                   className="bg-emerald-400 h-full transition-all duration-300"
-                  style={{ width: `${vmStatus?.metrics.ramUsage ?? 0}%` }}
+                  style={{ width: `${vmStatus?.metrics?.ramUsage ?? 0}%` }}
                 />
               </div>
             </div>
@@ -131,13 +153,13 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <HardDrive className="w-4 h-4 text-purple-400" />
               </div>
               <div className="text-2xl font-mono font-bold text-slate-100">
-                {vmStatus?.metrics.diskUsage != null ? `${vmStatus.metrics.diskUsage}%` : '—'}{' '}
-                <span className="text-sm font-normal text-slate-400">of 200 GB</span>
+                {diskUsage != null ? `${diskUsage}%` : '—'}{' '}
+                <span className="text-sm font-normal text-slate-400">of {vmStatus?.bootVolumeGb ?? 200} GB</span>
               </div>
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
                   className="bg-purple-400 h-full transition-all duration-300"
-                  style={{ width: `${vmStatus?.metrics.diskUsage ?? 0}%` }}
+                  style={{ width: `${diskUsage ?? 0}%` }}
                 />
               </div>
             </div>
@@ -148,10 +170,10 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <Activity className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="text-2xl font-mono font-bold text-emerald-400">
-                ONLINE
+                {runState ?? UNKNOWN}
               </div>
               <span className="text-xs font-mono text-slate-400">
-                {vmStatus?.uptimeHours || 342} hours continuous
+                {uptimeHours != null ? `${uptimeHours} hours continuous` : 'uptime UNKNOWN'}
               </span>
             </div>
           </div>
@@ -163,10 +185,10 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <Terminal className="w-4 h-4" />
                 SSH TERMINAL COMMAND (ARM VM ACCESS)
               </span>
-              <span className="text-slate-500">Public IP: {vmStatus?.publicIp || '129.154.42.108'}</span>
+              <span className="text-slate-500">Public IP: {publicIp ?? UNKNOWN}</span>
             </div>
             <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-950 border border-slate-800 font-mono text-xs text-slate-200">
-              <code>ssh -i ~/.ssh/oracle_arm_key ubuntu@{vmStatus?.publicIp || '129.154.42.108'}</code>
+              <code>{sshCommand ?? `SSH target ${UNKNOWN} — server reported no address`}</code>
               <button
                 onClick={handleCopySSH}
                 className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 text-[11px]"
