@@ -331,8 +331,9 @@ Security: NOT RUN — no external audit tooling; git check-ignore not re-run thi
 Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md,
                automation/reports/hermes-window-log.md
 Branch:  feature/hermes-full-completion
-Commit:  e594ad2
-Push:    succeeded — origin/feature/hermes-full-completion 9190b9b..e594ad2
+Commits: e594ad2 (fix + regression test), 6a57558 (docs + this report)
+Push:    succeeded — origin/feature/hermes-full-completion 9190b9b..6a57558; also
+         automation/hermes-state c8d76ee..93c84e7
 
 PR:         none opened this slot
 Main merge: NOT MERGED — awaiting human approval (never auto-merge)
