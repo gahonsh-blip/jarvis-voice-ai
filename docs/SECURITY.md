@@ -82,6 +82,18 @@ is the secret and is caught by the generic credential patterns.
 UTF-16, so git honoured none of it; `git check-ignore .env` confirms the current
 file works.
 
+### Caller-ID masking
+
+Masking is a privacy control, so it must be consistent wherever a number is
+logged or rendered. Two independent `maskPhoneNumber` implementations existed.
+The helper in `src/utils/androidBridgeEngine.ts` correctly produced
+`+91 ******3210`; the one in `src/utils/telephonyPermissions.ts` produced
+`+9198765*****`, exposing the country code plus eight of the ten subscriber
+digits. The telephony helper now matches the bridge helper, hiding everything
+except the country prefix and the last four digits; blank input returns
+`Unknown / Private` and input with ≤4 digits returns
+`****`. Guarded by `src/tests/telephonyPermissions.test.ts` (24 tests).
+
 The token vault no longer carries a hardcoded fallback key. Without
 `APP_SECRET`/`SESSION_SECRET` it reports `NOT_CONFIGURED` and encrypts under a
 random per-process key, so tokens do not survive a restart but are never

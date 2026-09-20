@@ -4,7 +4,25 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 22:05 IST — Workspace path-containment fix. The file
+Last cycle: 2026-09-20 22:35 IST — Caller-ID masking privacy leak. There were two
+`maskPhoneNumber` implementations. The one in `src/utils/telephonyPermissions.ts`
+(the telephony permission/safety surface) revealed far more of the number than
+its sibling: for `+91 9876543210` it returned `+9198765*****`, exposing the
+country code plus eight subscriber digits, while `src/utils/androidBridgeEngine.ts`
+masked the same input as `+91 ******3210`. The privacy contract documented in
+`TelephonySession` is the latter form, so the leak was both a correctness bug and
+a privacy exposure on any surface that logs or renders a caller ID through the
+telephony permissions module. `maskPhoneNumber` now extracts the digits, keeps
+only the `+NN` country prefix and the last four digits, and returns the canonical
+`+91 ******3210` (blank input → `Unknown / Private`, ≤4 digits → `****`). Direct
+coverage added in `src/tests/telephonyPermissions.test.ts` (24 tests) covering the
+masking contract, permission/tier resolution and clinic-safety redaction.
+Negative-validated on this tree by restoring the original implementation —
+8 of 24 fail, including the eight-leaked-digits case. Gates observed on tip: lint
+exit 0, vitest 48 files / 715 tests passed, build exit 0 (`dist/server.cjs`,
+816,011 bytes).
+
+Prior cycle: 2026-09-20 22:05 IST — Workspace path-containment fix. The file
 routes in `server_tools.ts` guarded against escape with a bare string-prefix
 test, `absolute.startsWith(PROJECT_ROOT)`. A string prefix is not a directory
 boundary: `/workspace/project/jarvis-voice-ai-EXT` (and any sibling directory
@@ -286,7 +304,7 @@ is connected to this environment.
 | 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. |
 | 52 | Permission matrix finalization | `VERIFIED` | `src/utils/hardening/permissionMatrix.ts` holds one ordered matrix that all callers share. The first matching entry wins, so a command containing both `read` and `delete` classifies as destructive. An unrecognised action is refused at level 4 and requires approval — it is never defaulted to safe. `POST /api/security/evaluate` exposes it. 19 unit tests plus E2E. |
 | 53 | Kill-switch testing | `VERIFIED` | `POST /api/security/evaluate` checks the emergency stop before the level check, so an engaged kill switch blocks even a level-1 read action with category `kill_switch`. E2E toggles the switch on, asserts the block, then releases it. `isBlockedByKillSwitch` unit-tested both ways. |
-| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; and — this cycle — HUD surfaces that asserted unverified credential/link state. `HUDHeader.tsx` printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; the header now polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (15 tests). No credential rotation was performed against live providers here. |
+| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; HUD surfaces that asserted unverified credential/link state; and — 2026-09-20 22:35 IST — a caller-ID masking leak. `maskPhoneNumber` in `src/utils/telephonyPermissions.ts` returned `+9198765*****` for `+91 9876543210`, exposing the country code plus eight subscriber digits, while the sibling helper in `androidBridgeEngine.ts` already masked the same input as `+91 ******3210`. The telephony helper now matches that canonical `+91 ******3210` form (`src/tests/telephonyPermissions.test.ts`, 24 tests; negative-validated — 8 of 24 fail against the old implementation). `HUDHeader.tsx` no longer printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; it polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (15 tests). No credential rotation was performed against live providers here. |
 | 55 | Real-device E2E test suite | `NOT_AVAILABLE` | No Android device or Windows host is attached in this environment. The server-side legs are covered by E2E tests; the on-device checklist remains in `docs/ANDROID_BRIDGE.md`. |
 | 56 | Offline-mode E2E tests | `VERIFIED` | `src/tests/offlineOnline.e2e.test.ts` boots a real server with `GEMINI_API_KEY` blanked and asserts health, memory read/write round-trip, local intent classification, a verified backup, and that permissions stay enforced offline. 6 offline tests. |
 | 57 | Online-mode E2E tests | `VERIFIED` | Same file. Confirms core endpoints answer, and that each integration status endpoint with `configured: false` never reports `connected: true` or `status: connected`. 2 online tests. |
