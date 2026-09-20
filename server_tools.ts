@@ -351,12 +351,11 @@ export function realGitStatus(): { success: boolean; branch?: string; statusText
       clean: !statusOutput,
     };
   } catch (err: any) {
-    // Fallback inspection if git CLI is uninitialized or sandboxed
+    // Never invent repository state. If git cannot be queried, report failure
+    // so callers show UNKNOWN instead of a fabricated clean "main" branch.
     return {
-      success: true,
-      branch: 'main',
-      statusText: 'Git workspace active. Filesystem operational with real disk synchronization.',
-      clean: true,
+      success: false,
+      error: `Git is unavailable in this environment: ${err?.message || err}`,
     };
   }
 }
@@ -366,16 +365,14 @@ export function realGitLog(count: number = 5): { success: boolean; commits?: str
     const logOutput = execSync(`git log -n ${count} --oneline 2>/dev/null`, { cwd: PROJECT_ROOT, timeout: 3000 })
       .toString()
       .trim();
-    const commits = logOutput ? logOutput.split('\n') : ['Initial repository commit'];
+    const commits = logOutput ? logOutput.split('\n') : [];
     return { success: true, commits };
   } catch (err: any) {
+    // The previous fallback returned three invented commit subjects with
+    // success: true, so the tools HUD displayed a history that never existed.
     return {
-      success: true,
-      commits: [
-        'feat(hermes): upgrade to real permission-gated autonomous assistant',
-        'feat(linkedin): personal profile REST Posts API integration',
-        'chore: initialize workspace structure',
-      ],
+      success: false,
+      error: `Git is unavailable in this environment: ${err?.message || err}`,
     };
   }
 }
@@ -385,7 +382,11 @@ export function realGitDiff(): { success: boolean; diff?: string; error?: string
     const diff = execSync('git diff 2>/dev/null', { cwd: PROJECT_ROOT, timeout: 4000 }).toString().trim();
     return { success: true, diff: diff || 'No uncommitted differences found.' };
   } catch (err: any) {
-    return { success: true, diff: 'Diff tool nominal.' };
+    // 'Diff tool nominal.' asserted success while saying nothing about state.
+    return {
+      success: false,
+      error: `Git is unavailable in this environment: ${err?.message || err}`,
+    };
   }
 }
 

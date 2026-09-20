@@ -201,7 +201,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       ]);
       setGitStatus(statusRes);
       setGitCommits(logRes.commits || []);
-      setGitDiff(diffRes.diff || '');
+      setGitDiff(diffRes.success ? diffRes.diff || '' : `Git diff unavailable: ${diffRes.error || 'unknown error'}`);
     } catch {
       // safe fallback
     }
@@ -937,17 +937,24 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                   <div className="flex items-center gap-2">
                     <span className="text-slate-400">Current Branch:</span>
                     <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-bold">
-                      {gitStatus?.branch || 'main'}
+                      {gitStatus?.success ? gitStatus.branch : 'UNKNOWN'}
                     </span>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
-                    {gitStatus?.statusText || 'Working tree clean.'}
+                    {gitStatus?.success
+                      ? gitStatus.statusText
+                      : gitStatus?.error || 'Git status not yet queried.'}
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
                   <span className="text-[10px] text-slate-500 uppercase font-bold">Recent Commit Log</span>
                   <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {gitCommits.length === 0 && (
+                      <div className="p-2 rounded bg-slate-900 border border-slate-800/80 text-slate-500">
+                        No commit log available.
+                      </div>
+                    )}
                     {gitCommits.map((c, i) => (
                       <div key={i} className="p-2 rounded bg-slate-900 border border-slate-800/80 text-slate-300">
                         {c}

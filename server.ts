@@ -8138,9 +8138,16 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'git_status_tool': {
         const git = realGitStatus();
-        spokenResponse = `Git repository active on branch ${git.branch}. ${git.clean ? 'Working directory is clean.' : git.statusText}`;
-        actionExecuted = true;
-        actionDetail = { type: 'git_status', title: `Git: ${git.branch}`, payload: git };
+        actionDetail = { type: 'git_status', title: git.success ? `Git: ${git.branch}` : 'Git: UNKNOWN', payload: git };
+        if (!git.success) {
+          spokenResponse = language.startsWith('hi')
+            ? `Git जानकारी अनुपलब्ध है। ${git.error}`
+            : `Git status is unavailable. ${git.error}`;
+          actionExecuted = false;
+        } else {
+          spokenResponse = `Git repository active on branch ${git.branch}. ${git.clean ? 'Working directory is clean.' : git.statusText}`;
+          actionExecuted = true;
+        }
         break;
       }
       case 'github_repos_tool': {
