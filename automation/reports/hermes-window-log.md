@@ -1015,3 +1015,100 @@ non-VERIFIED backlog item if the inventory closes.
 हिंदी सारांश (एक पंक्ति):
 - Oracle VCN फ़ायरवॉल नियमों को अब बिना जाँच "सत्यापित" नहीं दिखाया जाता; `NOT_PROBED`
   के रूप में दिखता है, और परीक्षण/लिंट/बिल्ड सब असली में चलाए गए — सभी पास।
+---
+
+    HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+    Slot:        WORK  |  IST time: 03:07
+    Window date: 2026-09-20/21 (window spans midnight IST)   Window slots completed so far: 13
+    
+    Completed:
+    - #13 Zero-fake-success for all tools — PARTIAL (this slot's slice). Three UI
+      status-badge surfaces no longer assert state nobody measured:
+      * src/components/PermissionGateway.tsx — a literal
+        "Payload Checksum: Verified SHA-Safe" was printed on EVERY approval card
+        while nothing hashed the payload. Now renders
+        payloadChecksumLine(activeRequest.contentChanges) (line 643), which hashes
+        the real payload with FNV-1a32 and labels it
+        "(local integrity marker, not SHA-2)" — it does not claim a cryptographic
+        check it cannot perform. Empty payload renders "NONE", not a green tick.
+      * src/components/ProactiveRoutinesModal.tsx — the footer hardcoded
+        "Telegram Push Ready" and "Cron Scheduler: Active on Oracle ARM Node"
+        regardless of whether any bot or daemon was reachable. It now fetches
+        /api/telegram/status and /api/daemon/status, holds each as tri-state
+        (null = unanswered) and renders telegramPushLabel() / cronSchedulerLabel()
+        (lines 235, 243). Unanswered -> "UNKNOWN (status not queried)"; the Host
+        field is now labelled "self-reported, not verified".
+      * src/components/BlueprintRoadmapModal.tsx — seeded completionPercentage: 100
+        and a "100% Free Architecture Verified" header BEFORE /api/blueprint was
+        fetched, so a failed fetch left a fabricated "complete" panel on screen.
+        State now starts at 0 (line 56) and the footer reports the measured
+        percentage; the header string is gone.
+      * src/utils/checksumTruth.ts — new pure module: fnv1a32Hex(),
+        payloadChecksumLine(), cronSchedulerLabel(), telegramPushLabel().
+    
+    In Progress:
+    - #13 — sweep remains pattern-driven, not a per-tool inventory. Unaudited:
+      server_tools.ts tool-result strings, remaining Autonomous Tools HUD panels,
+      and the /api/oracle-cloud/status seed question carried from slot 12.
+    
+    Remaining:
+    - #13 (finish the inventory), then the next non-VERIFIED backlog items. Items
+      1, 2, 8, 50, 55 stay BLOCKED on hardware (Android device / Windows host).
+    
+    Bugs Found:
+    - Three fabricated-success surfaces on the human approval path. Found by
+      grepping the UI for absolute status claims ("Verified", "Ready", "Active",
+      "100%") and checking whether any code path actually computed them. None did.
+      The PermissionGateway one is the most serious: it presented an integrity
+      assurance on the exact screen a human reads before approving an external
+      action.
+    
+    Bugs Fixed:
+    - All three. Verified by src/tests/fabricatedStatusClaims.test.ts (8 tests):
+      helper output is deterministic and honest, and source guards pin each removed
+      string. NEGATIVE-VALIDATED: sed-restoring all four fabrications fails exactly
+      the three component guards (3 failed | 5 passed); with them removed, 8/8 pass.
+    
+    Tests:    803 passed / 803, 57 files (npx vitest run, 19.71s) — on a8c1422
+    Lint:     PASS — npm run lint (tsc --noEmit) exit 0
+    Build:    PASS — npm run build exit 0; dist/server.cjs 816.6 kb;
+              dist/assets/index-BO99vQTI.js 981.10 kB (chunk-size warning only)
+    E2E:      NOT RUN — the repo's E2E journeys need a live server and device; no
+              physical device and no deployment target exist in this sandbox.
+    Security: git check-ignore -v .env -> .gitignore:4 .env (ignored, uncommitted)
+              git status --short -> clean before docs commit, no token/key in diff,
+              no node_modules or dist staged. Token used only in the remote URL and
+              never written to a file or echoed.
+    
+    Documentation: docs/COMPLETION_STATUS.md (item 13 row + Last cycle block),
+                   docs/CHANGELOG.md (new Unreleased section)
+    Branch:  feature/hermes-full-completion
+    Commit:  a8c1422 (fix) + 3f9be68 (docs)
+    Push:    succeeded — a8c1422, then a8c1422..3f9be68 to origin/feature/hermes-full-completion
+    
+    PR:         NONE — no open PR observed for this branch (checked via the GitHub
+                API; 0 open PRs). The finalization slot must open it.
+    Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+    Deploy:     NOT_ATTEMPTED — no deployment target or hosting integration is
+                present in this sandbox; the verified artifact is the deployment unit.
+    
+    Blocked:
+    - #1, #2, #50 — require a physical Android device (Android Bridge / E2E).
+    - #8 — requires a Windows host for the PowerShell capture leg.
+    - #55 — requires a physical Android device / Windows host.
+    
+    Human Approval Required:
+    - Nothing this slot. No permission gate was touched or weakened: these were
+      display-only truthfulness fixes on surfaces that already route external
+      actions through the gateway.
+    
+    Next Slot:
+    - (a) Run /api/oracle-cloud/status and decide whether the seeded
+      status "RUNNING" / publicIp 129.154.42.108 must be removed at the route
+      (carried over from slot 12), or (b) continue the item 13 inventory over
+      server_tools.ts tool-result strings. (b) is the safer 30-minute slice.
+    
+    हिंदी सारांश (एक पंक्ति):
+    - अनुमोदन/रूटीन स्क्रीनों से झूठे "सत्यापित/तैयार/सक्रिय" दावे हटा दिए गए और उनकी
+      जगह असली माप (FNV-1a32 checksum, UNKNOWN तक स्थिति) लगाई गई; परीक्षण 803/803,
+      लिंट और बिल्ड दोनों पास — सब असली में चलाया गया।
