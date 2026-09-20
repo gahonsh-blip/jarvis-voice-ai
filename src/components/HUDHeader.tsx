@@ -22,6 +22,12 @@ import {
   Navigation,
 } from 'lucide-react';
 import { getLanguageOption } from '../utils/languages';
+import {
+  UNAVAILABLE_HUD_TELEMETRY,
+  fetchHudTelemetry,
+  formatHudPercent,
+  type HudTelemetrySnapshot,
+} from '../utils/hudTelemetry';
 
 interface HUDHeaderProps {
   userName?: string;
@@ -64,7 +70,9 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
 }) => {
   const [time, setTime] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
-  const [cpuSim, setCpuSim] = useState<number>(14);
+  const [telemetry, setTelemetry] = useState<HudTelemetrySnapshot>(UNAVAILABLE_HUD_TELEMETRY);
+  const [telegramLive, setTelegramLive] = useState<boolean | null>(null);
+  const [securityLevel, setSecurityLevel] = useState<number | null>(null);
   const [isKillSwitchActive, setIsKillSwitchActive] = useState<boolean>(false);
   const [killSwitchReason, setKillSwitchReason] = useState<string>('');
   const [showKillModal, setShowKillModal] = useState<boolean>(false);
@@ -143,13 +151,58 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
     updateClock();
     const interval = setInterval(updateClock, 1000);
 
-    const cpuInterval = setInterval(() => {
-      setCpuSim(Math.floor(10 + Math.random() * 8));
-    }, 3000);
+    // Real host telemetry only. The previous version invented the number with
+    // Math.random() and labelled it "ARM VM LOAD". A failed fetch leaves the
+    // reading null, rendered as "—".
+    let cancelled = false;
+    const readTelemetry = async () => {
+      const snapshot = await fetchHudTelemetry();
+      if (!cancelled) setTelemetry(snapshot);
+    };
+    readTelemetry();
+    const telemetryInterval = setInterval(readTelemetry, 10000);
+
+    // "TELEGRAM ONLINE" used to be hardcoded text, so the HUD asserted a live
+    // phone link even when no bot token was configured. Read the real
+    // connection flag; null (unknown) renders as "—".
+    const readTelegramStatus = async () => {
+      try {
+        const res = await fetch('/api/telegram/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setTelegramLive(data?.config?.isLiveConnected === true);
+      } catch {
+        if (!cancelled) setTelegramLive(null);
+      }
+    };
+    readTelegramStatus();
+    const telegramInterval = setInterval(readTelegramStatus, 15000);
+
+    // The header claimed a fixed "LEVEL 2 SAFE" in purple regardless of the
+    // real security matrix level. Read the actual level so the indicator cannot
+    // claim a safety state the backend is not in.
+    const readSecurityLevel = async () => {
+      try {
+        const res = await fetch('/api/security');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        const level = data?.currentLevel;
+        setSecurityLevel(typeof level === 'number' && Number.isFinite(level) ? level : null);
+      } catch {
+        if (!cancelled) setSecurityLevel(null);
+      }
+    };
+    readSecurityLevel();
+    const securityInterval = setInterval(readSecurityLevel, 20000);
 
     return () => {
+      cancelled = true;
       clearInterval(interval);
-      clearInterval(cpuInterval);
+      clearInterval(telemetryInterval);
+      clearInterval(telegramInterval);
+      clearInterval(securityInterval);
     };
   }, []);
 
@@ -226,10 +279,21 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             <button
               onClick={onOpenOracle}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-cyan-500/50 transition-colors"
+              title={
+                telemetry.metricsSource === 'live_host'
+                  ? `Live sample of the daemon host at ${telemetry.sampledAt ?? 'unknown time'}. CPU ${formatHudPercent(telemetry.cpuUsage)}, RAM ${formatHudPercent(telemetry.ramUsage)}.`
+                  : 'No live host reading is available.'
+              }
             >
               <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-slate-400">ARM VM LOAD:</span>
-              <span className="text-cyan-300 font-semibold">{cpuSim}%</span>
+              <span className="text-slate-400">HOST LOAD:</span>
+              <span className={telemetry.cpuUsage == null ? 'text-slate-500' : 'text-cyan-300 font-semibold'}>
+                {formatHudPercent(telemetry.cpuUsage)}
+              </span>
+              <span className="text-slate-400">RAM:</span>
+              <span className={telemetry.ramUsage == null ? 'text-slate-500' : 'text-cyan-300 font-semibold'}>
+                {formatHudPercent(telemetry.ramUsage)}
+              </span>
             </button>
 
             <button
@@ -238,7 +302,24 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             >
               <Smartphone className="w-3.5 h-3.5 text-blue-400" />
               <span className="text-slate-400">MOBILE:</span>
-              <span className="text-emerald-400 font-semibold">TELEGRAM ONLINE</span>
+              <span
+                className={
+                  telegramLive === true
+                    ? 'text-emerald-400 font-semibold'
+                    : telegramLive === false
+                      ? 'text-amber-400 font-semibold'
+                      : 'text-slate-500 font-semibold'
+                }
+                title={
+                  telegramLive === true
+                    ? 'Telegram bot is live-connected.'
+                    : telegramLive === false
+                      ? 'Telegram bot is not live-connected (no token or polling down).'
+                      : 'Telegram connection state is unknown.'
+                }
+              >
+                {telegramLive === true ? 'TELEGRAM ONLINE' : telegramLive === false ? 'TELEGRAM OFFLINE' : 'TELEGRAM UNKNOWN'}
+              </span>
             </button>
 
             <button
@@ -247,7 +328,9 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             >
               <Lock className="w-3.5 h-3.5 text-purple-400" />
               <span className="text-slate-400">SECURITY:</span>
-              <span className="text-purple-300 font-semibold">LEVEL 2 SAFE</span>
+              <span className={securityLevel == null ? 'text-slate-500 font-semibold' : 'text-purple-300 font-semibold'}>
+                {securityLevel == null ? 'UNKNOWN' : `LEVEL ${securityLevel}`}
+              </span>
             </button>
 
             {onOpenLocation && (
