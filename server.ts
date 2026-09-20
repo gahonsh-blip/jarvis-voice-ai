@@ -3072,9 +3072,9 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       }
     }
   } else if (intentData.intent === 'check_project') {
-    // Report the real working tree. The previous reply hardcoded "All active
-    // repositories inspected", a fixed clean branch, an Oracle VM uptime and
-    // "All tests green" — none of which this handler ever measured.
+    // Report the real working tree. The previous reply asserted a completed
+    // multi-repository audit, a fixed clean branch, a cloud-VM uptime and a
+    // green test suite — none of which this handler ever measured.
     const git = realGitStatus();
     if (git.success) {
       botReplyText = git.clean
@@ -8808,13 +8808,15 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
               ? `नमस्ते ${memoryState.name || 'सर'}! हरमीस जार्विस ऑनलाइन है और आपकी सेवा में तत्पर है। बताइए, मैं आपकी क्या सहायता करूँ?`
               : `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis online and standing by on your cloud server. How may I assist you today?`;
           } else if (userLower.includes('who are you') || userLower.includes('तुम कौन हो') || userLower.includes('aap kaun ho')) {
+            const host = getLocalHostIdentity();
             spokenResponse = isHi
-              ? `मैं हरमीस जार्विस हूँ — आपका ऑटोनॉमस पर्सनल AI असिस्टेंट, जो 24/7 सक्रिय है।`
-              : `I am HERMES JARVIS, your autonomous mobile-controlled AI assistant running on Oracle Always Free cloud.`;
+              ? `मैं हरमीस जार्विस हूँ — आपका ऑटोनॉमस पर्सनल AI असिस्टेंट। मैं होस्ट \`${host.hostname}\` पर चल रहा हूँ${host.isOracleLike ? '' : ' (क्लाउड प्रोवाइडर यहाँ सत्यापित नहीं है)'}।`
+              : `I am HERMES JARVIS, your autonomous AI assistant, running on host \`${host.hostname}\`.${host.isOracleLike ? '' : ' The cloud provider is not verified from inside this process.'}`;
           } else if (userLower.includes('how are you') || userLower.includes('कैसे हो') || userLower.includes('kaise ho')) {
+            const host = getLocalHostIdentity();
             spokenResponse = isHi
-              ? `सभी क्लाउड सिस्टम सुचारू रूप से कार्य कर रहे हैं, ${memoryState.name || 'सर'}।`
-              : `All cloud systems operating at 100% efficiency, ${memoryState.name || 'Sir'}.`;
+              ? `मैं होस्ट \`${host.hostname}\` पर चल रहा हूँ, ${memoryState.name || 'सर'}। मैं अपनी स्वयं की स्वास्थ्य जाँच नहीं कर सकता, इसलिए "सब ठीक है" कहना असत्य होगा।`
+              : `I am running on host \`${host.hostname}\`, ${memoryState.name || 'Sir'}. I cannot health-check myself, so I will not claim all systems are nominal.`;
           } else if (userLower.includes('thank') || userLower.includes('धन्यवाद') || userLower.includes('shukriya')) {
             spokenResponse = isHi
               ? `आपकी सेवा में सदैव तत्पर, ${memoryState.name || 'सर'}।`
