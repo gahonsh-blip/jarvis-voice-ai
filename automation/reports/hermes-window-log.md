@@ -1111,4 +1111,50 @@ non-VERIFIED backlog item if the inventory closes.
     हिंदी सारांश (एक पंक्ति):
     - अनुमोदन/रूटीन स्क्रीनों से झूठे "सत्यापित/तैयार/सक्रिय" दावे हटा दिए गए और उनकी
       जगह असली माप (FNV-1a32 checksum, UNKNOWN तक स्थिति) लगाई गई; परीक्षण 803/803,
-      लिंट और बिल्ड दोनों पास — सब असली में चलाया गया।
+      लिंट और बिल्ड दोनों पास — सब असली में चलाया गया।---
+
+## Slot 14 — 2026-09-21 03:37 IST (2026-09-20 22:07 UTC) — WORK SLOT
+
+**Slot:** WORK | **Window date:** 2026-09-20 | **Slots completed:** 14
+**Item:** #13 Zero-fake-success for all tools — approval-resolution path (`PARTIAL`)
+
+### Completed
+- `#13` — the approval-resolution path no longer reports unconfirmed actions as
+  executed/verified.
+  - New `src/utils/hardening/approvalResolution.ts` — `classifyApprovalOutcome()`
+    returns `executed` / `outcome` / `evidenceRef` / `errorReason` derived from the
+    real dispatcher result.
+  - `server.ts` `/api/approvals/resolve` — removed the `{ executed: true }` default,
+    the unconditional `VERIFIED` stamp and the synthetic
+    `urn:jarvis:executed:<id>` fallback; status now follows `resolution.executed`.
+  - `src/components/PermissionGateway.tsx` — an `UNVERIFIED` approval now renders as
+    "Not confirmed" instead of a success toast.
+  - `src/tests/approvalResolutionTruth.test.ts` — 8 tests, all passing.
+
+### Bugs Found
+- `/api/approvals/resolve` stamped `EXECUTED` + `VERIFIED` on a permission request
+  whose execution branch never ran.
+
+### Bugs Fixed
+- The above; negative-validated (restoring the old default fails exactly 2 of 8,
+  restoring the fix passes 8/8).
+
+### Gates (observed on 2769c31 / docs ec21313)
+- Tests: 58 files / 811 tests passed (`npx vitest run`, exit 0)
+- Lint: `npm run lint` (tsc --noEmit) exit 0
+- Build: `npm run build` exit 0 — dist/server.cjs 819.5kb
+- E2E: NOT RUN
+- Security: no audit run this slot; no secret written to any file
+
+### Repo
+- Branch `feature/hermes-full-completion`; commits `2769c31` (fix), `ec21313` (docs)
+- Push succeeded both times (73fb7a3..2769c31, 2769c31..ec21313)
+- PR: NONE · Main merge: NOT MERGED — awaiting human approval
+- Deploy: NOT_CONFIGURED — no deployment target in this environment
+
+### Next Slot
+- Settle the `/api/oracle-cloud/status` seed question, or continue the item 13
+  inventory across `server_tools.ts` tool result strings.
+
+हिंदी सारांश (एक पंक्ति):
+- अनुमोदन मार्ग में झूठा "EXECUTED/VERIFIED" दर्ज होना बंद किया; 8 नए टेस्ट पास, lint और build दोनों exit 0।
