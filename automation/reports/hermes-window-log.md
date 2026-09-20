@@ -205,3 +205,46 @@ build exit 0, `dist/server.cjs` emitted.
 **Not verified:** the browser-side indicator rendering was not exercised in a
 real browser here (no DOM run); only the parsing/formatting logic is unit-tested.
 No credential rotation was performed against live providers.
+## Slot — 2026-09-20 21:35 IST (WORK, fire #3)
+
+**Item:** #54 Secret/token protection audit — PARTIAL (no new code slice this slot)
+
+**What happened.** This slot spent its budget on a real branch/state integrity
+problem rather than new feature code, because the tree it inherited was not in
+the state the previous slot reported.
+
+**Finding (real, verified):** the previous slot's report and window state claimed
+the HUD-honesty commits `baf3ea1` and `344a1e2` had been pushed to
+`origin/feature/hermes-full-completion`. They had not. `git merge-base
+--is-ancestor` against the fetched remote ref returned NOT-IN-REMOTE for all
+three local commits (`baf3ea1`, `344a1e2`, `354994a`), and the remote branch head
+was still `d106c73`. The three commits existed only in the dying sandbox and
+would have been lost when it was torn down.
+
+**Fixed:** committed the outstanding `docs/COMPLETION_STATUS.md` edit as
+`354994a` and pushed the branch, which carried all three commits to the remote
+(fast-forward onto `d106c73`). Confirmed by `git ls-remote origin
+refs/heads/feature/hermes-full-completion` → `354994a…`. The HUD honesty work is
+now durably on the remote.
+
+**State-branch collision:** the `automation/hermes-state` branch advanced twice
+while this slot ran (`a8765f4` → `f46dc88` from the 21:05 fire). The first two
+push attempts were correctly rejected as non-fast-forward; the slot did not
+force-push and did not rewrite history. State was re-based onto the current
+remote tip and published as `17decb8`.
+
+**Not done:** no new #54 code slice. The secret/token audit remains at the HUD
+honesty slice from the prior slot. The following were identified as the next
+audit targets but NOT started: `src/utils/androidBridgeEngine.ts`,
+`androidBridgeGateway.ts`, `mobileBridgeSession.ts`, `telephonySessionManager.ts`
+and `operatorChatIntegration.ts` all contain redaction logic that has not been
+read line-by-line for leak paths.
+
+**Gates:** NOT RUN in this slot. No source file was changed, so no suite was
+executed. The previously observed results (lint exit 0 · vitest 46 files /
+682 tests · build exit 0) are carried over from the 21:05 fire and are reported
+here as inherited, not re-observed.
+
+**Security:** no token written to any file; the token appeared only inside the
+git remote URL. No force-push, no history rewrite, no branch deletion, `main`
+untouched.
