@@ -14,7 +14,6 @@ Format per slot:
 - Tests: <observed counts or NOT RUN>
 - Commit: <sha>  Push: <ok|failed>
 - Notes / blockers:
-```
 
 ---
 
@@ -838,3 +837,31 @@ live-telemetry branch has never run against a physical device.
 हिंदी सारांश (एक पंक्ति):
 - नकली (sample) मोबाइल फिक्स्चर अब कभी असली माप बनकर नहीं बोले जाएंगे; नेगेटिव टेस्ट से
   साबित, पूरा सूट 781/781 हरा।
+## 2026-09-20T20:58Z — slot 10/16 (WORK), 02:27 IST
+- Item worked: #13 Zero-fake-success for all tools (host telemetry surface)
+- Status: PARTIAL (unchanged; no separate advance this slot — see notes)
+- Tests: src/tests/hudTelemetry.test.ts + vmTelemetryDisplay.test.ts +
+  toolSurfaceTruthfulness.test.ts → 3 files, 31 passed
+- Commit: none of mine (my duplicate was dropped)  Push: ok (inherited 42cd1e0)
+- Notes / blockers:
+  - **Duplicate-work collision.** This slot independently fixed the `|| 342`
+    uptime fabrication in `OracleCloudModal.tsx` and pushed 067d63e, but a
+    concurrent slot had already landed a strictly broader fix at `42cd1e0`
+    (`src/utils/vmTelemetryDisplay.ts` — uptime, public IP, status, SSH command,
+    shape/disk specs; 2 test files). Rebase hit a conflict on the modal. I
+    dropped my narrower commit and re-based my branch onto 42cd1e0 rather than
+    re-land a redundant change. No fabricated value remains.
+  - **New gap identified (uptime leg fully closed by 42cd1e0).** `server.ts:1412`
+    still ships a hardcoded `firewallRules` list of five ports, every entry
+    `active: true`, seeded alongside `status: 'RUNNING'` (1390) and a hardcoded
+    `publicIp` (1391). `OracleCloudModal.tsx:213` renders a green check for each
+    rule and the heading "Zero Accidental Ingress". Nothing in the process ever
+    probes a port or asks Docker/iptables, and `rule.active` is never read — the
+    checkmark is unconditional. This is a security-relevant fabrication: the card
+    invites a human to trust unverified ingress exposure. Not fixed this slot
+    (requires probing live state); recorded for the next slot.
+    `/api/oracle-cloud/status` was NOT run this slot, so whether that route still
+    serves the invented IP is UNKNOWN.
+  - `uptimeHours` is never re-derived in `refreshOracleMetrics()` (1419-1440), so
+    it stays at its seeded value forever; a measured uptime would be the better
+    fix but needs the server telemetry path.
