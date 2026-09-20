@@ -1,22 +1,37 @@
 {
   "window_date": "2026-09-20",
   "window_started_at": "2026-09-20T05:51:23Z",
-  "last_slot_at": "2026-09-20T22:33:00Z",
-  "slots_completed": 14,
+  "last_slot_at": "2026-09-20T22:40:00Z",
+  "slots_completed": 15,
   "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools (approval resolution no longer reports unconfirmed actions as executed/verified)",
+  "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "ec21313",
+  "last_commit": "d54b1e3",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    { "item": 1, "reason": "physical Android device required" },
-    { "item": 2, "reason": "physical Android device required" },
-    { "item": 8, "reason": "Windows host required for the PowerShell capture leg" },
-    { "item": 50, "reason": "physical Android device required" },
-    { "item": 55, "reason": "physical Android device / Windows host required" }
+    {
+      "item": 1,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 2,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 8,
+      "reason": "Windows host required for the PowerShell capture leg"
+    },
+    {
+      "item": 50,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 55,
+      "reason": "physical Android device / Windows host required"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "SLOT 14 (03:37 IST, 22:07 UTC) - WORK SLOT. Continued item 13 zero-fake-success onto the APPROVAL-RESOLUTION path, chosen because it is the surface a human reads to decide whether an external action actually ran. FOUND: /api/approvals/resolve in server.ts defaulted executionResult to { executed: true }, stamped status 'EXECUTED' with verificationStatus + finalTruthState both 'VERIFIED' unconditionally, and fell back to a SYNTHETIC result id 'urn:jarvis:executed:<request id>' when the executed branch produced none. So a request whose execution branch never ran, or whose provider returned no identifier, was written to the audit log and shown in the Permission Gateway as an executed + verified Level 4 action. FIX (commit 2769c31): new pure module src/utils/hardening/approvalResolution.ts exporting classifyApprovalOutcome(executionResult) which returns executed/outcome/evidenceRef/errorReason; VERIFIED only when a real provider URN (social post) or issue URL (GitHub issue) is present; UNVERIFIED when nothing confirmed; FAILED on a real provider error; the synthetic URN is never emitted. server.ts now updates action request status from resolution.executed (EXECUTED vs FAILED) and uses resolution.evidenceRef as resultUrn. src/components/PermissionGateway.tsx gained an explicit outcome === 'UNVERIFIED' branch that renders 'Not confirmed' and speaks that the action could not be confirmed, instead of the previous success toast. TREE GREEN BEFORE PUSH: new src/tests/approvalResolutionTruth.test.ts 8/8 passed, npm run lint exit 0; committed at 2769c31 and pushed BEFORE the full verification per the slot-budget rule. NEGATIVE-VALIDATED: temporarily restoring the old 'outcome VERIFIED / executed true / synthetic urn' default in approvalResolution.ts made exactly 2 of the 8 tests fail; the file was restored from /tmp/ar.bak and 8/8 passed again. RELATED REGRESSION SUITES: permissionGuard + permissionMatrix + fabricatedStatusClaims + toolSurfaceTruthfulness + integrationsAuditTruthfulness = 5 files / 55 tests passed. FULL GATES OBSERVED ON 2769c31: npx vitest run 58 files / 811 tests passed (20.45s); npm run lint (tsc --noEmit) exit 0; npm run build exit 0, dist/server.cjs 819.5kb, dist/server.cjs.map 1.4mb. SECURITY: no token written to any file; push used the remote URL only; .env untouched. Docs commit ec21313 pushed 2769c31..ec21313. PR: none opened or refreshed this slot. DEPLOYMENT NOT ATTEMPTED - no deployment target observed in this environment. Item 13 REMAINS PARTIAL: still a pattern-driven sweep over named surfaces, not a per-tool inventory. NEXT SLOT: (a) settle the /api/oracle-cloud/status seed question (seeded RUNNING / publicIp 129.154.42.108) at the route, or (b) continue the item 13 inventory across server_tools.ts tool result strings. NOTE: window_date intentionally left at 2026-09-20 because the window spans midnight IST and the finalization guard keys on that value."
+  "notes": "SLOT 15 (04:06 IST, 22:36 UTC) - WORK SLOT. Continued item 13 zero-fake-success onto the /api/oracle-cloud SEED (the next item recorded by slot 14). FOUND: oracleCloudState in server.ts seeded a constant status RUNNING and a literal publicIp, plus uptimeHours = measured + hardcoded 342 and Math.random() jitter around constants (14.8% CPU, 3.4 GB RAM). The UI normalisers added in earlier slots only reject a MISSING value, so a seeded constant passed straight through them and was rendered as an observed run state and offered as a copyable ssh target. FIX (commit be203c2): new src/utils/hardening/ociInstanceTruth.ts keeps only what is provable in-process - a hostname match against the declared instance proves this process runs ON it, a LOWER BOUND labelled as such; publicIp is never derivable this way. server.ts seeds publicIp/status null with statusObservedAt, calls observeOciInstance(), and renders the Telegram reply + integrations matrix through describeRunState/describePublicIp (NOT_OBSERVED). OracleCloudModal.tsx renders the observed payload and labels shape/OCPU/RAM as the declared plan. types.ts OracleVMStatus updated. FIXED DURING VERIFICATION: the source guard matches the literal IP as text, so my own explanatory comment in server.ts was the last occurrence in the tree; the comment was reworded to reference the test instead of repeating the literal. TREE GREEN BEFORE PUSH: targeted 2 files / 33 tests passed; npm run lint exit 0; committed be203c2 and pushed before the full verification. NEGATIVE-VALIDATED: restoring the literal publicIp failed exactly 2 tests (constant-RUNNING/literal-IP guard and the starts-unobserved guard); reverted from a backup and 33/33 passed. FULL GATES OBSERVED ON be203c2: npx vitest run 59 files / 824 tests passed (19.62s); npm run lint (tsc --noEmit) exit 0; npm run build exit 0, dist/server.cjs 822.0kb (841726 bytes). SECURITY: no token written to any file; push used the remote URL only; .env untouched and untracked. Docs commit d54b1e3 updated docs/COMPLETION_STATUS.md (new Last cycle block, item 13 cell detail, rewritten Oracle known-limitation that still called publicIp/status static metadata) and docs/CHANGELOG.md. PR: none opened or refreshed this slot - no PR exists for this branch yet. DEPLOYMENT NOT ATTEMPTED: no deployment target observed in this environment. Item 13 REMAINS PARTIAL: no Oracle instance was observed from this sandbox, the observation branch is unit-tested rather than exercised against a real instance, and the sweep is pattern-driven, not a per-tool inventory. NEXT SLOT (04:35 = FINALIZATION): run the full verification, the security checks, open the PR to main with the observed evidence, and write the final state. NOTE: window_date intentionally left at 2026-09-20 because the window spans midnight IST and the finalization guard keys on that value."
 }
