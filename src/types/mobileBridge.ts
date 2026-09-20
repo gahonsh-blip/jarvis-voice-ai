@@ -503,6 +503,5 @@ export interface AndroidBridgeSettings {
   readNotificationsAloud: boolean;
   privacyRules: Record<string, AppPrivacyRule>;
   categoryPermissions: Record<NotificationCategory, boolean>;
-  sensitiveFilteringEnabled: boolean;
   blockHealthNotificationsByDefault: boolean;
 }

@@ -105,7 +105,6 @@ export const DEFAULT_BRIDGE_SETTINGS: AndroidBridgeSettings = {
   readNotificationsAloud: true,
   privacyRules: DEFAULT_APP_RULES,
   categoryPermissions: DEFAULT_CATEGORY_PERMISSIONS,
-  sensitiveFilteringEnabled: true,
   blockHealthNotificationsByDefault: true,
 };
 
@@ -663,15 +662,18 @@ export class AndroidBridgeManager {
       return { announced: false, blockedReason: 'DUPLICATE_NOTIFICATION' };
     }
 
-    // 5. Sensitive content detection — both the filtering and the health block
-    // are owner-controlled settings, so they are enforced here rather than
-    // assumed. When filtering is off the owner has explicitly opted out of
-    // redaction and inspection continues unredacted.
-    const sensitiveCheck = this.settings.sensitiveFilteringEnabled
-      ? detectSensitiveContent(payload.text, payload.title)
-      : { isSensitive: false, category: undefined as undefined, reason: undefined as string | undefined, redactedText: payload.text || '' };
+    // 5. Sensitive content detection. This guard is deliberately not
+    // settings-gated: docs/MOBILE_CALL_NOTIFICATION.md promises OTP, banking and
+    // credential bodies are *never* read aloud or written to logs, so there is
+    // no owner override that would let a raw secret through. (A persisted
+    // `sensitiveFilteringEnabled: false` from an older build is ignored, since
+    // it could otherwise silently disable the guard.)
+    const sensitiveCheck = detectSensitiveContent(payload.text, payload.title);
     const isSensitive = sensitiveCheck.isSensitive;
 
+    // Health notifications are the one category the owner may opt into, via
+    // AndroidBridgeSettings.blockHealthNotificationsByDefault. It defaults to
+    // blocking, and unlike the redaction guard it only widens what is announced.
     if (
       this.settings.blockHealthNotificationsByDefault &&
       sensitiveCheck.category === 'HEALTH'

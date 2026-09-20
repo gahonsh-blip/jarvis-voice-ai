@@ -77,27 +77,31 @@ describe('Android Bridge — privacy settings are actually enforced', () => {
     expect(engine.getPendingEvent()).not.toBeNull();
   });
 
-  it('redacts sensitive content when sensitiveFilteringEnabled is on (default)', () => {
-    expect(engine.getSettings().sensitiveFilteringEnabled).toBe(true);
-
+  it('redacts sensitive content unconditionally', () => {
     const result = engine.handleIncomingNotification(OTP_NOTIFICATION);
 
     expect(result.announced).toBe(true);
     expect(result.isSensitive).toBe(true);
+    expect(result.sensitiveCategory).toBe('OTP');
     expect(result.pendingEvent?.rawText).toBeUndefined();
     expect(result.pendingEvent?.isSensitive).toBe(true);
     expect(result.spokenText).not.toContain('4821');
   });
 
-  it('honours the owner override when sensitiveFilteringEnabled is disabled', () => {
-    engine.updateSettings({ sensitiveFilteringEnabled: false });
+  it('cannot be switched off by a legacy persisted sensitiveFilteringEnabled=false', () => {
+    // Older builds persisted this key and it used to disable the guard. It is
+    // no longer read, so a stored value cannot silently expose OTP/bank bodies.
+    const legacySettings = { sensitiveFilteringEnabled: false } as unknown as Parameters<
+      typeof engine.updateSettings
+    >[0];
+    engine.updateSettings(legacySettings);
 
     const result = engine.handleIncomingNotification(OTP_NOTIFICATION);
 
-    expect(result.announced).toBe(true);
-    expect(result.isSensitive).toBe(false);
-    expect(result.sensitiveCategory).toBeUndefined();
-    expect(result.pendingEvent?.rawText).toBe('Your OTP is 4821');
+    expect(result.isSensitive).toBe(true);
+    expect(result.sensitiveCategory).toBe('OTP');
+    expect(result.pendingEvent?.rawText).toBeUndefined();
+    expect(result.spokenText).not.toContain('4821');
   });
 
   it('records a SENSITIVE_REDACTION audit entry and never leaks the raw body', () => {
