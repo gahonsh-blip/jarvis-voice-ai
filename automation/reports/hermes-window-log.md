@@ -1272,3 +1272,104 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - ओरेकल क्लाउड इंस्टेंस की स्थिति और पब्लिक IP अब नकली तौर पर "देखी गई" के रूप
   में नहीं दिखाई जाती — दोनों `NOT_OBSERVED` रिपोर्ट करते हैं, 33/33 टेस्ट पास।
+---
+
+## SLOT 16 — FINALIZATION — 2026-09-21 04:35 IST (2026-09-20 23:06 UTC)
+
+Window: 2026-09-20 (spans midnight IST). Slots completed: 15 work slots
+(21:05 → 04:05) plus this finalization slot = 16.
+
+### What this slot did
+
+No new development. This slot ran the full verification on the branch tip,
+performed the repository security checks, opened the PR to `main`, and wrote the
+final window state.
+
+Branch tip at the time of verification: `be7ca2b`. Working tree was clean
+(`git status --short` empty) before and after the run — no uncommitted work was
+pending from slot 15.
+
+### Full verification — observed output
+
+Command: `npm run lint && npx vitest run && npm run build; echo "EXIT=$?"`
+Log: `/tmp/verify.log` in this run's sandbox (not durable).
+
+| Gate | Command | Observed result |
+|---|---|---|
+| Lint | `npm run lint` (`tsc --noEmit`) | exit 0, no diagnostics |
+| Tests | `npx vitest run` | **59 test files passed (59), 824 tests passed (824)**, duration 19.46s |
+| Build | `npm run build` | exit 0; `dist/server.cjs` **822.0 kb / 841726 bytes**, `dist/server.cjs.map` 1.4mb |
+| Overall | | `EXIT=0` |
+
+`node -v` → v22.23.2, `npm -v` → 10.9.8. `npm ci` was run once at Phase A and
+succeeded (13 log lines, no error); it was not re-run.
+
+### Repository security checks — observed output
+
+| Check | Command | Observed result |
+|---|---|---|
+| `.env` ignored | `git check-ignore -v .env` | matched by `.gitignore:4:.env` — exit 0 |
+| Clean tree | `git status --short` | empty (nothing staged, nothing untracked) |
+| No build/dep dirs tracked | `git ls-files` filtered for `node_modules/` / `dist/` | no matches |
+| Secret-pattern scan of the branch diff vs `main` | `git diff origin/main` filtered for token families | 6 hits, **all benign and verified by eye**: they are `redactSecrets` pattern documentation and test fixtures using obviously fake values (`sk-abcdefghijklmnopqrstuvwxyz1234567890ABCD`, `AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q`, `ghp_` + 40×`b`, and `sk_live_`/`rk_test_`/`xoxb-`/`npm_` listed as patterns to redact). No real credential is present. |
+| Diff vs `main` size | `git diff --stat origin/main` | 127 files changed, 24416 insertions(+), 1357 deletions(-) |
+| Branch position | GitHub compare API `main...feature/hermes-full-completion` | `status: ahead`, **ahead_by 78, behind_by 0**, 127 files |
+
+No `.env`, no `node_modules`, no `dist`, no stray debug file is staged or
+tracked. No token was written to any file; the GitHub API was called with the
+token in the `Authorization` header only.
+
+### Deploy
+
+`DEPLOYMENT: NOT_CONFIGURED` — no `DEPLOY_URL` and no hosting integration is
+present in this environment. No deployment was attempted and none is claimed.
+The verified artifact is `dist/server.cjs` (841726 bytes), which is the
+deployment unit available.
+
+### Window summary — items advanced across all 16 slots
+
+All 60 backlog items are implemented and tested. The 15 work slots in this
+window advanced **no new item to `VERIFIED`**; every remaining non-`VERIFIED`
+item is blocked on hardware or a third-party credential. Consistent with the
+prompt's rule ("if every remaining item is blocked, do not invent work"), the
+window was spent on the one item that could still be genuinely advanced —
+**item 13, zero-fake-success** — and on widening the secret-redaction engine
+(item 54). Work done in this window, all with named guards and negative
+validation:
+
+- **item 4** — a regression that had made the sensitive-content redaction guard
+  switchable off was reverted and pinned.
+- **item 10** — workspace path containment (`safeResolvePath` bare-prefix escape)
+  and a direct `permissionGuard.test.ts` for the computer-operator gate.
+- **item 13** — five successive slices: the `SAMPLE_*` fixture speech gap, the
+  Oracle VCN firewall "Zero Accidental Ingress" claim, the UI status badges
+  (`Verified SHA-Safe`, `Telegram Push Ready`, `Cron Scheduler: Active`), the
+  approval-resolution path, and finally the Oracle Cloud instance run-state and
+  public IP. Each slice removed a plausible-looking value that nothing had
+  measured and replaced it with an explicit `NOT_OBSERVED`/`UNKNOWN`.
+- **item 54** — six further token families that passed `redactSecrets`
+  unchanged, plus the caller-ID masking leak in `telephonyPermissions.ts` that
+  exposed 8 of 10 subscriber digits.
+
+Item 13 remains `PARTIAL`: the fixes are a pattern-driven sweep over known
+surfaces, not a per-tool proof, and the live-telemetry branches have never run
+against a real device or a real OCI instance.
+
+### Blocked (unchanged this window)
+
+- #1, #2, #50 — physical Android device required.
+- #8 — Windows host required for the PowerShell capture leg.
+- #55 — physical Android device / Windows host required.
+- #13 — cannot leave `PARTIAL` without a real OCI instance or live Oracle API
+  credential (not a blocker to its current PARTIAL status, only to promotion).
+
+### Gates for the morning review
+
+```
+lint    pass  (tsc --noEmit, exit 0)
+tests   pass  (59 files / 824 tests)
+build   pass  (dist/server.cjs 822.0 kb)
+audit   clean (no .env, no tracked node_modules/dist, no real secret in diff)
+merge   branch ahead_by 78, behind_by 0 — no conflict expected
+PR      opened this slot to main (never auto-merged)
+```
