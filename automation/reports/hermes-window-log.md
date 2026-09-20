@@ -171,3 +171,37 @@ and its 23:30 IST start overlaps this window's 23:05 slot until the 23:35 kill.
 
 ### Next slot
 - #14 GitHub automation, or the next non-`VERIFIED` item per the mandated order.
+
+---
+
+## Slot — 2026-09-20 21:35 IST (WORK)
+
+**Item:** #54 Secret/token protection audit (HUD honesty slice) — PARTIAL
+
+This slot continued the honesty audit of surfaces that assert unverified state.
+The completion-status doc already records the credential-redaction work; what
+remained was the HUD asserting state it had not checked.
+
+**Found:** `src/components/HUDHeader.tsx` rendered the literal strings
+`TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants, independent of any backend
+response. The header therefore claimed a live phone link and a specific safety
+level even when `isLiveConnected` was false or the security level differed.
+
+**Fixed:** both indicators now poll the real endpoints —
+`/api/telegram/status` (`config.isLiveConnected`) and `/api/security`
+(`currentLevel`) — and render `TELEGRAM OFFLINE`/`TELEGRAM UNKNOWN` and
+`LEVEL <n>`/`UNKNOWN` when the truth is not available. Raw bot tokens are not
+exposed: the endpoint returns `botTokenMasked` only.
+
+**Negative validation:** injected fabrication into `toMetric()` (returning 14.8
+instead of null for invalid metrics) and observed 3 of 7 tests fail, then
+restored. The test guards the honest-null behaviour, not just the happy path.
+
+**Evidence:** `src/utils/hudTelemetry.ts`, `src/components/HUDHeader.tsx`,
+`src/tests/hudTelemetry.test.ts` (7 tests).
+**Gates:** lint (tsc --noEmit) exit 0 · vitest 46 files / 682 tests passed ·
+build exit 0, `dist/server.cjs` emitted.
+**Security:** `git check-ignore -v .env` → `.gitignore:4:.env`; working tree clean.
+**Not verified:** the browser-side indicator rendering was not exercised in a
+real browser here (no DOM run); only the parsing/formatting logic is unit-tested.
+No credential rotation was performed against live providers.
