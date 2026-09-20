@@ -1,37 +1,22 @@
 {
   "window_date": "2026-09-20",
   "window_started_at": "2026-09-20T05:51:23Z",
-  "last_slot_at": "2026-09-20T20:15:00Z",
-  "slots_completed": 8,
+  "last_slot_at": "2026-09-20T20:55:00Z",
+  "slots_completed": 9,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools (host telemetry surface audited)",
   "current_item_status": "PARTIAL",
-  "last_commit": "00da222",
+  "last_commit": "85024cf",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 2,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 8,
-      "reason": "Windows host required for the PowerShell capture leg"
-    },
-    {
-      "item": 50,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 55,
-      "reason": "physical Android device / Windows host required"
-    }
+    {"item": 1, "reason": "physical Android device required"},
+    {"item": 2, "reason": "physical Android device required"},
+    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
+    {"item": 50, "reason": "physical Android device required"},
+    {"item": 55, "reason": "physical Android device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 8 (01:35 IST WORK, fire #8; started ~01:36 because the previous sandbox ran long). Item 13 zero-fake-success continued onto the HOST TELEMETRY surface. Found by running the real full suite: src/tests/hostTelemetry.test.ts failed with expected 107 to be less than or equal to 100. Root cause from reading the source: getHostCpuUsagePercent() probed os.cpuUsage, which is not a Node API (undefined on node v22.23.2), so that branch was dead and every reading came from the load-average proxy, which divided the 1-min load average by the core count WITHOUT clamping. Fixed: clamp to 100, dead branch removed, clampCpuPercent() exported. src/tests/hostTelemetry.test.ts now 8 tests / 8 passed. NEGATIVE-VALIDATED: replacing round(Math.min(v,100)) with round(v) makes the new assertion fail with 107 vs 100; restored after. The number is rendered live by HUDHeader.tsx, the Oracle Cloud modal and the spoken briefing, so an impossible 107% was being presented as measured. Gates OBSERVED on tip 00da222: npx vitest run 55 files / 772 tests passed, tsc --noEmit clean, build emitted dist/server.cjs (833708 bytes). Commits: 0096510 (fix+tests), 00da222 (docs+report). Rebase note: the remote advanced to 2c04ada while I worked (a concurrent slot android-bridge commit); fetched, rebased my fix on top, re-ran the targeted test, then pushed 2c04ada..0096510 and 0096510..00da222. Item 13 remains PARTIAL: the sweep is pattern-driven and a tool-by-tool inventory of server_tools.ts / server.ts is still outstanding; the SAMPLE_* fixtures in mobileStatusEngine.ts are still rendered by compileMobileStatusData without a sample-data label. NEXT: audit hudTelemetry.ts, OracleCloudModal.tsx and the server.ts VM-status routes for the same class of unmeasured-value-presented-as-measured bug."
+  "notes": "Slot 9 (WORK, scheduled fire 02:05 IST) continued item 13 zero-fake-success onto the ORACLE CLOUD VM surface. src/components/OracleCloudModal.tsx fabricated VM metrics whenever /api/oracle-cloud/status was absent or partial: a 342-hour uptime fallback under a constant ONLINE badge, a hardcoded public IP 129.154.42.108 with a copyable ssh command for an address no server reported, and static header/disk specs (VM.Standard.A1.Flex, 4 OCPU, 24 GB, 200 GB). New src/utils/vmTelemetryDisplay.ts normalises every display value (normalizeUptimeHours, normalizePublicIp, normalizeMetricPercent clamped 0-100, normalizeGigabytes, normalizeVmStatus, buildSshCommand); absent values render UNKNOWN / em dash. This also closes the previous slot's NEXT pointer for OracleCloudModal.tsx. Evidence: src/tests/vmTelemetryDisplay.test.ts (6 tests) and the Oracle block in src/tests/toolSurfaceTruthfulness.test.ts (18 tests in file), 18/18 passing. NEGATIVE-VALIDATED: restoring the 342 fallback, the hardcoded IP and the constant ONLINE fails exactly 3 of the 18; restored after. Gates OBSERVED on the pushed tip: npx vitest run 56 files / 791 tests passed (EXIT=0), npm run lint (tsc --noEmit) exit 0, npm run build exit 0 emitting dist/server.cjs (835675 bytes). Commits: 42cd1e0 (fix + tests), 684078f (docs), 85024cf (report). Push note: the first push was REJECTED (remote had advanced 3 commits from a concurrent slot: dbd3385, 3b14abf, b4bd54f, all in mobileStatusEngine/localJarvisEngine which my commit does not touch); fetched, rebased 42cd1e0 onto b4bd54f with no conflicts, then pushed b4bd54f..42cd1e0. Item 13 remains PARTIAL: the sweep is still tool-surface-by-tool-surface. NEXT: server.ts VM-status / Oracle telemetry numeric surfaces, then hudTelemetry.ts."
 }
