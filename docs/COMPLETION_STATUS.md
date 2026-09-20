@@ -4,45 +4,23 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-21 04:06 IST (2026-09-20 22:36 UTC) — zero-fake-success
-reached the **Oracle Cloud instance run-state and address** surfaces (item 13).
-Everything the previous Oracle slots fixed sat in the *rendering* path: the UI
-normalisers added from 02:25 IST onward reject a missing value, so they repaired
-a partial `/api/oracle-cloud` payload. They could not repair the payload itself,
-and the payload was seeded with a plausible answer — `oracleCloudState` in
-`server.ts` started life with `status: 'RUNNING'` and `publicIp: '129.154.42.108'`,
-plus a hardcoded `+342` hour uptime offset and `Math.random()` jitter around
-constants (14.8% CPU, 3.4 GB RAM). A supplied value is indistinguishable from a
-measurement once it reaches the normalisers, so the modal rendered an observed
-run state and an address the user was invited to copy into an `ssh` command.
-The OCI control plane owns `instance.status` and the public address, and nothing
-in this process queries it, so neither value is observable here.
-`src/utils/hardening/ociInstanceTruth.ts` records only what is provable: a
-hostname match against the declared instance proves this process is *running on*
-that instance, which is a lower bound ("the instance is up") and is labelled as
-such — the exact lifecycle state and any public address stay unobserved.
-`publicIp` and `status` now seed as `null`, `statusObservedAt` records when a
-status was actually read, and the Telegram status reply, the `/api/oracle-cloud`
-integrations matrix and `OracleCloudModal.tsx` all render through
-`describeRunState`/`describePublicIp` so an unobserved value is named
-(`NOT_OBSERVED` / `not observed`) instead of silently omitted. The shape/OCPU/RAM
-figures in the modal header are now labelled as the declared plan, not readings.
-Fixed during verification: the source guard in
-`src/tests/toolSurfaceTruthfulness.test.ts` matches the literal address as text,
-so the explanatory comment I had written in `server.ts` was itself the last
-occurrence in the file — the comment now refers to the test without repeating the
-literal, and reintroducing the literal is exactly what the guard catches.
-Guarded by `src/tests/ociInstanceTruth.test.ts` plus the Oracle block in
-`src/tests/toolSurfaceTruthfulness.test.ts` (33 tests across the two files) and
-negative-validated: restoring the literal address fails 2 tests ("the state does
-not assert a constant RUNNING status or a literal public IP" and "both start
-unobserved and are filled only by the host observation") and 33/33 pass with the
-fix in place. Full gates on `be203c2`: `npm run lint` (`tsc --noEmit`) exit 0,
-`npx vitest run` 59 files / 824 tests passed, `npm run build` exit 0
-(`dist/server.cjs` 822.0 kb). **Still `PARTIAL`** — no Oracle instance was
-observed from this sandbox, so the observation branch that fills these fields is
-unit-tested, not exercised against a real OCI instance, and the sweep remains
-pattern-driven rather than proof that no unmeasured claim survives.
+Last cycle: 2026-09-21 04:35 IST (2026-09-20 23:06 UTC) — **FINALIZATION SLOT**,
+slot 16 of the 2026-09-20 window. No new development and no code change. The
+slot ran the full verification on branch tip `be7ca2b`, executed the repository
+security checks, committed and pushed this window's report, and opened the PR to
+`main`. Observed gates: `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run`
+**59 files / 824 tests passed** in 19.46s; `npm run build` exit 0
+(`dist/server.cjs` 822.0 kb / 841726 bytes); overall `EXIT=0`. Security:
+`git check-ignore -v .env` matched `.gitignore:4:.env`, `git status --short`
+empty, nothing under `node_modules/` or `dist/` is tracked, and the branch diff
+against `main` contains no real credential (only redaction-pattern documentation
+and obviously-fake test fixtures). No backlog item changed status: **all 60 items
+are already implemented and tested**, and every remaining non-`VERIFIED` item is
+blocked on a physical Android device, a Windows host, live third-party
+credentials, or an external auditor. Item 13 remains `PARTIAL` for the reasons
+recorded in its cell. The branch is `ahead_by 78 / behind_by 0` relative to
+`main` (GitHub compare API), so the PR has no conflict. Main is **not merged** —
+awaiting human approval. Deployment is `NOT_CONFIGURED` in this environment.
 
 Previous cycle: 2026-09-21 03:37 IST (2026-09-20 22:07 UTC) — zero-fake-success
 reached the **approval-resolution path** (item 13).
