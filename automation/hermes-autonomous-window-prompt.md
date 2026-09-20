@@ -14,7 +14,7 @@ prompt.
 
 ## 0. Non-negotiable honesty rules (read first)
 
-1. **NEVER fabricate.** Never claim a test, lint, build, push, merge, deploy,
+1. **NEVER fabricate.** Never claim a test, lint, build, push, deploy, or
    health check, device connection, provider call, or approval that you did not
    actually observe. If you did not run it, write `NOT RUN`. If you do not know,
    write `UNKNOWN`. Invented pass counts are forbidden.
@@ -265,27 +265,31 @@ Aim to be done by **05:00 IST**; the platform will hard-kill the run at the
    must state: items advanced, evidence, exact test/lint/build results, security
    considerations, known limitations, and remaining blockers. **Never claim a
    check passed unless you observed it.**
-5. **Merge gate — be strict.** Merge `feature/hermes-full-completion` → `main`
-   **only if every one of these is true as observed in this run**:
-   - lint passed · tests passed · build passed
-   - the deployment artifact exists (`dist/server.cjs`)
-   - no CRITICAL or HIGH finding in the repository's security audit
-   - no secrets, `.env`, `node_modules`, or `dist` in the diff
-   - the diff matches the stated work; no unrelated changes
-   - the PR has no conflicts (`mergeable_state` not `dirty`)
-   - no force-push or history rewrite was needed
+5. **NEVER merge to `main`.** This is an absolute rule for this project, not a
+   gate to be cleared. The owner's instruction is explicit: the merge to `main`
+   happens only after a human reads the final verification report and approves
+   it. No set of green checks, however complete, authorizes an automated merge.
 
-   If **any** condition fails: **do not merge.** Leave the PR open and write
-   exactly which gate blocked it. When in doubt, do not merge — that is always
-   the correct call.
+   Your job at the end of the window is to leave the PR in a state a human can
+   merge in one click:
+   - the PR is open, non-draft, and has no conflicts (`mergeable_state` not
+     `dirty`)
+   - the PR body states the exact observed lint/test/build/security results
+   - the branch is pushed and up to date
+   - anything that failed is named in the body
 
-   Merging is performed by the user-authorized automation. Do it via the GitHub
-   API/`gh` only after re-reading the PR state. Then verify the merge commit is
-   actually on `main`:
-   ```bash
-   git fetch origin main && git --no-pager log --oneline -1 origin/main
+   Then report:
+
    ```
-   **Never report "merged" from the API response alone.**
+   Main merge: NOT MERGED — awaiting human approval
+   PR:         <url>
+   Gate status: lint <pass/fail> · tests <pass/fail> · build <pass/fail> ·
+                audit <clean/findings> · conflicts <none/present>
+   ```
+
+   If a reviewer explicitly instructs the merge in the PR or an issue, that is a
+   human approval and you may act on it — but an approval must come from a
+   person, never from your own assessment of the gates.
 6. **Deploy.** Build and record the real artifact:
    ```bash
    npm run build
@@ -346,7 +350,7 @@ Commit:  <sha>
 Push:    <succeeded/failed + remote>
 
 PR:         <number + URL, or NONE>
-Main merge: <MERGED + verified commit sha | NOT MERGED — <blocking gate>>
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
 Deploy:     <DEPLOYED | NOT_CONFIGURED | FAILED> — <evidence>
 
 Blocked:
