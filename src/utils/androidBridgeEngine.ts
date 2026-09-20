@@ -663,9 +663,30 @@ export class AndroidBridgeManager {
       return { announced: false, blockedReason: 'DUPLICATE_NOTIFICATION' };
     }
 
-    // 5. Sensitive content detection
-    const sensitiveCheck = detectSensitiveContent(payload.text, payload.title);
+    // 5. Sensitive content detection — both the filtering and the health block
+    // are owner-controlled settings, so they are enforced here rather than
+    // assumed. When filtering is off the owner has explicitly opted out of
+    // redaction and inspection continues unredacted.
+    const sensitiveCheck = this.settings.sensitiveFilteringEnabled
+      ? detectSensitiveContent(payload.text, payload.title)
+      : { isSensitive: false, category: undefined as undefined, reason: undefined as string | undefined, redactedText: payload.text || '' };
     const isSensitive = sensitiveCheck.isSensitive;
+
+    if (
+      this.settings.blockHealthNotificationsByDefault &&
+      sensitiveCheck.category === 'HEALTH'
+    ) {
+      this.recordAudit({
+        eventType: 'SENSITIVE_REDACTION',
+        application: payload.appName || 'Unknown',
+        actionRequested: 'Announce Notification',
+        permissionState: 'GRANTED',
+        authorizationState: 'BLOCKED_HEALTH_DEFAULT',
+        result: 'REJECTED',
+        notes: 'Health notification blocked because blockHealthNotificationsByDefault is enabled',
+      });
+      return { announced: false, blockedReason: 'HEALTH_BLOCKED' };
+    }
 
     const isHindi = language.startsWith('hi') || language === 'auto';
     const isHinglish = language === 'hinglish';
@@ -731,6 +752,19 @@ export class AndroidBridgeManager {
       result: 'SUCCESS',
       notes: `App: ${appName}, Sender: ${sender}, Sensitive: ${isSensitive}`,
     });
+
+    if (isSensitive) {
+      // Record the redaction without ever persisting the protected body.
+      this.recordAudit({
+        eventType: 'SENSITIVE_REDACTION',
+        application: appName,
+        actionRequested: 'Redact Notification Body',
+        permissionState: 'GRANTED',
+        authorizationState: 'WAITING_FOR_OWNER_APPROVAL',
+        result: 'SUCCESS',
+        notes: `Protected ${sensitiveCheck.category} content redacted before announcement`,
+      });
+    }
 
     return {
       announced: true,
