@@ -964,3 +964,54 @@ Next Slot:
 - नमूना (sample) मोबाइल डेटा अब असली माप के रूप में बोला नहीं जाता; उसका काम
   रिमोट पर सुरक्षित है और रिपोर्ट पूरी हुई, पर इस स्लॉट में lint/test/build दोबारा
   नहीं चलाए गए — इसलिए वे NOT RUN दर्ज हैं।
+---
+
+## Slot: WORK — 2026-09-21 02:36 IST (2026-09-20 21:06 UTC)
+
+Window date: 2026-09-20   Slots completed so far: 12
+
+Item #13 (Zero-fake-success for all tools) — the Oracle VCN firewall surface.
+
+- `oracleCloudState.firewallRules` in `server.ts` declared all five ingress rules
+  `active: true`; `OracleCloudModal.tsx` drew an unconditional `<Check />` per
+  rule under `<Lock /> Zero Accidental Ingress`. Nothing in this process contacts
+  the Oracle VCN, so this was an invented security posture.
+- `active` is now `boolean | null`, all rules ship `active: null`. New
+  `resolveFirewallRuleState()` / `summarizeFirewallObservation()` in
+  `src/utils/vmTelemetryDisplay.ts`. The modal shows `NOT_PROBED` for unprobed
+  rules and gates the "Zero Accidental Ingress" text on
+  `firewallSummary.verified` (false until every rule is observed); otherwise the
+  heading reads `Ingress NOT_PROBED (0/5 rules observed)`.
+- Four more plausible defaults removed from the modal: `4 OCPUs`, `?? 200` GB,
+  hardcoded Ubuntu footer, and the "₹0 / Forever Free" checklist (relabelled
+  `PROGRAMME LIMITS (NOT VERIFIED FOR THIS INSTANCE)`).
+
+Evidence and gates observed this slot:
+- target tests: `npx vitest run vmTelemetryDisplay.test.ts
+  toolSurfaceTruthfulness.test.ts integrationsAuditTruthfulness.test.ts` —
+  3 files / 32 tests passed.
+- negative validation: `sed 's/active: null/active: true/g' server.ts` →
+  `toolSurfaceTruthfulness.test.ts` 1 failed | 19 passed, failing exactly
+  `the Oracle firewall rules are not asserted active without a probe`;
+  `server.ts` restored from `/tmp/server.ts.orig` (integrity checked, the
+  12-insertion working diff intact).
+- `npm run lint` (tsc --noEmit): exit 0.
+- `npx vitest run` (full): 56 files / 795 tests passed (19.32s).
+- `npm run build`: exit 0, `dist/server.cjs` 816.6 kb.
+
+Commit `d1ae25b` on `feature/hermes-full-completion`; pushed successfully
+(`f0a2a76..d1ae25b`).
+
+Bugs found: 1 (fabricated VCN firewall verification, above).
+Bugs fixed: 1, negative-validated.
+
+Blocked: none new. Item 13 stays `PARTIAL` — the sweep remains pattern-driven
+and a tool-by-tool inventory is still outstanding.
+
+Next slot: continue item 13 on an unaudited tool surface (oracle-cloud spoke
+responses / remaining Autonomous Tools HUD panels), or move to the next
+non-VERIFIED backlog item if the inventory closes.
+
+हिंदी सारांश (एक पंक्ति):
+- Oracle VCN फ़ायरवॉल नियमों को अब बिना जाँच "सत्यापित" नहीं दिखाया जाता; `NOT_PROBED`
+  के रूप में दिखता है, और परीक्षण/लिंट/बिल्ड सब असली में चलाए गए — सभी पास।

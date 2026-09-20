@@ -4,6 +4,41 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-21 02:36 (21:06 UTC) — Oracle VCN ingress rules are no longer reported as verified
+
+### 🛡️ Truthfulness
+- `oracleCloudState.firewallRules` in `server.ts` declared all five VCN ingress
+  rules `active: true`, and `OracleCloudModal.tsx` drew an unconditional
+  checkmark per rule under a heading reading `<Lock /> Zero Accidental Ingress`.
+  Nothing in the process contacts the Oracle VCN or opens an inbound socket, so
+  the panel asserted an observed firewall posture for ports it never tested.
+- `firewallRules[].active` is now a tri-state observation (`boolean | null`) and
+  every declared rule ships `active: null` (never probed). New pure helpers in
+  `src/utils/vmTelemetryDisplay.ts`: `resolveFirewallRuleState()` returns
+  `OBSERVED_OPEN` / `OBSERVED_CLOSED` / `NOT_PROBED`, and
+  `summarizeFirewallObservation()` returns `{ probedCount, total, verified }`.
+- The modal renders `NOT_PROBED` as a label, not a tick. The "Zero Accidental
+  Ingress" claim now sits behind `firewallSummary.verified` (false until every
+  rule carries a real observation); otherwise the heading reads
+  `Ingress NOT_PROBED (0/5 rules observed)`.
+- Four further plausible defaults removed from the same modal: the hardcoded
+  `CPU LOAD (4 OCPUs)` label, `of {bootVolumeGb ?? 200} GB`, a hardcoded
+  `Ubuntu 24.04 LTS (Minimal ARM64)` footer (now the reported `os`, else
+  `UNKNOWN`), and the "₹0 / Forever Free" Always Free checklist, now labelled
+  `PROGRAMME LIMITS (NOT VERIFIED FOR THIS INSTANCE)` because billing
+  entitlement is never queried.
+
+### 🧪 Tests
+- `src/tests/vmTelemetryDisplay.test.ts` covers the firewall normalisers;
+  `src/tests/toolSurfaceTruthfulness.test.ts` gained two source guards (22 tests
+  in the file). Negative-validated: restoring `active: true` on the five server
+  rules fails exactly `the Oracle firewall rules are not asserted active without
+  a probe` (1 failed | 19 passed); restoring `active: null` passes 20/20.
+- Gates: `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run` 56 files /
+  795 tests passed; `npm run build` exit 0 (`dist/server.cjs` 816.6 kb).
+
+---
+
 ## [Unreleased] - 2026-09-21 02:25 (20:55 UTC) — The Oracle Cloud modal stopped inventing VM metrics
 
 ### 🛡️ Truthfulness
