@@ -865,3 +865,102 @@ live-telemetry branch has never run against a physical device.
   - `uptimeHours` is never re-derived in `refreshOracleMetrics()` (1419-1440), so
     it stays at its seeded value forever; a measured uptime would be the better
     fix but needs the server telemetry path.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:35 (run start 20:07 UTC, report written 21:04 UTC)
+Window date: 2026-09-21 (window_started_at 2026-09-20T05:51:23Z)
+Window slots completed so far: 11
+
+Completed:
+- #13 Zero-fake-success — the sample-fixture speech gap that slots 7 and 8 both
+  recorded as outstanding is CLOSED. Evidence: src/utils/mobileStatusEngine.ts
+  compileMobileStatusData() returns placeholder sections flagged `isSample: true`
+  that nonetheless carry `available: true` (battery 91%, 7 notifications, 4
+  events, 9 emails); `processOfflineCommand()` in src/utils/localJarvisEngine.ts
+  spoke them because it gated on `available` alone. Every mobile section now also
+  gates on `isSample` (grep -c 'isSample !== true' = 5) and the weather branch
+  reads mobileStatus.weather instead of the fixed 27C / 48% / 'New Delhi'.
+  src/components/MobilePersonalStatusModal.tsx no longer renders the
+  "Real-Time Generated Telemetry" badge for sample snapshots.
+  Test: src/tests/localJarvisEngine.test.ts.
+
+In Progress:
+- #13 — remains `PARTIAL`. The audit is pattern/test-driven rather than a
+  per-tool inventory across server_tools.ts / server.ts, and the live-telemetry
+  branch has never executed against a real device (UNVERIFIED).
+
+Remaining:
+- #1, #2, #50, #55 Android device E2E — BLOCKED, no physical device.
+- #8 host capture — BLOCKED, needs a Windows host for the PowerShell leg.
+- #13 follow-up recorded by the concurrent slot 10: server.ts:1412 seeds
+  hardcoded firewallRules (ports 22/80/443/3000/8443, every entry active:true)
+  while OracleCloudModal.tsx:213 draws a green checkmark per rule under the
+  heading "Zero Accidental Ingress"; nothing probes a port and rule.active is
+  never read, so the checkmark is unconditional. server.ts:1390-1391 also seeds
+  status RUNNING and publicIp 129.154.42.108. Whether /api/oracle-cloud/status
+  serves those values is UNKNOWN — that route was NOT run this slot.
+
+Bugs Found:
+- (this slot) No new product bug. The failure I hit was process, not product: the
+  automation's git remote has a main-only fetch refspec
+  (remote.origin.fetch = +refs/heads/main:refs/remotes/origin/main). `git fetch
+  origin` therefore never updates origin/feature/hermes-full-completion, so
+  `git merge-base --is-ancestor` tested against a stale ref and reported
+  YES_FF while the push was correctly rejected. This is why the same
+  "fast-forward possible" claim has been recorded by more than one slot.
+
+Bugs Fixed:
+- (this slot) None authored. The Item 13 fix landed under commit dbd3385 with
+  documentation at 3b14abf, authored earlier in this fire.
+  Negative validation (recorded, not re-run this slot): reverting the isSample
+  gate makes src/tests/localJarvisEngine.test.ts fail with the fixture values
+  spoken as real ("Device battery is at 91%" / "You have 7 priority
+  notifications"); restoring the fix makes it pass.
+
+Tests:    NOT RUN this slot. Previously observed on tip dbd3385 (20:49 UTC):
+          55 files / 781 tests passed; targeted localJarvisEngine 46/46.
+Lint:     NOT RUN this slot (`tsc --noEmit` exit 0 observed earlier on dbd3385).
+Build:    NOT RUN this slot (exit 0, dist/server.cjs 835675 bytes, on dbd3385).
+E2E:      NOT RUN — no device and no E2E harness invoked this slot.
+Security: NOT RUN — no audit invoked this slot.
+
+Documentation: none authored this slot. This report and the window state file.
+
+Branch:  feature/hermes-full-completion
+Commit:  cf82366 (remote tip; my Item 13 code dbd3385 and docs 3b14abf are
+         confirmed ancestors of it). State branch automation/hermes-state at
+         40826f9.
+Push:    SUCCEEDED. feature/hermes-full-completion: fast-forward 85024cf..4f703f3
+         (my report commit). automation/hermes-state: b76a3fc..40826f9.
+         No force-push, no history rewrite, no branch deletion.
+
+PR:         NONE opened this slot.
+Main merge: NOT MERGED — awaiting human approval (never auto-merge).
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified artifact is the deployment
+            unit available.
+
+Blocked:
+- #1/#2/#50/#55 — physical Android device.
+- #8 — Windows host.
+
+Human Approval Required:
+- The branch-level concurrency problem needs an owner decision: multiple slots
+  run against the same cron fire and rewrite the shared feature branch, which
+  destroys work (observed twice tonight). Also the git remote fetch refspec is
+  main-only, which misleads every slot's ancestry check.
+
+Next Slot:
+- Take the firewallRules fabrication at server.ts:1412 / OracleCloudModal.tsx:213
+  recorded by slot 10 — either genuinely probe the ports or render each rule
+  UNVERIFIED and drop the unconditional green checkmark — and normalise the
+  seeded status/publicIp at server.ts:1390-1391. It is a security-relevant
+  fabricated claim, smaller than a full-tool inventory, and completable in one
+  slot with a targeted test.
+
+हिंदी सारांश (एक पंक्ति):
+- नमूना (sample) मोबाइल डेटा अब असली माप के रूप में बोला नहीं जाता; उसका काम
+  रिमोट पर सुरक्षित है और रिपोर्ट पूरी हुई, पर इस स्लॉट में lint/test/build दोबारा
+  नहीं चलाए गए — इसलिए वे NOT RUN दर्ज हैं।
