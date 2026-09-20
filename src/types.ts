@@ -323,6 +323,9 @@ export interface BlueprintPhase {
 }
 
 export interface OracleVMStatus {
+  // The fields below the plan comment are the *declared* configuration/plan.
+  // Nothing in this process queries the OCI control plane, so they are not
+  // readings: the UI labels them as declared.
   provider: 'Oracle Cloud Always Free';
   tier: 'Always Free (₹0 / month)';
   instanceType: 'Ampere A1 Compute (ARM64)';
@@ -331,9 +334,14 @@ export interface OracleVMStatus {
   ramGb: number;
   bootVolumeGb: number;
   os: 'Ubuntu 24.04 LTS (Minimal ARM)';
-  publicIp: string;
+  // `publicIp` and `status` are OCI control-plane observations. Both are null
+  // until something actually observes them; the server never seeds them with a
+  // plausible value. See src/utils/hardening/ociInstanceTruth.ts.
+  publicIp: string | null;
   sshPort: number;
-  status: 'RUNNING' | 'PROVISIONING' | 'STOPPED';
+  status: 'RUNNING' | 'PROVISIONING' | 'STOPPED' | null;
+  /** ISO8601 of the observation that produced `status`, or null if never observed. */
+  statusObservedAt?: string | null;
   uptimeHours: number;
   metrics: {
     cpuUsage: number | null;

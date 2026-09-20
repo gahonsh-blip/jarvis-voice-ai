@@ -100,7 +100,7 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Shape: {vmStatus?.shape ?? 'UNKNOWN'} (Ampere A1 ARM64) • {vmStatus?.ocpu ?? 'UNKNOWN'} OCPUs • {vmStatus?.ramGb ?? 'UNKNOWN'} GB RAM • {vmStatus?.bootVolumeGb ?? 'UNKNOWN'} GB Storage
+                Declared plan: {vmStatus?.shape ?? 'UNKNOWN'} (Ampere A1 ARM64) • {vmStatus?.ocpu ?? 'UNKNOWN'} OCPUs • {vmStatus?.ramGb ?? 'UNKNOWN'} GB RAM • {vmStatus?.bootVolumeGb ?? 'UNKNOWN'} GB Storage — not read from a running instance
               </p>
             </div>
           </div>

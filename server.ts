@@ -67,6 +67,11 @@ import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/and
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
 import { classifyApprovalOutcome } from './src/utils/hardening/approvalResolution';
 import {
+  observeInstanceFromHost,
+  describeRunState,
+  describePublicIp,
+} from './src/utils/hardening/ociInstanceTruth';
+import {
   buildDeliveryReceipt,
   classifyTelegramError,
   interpretTelegramSend,
@@ -1382,6 +1387,11 @@ const BLUEPRINT_PHASES = [
 
 let oracleCloudState = {
   provider: 'Oracle Cloud Always Free' as const,
+  // Shape/OCPU/RAM/boot-volume/OS below are the *plan* the owner intends to run
+  // on, not readings from an instance. Nothing in this process queries the OCI
+  // control plane, so none of them is an observation; the UI header labels them
+  // as declared configuration and the panel labels the Always Free figures as
+  // programme limits. They are kept only as the declared plan.
   tier: 'Always Free (₹0 / month)' as const,
   instanceType: 'Ampere A1 Compute (ARM64)' as const,
   shape: 'VM.Standard.A1.Flex' as const,
@@ -1389,9 +1399,20 @@ let oracleCloudState = {
   ramGb: 24,
   bootVolumeGb: 200,
   os: 'Ubuntu 24.04 LTS (Minimal ARM)' as const,
-  publicIp: '129.154.42.108',
+  // `publicIp` and `status` are OCI control-plane facts. The previous seed
+  // asserted a literal address and a constant `RUNNING`, and because a supplied
+  // value passes through the UI normalisers it rendered — and was copied to the
+  // clipboard as an `ssh` target — as an observed address. The literal is
+  // deliberately not repeated here so it cannot re-enter this file; see
+  // src/utils/hardening/ociInstanceTruth.ts and the guard in
+  // src/tests/toolSurfaceTruthfulness.test.ts.
+  // Both are null until something actually observes them (see the observation
+  // block below this state).
+  publicIp: null as string | null,
   sshPort: 22,
-  status: 'RUNNING' as const,
+  status: null as 'RUNNING' | 'PROVISIONING' | 'STOPPED' | null,
+  // When `status` was observed, or null when it was never observed.
+  statusObservedAt: null as string | null,
   // Hours this *process* has been up, measured. The previous version added a
   // hardcoded +342 offset, so JARVIS always claimed 342+ hours of uptime that
   // nobody had measured.
@@ -1447,6 +1468,26 @@ function refreshOracleMetrics(): void {
 
 refreshOracleMetrics();
 
+// Oracle VM instance observation.
+//
+// `status` and `publicIp` are OCI control-plane facts and this process never
+// calls that control plane, so neither can be *measured* here. One weaker fact
+// is provable: if the daemon host is the Oracle ARM instance (a real hostname
+// match), the instance must be running — this process is executing on it. That
+// is recorded as an observation of the hosting instance, and the public address
+// stays unobserved because a host interface address is not the instance's
+// cloud-assigned IP.
+function observeOciInstance(): void {
+  const { isOracleLike } = getLocalHostIdentity();
+  const observation = observeInstanceFromHost(
+    isOracleLike,
+    oracleCloudState.metricsSampledAt,
+  );
+  oracleCloudState.status = observation.status;
+  oracleCloudState.publicIp = observation.publicIp;
+  oracleCloudState.statusObservedAt = observation.observedAt;
+}
+
 /** Identity of the machine this process actually runs on. Used to avoid
  *  asserting which cloud provider hosts us when nothing verified that. */
 function getLocalHostIdentity(): { hostname: string; isOracleLike: boolean } {
@@ -1459,6 +1500,8 @@ function getLocalHostIdentity(): { hostname: string; isOracleLike: boolean } {
   })();
   return { hostname, isOracleLike: /oracle|oci|ampere/i.test(hostname) };
 }
+
+observeOciInstance();
 
 // Security Matrix State
 let securityMatrixState = {
@@ -3160,7 +3203,7 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
     const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
     const cpuLine = live?.cpuUsage != null ? `${live.cpuUsage}%` : 'unavailable';
     const ramLine = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : 'unavailable';
-    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${oracleCloudState.status} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${cpuLine} | *RAM*: ${ramLine}\n• *Metrics Source*: ${live ? 'live host telemetry' : 'unavailable'}\n• *Cost*: ₹0 / Always Free Guaranteed\n• *IP*: ${oracleCloudState.publicIp}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
+    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${describeRunState(oracleCloudState.status)} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${cpuLine} | *RAM*: ${ramLine}\n• *Metrics Source*: ${live ? 'live host telemetry' : 'unavailable'}\n• *Cost*: ₹0 / Always Free Guaranteed\n• *IP*: ${describePublicIp(oracleCloudState.publicIp)}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
     actionData = { type: 'telemetry', metrics: oracleCloudState.metrics };
   } else if (intentData.intent === 'security_audit') {
     botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: Level ${securityMatrixState.currentLevel} (Create Mode with Human Approval)\n• *Human Approval*: Enforced for all external actions\n• *Credential Protection*: Passwords & API tokens strictly isolated\n• *Recent Audit Logs*: ${memoryState.auditLogs.length} verified events`;
@@ -3788,10 +3831,17 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
           executionHost: localHost.isOracleLike ? 'Oracle Cloud ARM instance (hostname matched)' : 'unverified — hostname not matched',
           hostname: localHost.hostname,
           metricsSource: oracleCloudState.metricsSource,
+          // Instance run state / public address come from the OCI control plane,
+          // which this server never queries. `status` is only non-null when the
+          // hostname proved this process runs on the instance (a lower bound),
+          // and the address stays null until an operator supplies an observation.
+          instanceStatus: oracleCloudState.status,
+          instanceStatusObservedAt: oracleCloudState.statusObservedAt,
+          publicIp: oracleCloudState.publicIp,
           cpuUsage: live?.cpuUsage ?? null,
           ramUsedGb: live?.ramUsedGb ?? null,
           sampledAt: oracleCloudState.metricsSampledAt,
-          note: 'Values observed from the local host. Cloud control-plane status is not queried by this server.',
+          note: 'Values observed from the local host. Cloud control-plane status and the instance public IP are not queried by this server.',
         },
       };
     })(),

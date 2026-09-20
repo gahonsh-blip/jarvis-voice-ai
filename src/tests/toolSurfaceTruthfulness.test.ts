@@ -162,3 +162,37 @@ describe('the Oracle Cloud modal renders the payload, never a plausible default'
     expect(modalFlat).toContain('normalizeMetricPercent(vmStatus?.metrics?.cpuUsage)');
   });
 });
+
+describe('the Oracle instance run state and address are never seeded', () => {
+  it('the state does not assert a constant RUNNING status or a literal public IP', () => {
+    // These are OCI control-plane facts. A seeded value passes through the UI
+    // normalisers (which can only reject a *missing* value), so it rendered as a
+    // measured run state and was copied to the clipboard as an ssh target.
+    expect(flat).not.toMatch(/status:\s*'RUNNING'\s*as const/);
+    expect(flat).not.toContain("publicIp: '129.154.42.108'");
+    expect(flat).not.toContain('129.154.42.108');
+  });
+
+  it('both start unobserved and are filled only by the host observation', () => {
+    expect(flat).toContain('publicIp: null as string | null');
+    expect(flat).toContain("status: null as 'RUNNING' | 'PROVISIONING' | 'STOPPED' | null");
+    expect(flat).toContain('observeOciInstance()');
+    expect(flat).toContain('observeInstanceFromHost(');
+  });
+
+  it('the Telegram reply names an unobserved state/address rather than a value', () => {
+    // The previous reply interpolated `oracleCloudState.status` and
+    // `oracleCloudState.publicIp` directly, so a null would print as "null" and
+    // a seeded value printed as fact. It must go through the describers.
+    expect(flat).toContain('describeRunState(oracleCloudState.status)');
+    expect(flat).toContain('describePublicIp(oracleCloudState.publicIp)');
+  });
+
+  it('the modal header labels the shape/specs as a declared plan, not a reading', () => {
+    const modalFlat = fs
+      .readFileSync(path.resolve(process.cwd(), 'src/components/OracleCloudModal.tsx'), 'utf8')
+      .replace(/\s+/g, ' ');
+    expect(modalFlat).toContain('Declared plan:');
+    expect(modalFlat).toContain('not read from a running instance');
+  });
+});
