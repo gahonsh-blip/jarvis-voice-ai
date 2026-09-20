@@ -3,10 +3,10 @@
   "window_started_at": "2026-09-20T05:51:23Z",
   "last_slot_at": "2026-09-20T16:10:00Z",
   "slots_completed": 2,
-  "current_item": 4,
-  "current_item_title": "Real Android notifications integration (server-side privacy filter)",
-  "current_item_status": "VERIFIED (server) + bug fixed",
-  "last_commit": "98bd749",
+  "current_item": 54,
+  "current_item_title": "Secret/token protection audit",
+  "current_item_status": "PARTIAL",
+  "last_commit": "354994a56a306d483f98c2bc340c18199bf8976f",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -18,5 +18,5 @@
     {"item": 55, "reason": "physical Android device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 2 (21:05 IST scheduled fire). Rebased a misplaced local commit (branch had been created from main) onto origin/feature/hermes-full-completion. Fixed a real Hindi-OTP sensitivity bug in src/utils/mobileNotificationPrivacy.ts and added src/tests/mobileNotificationPrivacy.test.ts (39 tests). Observed: lint exit 0, vitest 45 files / 675 tests passing, build exit 0, dist/server.cjs 815749 bytes."
+  "notes": "Slot 2 (21:35 IST WORK). HUD honesty slice: HUDHeader no longer hardcodes TELEGRAM ONLINE / LEVEL 2 SAFE; reads /api/telegram/status + /api/security, renders UNKNOWN/OFFLINE. hudTelemetry.ts + 7 tests, negative-validated. Gates observed: lint exit 0, vitest 46 files / 682 tests passing, build exit 0."
 }
