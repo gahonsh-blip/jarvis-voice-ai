@@ -130,7 +130,7 @@ export const SAMPLE_NOTIFICATIONS: MobileNotificationItem[] = [
     id: 'notif-2',
     app: 'Gmail',
     sender: 'Oracle Cloud Notifications',
-    summary: 'Always Free ARM VM health check: 100% nominal uptime.',
+    summary: 'Always Free ARM VM maintenance notice: verify uptime in the Oracle console.',
     timestamp: '35 min ago',
     priority: 'normal',
   },

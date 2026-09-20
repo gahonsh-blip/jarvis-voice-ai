@@ -253,7 +253,11 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
         {/* Footer */}
         <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
-          <span>Security Matrix Status: 100% Operational</span>
+          <span>
+            {securityState
+              ? `Level ${activeLevel} of 4 active · permissions enforced by the gateway`
+              : 'Security state unavailable — /api/security did not respond'}
+          </span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
