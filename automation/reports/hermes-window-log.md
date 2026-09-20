@@ -133,3 +133,41 @@ and its 23:30 IST start overlaps this window's 23:05 slot until the 23:35 kill.
   decision, not this agent's. Flagged in the morning report instead.
   Options for the owner: shift this window's schedule to avoid `23:30`
   (e.g. `05,35 21-22,0-4 * * *`), or disable one of the two.
+
+
+---
+
+## 2026-09-20 21:05 IST — WORK slot 2/16
+
+- **Slot:** WORK (scheduled fire `05 21 * * *` IST). Window date 2026-09-20.
+- **Selected item:** #4 Real Android notifications integration (server-side
+  privacy filter). Item was already `VERIFIED (server)`; this slot found and
+  fixed a real defect in that filter and gave it direct coverage.
+
+### Completed
+- **#4** — Fixed a garbled Hindi OTP matcher in
+  `src/utils/mobileNotificationPrivacy.ts`. The pattern decodes to garbled
+  Devanagari (not `OTP`), so a Hindi OTP notification was **not** classified as
+  sensitive and its body could be exposed through the bridge. The matcher is
+  corrected and the alternate variant added. Evidence:
+  `src/tests/mobileNotificationPrivacy.test.ts` (39 tests) — the Hindi-OTP test
+  is **negative-validated** (reverting the matcher fails it).
+- Removed a dead ternary in `exposeNotificationContent` (clarity only;
+  behaviour identical for non-empty previews).
+
+### Repo hygiene
+- A prior local commit had been made on a branch created from `main`, not from
+  `origin/feature/hermes-full-completion`. Rebased it onto the correct branch so
+  the window's 18 prior commits are intact, then pushed (fast-forward
+  `6361d9d..9076368`). No force-push, no history rewrite.
+
+### Observed gates
+- `npm run lint` (tsc --noEmit): exit 0, no output.
+- `npx vitest run`: **45 files / 675 tests passed**, exit 0.
+- `npm run build`: exit 0; `dist/server.cjs` 815,749 bytes.
+
+### Blocked (unchanged from slot 1)
+- #1, #2, #50, #55 — physical Android device. #8 — Windows host.
+
+### Next slot
+- #14 GitHub automation, or the next non-`VERIFIED` item per the mandated order.
