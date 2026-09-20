@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-20",
   "window_started_at": "2026-09-20T05:51:23Z",
-  "last_slot_at": "2026-09-20T06:24:01Z",
-  "slots_completed": 1,
-  "current_item": 54,
-  "current_item_title": "Secret/token protection audit",
-  "current_item_status": "PARTIAL",
-  "last_commit": "70952e5741d35029317385d3471b6c1ff83106e0",
+  "last_slot_at": "2026-09-20T16:10:00Z",
+  "slots_completed": 2,
+  "current_item": 4,
+  "current_item_title": "Real Android notifications integration (server-side privacy filter)",
+  "current_item_status": "VERIFIED (server) + bug fixed",
+  "last_commit": "98bd749",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -18,5 +18,5 @@
     {"item": 55, "reason": "physical Android device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 1 (manual verification dispatch, not a scheduled fire). Independently re-verified by the deploying agent: lint exit 0, vitest 43 files / 630 tests passing, build exit 0, dist/server.cjs present."
+  "notes": "Slot 2 (21:05 IST scheduled fire). Rebased a misplaced local commit (branch had been created from main) onto origin/feature/hermes-full-completion. Fixed a real Hindi-OTP sensitivity bug in src/utils/mobileNotificationPrivacy.ts and added src/tests/mobileNotificationPrivacy.test.ts (39 tests). Observed: lint exit 0, vitest 45 files / 675 tests passing, build exit 0, dist/server.cjs 815749 bytes."
 }
