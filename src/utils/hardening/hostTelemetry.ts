@@ -22,37 +22,29 @@ const round = (value: number, digits = 1): number => {
 
 const toGb = (bytes: number): number => round(bytes / 1024 / 1024 / 1024, 2);
 
-function normaliseCpuPercent(value: number): number | null {
+/**
+ * Coerce a measured utilisation into the only range a CPU percentage can occupy.
+ * Every caller already produces a 0-100 percentage, so a value above 100 means
+ * the host is oversubscribed (load average exceeds the core count) and must be
+ * reported as fully saturated rather than as an impossible 107%.
+ */
+export function clampCpuPercent(value: number): number | null {
   if (!Number.isFinite(value) || value < 0) return null;
-  if (value <= 1) return round(value * 100);
-  return round(value);
+  return round(Math.min(value, 100));
 }
 
 /**
- * Read the real CPU utilisation of the daemon host. Node exposes an instantaneous
- * system-wide percentage (since Node 19.6 / 18.15). On runtimes that do not, we
- * fall back to the 1-minute load average divided by the core count. If neither is
- * available we return null rather than inventing a number.
+ * Read the real CPU utilisation of the daemon host. Node exposes host CPU time
+ * counters via `os.cpus()`, so the 1-minute load average divided by the core
+ * count is used as the utilisation proxy. A host whose load average exceeds its
+ * core count is saturated and is reported as 100%, never as a value above 100.
+ * If the counters are unavailable we return null rather than inventing a number.
  */
 export function getHostCpuUsagePercent(): number | null {
-  const direct = (os as { cpuUsage?: () => { idle: number; total: number } }).cpuUsage;
-  if (typeof direct === 'function') {
-    try {
-      const sample = direct();
-      if (sample && sample.total > 0) {
-        const used = ((sample.total - sample.idle) / sample.total) * 100;
-        const normalised = normaliseCpuPercent(used);
-        if (normalised !== null) return normalised;
-      }
-    } catch {
-      // fall through to load average
-    }
-  }
-
   const load = os.loadavg()[0];
   const cores = os.cpus()?.length ?? 0;
   if (cores > 0 && Number.isFinite(load) && load >= 0) {
-    return normaliseCpuPercent((load / cores) * 100);
+    return clampCpuPercent((load / cores) * 100);
   }
   return null;
 }

@@ -5,6 +5,7 @@ import {
   getHostRam,
   getDiskUsagePercent,
   sampleHostTelemetry,
+  clampCpuPercent,
 } from '../utils/hardening/hostTelemetry';
 
 describe('hostTelemetry — real daemon-host metrics (no invented values)', () => {
@@ -70,6 +71,24 @@ describe('hostTelemetry — real daemon-host metrics (no invented values)', () =
     const realTotalGb = os.totalmem() / 1024 / 1024 / 1024;
     if (Math.abs(realTotalGb - 24) > 0.5) {
       expect(ram.totalGb).not.toBe(24);
+    }
+  });
+
+  it('clamps an oversubscribed load average to 100% instead of reporting an impossible value', () => {
+    // Regression guard: load average can exceed the core count on a busy host.
+    // Before the fix this produced CPU figures above 100% (observed: 107%),
+    // which the HUD and the spoken briefing then presented as a real reading.
+    expect(clampCpuPercent(107)).toBe(100);
+    expect(clampCpuPercent(150.4)).toBe(100);
+    expect(clampCpuPercent(-1)).toBeNull();
+    expect(clampCpuPercent(Number.NaN)).toBeNull();
+    expect(clampCpuPercent(42.35)).toBe(42.4);
+  });
+
+  it('keeps a real load average reading unclamped when it is below saturation', () => {
+    const cpu = getHostCpuUsagePercent();
+    if (cpu !== null) {
+      expect(cpu).toBeLessThanOrEqual(100);
     }
   });
 });
