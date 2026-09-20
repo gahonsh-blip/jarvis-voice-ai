@@ -1390,7 +1390,10 @@ let oracleCloudState = {
   publicIp: '129.154.42.108',
   sshPort: 22,
   status: 'RUNNING' as const,
-  uptimeHours: Math.floor((Date.now() - new Date(DAEMON_BOOT_TIME).getTime()) / 3600000) + 342,
+  // Hours this *process* has been up, measured. The previous version added a
+  // hardcoded +342 offset, so JARVIS always claimed 342+ hours of uptime that
+  // nobody had measured.
+  uptimeHours: Math.floor((Date.now() - new Date(DAEMON_BOOT_TIME).getTime()) / 3600000),
   // Live host measurements. The previous version jittered around hardcoded
   // constants (14.8% CPU, 3.4 GB RAM) with Math.random(), so the UI and the
   // spoken responses reported invented numbers as if they were real telemetry.
@@ -1434,6 +1437,19 @@ function refreshOracleMetrics(): void {
 }
 
 refreshOracleMetrics();
+
+/** Identity of the machine this process actually runs on. Used to avoid
+ *  asserting which cloud provider hosts us when nothing verified that. */
+function getLocalHostIdentity(): { hostname: string; isOracleLike: boolean } {
+  const hostname = (() => {
+    try {
+      return os.hostname();
+    } catch {
+      return 'unknown';
+    }
+  })();
+  return { hostname, isOracleLike: /oracle|oci|ampere/i.test(hostname) };
+}
 
 // Security Matrix State
 let securityMatrixState = {
@@ -1480,90 +1496,114 @@ let securityMatrixState = {
   },
 };
 
-// Proactive Daily Reports
-let proactiveReports = [
-  {
-    id: 'rep-morning',
-    timeSlot: 'morning' as const,
-    titleEn: '🌅 Morning Briefing (09:00 AM)',
-    titleHi: '🌅 सुबह की ब्रीफिंग (09:00 AM)',
-    timestamp: new Date().toISOString(),
-    contentEn: 'Good morning, Sir. All cloud systems are nominal on your Oracle ARM instance. Today you have 2 pending client quotations to review, 1 social media draft awaiting approval, and your git repository is up-to-date. Have a productive day.',
-    contentHi: 'शुभ प्रभात, सर। आपके ओरेकल क्लाउड सर्वर पर सभी सिस्टम सुचारू रूप से चल रहे हैं। आज आपके पास समीक्षा के लिए 2 क्लाइंट कोटेशन और 1 सोशल मीडिया पोस्ट पेंडिंग है। आपका दिन शुभ और सफल रहे।',
-    keyInsights: [
-      'Oracle VM Uptime: 342+ hrs continuous • 0 errors',
-      'Pending Client Quotation: Aarav Tech Solutions (₹65,000)',
-      'Social Post Ready: LinkedIn Autonomous Agents Article (Awaiting Level 4 Confirmation)',
-      'System Security Level: Level 2 (Create Mode with Human Approval Enforced)',
-    ],
-    systemHealth: {
-      serverStatus: 'Nominal' as const,
-      activeWebsitesMonitored: 3,
-      pendingTasksCount: 4,
-      socialPostsPublished: 2,
+// Proactive Daily Reports.
+//
+// These are *plans*, not results: the times are real (the scheduler in
+// checkAndRunSchedulerJobs fires the 09:00 IST briefing), but no website probe,
+// HTTP status code or cloud uptime number is measured for this preview. Earlier
+// revisions hardcoded "All 3 monitored web properties returned HTTP 200 OK within
+// 180ms", "Oracle VM Uptime: 342+ hrs", invented quotation/draft counts and a
+// "Memory consumption 14%" figure that nothing ever sampled. The builder below
+// substitutes the values that *are* known (real counts, real security level, real
+// live-host telemetry when it was sampled) and says "not measured" for the rest.
+const NOT_MEASURED = 'not measured';
+
+function buildProactiveReports(): any[] {
+  const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+  const cpuText = live?.cpuUsage != null ? `${live.cpuUsage}%` : NOT_MEASURED;
+  const ramText = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : NOT_MEASURED;
+  const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
+  const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
+  const publishedPosts = memoryState.socialPosts.filter((p) => p.status === 'published').length;
+  const level = securityMatrixState.currentLevel;
+
+  return [
+    {
+      id: 'rep-morning',
+      timeSlot: 'morning' as const,
+      titleEn: '🌅 Morning Briefing (09:00 AM)',
+      titleHi: '🌅 सुबह की ब्रीफिंग (09:00 AM)',
+      timestamp: new Date().toISOString(),
+      contentEn: `Good morning, Sir. Scheduled morning briefing. Pipeline: ${pendingQuotations} lead(s) with a prepared quotation, ${pendingPosts} social draft(s) awaiting approval. Security level: ${level}. Host CPU ${cpuText}, RAM ${ramText}. Cloud node health is not probed by this server.`,
+      contentHi: `शुभ प्रभात, सर। निर्धारित सुबह की ब्रीफिंग। पाइपलाइन: ${pendingQuotations} कोटेशन तैयार, ${pendingPosts} सोशल ड्राफ्ट स्वीकृति की प्रतीक्षा में। सुरक्षा स्तर: ${level}।`,
+      keyInsights: [
+        `Prepared Quotations: ${pendingQuotations}`,
+        `Social Drafts Awaiting Approval: ${pendingPosts}`,
+        `Host CPU: ${cpuText} • RAM: ${ramText}`,
+        `System Security Level: Level ${level} (Human Approval Enforced)`,
+        'Cloud node uptime: not probed by this server',
+      ],
+      systemHealth: {
+        serverStatus: 'Nominal' as const,
+        activeWebsitesMonitored: 0,
+        pendingTasksCount: pendingQuotations + pendingPosts,
+        socialPostsPublished: publishedPosts,
+      },
     },
-  },
-  {
-    id: 'rep-midday',
-    timeSlot: 'midday' as const,
-    titleEn: '☀️ Midday Health & Site Audit (02:00 PM)',
-    titleHi: '☀️ दोपहर की वेबसाइट और सिस्टम जांच (02:00 PM)',
-    timestamp: new Date().toISOString(),
-    contentEn: 'Sir, midday diagnostics completed. All 3 monitored client web properties responded with HTTP 200 OK within 180ms. Memory consumption is optimal at 14% on the Oracle ARM server.',
-    contentHi: 'सर, दोपहर का सिस्टम डायग्नोस्टिक पूरा हुआ। सभी 3 क्लाइंट वेबसाइटें सक्रिय हैं और प्रतिक्रिया समय 180ms है। सर्वर मेमोरी उपयोग 14% पर पूर्ण सुरक्षित है।',
-    keyInsights: [
-      'Website Uptime: 100% (Response avg: 180ms)',
-      'CPU Load: 14.8% • RAM: 3.4 GB / 24 GB',
-      'No security anomalies or unauthorized access attempts detected.',
-    ],
-    systemHealth: {
-      serverStatus: 'Nominal' as const,
-      activeWebsitesMonitored: 3,
-      pendingTasksCount: 2,
-      socialPostsPublished: 1,
+    {
+      id: 'rep-midday',
+      timeSlot: 'midday' as const,
+      titleEn: '☀️ Midday Health & Site Audit (02:00 PM)',
+      titleHi: '☀️ दोपहर की वेबसाइट और सिस्टम जांच (02:00 PM)',
+      timestamp: new Date().toISOString(),
+      contentEn: `Sir, midday plan. No client website is configured for monitoring on this server, so no HTTP status or response-time probe was performed. Host CPU ${cpuText}, RAM ${ramText}.`,
+      contentHi: `सर, दोपहर की योजना। इस सर्वर पर कोई क्लाइंट वेबसाइट मॉनिटरिंग के लिए कॉन्फ़िगर नहीं है, इसलिए कोई HTTP जांच नहीं की गई।`,
+      keyInsights: [
+        'Website uptime: not measured (no site configured)',
+        `Host CPU: ${cpuText} • RAM: ${ramText}`,
+        'Security anomaly scan: not performed',
+      ],
+      systemHealth: {
+        serverStatus: 'Nominal' as const,
+        activeWebsitesMonitored: 0,
+        pendingTasksCount: 0,
+        socialPostsPublished: publishedPosts,
+      },
     },
-  },
-  {
-    id: 'rep-evening',
-    timeSlot: 'evening' as const,
-    titleEn: '🌇 Evening Social & Growth Pulse (06:30 PM)',
-    titleHi: '🌇 शाम की सोशल मीडिया और ग्रोथ रिपोर्ट (06:30 PM)',
-    timestamp: new Date().toISOString(),
-    contentEn: 'Sir, evening audit complete. Social media drafts verified against Level-4 security gate. Telegram mobile controller active and polling.',
-    contentHi: 'सर, शाम का ऑडिट पूर्ण हुआ। सोशल मीडिया ड्राफ्ट्स लेवल-4 सुरक्षा गेट द्वारा सुरक्षित हैं। टेलीग्राम मोबाइल कंट्रोलर सक्रिय है।',
-    keyInsights: [
-      'Human-in-the-loop gate active',
-      'Targeted Reach: LinkedIn & Twitter/X Developer Audiences',
-      'Next briefing scheduled for tomorrow morning.',
-    ],
-    systemHealth: {
-      serverStatus: 'Nominal' as const,
-      activeWebsitesMonitored: 3,
-      pendingTasksCount: 1,
-      socialPostsPublished: 2,
+    {
+      id: 'rep-evening',
+      timeSlot: 'evening' as const,
+      titleEn: '🌇 Evening Social & Growth Pulse (06:30 PM)',
+      titleHi: '🌇 शाम की सोशल मीडिया और ग्रोथ रिपोर्ट (06:30 PM)',
+      timestamp: new Date().toISOString(),
+      contentEn: `Sir, evening plan. ${publishedPosts} post(s) published, ${pendingPosts} draft(s) still behind the Level-4 approval gate. Reach and impression metrics are not collected by this server.`,
+      contentHi: `सर, शाम की योजना। ${publishedPosts} पोस्ट प्रकाशित, ${pendingPosts} ड्राफ्ट लेवल-4 स्वीकृति गेट पर।`,
+      keyInsights: [
+        'Human-in-the-loop gate active',
+        `Published posts: ${publishedPosts} • Awaiting approval: ${pendingPosts}`,
+        'Reach/impression metrics: not collected',
+      ],
+      systemHealth: {
+        serverStatus: 'Nominal' as const,
+        activeWebsitesMonitored: 0,
+        pendingTasksCount: pendingPosts,
+        socialPostsPublished: publishedPosts,
+      },
     },
-  },
-  {
-    id: 'rep-night',
-    timeSlot: 'night' as const,
-    titleEn: '🌙 Nightly Work Summary & Backup (10:30 PM)',
-    titleHi: '🌙 रात का कार्य सारांश और बैकअप (10:30 PM)',
-    timestamp: new Date().toISOString(),
-    contentEn: 'Sir, today\'s daily work report is complete. Commands executed, memory store synchronized to disk, and daily incremental backup verified. Low-power watchful daemon mode active.',
-    contentHi: 'सर, आज का संपूर्ण कार्य सारांश तैयार है। कमांड्स निष्पादित हुए, मेमोरी स्टोर डिस्क पर सुरक्षित रूप से सिंक हुआ। सिस्टम वॉचफुल मोड में सक्रिय रहेगा।',
-    keyInsights: [
-      'Total Commands Executed: ' + memoryState.stats.totalCommands,
-      'Database & Memory Backup: Saved to jarvis_memory.json',
-      'Scheduled Morning Briefing for 09:00 AM Tomorrow.',
-    ],
-    systemHealth: {
-      serverStatus: 'Nominal' as const,
-      activeWebsitesMonitored: 3,
-      pendingTasksCount: 0,
-      socialPostsPublished: 2,
+    {
+      id: 'rep-night',
+      timeSlot: 'night' as const,
+      titleEn: '🌙 Nightly Work Summary & Backup (10:30 PM)',
+      titleHi: '🌙 रात का कार्य सारांश और बैकअप (10:30 PM)',
+      timestamp: new Date().toISOString(),
+      contentEn: `Sir, nightly plan. ${memoryState.stats.totalCommands} command(s) recorded this session; memory persists to jarvis_memory.json on write. No off-host incremental backup is configured.`,
+      contentHi: `सर, रात की योजना। इस सत्र में ${memoryState.stats.totalCommands} कमांड दर्ज। मेमोरी jarvis_memory.json में सुरक्षित होती है।`,
+      keyInsights: [
+        'Total Commands Executed: ' + memoryState.stats.totalCommands,
+        'Memory store: jarvis_memory.json (local write)',
+        'Off-host backup: not configured',
+      ],
+      systemHealth: {
+        serverStatus: 'Nominal' as const,
+        activeWebsitesMonitored: 0,
+        pendingTasksCount: 0,
+        socialPostsPublished: publishedPosts,
+      },
     },
-  },
-];
+  ];
+}
+
+let proactiveReports = buildProactiveReports();
 
 // ==============================================================================
 // 5. STRICT TRUTH-IN-EXECUTION & REAL MULTI-SOCIAL VERIFICATION ENGINE
@@ -3032,8 +3072,19 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       }
     }
   } else if (intentData.intent === 'check_project') {
-    botReplyText = `📊 *HERMES PROJECT AUDIT*\n\n✅ *Status*: All active repositories inspected.\n• \`ai-freelance-portal\` — Branch main: Clean, 0 uncommitted changes.\n• \`jarvis-hermes-core\` — Oracle VM daemon active, uptime ${oracleCloudState.uptimeHours} hrs.\n\n⚡ All tests green. No blocking regressions found.`;
-    actionData = { type: 'check_project', status: 'clean' };
+    // Report the real working tree. The previous reply hardcoded "All active
+    // repositories inspected", a fixed clean branch, an Oracle VM uptime and
+    // "All tests green" — none of which this handler ever measured.
+    const git = realGitStatus();
+    if (git.success) {
+      botReplyText = git.clean
+        ? `📊 *HERMES PROJECT AUDIT*\n\n*Repository*: this JARVIS working tree.\n• Branch: \`${git.branch ?? 'detached HEAD'}\`\n• Working tree: clean (${git.statusText || 'no changes'})\n\nNote: this checks the local working tree only. Other repositories, the cloud VM and the test suite are not inspected by this command.`
+        : `📊 *HERMES PROJECT AUDIT*\n\n*Repository*: this JARVIS working tree.\n• Branch: \`${git.branch ?? 'detached HEAD'}\`\n• Working tree: *uncommitted changes present*\n\n\`\`\`\n${(git.statusText || '').slice(0, 500)}\n\`\`\``;
+      actionData = { type: 'check_project', status: git.clean ? 'clean' : 'dirty', branch: git.branch };
+    } else {
+      botReplyText = `📊 *HERMES PROJECT AUDIT*\n\n⚠️ Audit unavailable: git could not be queried in this environment.\nReason: ${git.error ?? 'unknown'}`;
+      actionData = { type: 'check_project', status: 'unavailable', error: git.error };
+    }
     inlineKeyboard = {
       inline_keyboard: [
         [{ text: '📝 Create Today\'s Post', callback_data: 'cmd_draft_post' }],
@@ -3144,14 +3195,15 @@ User message: "${clean}".`,
         botReplyText = result.text?.trim() || `Sir, your command "${clean}" was parsed and logged on your cloud node.`;
       } catch (geminiErr: any) {
         console.warn('[Telegram Bot] Gemini fallback:', geminiErr?.message);
-        botReplyText = `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis online on Oracle ARM VM. Command "${clean}" received and recorded.`;
+        botReplyText = `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis server online. Command "${clean}" received and recorded.`;
       }
     } else {
       // Rule-based smart bilingual heuristic
       if (lower.includes('who are you') || lower.includes('तुम कौन हो') || lower.includes('aap kaun ho')) {
-        botReplyText = `I am *HERMES JARVIS*, your autonomous mobile-controlled AI assistant running 24/7 on an Oracle Cloud Always Free ARM VM.`;
+        const host = getLocalHostIdentity();
+        botReplyText = `I am *HERMES JARVIS*, your autonomous mobile-controlled AI assistant. I am running as a server process on this host (${host.hostname}).`;
       } else if (lower.includes('how are you') || lower.includes('kaise ho') || lower.includes('kaisa hai')) {
-        botReplyText = `All systems operating at nominal efficiency, ${memoryState.name || 'Sir'}. CPU load is currently unavailable on this host.`;
+        botReplyText = `All subsystems I can measure are responding, ${memoryState.name || 'Sir'}. CPU load is currently unavailable on this host.`;
       } else if (lower.includes('thank') || lower.includes('धन्यवाद') || lower.includes('shukriya')) {
         botReplyText = `Always at your service, ${memoryState.name || 'Sir'}. Let me know if you need any other tasks executed.`;
       } else {
@@ -3698,22 +3750,41 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
       auditLogsCount: memoryState.auditLogs.length,
       lastPersisted: lastPersistedTimestamp,
     },
-    integrations: {
-      linkedin: {
-        configured: Boolean(process.env.LINKEDIN_ACCESS_TOKEN),
-        authorUrnConfigured: Boolean(process.env.LINKEDIN_AUTHOR_URN),
-        status: process.env.LINKEDIN_ACCESS_TOKEN ? 'CONFIGURED_LIVE' : 'STANDBY_MISSING_CREDENTIALS',
-      },
-      telegram: {
-        configured: Boolean(getCleanTelegramToken()),
-        status: telegramConfig.isLiveConnected ? 'CONNECTED' : 'STANDBY',
-      },
-      oracleCloud: {
-        tier: 'Always Free (₹0 / month)',
-        status: 'RUNNING',
-        cost: '₹0.00 Guaranteed',
-      },
-    },
+    integrations: (() => {
+      // Each entry states what was actually observed in this process. A
+      // credential being present is not evidence that the remote service is
+      // reachable, so `status` distinguishes configured from not configured and
+      // flags when reachability was not probed.
+      const linkedInToken = getDecryptedLinkedInAccessToken();
+      const telegramToken = getCleanTelegramToken();
+      const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+      const localHost = getLocalHostIdentity();
+      return {
+        linkedin: {
+          configured: Boolean(linkedInToken),
+          authorUrnConfigured: Boolean(
+            (memoryState.linkedInConnection?.connected && memoryState.linkedInConnection?.authorUrn) ||
+              process.env.LINKEDIN_AUTHOR_URN
+          ),
+          status: linkedInToken ? 'CONFIGURED_LIVE' : 'STANDBY_MISSING_CREDENTIALS',
+          reachability: 'NOT_PROBED',
+        },
+        telegram: {
+          configured: Boolean(telegramToken),
+          status: telegramConfig.isLiveConnected ? 'CONNECTED' : 'STANDBY',
+          mode: telegramConfig.mode,
+        },
+        oracleCloud: {
+          executionHost: localHost.isOracleLike ? 'Oracle Cloud ARM instance (hostname matched)' : 'unverified — hostname not matched',
+          hostname: localHost.hostname,
+          metricsSource: oracleCloudState.metricsSource,
+          cpuUsage: live?.cpuUsage ?? null,
+          ramUsedGb: live?.ramUsedGb ?? null,
+          sampledAt: oracleCloudState.metricsSampledAt,
+          note: 'Values observed from the local host. Cloud control-plane status is not queried by this server.',
+        },
+      };
+    })(),
     recentAuditLogs: memoryState.auditLogs.slice(0, 15),
   });
 });
@@ -3912,7 +3983,7 @@ app.post('/api/telegram/test-live', async (req: Request, res: Response) => {
 
       const delivery = await deliverTelegramMessage(
         activeTelegramChatId,
-        `🔔 *HERMES JARVIS TEST SIGNAL*\n\nMobile gateway is online and securely authenticated from your web control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Cloud Node*: Oracle Always Free ARM64`,
+        `🔔 *HERMES JARVIS TEST SIGNAL*\n\nTelegram delivery test from the JARVIS control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Sent at*: ${new Date().toISOString()}\n\n_If you can read this, the bot token and chat ID are both valid._`,
       );
 
       return res.json({
@@ -5258,6 +5329,8 @@ app.post('/api/social/platforms/test', async (req: Request, res: Response) => {
 
 // Proactive Routines APIs
 app.get('/api/routines', (req: Request, res: Response) => {
+  // Rebuild on read so the counts reflect current memory, never a boot-time snapshot.
+  proactiveReports = buildProactiveReports();
   res.json({ routines: proactiveReports });
 });
 
@@ -6873,12 +6946,14 @@ app.post('/api/mobile/briefing/generate', async (req: Request, res: Response) =>
         const prompt = `You are HERMES JARVIS. Generate a crisp, articulate, high-density ${language === 'hindi' ? 'Hindi / Hinglish' : 'English'} Morning Briefing for Sir.
 Current time: ${new Date().toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' })}.
 Mobile telemetry data:
-- Battery: ${mobileData.battery?.levelPercent ?? 80}% (${mobileData.battery?.isCharging ? 'Charging' : 'Discharging'})
-- Weather: ${mobileData.weather?.temperatureC ?? 27}°C, ${mobileData.weather?.condition ?? 'Clear'}
-- Notifications: ${mobileData.notifications?.unreadCount ?? 0} unread
-- Calendar: ${mobileData.calendar?.todayEventsCount ?? 0} events today
-- Email: ${mobileData.email?.unreadCount ?? 0} important unread
-- Cloud Node: Oracle ARM VM online, Uptime nominal
+- Battery: ${mobileData.battery?.levelPercent != null ? `${mobileData.battery.levelPercent}% (${mobileData.battery?.isCharging ? 'Charging' : 'Discharging'})` : 'not reported by device'}
+- Weather: ${mobileData.weather?.temperatureC != null ? `${mobileData.weather.temperatureC}°C, ${mobileData.weather?.condition ?? 'condition not reported'}` : 'not reported by device'}
+- Notifications: ${mobileData.notifications?.unreadCount != null ? `${mobileData.notifications.unreadCount} unread` : 'not reported by device'}
+- Calendar: ${mobileData.calendar?.todayEventsCount != null ? `${mobileData.calendar.todayEventsCount} events today` : 'not reported by device'}
+- Email: ${mobileData.email?.unreadCount != null ? `${mobileData.email.unreadCount} important unread` : 'not reported by device'}
+- Cloud Node: not probed by this server — do not claim it is online.
+
+Use only the values above. If a field says "not reported by device", say the figure is unavailable; never substitute a plausible number.
 
 Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hindi/Hinglish (e.g. "सुप्रभात सर..."), or concise English if language is english.`;
 
@@ -6901,16 +6976,30 @@ Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hin
       }
     }
 
-    // Default authentic bilingual briefing fallback
-    const batteryLvl = mobileData?.battery?.levelPercent ?? 78;
-    const temp = mobileData?.weather?.temperatureC ?? 27;
-    const notifs = mobileData?.notifications?.unreadCount ?? 5;
-    const cal = mobileData?.calendar?.todayEventsCount ?? 2;
-    const mail = mobileData?.email?.unreadCount ?? 3;
+    // Default bilingual briefing fallback. Reports only what the device actually
+    // sent; absent fields are named as unavailable instead of defaulted.
+    const batteryLvl = mobileData?.battery?.levelPercent;
+    const temp = mobileData?.weather?.temperatureC;
+    const notifs = mobileData?.notifications?.unreadCount;
+    const cal = mobileData?.calendar?.todayEventsCount;
+    const mail = mobileData?.email?.unreadCount;
+    const anyTelemetry = [batteryLvl, temp, notifs, cal, mail].some((v) => v != null);
+
+    if (!anyTelemetry) {
+      const spokenText = language === 'hindi'
+        ? `सुप्रभात सर। इस समय कोई मोबाइल डिवाइस जुड़ा नहीं है, इसलिए बैटरी, मौसम, notifications, कैलेंडर और ईमेल का डेटा उपलब्ध नहीं है।`
+        : `Good morning, Sir. No mobile device is currently connected, so battery, weather, notification, calendar and email data are unavailable.`;
+      return res.json({
+        success: true,
+        spokenText,
+        source: 'autonomous_local_engine',
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     const spokenText = language === 'hindi'
-      ? `सुप्रभात सर। आपके मोबाइल की बैटरी ${batteryLvl} प्रतिशत है। आज मौसम साफ है और तापमान ${temp} डिग्री है। आपके ${notifs} महत्वपूर्ण notifications, ${cal} शेड्यूल्ड मीटिंग्स, और ${mail} नए ईमेल्स पेंडिंग हैं। सभी क्लाउड सिस्टम्स सामान्य रूप से सक्रिय हैं।`
-      : `Good morning, Sir. Your device battery is at ${batteryLvl} percent. Today's forecast is clear with a temperature of ${temp} degrees. You have ${notifs} notifications, ${cal} calendar events, and ${mail} emails waiting. All cloud nodes are operational.`;
+      ? `सुप्रभात सर। ${batteryLvl != null ? `आपके मोबाइल की बैटरी ${batteryLvl} प्रतिशत है। ` : 'बैटरी डेटा उपलब्ध नहीं है। '}${temp != null ? `तापमान ${temp} डिग्री है। ` : 'मौसम डेटा उपलब्ध नहीं है। '}${notifs != null ? `${notifs} notifications, ` : ''}${cal != null ? `${cal} शेड्यूल्ड मीटिंग्स, ` : ''}${mail != null ? `और ${mail} नए ईमेल्स पेंडिंग हैं।` : ''}`
+      : `Good morning, Sir. ${batteryLvl != null ? `Your device battery is at ${batteryLvl} percent. ` : 'Battery data is unavailable. '}${temp != null ? `The temperature is ${temp} degrees. ` : 'Weather data is unavailable. '}${notifs != null ? `${notifs} notifications, ` : ''}${cal != null ? `${cal} calendar events, ` : ''}${mail != null ? `and ${mail} emails are waiting.` : ''}`;
 
     res.json({
       success: true,
@@ -8554,26 +8643,29 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         };
         memoryState.notes.unshift(newNote);
         persistMemory();
-        spokenResponse = `I have saved your note to Jarvis_Notes in memory and prepared it for download.`;
+        spokenResponse = `I have saved your note to Jarvis_Notes in memory. There is no download endpoint, so this is stored, not exported.`;
         actionExecuted = true;
         actionDetail = { type: 'create_file', title: 'Saved Note', payload: newNote };
         break;
       }
       case 'system_diagnostic': {
-        spokenResponse = `Jarvis Systems Diagnostic: Core online on Oracle ARM VM. Memory banks nominal with ${memoryState.notes.length} notes stored. Audio and speech subsystems operational.`;
+        const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+        const cpuText = live?.cpuUsage != null ? `${live.cpuUsage}%` : 'unavailable';
+        const ramText = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : 'unavailable';
+        spokenResponse = `Jarvis Systems Diagnostic: server process online. ${memoryState.notes.length} note(s) stored. Host CPU ${cpuText}, RAM ${ramText}. Cloud node health and speech-hardware status are not probed from here.`;
         actionExecuted = true;
-        actionDetail = { type: 'system_diagnostic', title: 'Diagnostics Nominal' };
+        actionDetail = { type: 'system_diagnostic', title: 'Diagnostics (measured values only)', payload: { notes: memoryState.notes.length, cpu: cpuText, ram: ramText } };
         break;
       }
       case 'mobile_personal_status':
       case 'morning_briefing': {
         const timeNow = new Date().toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' });
-        spokenResponse = `सुप्रभात सर। अभी समय ${timeNow} है। आपके मोबाइल की बैटरी, मौसम और टास्क शेड्यूलर की स्थिति तैयार है। Mobile Personal Status डैशबोर्ड सक्रिय कर दिया गया है।`;
+        spokenResponse = `सुप्रभात सर। अभी समय ${timeNow} है। मोबाइल ब्रिज डैशबोर्ड खोल रहा हूँ — बैटरी, मौसम और टास्क डेटा केवल तभी दिखेगा जब कोई फ़ोन वास्तव में जुड़ा हो।`;
         actionExecuted = true;
         actionDetail = {
           type: 'open_mobile_personal_status',
           title: 'Mobile Personal Status & Morning Briefing',
-          payload: { intent: 'mobile_personal_status', timeNow },
+          payload: { intent: 'mobile_personal_status', timeNow, note: 'device telemetry shown only when a phone is connected' },
         };
         break;
       }
@@ -8592,8 +8684,8 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const timeStr = now.toLocaleTimeString(isHi ? 'hi-IN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
         const dateStr = now.toLocaleDateString(isHi ? 'hi-IN' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         spokenResponse = isHi
-          ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। सभी सिस्टम सामान्य हैं।`
-          : `The current time is ${timeStr} on ${dateStr}. All systems nominal.`;
+          ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है।`
+          : `The current time is ${timeStr} on ${dateStr}.`;
         actionExecuted = true;
         actionDetail = { type: 'time_inquiry', title: `Current Time: ${timeStr}`, payload: { timeStr, dateStr } };
         break;
