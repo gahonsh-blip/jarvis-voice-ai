@@ -102,5 +102,34 @@ The run's claim of "43 files / 630 tests" is therefore independently confirmed.
   wrong: the owner's text authorized an autonomous merge, but a standing
   repository instruction already reserved the `main` merge for a human decision
   after reading the report, and the narrower human policy governs.
-- The cap-hardening changes (push early, commit the report) are kept — they are
-  orthogonal to the merge question.
+
+---
+
+## 2026-09-20T06:40Z — automation re-deployed with the corrected policy
+
+- New automation: `HERMES JARVIS Autonomous Nightly Window`
+  **`a0cfd035-8712-4e75-b81a-3458a7ff4f41`**, enabled.
+  - cron `05,35 21-23,0-4 * * *`, timezone `Asia/Kolkata`, timeout `1800`.
+  - repos: `https://github.com/gahonsh-blip/jarvis-voice-ai`.
+  - Prompt verified to contain the no-merge rule at deploy time.
+- The superseded, disabled definition `87f65356-...` was deleted so only one
+  window automation exists.
+- Why a new id and not a PATCH: `PATCH /api/automation/v1/{id}` can change
+  `name`, `trigger`, `enabled` and `timeout`, but **not** the prompt. Changing a
+  prompt requires re-creating the automation.
+
+### Known overlap — a human decision
+
+`HERMES JARVIS Nightly Continuation Engineer` (`0455e7b3-f648-4378-a2e7-ff0b443ec850`,
+cron `30 23 * * *` IST, enabled) already works this same repository and branch,
+and its 23:30 IST start overlaps this window's 23:05 slot until the 23:35 kill.
+
+- Both write `feature/hermes-full-completion`. Pushes are plain (never
+  `--force`), so a collision fails the later push rather than destroying work,
+  and the slot reports it honestly.
+- The overlap is ~5 minutes wide and Low impact, but it is duplicated work and a
+  wasted slot if one run loses the race.
+- This was **left as-is**: disabling the user's other automation is their
+  decision, not this agent's. Flagged in the morning report instead.
+  Options for the owner: shift this window's schedule to avoid `23:30`
+  (e.g. `05,35 21-22,0-4 * * *`), or disable one of the two.
