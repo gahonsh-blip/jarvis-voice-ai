@@ -10,7 +10,14 @@ export interface RedactionResult {
   redactedCategories: string[];
 }
 
-const REDACTION_PATTERNS: { category: string; regex: RegExp; placeholder: string }[] = [
+const REDACTION_PATTERNS: {
+  category: string;
+  regex: RegExp;
+  placeholder: string;
+  // Optional custom replacer for patterns that must preserve surrounding text
+  // (e.g. a connection string, where only the password is secret).
+  replacer?: (match: string, ...groups: string[]) => string;
+}[] = [
   // 1. Google API Keys
   {
     category: 'Google API Key',
@@ -116,6 +123,46 @@ const REDACTION_PATTERNS: { category: string; regex: RegExp; placeholder: string
     regex: /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}\b/g,
     placeholder: '[REDACTED_SENDGRID_KEY]',
   },
+  // 17. Google OAuth client secrets (`GOCSPX-...`)
+  {
+    category: 'Google OAuth Client Secret',
+    regex: /\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g,
+    placeholder: '[REDACTED_GOOGLE_OAUTH_SECRET]',
+  },
+  // 18. Discord bot tokens (`<base64 id>.<6-char timestamp>.<27+ char hmac>`)
+  {
+    category: 'Discord Bot Token',
+    regex: /\b[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}\b/g,
+    placeholder: '[REDACTED_DISCORD_TOKEN]',
+  },
+  // 19. GitLab personal/project access tokens (`glpat-...`)
+  {
+    category: 'GitLab Token',
+    regex: /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
+    placeholder: '[REDACTED_GITLAB_TOKEN]',
+  },
+  // 20. DigitalOcean personal access tokens (`dop_v1_` + 64 hex)
+  {
+    category: 'DigitalOcean Token',
+    regex: /\bdop_v1_[a-f0-9]{64}\b/g,
+    placeholder: '[REDACTED_DIGITALOCEAN_TOKEN]',
+  },
+  // 21. AWS secret access keys. These have no fixed prefix, so they are only
+  // unambiguous when labelled; anchor on the label to avoid redacting prose.
+  {
+    category: 'AWS Secret Access Key',
+    regex: /(aws_secret_access_key|secret_access_key)\s*[:=]\s*["']?([A-Za-z0-9/+=]{40})["']?/gi,
+    placeholder: 'AWS_SECRET_ACCESS_KEY: [REDACTED_AWS_SECRET]',
+  },
+  // 22. Database connection-string passwords (`scheme://user:password@host`).
+  // Only the password is secret; the scheme, user and host are preserved so the
+  // line stays useful in a log, mirroring the Password Assignment placeholder.
+  {
+    category: 'Connection String Password',
+    regex: /\b([a-z][a-z0-9+.-]*:\/\/[^:@\s/]+):([^@\s/]+)@/gi,
+    placeholder: '$1:[REDACTED_SECRET]@',
+    replacer: (match, schemeUser, password) => `${schemeUser}:[REDACTED_SECRET]@`,
+  },
 ];
 
 /**
@@ -127,6 +174,9 @@ export function redactSecrets(input: string): string {
 
   for (const item of REDACTION_PATTERNS) {
     text = text.replace(item.regex, (match, ...groups) => {
+      if (item.replacer) {
+        return item.replacer(match, ...(groups as string[]));
+      }
       // If the pattern has group references like '$1: [REDACTED_SECRET]'
       if (item.placeholder.includes('$1') && groups.length > 0) {
         return `${groups[0]}: [REDACTED_SECRET]`;
@@ -192,6 +242,9 @@ export function auditSecrets(input: string): RedactionResult {
       count += matches.length;
       categories.push(item.category);
       text = text.replace(item.regex, (match, ...groups) => {
+        if (item.replacer) {
+          return item.replacer(match, ...(groups as string[]));
+        }
         if (item.placeholder.includes('$1') && groups.length > 0) {
           return `${groups[0]}: [REDACTED_SECRET]`;
         }

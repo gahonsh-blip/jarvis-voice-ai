@@ -4,7 +4,24 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 23:35 IST — git tools no longer fabricate state.
+Last cycle: 2026-09-20 23:55 UTC — second secret-redaction leak sweep (item 54).
+A live probe of the shared redactor (`src/utils/computerOperator/credentialRedactor.ts`)
+found six more token families passing through `redactSecrets` byte-for-byte:
+Google OAuth client secrets (`GOCSPX-`), Discord bot tokens, GitLab access tokens
+(`glpat-`), DigitalOcean personal access tokens (`dop_v1_`), labelled AWS secret
+access keys, and database connection-string passwords
+(`scheme://user:password@host`). Because this function masks any text leaving the
+system (screenshots, terminal streams, logs) and the operator chat path composes
+it, each leaked family was a live exposure. Patterns 17-22 were added, plus an
+optional `replacer` hook so a connection string masks only the password and keeps
+the scheme/user/host. `src/tests/credentialRedactor.test.ts` grew from 15 to 22
+tests (7 new). Negative-validated: 6 of 22 fail against the pre-fix pattern set and
+all 22 pass after. No backlog item could be advanced — every remaining
+`PARTIAL`/`NOT_AVAILABLE` is blocked on hardware or third-party credentials — so
+the cycle was spent on this real bug hunt, as the previous cycle was. Gates
+observed on tip: lint exit 0, vitest 49 files / 731 tests passed, build exit 0.
+
+Previous cycle: 2026-09-20 23:35 IST — git tools no longer fabricate state.
 `realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned
 `success: true` on every git failure, inventing branch `main`, three commit
 subjects and `"Diff tool nominal."` Fixed; the HUD, `/api/tools/git/*` and the
@@ -13,7 +30,7 @@ subjects and `"Diff tool nominal."` Fixed; the HUD, `/api/tools/git/*` and the
 downgraded item 13 from `VERIFIED` to `PARTIAL` — the zero-fake-success claim
 had never actually been audited repo-wide.
 
-Previous cycle: 2026-09-20 23:05 IST — PermissionGuard direct test coverage.
+Earlier cycle: 2026-09-20 23:05 IST — PermissionGuard direct test coverage.
 `src/utils/computerOperator/permissionGuard.ts` is the computer-operator safety
 surface that all Level 1-4 decisions flow through, but it had no test that called
 it directly (only indirect exercise via the engine). Added
@@ -332,7 +349,7 @@ is connected to this environment.
 | 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. |
 | 52 | Permission matrix finalization | `VERIFIED` | `src/utils/hardening/permissionMatrix.ts` holds one ordered matrix that all callers share. The first matching entry wins, so a command containing both `read` and `delete` classifies as destructive. An unrecognised action is refused at level 4 and requires approval — it is never defaulted to safe. `POST /api/security/evaluate` exposes it. 19 unit tests plus E2E. |
 | 53 | Kill-switch testing | `VERIFIED` | `POST /api/security/evaluate` checks the emergency stop before the level check, so an engaged kill switch blocks even a level-1 read action with category `kill_switch`. E2E toggles the switch on, asserts the block, then releases it. `isBlockedByKillSwitch` unit-tested both ways. |
-| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; HUD surfaces that asserted unverified credential/link state; and — 2026-09-20 22:35 IST — a caller-ID masking leak. `maskPhoneNumber` in `src/utils/telephonyPermissions.ts` returned `+9198765*****` for `+91 9876543210`, exposing the country code plus eight subscriber digits, while the sibling helper in `androidBridgeEngine.ts` already masked the same input as `+91 ******3210`. The telephony helper now matches that canonical `+91 ******3210` form (`src/tests/telephonyPermissions.test.ts`, 24 tests; negative-validated — 8 of 24 fail against the old implementation). `HUDHeader.tsx` no longer printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; it polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (15 tests). No credential rotation was performed against live providers here. |
+| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; HUD surfaces that asserted unverified credential/link state; and — 2026-09-20 22:35 IST — a caller-ID masking leak. `maskPhoneNumber` in `src/utils/telephonyPermissions.ts` returned `+9198765*****` for `+91 9876543210`, exposing the country code plus eight subscriber digits, while the sibling helper in `androidBridgeEngine.ts` already masked the same input as `+91 ******3210`. The telephony helper now matches that canonical `+91 ******3210` form (`src/tests/telephonyPermissions.test.ts`, 24 tests; negative-validated — 8 of 24 fail against the old implementation). `HUDHeader.tsx` no longer printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; it polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (22 tests). A second leak sweep on 2026-09-20 23:55 UTC found six more families that passed through unredacted (Google OAuth client secrets, Discord bot tokens, GitLab PATs, DigitalOcean tokens, labelled AWS secret keys, connection-string passwords); they are now covered. No credential rotation was performed against live providers here. |
 | 55 | Real-device E2E test suite | `NOT_AVAILABLE` | No Android device or Windows host is attached in this environment. The server-side legs are covered by E2E tests; the on-device checklist remains in `docs/ANDROID_BRIDGE.md`. |
 | 56 | Offline-mode E2E tests | `VERIFIED` | `src/tests/offlineOnline.e2e.test.ts` boots a real server with `GEMINI_API_KEY` blanked and asserts health, memory read/write round-trip, local intent classification, a verified backup, and that permissions stay enforced offline. 6 offline tests. |
 | 57 | Online-mode E2E tests | `VERIFIED` | Same file. Confirms core endpoints answer, and that each integration status endpoint with `configured: false` never reports `connected: true` or `status: connected`. 2 online tests. |
@@ -379,6 +396,22 @@ is connected to this environment.
    into a chat-rendered operator line. The engine function now composes the
    engine's legacy pattern with the shared engine's patterns, making that path a
    superset. Regression test added to `computerOperatorEngine.test.ts`.
+8. **Six more real token families passed through redaction unchanged.** A second
+   live probe of the shared `redactSecrets` (2026-09-20 23:55 UTC) found Google
+   OAuth client secrets (`GOCSPX-…`), Discord bot tokens
+   (`<id>.<timestamp>.<hmac>`), GitLab access tokens (`glpat-`), DigitalOcean
+   personal access tokens (`dop_v1_` + 64 hex), labelled AWS secret access keys,
+   and database connection-string passwords (`scheme://user:password@host`) all
+   survived byte-for-byte. Because this function masks any text that leaves the
+   system — screenshots, terminal streams, logs — and the operator chat path
+   composes it, each was a live exposure. Patterns 17-22 were added. The
+   connection-string rule uses a new optional `replacer` hook so only the
+   password is masked and the scheme, user and host remain readable in a log. A
+   guard test pins that ordinary dotted prose and versioned URLs are not
+   over-redacted by the Discord-shaped pattern. `src/tests/credentialRedactor.test.ts`
+   grew from 15 to 22 tests (7 new: 6 leak regressions plus 1 over-redaction
+   guard); negative-validated — 6 of 22 fail against the pre-fix pattern set and
+   all 22 pass after.
 
 ---
 
@@ -507,6 +540,11 @@ is connected to this environment.
   physical Android device, a Windows host, live third-party credentials, or an
   external auditor. The cycle was spent on a real bug hunt in the secret
   redaction engine (item 54's subject) and the fix is recorded above.
+- A second redaction cycle (2026-09-20 23:55 UTC) again advanced no backlog item,
+  for the same reason, and again spent the slot on a real bug hunt in the same
+  engine: six further token families leaked unredacted and are now covered.
+  Item 54 stays `PARTIAL` — the pattern scan is wider but still not a proof, and
+  no live credential rotation or third-party audit was performed.
 - The `server.ts` token vault reports `NOT_CONFIGURED` unless `APP_SECRET` or
   `SESSION_SECRET` is set. With no secret, tokens are encrypted under a random
   per-process key and will not survive a restart.

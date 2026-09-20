@@ -78,6 +78,27 @@ hex) is intentionally **not** redacted: it is a public account identifier, and
 masking it would only corrupt legitimate logs. The rotate-able Twilio auth token
 is the secret and is caught by the generic credential patterns.
 
+A second probe (2026-09-20) found six further families that `redactSecrets` left
+untouched, all now covered:
+
+- Google OAuth client secrets (`GOCSPX-…`) and Discord bot tokens
+  (`<id>.<timestamp>.<hmac>`).
+- GitLab access tokens (`glpat-`) and DigitalOcean personal access tokens
+  (`dop_v1_` + 64 hex).
+- Labelled AWS secret access keys. These have no fixed prefix, so the pattern is
+  anchored on the `aws_secret_access_key` / `secret_access_key` label; matching a
+  bare 40-character blob would redact ordinary output.
+- Passwords inside database connection strings
+  (`scheme://user:password@host`). This rule uses a `replacer` hook so only the
+  password is masked and the scheme, user and host remain readable in a log. The
+  Discord-shaped pattern is guarded by a test that ordinary dotted prose such as
+  `node 20.11.0` and versioned URLs are not over-redacted.
+
+`src/tests/credentialRedactor.test.ts` now has 22 tests; 7 were added by this
+probe. Six of those seven fail against the previous pattern set, and the seventh
+is a guard against over-redaction. Negative-validated: reverting only the source
+fix fails exactly those 6.
+
 `.gitignore` must contain a `.env` line and must be UTF-8. The committed file was
 UTF-16, so git honoured none of it; `git check-ignore .env` confirms the current
 file works.
