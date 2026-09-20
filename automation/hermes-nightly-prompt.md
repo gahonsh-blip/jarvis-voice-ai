@@ -8,10 +8,27 @@ The repository is cloned for you at the start of the run. Work in it.
 
 ## Hard constraints — read before anything else
 
-1. **You have a 30-minute wall-clock cap.** Plan ~25 minutes of work and keep
-   ~5 minutes for the report. **The report is the deliverable: a partial honest
-   report is a SUCCESS; a run that edits files and dies before reporting is a
-   FAILURE.** Write the report skeleton first (Phase 0) and fill it in as you go.
+1. **You have a wall-clock cap.** Check `date -u` often and treat the schedule
+   below as binding. **The report is the deliverable: a partial honest report is
+   a SUCCESS; a run that edits files and dies before reporting is a FAILURE.**
+   Write the report skeleton first (Phase 0) and fill it in as you go. If you
+   are past your time budget at any point, stop implementing immediately and go
+   straight to Phase 5 (commit) and Phase 6 (report).
+
+   Budget, measured from run start:
+
+   | By | Phase |
+   | :--- | :--- |
+   | T+5 min | Phase 0 done — dependency install started |
+   | T+8 min | Phase 1 done — target chosen |
+   | T+18 min | Phase 2 done — change written |
+   | T+24 min | Phase 3 done — targeted tests run |
+   | T+27 min | Phase 5 done — committed and pushed |
+   | T+30 min | Phase 6 — report written (**hard stop**) |
+
+   **Setup is expensive.** `npm ci`/`npm install` on this repo takes several
+   minutes. Start it in the background at the very start and continue reading
+   files while it runs — do not sit idle waiting for it.
 2. **NEVER push to `main`/`master`. NEVER merge a PR. NEVER force-push, never
    rewrite history, never delete branches.** Create/use the feature branch
    `feature/hermes-full-completion`. If it already exists, continue on it.
@@ -32,6 +49,10 @@ The repository is cloned for you at the start of the run. Work in it.
    lint, or a failing build, either fix it or revert your change and report the
    repository as left in its previous green state. Never leave the feature branch
    with a known-failing suite and call it done.
+7. **Do not re-do finished work.** The "Bugs found and fixed" section of
+   `docs/COMPLETION_STATUS.md` lists defects that are already fixed and
+   committed. Do not re-investigate or re-fix those. Your job is the *next*
+   thing, not a re-run of last night.
 
 ## Your repository — and what you do NOT own
 
@@ -109,19 +130,38 @@ accuracy. Say plainly in the report that no backlog item could be advanced.
 
 ## Phase 3 — Test, and fix what you find
 
-Run these for real, in this order, and capture the actual output:
+**Run the targeted test for what you changed, not the whole suite.** The full
+suite takes ~20 seconds of test time but the vitest run plus install can push a
+complete verification to several minutes; a full `lint && test && build` gate has
+previously exceeded the entire run window and killed the run before it reported.
+Never let that happen.
+
+Order, with a time limit on each:
 
 ```
-npm run lint
-npx vitest run
-npm run build
+npx vitest run src/tests/<the file you touched>.test.ts    # ~1 min cap
+npm run lint                                                # ~2 min cap
+npm run build                                               # ~3 min cap
 ```
+
+Run the **full** `npx vitest run` only if you have more than ~8 minutes left. If
+you do not, run the targeted tests plus lint, and write in the report:
+
+```
+Tests:   <targeted file> — N passed. FULL SUITE: NOT RUN (time budget)
+```
+
+That is an honest, acceptable report. An aborted full-suite gate that produces no
+report is not.
 
 Note the exact file/test/pass counts you observed — never a remembered number.
 
-For every bug you find: fix it, then **re-run the suite** to prove the fix. If a
-test fails, diagnose it rather than weakening the assertion. Do not delete or
-skip a failing test to get green.
+For every bug you find: fix it, then **re-run the same targeted test** to prove
+the fix. If a test fails, diagnose it rather than weakening the assertion. Do not
+delete or skip a failing test to get green.
+
+If a test times out or hangs, note which one and move on. A hanging test is a
+finding, not a reason to burn the remaining budget.
 
 ## Phase 4 — Update the documentation
 
