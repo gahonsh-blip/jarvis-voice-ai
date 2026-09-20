@@ -4,7 +4,17 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 21:05 IST — Notification privacy honesty fix. Item 4 was
+Last cycle: 2026-09-20 21:35 IST — HUD honesty fix. The header rendered
+`TELEGRAM ONLINE` and `LEVEL 2 SAFE` as literal constants, so it asserted a live
+phone link and a specific safety level regardless of backend state. Both
+indicators now read `/api/telegram/status` (`config.isLiveConnected`, which
+exposes only `botTokenMasked`) and `/api/security` (`currentLevel`), and render
+`OFFLINE`/`UNKNOWN` when the truth is unavailable. `src/utils/hudTelemetry.ts`
+plus `src/tests/hudTelemetry.test.ts` (7 tests) guard the honest-null behaviour;
+negative-validated by injecting a fabricated metric value (3 of 7 tests fail).
+Gates observed: lint exit 0, vitest 46 files / 682 tests passed, build exit 0.
+
+Prior cycle: 2026-09-20 21:05 IST — Notification privacy honesty fix. Item 4 was
 recorded `VERIFIED` on the strength of the *server-side* gating, but the
 sensitive-content matcher itself was broken: the Hindi OTP pattern decoded to the
 garbled literal `ओटगीपीप` rather than `ओटीपी`, so a Hindi OTP notification was
@@ -263,7 +273,7 @@ is connected to this environment.
 | 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. |
 | 52 | Permission matrix finalization | `VERIFIED` | `src/utils/hardening/permissionMatrix.ts` holds one ordered matrix that all callers share. The first matching entry wins, so a command containing both `read` and `delete` classifies as destructive. An unrecognised action is refused at level 4 and requires approval — it is never defaulted to safe. `POST /api/security/evaluate` exposes it. 19 unit tests plus E2E. |
 | 53 | Kill-switch testing | `VERIFIED` | `POST /api/security/evaluate` checks the emergency stop before the level check, so an engaged kill switch blocks even a level-1 read action with category `kill_switch`. E2E toggles the switch on, asserts the block, then releases it. `isBlockedByKillSwitch` unit-tested both ways. |
-| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; and — this cycle — five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged. `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded. The added patterns are covered by `src/tests/credentialRedactor.test.ts` (15 tests). No credential rotation was performed against live providers here. |
+| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; and — this cycle — HUD surfaces that asserted unverified credential/link state. `HUDHeader.tsx` printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; the header now polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (15 tests). No credential rotation was performed against live providers here. |
 | 55 | Real-device E2E test suite | `NOT_AVAILABLE` | No Android device or Windows host is attached in this environment. The server-side legs are covered by E2E tests; the on-device checklist remains in `docs/ANDROID_BRIDGE.md`. |
 | 56 | Offline-mode E2E tests | `VERIFIED` | `src/tests/offlineOnline.e2e.test.ts` boots a real server with `GEMINI_API_KEY` blanked and asserts health, memory read/write round-trip, local intent classification, a verified backup, and that permissions stay enforced offline. 6 offline tests. |
 | 57 | Online-mode E2E tests | `VERIFIED` | Same file. Confirms core endpoints answer, and that each integration status endpoint with `configured: false` never reports `connected: true` or `status: connected`. 2 online tests. |
