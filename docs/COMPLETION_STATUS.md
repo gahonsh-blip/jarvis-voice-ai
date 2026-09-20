@@ -4,7 +4,30 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-21 01:05 IST — zero-fake-success audit widened to the UI and
+Last cycle: 2026-09-21 01:40 IST — zero-fake-success audit reached the host
+telemetry (item 13). `getHostCpuUsagePercent()` in
+`src/utils/hardening/hostTelemetry.ts` read `os.cpuUsage`, which is not a Node
+API on any runtime we can observe (`os.cpuUsage === undefined` on node
+v22.23.2), so that branch was dead code and every CPU reading came from the
+load-average proxy. That proxy divided the 1-minute load average by the core
+count and was never clamped, so a busy/oversubscribed host produced an
+arithmetically impossible utilisation — a real `npx vitest run` of
+`src/tests/hostTelemetry.test.ts` observed `expected 107 to be less than or
+equal to 100`. The HUD (`HUDHeader.tsx`), the Oracle Cloud modal and the spoken
+briefing all render this number as a live fact, so the fix reports a saturated
+host as 100% and removes the dead detection path; `clampCpuPercent()` is
+exported and covered. Guarded by two new assertions in
+`src/tests/hostTelemetry.test.ts` (8 tests total, negative-validated: reverting
+the clamp fails `expected 107 to be 100`).
+
+Still open before item 13 can return to `VERIFIED`: the sweep is text- and
+pattern-driven, so it can only prove the *audited* strings are gone. The
+`SAMPLE_*` fixtures in `mobileStatusEngine.ts` are still sample data rendered
+through `compileMobileStatusData`, and the UI consumes them without a
+"sample data" label — that is an honesty gap, not yet fixed. A tool-by-tool
+inventory of the remaining surfaces has not been completed.
+
+Previous cycle: 2026-09-21 01:05 IST — zero-fake-success audit widened to the UI and
 sample data (item 13). Two more hardcoded claims removed:
 `SecurityMatrixModal.tsx` always rendered `Security Matrix Status: 100%
 Operational` in its footer even when `/api/security` had never answered — it now

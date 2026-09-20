@@ -4,6 +4,24 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-21 01:40 — Host telemetry can no longer report an impossible CPU load
+
+### 🛡️ Truthfulness
+- `getHostCpuUsagePercent()` (`src/utils/hardening/hostTelemetry.ts`) probed
+  `os.cpuUsage`, which is not a Node API (`undefined` on node v22.23.2), so the
+  branch was dead code and every reading came from the load-average proxy. That
+  proxy was unclamped, so an oversubscribed host reported a physically
+  impossible utilisation — a real test run observed **107%**. Values are now
+  clamped to 100%, the dead detection path is removed, and `clampCpuPercent()`
+  is exported.
+
+### 🧪 Tests
+- `src/tests/hostTelemetry.test.ts` — 8 tests (was 6). The clamp is guarded
+  directly; negative-validated: reverting the clamp fails with
+  `expected 107 to be 100`.
+
+---
+
 ## [Unreleased] - 2026-09-20 23:35 — Git tools stop fabricating repository state
 
 ### 🛡️ Truthfulness

@@ -581,3 +581,82 @@ Next Slot:
 My slot-7 commit 96eb599 is an ancestor of the remote head; a concurrent slot pushed
 618c54e (YouTube summarizer extractive-only) on top of it. No force-push was used and
 none was needed.
+
+## 2026-09-21 01:40 IST — WORK slot
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:40
+Window date: 2026-09-21   Window slots completed so far: 2 (this slot)
+
+Completed:
+- #13 Zero-fake-success for all tools — host telemetry surface audited and fixed.
+  `getHostCpuUsagePercent()` (`src/utils/hardening/hostTelemetry.ts`) probed
+  `os.cpuUsage`, which is not a Node API (`undefined` on node v22.23.2), so the
+  branch was dead code and every reading came from the load-average proxy. That
+  proxy divided the 1-minute load average by the core count without clamping, so
+  an oversubscribed host reported an impossible CPU figure — observed live as
+  `expected 107 to be less than or equal to 100` in a real
+  `npx vitest run src/tests/hostTelemetry.test.ts`. Now clamped to 100%, the dead
+  branch removed, `clampCpuPercent()` exported. Evidence:
+  `src/tests/hostTelemetry.test.ts`, 8 tests, 8 passed.
+
+In Progress:
+- #13 — the zero-fake-success sweep is still PARTIAL. The audited surface (git
+  tools, UI, sample data, intent handlers, host telemetry) is honest; a
+  tool-by-tool inventory of the remaining `server_tools.ts` / `server.ts`
+  surfaces is still outstanding.
+
+Remaining:
+- #10 Real Computer Operator actions — synthetic mouse/keyboard NOT_AVAILABLE
+  (no display hardware in this sandbox).
+- Android / device E2E items — no physical device or emulator available.
+- Items 14-60 unchanged this slot.
+
+Bugs Found:
+- Host CPU utilisation could be reported above 100% (observed 107%). Found by
+  running the full suite: an existing guard in `src/tests/hostTelemetry.test.ts`
+  failed with `expected 107 to be less than or equal to 100`. Root cause traced
+  by reading the source — a dead `os.cpuUsage` probe plus an unclamped
+  load-average fallback.
+
+Bugs Fixed:
+- CPU clamp. Verification: `npx vitest run src/tests/hostTelemetry.test.ts`
+  -> 8 passed. Negative validation: replaced `round(Math.min(value,100))` with
+  `round(value)` -> the new assertion FAILED with `expected 107 to be 100`;
+  restored the fix -> 8 passed.
+
+Tests:    772 passed / 772, 55 files (npx vitest run, exit 0)
+Lint:     PASS — `npx tsc --noEmit` (npm run lint), exit 0
+Build:    PASS — `npm run build`, exit 0, dist/server.cjs 833708 bytes
+E2E:      NOT RUN — no device/Android target in this sandbox
+Security: `.env` not staged and not committed; no token/key in the diff. A
+          dedicated audit tool was NOT RUN.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle line; item 13 stays
+               PARTIAL with the new evidence), docs/CHANGELOG.md (new 01:40
+               entry), automation/reports/hermes-window-log.md (this section)
+Branch:  feature/hermes-full-completion
+Commit:  0096510 (fix, rebased onto 2c04ada)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE YET (opened at finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; dist/server.cjs is the verified artifact.
+
+Blocked:
+- #10 synthetic mouse/keyboard input — requires real display/GUI hardware.
+- Android / device E2E items — require a physical device or emulator.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- Continue #13: audit the remaining numeric/telemetry surfaces
+  (`hudTelemetry.ts`, `OracleCloudModal.tsx`, `server.ts` VM-status routes) for
+  other values a reader would take as measured when they are not, since this
+  slot's real bug was in exactly that class.
+
+हिंदी सारांश (एक पंक्ति):
+- होस्ट CPU अब कभी 100% से अधिक नहीं दिखाता — पहले 107% जैसा असंभव आंकड़ा असली
+  दिखता था; मरम्मत और टेस्ट हो गए, पूरा सूट 772/772 हरा।
