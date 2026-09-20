@@ -1,15 +1,14 @@
-# HERMES JARVIS — Autonomous Window Log
+# HERMES JARVIS ŌĆö Autonomous Window Log
 
 Durable, append-only record of the nightly autonomous development window
-(21:00 → 05:00 IST). Each 30-minute slot appends one section. **Never overwrite
-history** — this file is the memory that makes the next slot smarter, alongside
+(21:00 ŌåÆ 05:00 IST). Each 30-minute slot appends one section. **Never overwrite
+history** ŌĆö this file is the memory that makes the next slot smarter, alongside
 `automation/hermes-state` (branch `automation/hermes-state`).
 
 Format per slot:
 
 ```
-## <UTC ISO8601> — slot <n>/16 (<WORK|FINALIZATION>)
-
+## <UTC ISO8601> ŌĆö slot <n>/16 (<WORK|FINALIZATION>)
 - Item worked: #<n> <title>
 - Status: <VERIFIED|PARTIAL|...>
 - Tests: <observed counts or NOT RUN>
@@ -19,21 +18,37 @@ Format per slot:
 
 ---
 
-## 2026-09-20T05:45Z — setup (not a scheduled slot)
+
+## 2026-09-20T19:05Z — slot 7/16 (WORK)
+
+- Item worked: #13 Zero-fake-success for all tools
+- Status: PARTIAL (third widening: UI + sample fixtures + offline intent engine)
+- Tests: full suite 53 files / 760 tests passed; tsc --noEmit clean; build emitted dist/server.cjs
+- Commit: 482b0c4, af6ed6c  Push: ok (feature/hermes-full-completion)
+- Notes / blockers:
+  - `src/components/SecurityMatrixModal.tsx` footer hardcoded `Security Matrix Status: 100% Operational` regardless of `/api/security`; now renders the fetched level or says the state is unavailable.
+  - `src/utils/mobileStatusEngine.ts` `SAMPLE_NOTIFICATIONS` asserted `Always Free ARM VM health check: 100% nominal uptime`; reworded. Remaining gap: `SAMPLE_*` fixtures are rendered by `compileMobileStatusData` as if real and are not labelled as sample data in the UI.
+  - `src/utils/localJarvisEngine.ts`: briefing defaulted permissions to true and all readings to plausible constants (78% battery, 27C, 5 notifications, 3 events, 2 emails); weather inquiry answered 27C/48%/New Delhi with no provider; `how are you` claimed `All systems nominal`. All three fixed.
+  - Guards updated in `toolSurfaceTruthfulness.test.ts`; assertions pinning the old strings rewritten in `localJarvisEngine.test.ts`, `conversationalPipelineRegression.test.ts`, `voiceAndHindiModes.test.ts`.
+  - Negative-validated (restoring `temperatureC ?? 27` fails the telemetry guard); restored after.
+  - Prior-slot guards confirmed still passing: `documentSearchTruthfulness.test.ts` + `gitToolsTruthfulness.test.ts` = 11 tests.
+- Next slot: label or gate the `SAMPLE_*` fixtures in `mobileStatusEngine.ts`, or move to the next non-VERIFIED item.
+
+## 2026-09-20T05:45Z ŌĆö setup (not a scheduled slot)
 
 - Installed the automation definition `HERMES JARVIS Autonomous Nightly Window`
   with cron `05,35 21-23,0-4 * * *` (Asia/Kolkata) and a 1800s run cap.
 - Why slots: the automation platform rejects any `timeout` above 1800 seconds
   (`timeout must not exceed 1800 seconds (30 minutes)`, HTTP 422), so the
   eight-hour window is 16 sequential 30-minute runs rather than one long run.
-- The 04:35 IST slot is the finalization slot (final verify → push → PR →
-  PR opened → human approval required → deploy verification → report).
+- The 04:35 IST slot is the finalization slot (final verify ŌåÆ push ŌåÆ PR ŌåÆ
+  PR opened ŌåÆ human approval required ŌåÆ deploy verification ŌåÆ report).
 - Item worked: none (setup only)
 - Status: NOT_STARTED
 - Tests: NOT RUN
-- Commit: —  Push: —
+- Commit: ŌĆö  Push: ŌĆö
 
-## 2026-09-20T05:55Z — HUMAN POLICY CORRECTION (not a scheduled slot)
+## 2026-09-20T05:55Z ŌĆö HUMAN POLICY CORRECTION (not a scheduled slot)
 
 - The first version of this prompt authorized an automated merge to `main` once
   a checklist of green gates passed. This **violated the owner's explicit
@@ -42,7 +57,7 @@ Format per slot:
 - Action taken by the human-side operator:
   - `automation/hermes-autonomous-window-prompt.md` step 5 rewritten: the
     automation may open/refresh the PR and must stop there. It reports
-    `Main merge: NOT MERGED — awaiting human approval`.
+    `Main merge: NOT MERGED ŌĆö awaiting human approval`.
   - The deployed automation `HERMES JARVIS Autonomous Nightly Window`
     (`87f65356-3a69-4cf5-aa04-82523f7d1b94`) was **disabled**. It can be
     re-enabled via `automation/deploy-hermes-window.sh` once the corrected
@@ -50,7 +65,7 @@ Format per slot:
 - Reason recorded here so a future slot does not "helpfully" reintroduce the
   merge step.
 
-## 2026-09-20T06:20Z — slot 1 (WORK, manual verification dispatch)
+## 2026-09-20T06:20Z ŌĆö slot 1 (WORK, manual verification dispatch)
 
 - Item worked: #54 Secret/token protection audit (remains `PARTIAL`; this slot
   closed four real redaction gaps, not the whole item)
@@ -65,10 +80,10 @@ Format per slot:
 - Tests: `credentialRedactor.test.ts` +39 lines, `computerOperatorEngine.test.ts`
   +14 lines
 - Docs: `docs/COMPLETION_STATUS.md`, `docs/SECURITY.md`
-- Commit: `70439da` → `70952e5`  Push: ok (origin/feature/hermes-full-completion)
+- Commit: `70439da` ŌåÆ `70952e5`  Push: ok (origin/feature/hermes-full-completion)
 - Slot outcome: the run was **killed by the 1800s platform cap** during the
   push phase and reported FAILED, but the push had already completed. The cut
-  happened after the push, before the report — exactly the failure mode the
+  happened after the push, before the report ŌĆö exactly the failure mode the
   prompt warns about.
 
 ### Independent re-verification by the deploying agent (same day)
@@ -89,7 +104,7 @@ The run's claim of "43 files / 630 tests" is therefore independently confirmed.
   installs dependencies explicitly and up front so the budget is spent on work,
   not on an untracked dependency install.
 
-## 2026-09-20T06:40Z — conflict resolution (not a scheduled slot)
+## 2026-09-20T06:40Z ŌĆö conflict resolution (not a scheduled slot)
 
 - Two branches diverged on this file: the human policy correction (`f94be0f`,
   removing automated merge-to-main) and the deploying agent's cap-hardening
@@ -97,7 +112,7 @@ The run's claim of "43 files / 630 tests" is therefore independently confirmed.
   rather than one overwriting the other.
 - Policy now in force: **the automation never merges to `main`.** It opens a
   conflict-free, non-draft PR with the observed gate results and reports
-  `Main merge: NOT MERGED — awaiting human approval`.
+  `Main merge: NOT MERGED ŌĆö awaiting human approval`.
 - The deploying agent accepts this correction. The merge step it authored was
   wrong: the owner's text authorized an autonomous merge, but a standing
   repository instruction already reserved the `main` merge for a human decision
@@ -105,7 +120,7 @@ The run's claim of "43 files / 630 tests" is therefore independently confirmed.
 
 ---
 
-## 2026-09-20T06:40Z — automation re-deployed with the corrected policy
+## 2026-09-20T06:40Z ŌĆö automation re-deployed with the corrected policy
 
 - New automation: `HERMES JARVIS Autonomous Nightly Window`
   **`a0cfd035-8712-4e75-b81a-3458a7ff4f41`**, enabled.
@@ -118,7 +133,7 @@ The run's claim of "43 files / 630 tests" is therefore independently confirmed.
   `name`, `trigger`, `enabled` and `timeout`, but **not** the prompt. Changing a
   prompt requires re-creating the automation.
 
-### Known overlap — a human decision
+### Known overlap ŌĆö a human decision
 
 `HERMES JARVIS Nightly Continuation Engineer` (`0455e7b3-f648-4378-a2e7-ff0b443ec850`,
 cron `30 23 * * *` IST, enabled) already works this same repository and branch,
@@ -137,7 +152,7 @@ and its 23:30 IST start overlaps this window's 23:05 slot until the 23:35 kill.
 
 ---
 
-## 2026-09-20 21:05 IST — WORK slot 2/16
+## 2026-09-20 21:05 IST ŌĆö WORK slot 2/16
 
 - **Slot:** WORK (scheduled fire `05 21 * * *` IST). Window date 2026-09-20.
 - **Selected item:** #4 Real Android notifications integration (server-side
@@ -145,12 +160,12 @@ and its 23:30 IST start overlaps this window's 23:05 slot until the 23:35 kill.
   fixed a real defect in that filter and gave it direct coverage.
 
 ### Completed
-- **#4** — Fixed a garbled Hindi OTP matcher in
+- **#4** ŌĆö Fixed a garbled Hindi OTP matcher in
   `src/utils/mobileNotificationPrivacy.ts`. The pattern decodes to garbled
   Devanagari (not `OTP`), so a Hindi OTP notification was **not** classified as
   sensitive and its body could be exposed through the bridge. The matcher is
   corrected and the alternate variant added. Evidence:
-  `src/tests/mobileNotificationPrivacy.test.ts` (39 tests) — the Hindi-OTP test
+  `src/tests/mobileNotificationPrivacy.test.ts` (39 tests) ŌĆö the Hindi-OTP test
   is **negative-validated** (reverting the matcher fails it).
 - Removed a dead ternary in `exposeNotificationContent` (clarity only;
   behaviour identical for non-empty previews).
@@ -167,16 +182,16 @@ and its 23:30 IST start overlaps this window's 23:05 slot until the 23:35 kill.
 - `npm run build`: exit 0; `dist/server.cjs` 815,749 bytes.
 
 ### Blocked (unchanged from slot 1)
-- #1, #2, #50, #55 — physical Android device. #8 — Windows host.
+- #1, #2, #50, #55 ŌĆö physical Android device. #8 ŌĆö Windows host.
 
 ### Next slot
 - #14 GitHub automation, or the next non-`VERIFIED` item per the mandated order.
 
 ---
 
-## Slot — 2026-09-20 21:35 IST (WORK)
+## Slot ŌĆö 2026-09-20 21:35 IST (WORK)
 
-**Item:** #54 Secret/token protection audit (HUD honesty slice) — PARTIAL
+**Item:** #54 Secret/token protection audit (HUD honesty slice) ŌĆö PARTIAL
 
 This slot continued the honesty audit of surfaces that assert unverified state.
 The completion-status doc already records the credential-redaction work; what
@@ -187,9 +202,9 @@ remained was the HUD asserting state it had not checked.
 response. The header therefore claimed a live phone link and a specific safety
 level even when `isLiveConnected` was false or the security level differed.
 
-**Fixed:** both indicators now poll the real endpoints —
+**Fixed:** both indicators now poll the real endpoints ŌĆö
 `/api/telegram/status` (`config.isLiveConnected`) and `/api/security`
-(`currentLevel`) — and render `TELEGRAM OFFLINE`/`TELEGRAM UNKNOWN` and
+(`currentLevel`) ŌĆö and render `TELEGRAM OFFLINE`/`TELEGRAM UNKNOWN` and
 `LEVEL <n>`/`UNKNOWN` when the truth is not available. Raw bot tokens are not
 exposed: the endpoint returns `botTokenMasked` only.
 
@@ -199,15 +214,15 @@ restored. The test guards the honest-null behaviour, not just the happy path.
 
 **Evidence:** `src/utils/hudTelemetry.ts`, `src/components/HUDHeader.tsx`,
 `src/tests/hudTelemetry.test.ts` (7 tests).
-**Gates:** lint (tsc --noEmit) exit 0 · vitest 46 files / 682 tests passed ·
+**Gates:** lint (tsc --noEmit) exit 0 ┬Ę vitest 46 files / 682 tests passed ┬Ę
 build exit 0, `dist/server.cjs` emitted.
-**Security:** `git check-ignore -v .env` → `.gitignore:4:.env`; working tree clean.
+**Security:** `git check-ignore -v .env` ŌåÆ `.gitignore:4:.env`; working tree clean.
 **Not verified:** the browser-side indicator rendering was not exercised in a
 real browser here (no DOM run); only the parsing/formatting logic is unit-tested.
 No credential rotation was performed against live providers.
-## Slot — 2026-09-20 21:35 IST (WORK, fire #3)
+## Slot ŌĆö 2026-09-20 21:35 IST (WORK, fire #3)
 
-**Item:** #54 Secret/token protection audit — PARTIAL (no new code slice this slot)
+**Item:** #54 Secret/token protection audit ŌĆö PARTIAL (no new code slice this slot)
 
 **What happened.** This slot spent its budget on a real branch/state integrity
 problem rather than new feature code, because the tree it inherited was not in
@@ -224,11 +239,11 @@ would have been lost when it was torn down.
 **Fixed:** committed the outstanding `docs/COMPLETION_STATUS.md` edit as
 `354994a` and pushed the branch, which carried all three commits to the remote
 (fast-forward onto `d106c73`). Confirmed by `git ls-remote origin
-refs/heads/feature/hermes-full-completion` → `354994a…`. The HUD honesty work is
+refs/heads/feature/hermes-full-completion` ŌåÆ `354994aŌĆ”`. The HUD honesty work is
 now durably on the remote.
 
 **State-branch collision:** the `automation/hermes-state` branch advanced twice
-while this slot ran (`a8765f4` → `f46dc88` from the 21:05 fire). The first two
+while this slot ran (`a8765f4` ŌåÆ `f46dc88` from the 21:05 fire). The first two
 push attempts were correctly rejected as non-fast-forward; the slot did not
 force-push and did not rewrite history. State was re-based onto the current
 remote tip and published as `17decb8`.
@@ -241,14 +256,14 @@ and `operatorChatIntegration.ts` all contain redaction logic that has not been
 read line-by-line for leak paths.
 
 **Gates:** NOT RUN in this slot. No source file was changed, so no suite was
-executed. The previously observed results (lint exit 0 · vitest 46 files /
-682 tests · build exit 0) are carried over from the 21:05 fire and are reported
+executed. The previously observed results (lint exit 0 ┬Ę vitest 46 files /
+682 tests ┬Ę build exit 0) are carried over from the 21:05 fire and are reported
 here as inherited, not re-observed.
 
 **Security:** no token written to any file; the token appeared only inside the
 git remote URL. No force-push, no history rewrite, no branch deletion, `main`
 untouched.
-## Slot — 2026-09-20 21:35 IST (WORK, fire #3) — CORRECTION
+## Slot ŌĆö 2026-09-20 21:35 IST (WORK, fire #3) ŌĆö CORRECTION
 
 The "push-integrity finding" written immediately above is **withdrawn as
 unverified**. It claimed the previous slot's commits were not on the remote and
@@ -276,7 +291,7 @@ Two observations actually contradict the original finding:
 **Conclusion:** there is no verified evidence that the previous slot fabricated a
 push. The previous slot's push claim is consistent with what I can observe; I was
 wrong to call it false. I did not run `git merge-base --is-ancestor` before
-writing the first finding and must not have written it — that is exactly the
+writing the first finding and must not have written it ŌĆö that is exactly the
 fabrication this window forbids, committed while auditing others for dishonesty.
 
 **What is still true and useful:** this repository has only a `main` fetch
@@ -285,19 +300,19 @@ refspec, so any slot that judges remote state from
 be checked with `git ls-remote` or an explicit refspec fetch. That is a real,
 reproducible trap and is the durable result of this slot.
 
-**State branch:** genuinely was behind (`f46dc88` → `17decb8` from the concurrent
+**State branch:** genuinely was behind (`f46dc88` ŌåÆ `17decb8` from the concurrent
 21:05 fire). The two rejected pushes were real non-fast-forward rejections; no
 force-push was used. That part stands.
 
 **Gates:** NOT RUN. No source file changed this slot.
 ---
 
-HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+HERMES JARVIS ŌĆö AUTONOMOUS WINDOW REPORT
 Slot:        WORK  |  IST time: 22:05
 Window date: 2026-09-20   Window slots completed so far: 4
 
 Completed:
-- #10 Real Computer Operator actions (file routes) — `server_tools.ts`
+- #10 Real Computer Operator actions (file routes) ŌĆö `server_tools.ts`
   `safeResolvePath` confirmed containment with `absolute.startsWith(PROJECT_ROOT)`.
   A string prefix is not a directory boundary, so `../jarvis-voice-ai-EXT/x`
   resolved outside the workspace and passed the guard. Now segment-checked
@@ -306,11 +321,11 @@ Completed:
   by reverting the fix (4 of 9 fail).
 
 In Progress:
-- #54 Secret/token protection audit — `PARTIAL`, carried from prior slots. No
+- #54 Secret/token protection audit ŌĆö `PARTIAL`, carried from prior slots. No
   credential work this slot; nothing new observed.
 
 Remaining:
-- #25/#26 social auth + platform API, #30 real Telegram delivery — all need live
+- #25/#26 social auth + platform API, #30 real Telegram delivery ŌĆö all need live
   provider credentials this sandbox does not have. #1/#2/#50/#55 need an Android
   device; #8 needs a Windows host.
 
@@ -324,36 +339,36 @@ Bugs Fixed:
 
 Tests:    691 passed / 47 files (npx vitest run, 20.30s)
 Lint:     exit 0 (tsc --noEmit)
-Build:    exit 0 — dist/server.cjs 815,943 bytes
+Build:    exit 0 ŌĆö dist/server.cjs 815,943 bytes
 E2E:      NOT RUN separately this slot (the suite's E2E files ran inside the 691)
-Security: NOT RUN — no external audit tooling; git check-ignore not re-run this slot
+Security: NOT RUN ŌĆö no external audit tooling; git check-ignore not re-run this slot
 
 Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md,
                automation/reports/hermes-window-log.md
 Branch:  feature/hermes-full-completion
 Commits: e594ad2 (fix + regression test), 6a57558 (docs + this report)
-Push:    succeeded — origin/feature/hermes-full-completion 9190b9b..6a57558; also
+Push:    succeeded ŌĆö origin/feature/hermes-full-completion 9190b9b..6a57558; also
          automation/hermes-state c8d76ee..93c84e7
 
 PR:         none opened this slot
-Main merge: NOT MERGED — awaiting human approval (never auto-merge)
-Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+Main merge: NOT MERGED ŌĆö awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED ŌĆö no deployment target or hosting integration present
             in this environment; the verified artifact is the deployment unit
 
 Blocked:
-- #1/#2/#50/#55 — physical Android device
-- #8 — Windows host
-- #25/#26/#30 — live provider credentials
+- #1/#2/#50/#55 ŌĆö physical Android device
+- #8 ŌĆö Windows host
+- #25/#26/#30 ŌĆö live provider credentials
 
 Human Approval Required:
 - None this slot.
 
 Next Slot:
-- #54 Secret/token protection audit — continue the credential-pattern audit; it is
+- #54 Secret/token protection audit ŌĆö continue the credential-pattern audit; it is
   the highest non-hardware item still `PARTIAL`.
 
-हिंदी सारांश (एक पंक्ति):
-- वर्कस्पेस पाथ कंटेनमेंट बग ठीक किया गया; lint, tests और build सभी पास।
+Óż╣Óż┐ÓżéÓż”ÓźĆ ÓżĖÓżŠÓż░ÓżŠÓżéÓżČ (ÓżÅÓżĢ Óż¬ÓżéÓżĢÓźŹÓżżÓż┐):
+- ÓżĄÓż░ÓźŹÓżĢÓżĖÓźŹÓż¬ÓźćÓżĖ Óż¬ÓżŠÓżź ÓżĢÓżéÓż¤ÓźćÓż©Óż«ÓźćÓżéÓż¤ Óż¼ÓżŚ ÓżĀÓźĆÓżĢ ÓżĢÓż┐Óż»ÓżŠ ÓżŚÓż»ÓżŠ; lint, tests ÓżöÓż░ build ÓżĖÓżŁÓźĆ Óż¬ÓżŠÓżĖÓźż
 
 ---
 
@@ -370,12 +385,12 @@ confirms the trap recorded by slot 3.
 
 ## Slot 2026-09-20 23:05 IST (WORK, slot 5)
 
-HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+HERMES JARVIS ŌĆö AUTONOMOUS WINDOW REPORT
 Slot:        WORK  |  IST time: 23:05
 Window date: 2026-09-20   Window slots completed so far: 5
 
 Completed:
-- #10 Real Computer Operator actions — added direct, negative-validated test
+- #10 Real Computer Operator actions ŌĆö added direct, negative-validated test
   coverage for the computer-operator permission gate (the Level 1-4 safety
   surface). New file: src/tests/permissionGuard.test.ts (9 tests).
   Evidence: npx vitest run src/tests/permissionGuard.test.ts -> 1 file / 9 tests
@@ -383,21 +398,21 @@ Completed:
   security-bypass guard -> 1 failed / 8 passed; restore -> 9 passed.
 
 In Progress:
-- #10 remains VERIFIED (subset) — the synthetic mouse/keyboard leg is still
+- #10 remains VERIFIED (subset) ŌĆö the synthetic mouse/keyboard leg is still
   NOT_AVAILABLE (no desktop input device in this sandbox).
 
 Remaining:
-- #1 Android Bridge — BLOCKED (no physical Android device attached).
-- #50/#55 hands-free Android control + real-device E2E — NOT_AVAILABLE (hardware).
-- #51 Complete security audit — PARTIAL; #54 Secret/token protection audit —
-  PARTIAL; #60 Final documentation — PARTIAL.
+- #1 Android Bridge ŌĆö BLOCKED (no physical Android device attached).
+- #50/#55 hands-free Android control + real-device E2E ŌĆö NOT_AVAILABLE (hardware).
+- #51 Complete security audit ŌĆö PARTIAL; #54 Secret/token protection audit ŌĆö
+  PARTIAL; #60 Final documentation ŌĆö PARTIAL.
 
 Bugs Found:
 - No production bug this slot. Inspected the one plausible latent risk: a
   permanently blocked action (finance / security bypass) returns
   allowed: false, requiresHumanApproval: false. A caller that branched on
   requiresHumanApproval first could read that as "safe to proceed". Checked
-  the only caller, computerOperatorEngine.ts:158-187 — it branches on allowed
+  the only caller, computerOperatorEngine.ts:158-187 ŌĆö it branches on allowed
   first, so the action becomes BLOCKED. Not a bug; now pinned by a test.
 
 Bugs Fixed:
@@ -414,27 +429,27 @@ Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 10 row),
                docs/CHANGELOG.md
 Branch:  feature/hermes-full-completion
 Commit:  2858f23 (test) + 447c375 (docs+report) + e861ab5 (report ref fix)
-Push:    succeeded — test 4c8e6ce..2858f23, docs 5e43c3f..e861ab5 on feature/hermes-full-completion; state 98b2df4..f0a2c1c on automation/hermes-state. No force-push. Remote tip == local HEAD (verified).
+Push:    succeeded ŌĆö test 4c8e6ce..2858f23, docs 5e43c3f..e861ab5 on feature/hermes-full-completion; state 98b2df4..f0a2c1c on automation/hermes-state. No force-push. Remote tip == local HEAD (verified).
 
 PR:         not opened/refreshed this slot (work slot, not finalization)
-Main merge: NOT MERGED — awaiting human approval (never auto-merge)
-Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+Main merge: NOT MERGED ŌĆö awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED ŌĆö no deployment target or hosting integration is
             present in this environment; the verified artifact
             (dist/server.cjs, 816,011 bytes) is the deployment unit available.
 
 Blocked:
-- #1 Android Bridge — requires a physical Android device.
-- #55 real-device E2E — requires an Android device or Windows host.
+- #1 Android Bridge ŌĆö requires a physical Android device.
+- #55 real-device E2E ŌĆö requires an Android device or Windows host.
 
 Human Approval Required:
 - None this slot.
 
 Next Slot:
-- #51/#54 security audit continuation — the highest non-hardware item still
+- #51/#54 security audit continuation ŌĆö the highest non-hardware item still
   PARTIAL; audit a further credential/secret pattern set.
 
-हिंदी सारांश (एक पंक्ति):
-- कंप्यूटर ऑपरेटर के सुरक्षा गार्ड के लिए 9 नए टेस्ट जोड़े गए, नेगेटिव-वैलिडेट किए; lint, tests और build सभी पास।
+Óż╣Óż┐ÓżéÓż”ÓźĆ ÓżĖÓżŠÓż░ÓżŠÓżéÓżČ (ÓżÅÓżĢ Óż¬ÓżéÓżĢÓźŹÓżżÓż┐):
+- ÓżĢÓżéÓż¬ÓźŹÓż»ÓźéÓż¤Óż░ ÓżæÓż¬Óż░ÓźćÓż¤Óż░ ÓżĢÓźć ÓżĖÓźüÓż░ÓżĢÓźŹÓżĘÓżŠ ÓżŚÓżŠÓż░ÓźŹÓżĪ ÓżĢÓźć Óż▓Óż┐ÓżÅ 9 Óż©ÓżÅ Óż¤ÓźćÓżĖÓźŹÓż¤ Óż£ÓźŗÓżĪÓż╝Óźć ÓżŚÓżÅ, Óż©ÓźćÓżŚÓźćÓż¤Óż┐ÓżĄ-ÓżĄÓźłÓż▓Óż┐ÓżĪÓźćÓż¤ ÓżĢÓż┐ÓżÅ; lint, tests ÓżöÓż░ build ÓżĖÓżŁÓźĆ Óż¬ÓżŠÓżĖÓźż
 
 ---
 
@@ -450,7 +465,7 @@ non-fast-forward. Resolution: fetch the owned branch with an explicit refspec,
 git reset --hard origin/feature/hermes-full-completion, then git cherry-pick
 the slot's single commit onto the new tip. No force-push was used. Also note:
 git rebase fails in this sandbox unless git config user.name/user.email are
-set locally first — set them before any history operation.
+set locally first ŌĆö set them before any history operation.
 
 Slot 5 (22:35 IST) note (this slot):
 
@@ -461,13 +476,13 @@ push was rejected non-fast-forward. Correct procedure, now confirmed twice:
 `git fetch origin feature/hermes-full-completion:refs/remotes/origin/feature/hermes-full-completion`
 (explicit refspec), then `git reset --hard` to that ref and `cherry-pick` the
 local work. Also: the baseline gates measured before that fetch were meaningless
-(13 files/226 tests on the stale tree vs 47 files/691 tests on the real one) —
+(13 files/226 tests on the stale tree vs 47 files/691 tests on the real one) ŌĆö
 never trust pre-fetch counts. And `git identity` was unset in this fresh sandbox;
 `git config user.name/user.email` had to be set before any commit.
 
 ---
 
-### Correction — slot 5, 22:35 IST (append-only; supersedes the counts above)
+### Correction ŌĆö slot 5, 22:35 IST (append-only; supersedes the counts above)
 
 The slot-5 section above recorded `48 files / 715 tests passed`. That was
 measured **before** the report commit was rebased onto the real remote tip.
@@ -475,10 +490,10 @@ The remote had advanced to `2858f23` (another slot's computer-operator
 `PermissionGuard` test file), which the rebase pulled in. The counts measured on
 the **pushed** tree `5e43c3f` are:
 
-- `npm run lint` (`tsc --noEmit`) — exit 0
-- `npx vitest run` — **49 files / 724 tests passed**
-- `npm run build` — exit 0, `dist/server.cjs` 816011 bytes
-- `git check-ignore -v .env` — `.gitignore:4:.env` (ignored); no secret in diff
+- `npm run lint` (`tsc --noEmit`) ŌĆö exit 0
+- `npx vitest run` ŌĆö **49 files / 724 tests passed**
+- `npm run build` ŌĆö exit 0, `dist/server.cjs` 816011 bytes
+- `git check-ignore -v .env` ŌĆö `.gitignore:4:.env` (ignored); no secret in diff
 
 The `sk-`/`ghp_`/`AIza` strings that appear in the diff are synthetic fixtures in
 `src/tests/credentialRedactor.test.ts`, not real credentials.
@@ -489,13 +504,13 @@ was rebased cleanly and pushed as `2858f23..5e43c3f`. No force-push.
 
 ---
 
-# HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+# HERMES JARVIS ŌĆö AUTONOMOUS WINDOW REPORT
 
 Slot:        WORK  |  IST time: 23:35 (fire #6)
 Window date: 2026-09-20   Window slots completed so far: 5 (this run makes 6)
 
 Completed:
-- #13 Zero-fake-success for all tools — audited the git tool surface and found the
+- #13 Zero-fake-success for all tools ŌĆö audited the git tool surface and found the
   claim did not hold. `realGitStatus`, `realGitLog`, `realGitDiff` in
   `server_tools.ts` returned `success: true` on EVERY git failure, inventing
   branch `main`, three commit subjects ("...permission-gated autonomous
@@ -505,16 +520,16 @@ Completed:
   `src/components/AutonomousToolsModal.tsx` (diff render no longer passes an
   empty string off as "no uncommitted differences"). Evidence:
   `src/tests/gitToolsTruthfulness.test.ts`, 6 tests, 6 passed. Item status
-  deliberately DOWNGRADED from VERIFIED to PARTIAL — the repo-wide audit is not
+  deliberately DOWNGRADED from VERIFIED to PARTIAL ŌĆö the repo-wide audit is not
   finished.
 
 In Progress:
-- #13 Zero-fake-success for all tools — git surface done; every other tool
+- #13 Zero-fake-success for all tools ŌĆö git surface done; every other tool
   surface in `server_tools.ts` / `server.ts` still needs the same audit before
   this can return to VERIFIED.
 
 Remaining:
-- #10 Real Computer Operator actions — synthetic mouse/keyboard still
+- #10 Real Computer Operator actions ŌĆö synthetic mouse/keyboard still
   NOT_AVAILABLE (no hardware); permission-gate coverage already added 23:05.
 - Backlog items 14-60 unchanged this slot.
 
@@ -529,10 +544,10 @@ Bugs Fixed:
   4 of 6 FAILED (`expected true to be false` on the failure-path assertions),
   restored the fix -> 6 passed.
 
-Tests:    730 passed / 730, 50 files (npx vitest run) — includes the 6 new tests
-Lint:     PASS — `npm run lint` (tsc --noEmit), exit 0
-Build:    PASS — `npm run build`, exit 0, dist/server.cjs 816197 bytes
-E2E:      NOT RUN — no device/Android target in this sandbox
+Tests:    730 passed / 730, 50 files (npx vitest run) ŌĆö includes the 6 new tests
+Lint:     PASS ŌĆö `npm run lint` (tsc --noEmit), exit 0
+Build:    PASS ŌĆö `npm run build`, exit 0, dist/server.cjs 816197 bytes
+E2E:      NOT RUN ŌĆö no device/Android target in this sandbox
 Security: `.env` not staged and not committed; no token/key in the diff. A
           dedicated audit tool was NOT RUN.
 
@@ -543,13 +558,13 @@ Commit:  ff8f1da (fix) + docs commit
 Push:    succeeded -> origin/feature/hermes-full-completion
 
 PR:         NONE YET (opened at finalization slot)
-Main merge: NOT MERGED — awaiting human approval (never auto-merge)
-Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+Main merge: NOT MERGED ŌĆö awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED ŌĆö no deployment target or hosting integration present
             in this environment; dist/server.cjs is the verified artifact.
 
 Blocked:
-- #10 synthetic mouse/keyboard input — requires real display/GUI hardware.
-- Android / device E2E items — require a physical device or emulator.
+- #10 synthetic mouse/keyboard input ŌĆö requires real display/GUI hardware.
+- Android / device E2E items ŌĆö require a physical device or emulator.
 
 Human Approval Required:
 - None this slot.
@@ -559,6 +574,6 @@ Next Slot:
   `server.ts` for other fabricated-success fallbacks, since that is where this
   slot's real bug was found.
 
-हिंदी सारांश (एक पंक्ति):
-- गिट टूल्स अब असफल होने पर झूठी सफलता और नकली ब्रांच/कमिट नहीं दिखाते — असली
-  त्रुटि रिपोर्ट करते हैं; 6 नए टेस्ट पास, पूरा सूट 730/730 हरा।
+Óż╣Óż┐ÓżéÓż”ÓźĆ ÓżĖÓżŠÓż░ÓżŠÓżéÓżČ (ÓżÅÓżĢ Óż¬ÓżéÓżĢÓźŹÓżżÓż┐):
+- ÓżŚÓż┐Óż¤ Óż¤ÓźéÓż▓ÓźŹÓżĖ ÓżģÓż¼ ÓżģÓżĖÓż½Óż▓ Óż╣ÓźŗÓż©Óźć Óż¬Óż░ ÓżØÓźéÓżĀÓźĆ ÓżĖÓż½Óż▓ÓżżÓżŠ ÓżöÓż░ Óż©ÓżĢÓż▓ÓźĆ Óż¼ÓźŹÓż░ÓżŠÓżéÓżÜ/ÓżĢÓż«Óż┐Óż¤ Óż©Óż╣ÓźĆÓżé Óż”Óż┐Óż¢ÓżŠÓżżÓźć ŌĆö ÓżģÓżĖÓż▓ÓźĆ
+  ÓżżÓźŹÓż░ÓźüÓż¤Óż┐ Óż░Óż┐Óż¬ÓźŗÓż░ÓźŹÓż¤ ÓżĢÓż░ÓżżÓźć Óż╣ÓźłÓżé; 6 Óż©ÓżÅ Óż¤ÓźćÓżĖÓźŹÓż¤ Óż¬ÓżŠÓżĖ, Óż¬ÓźéÓż░ÓżŠ ÓżĖÓźéÓż¤ 730/730 Óż╣Óż░ÓżŠÓźż
