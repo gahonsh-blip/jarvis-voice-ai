@@ -3,6 +3,36 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-21 03:07 (21:37 UTC) — approval and routine surfaces no longer assert unmeasured state
+
+### 🛡️ Truthfulness
+- `PermissionGateway.tsx` rendered a fixed `Payload Checksum: Verified SHA-Safe`
+  badge on every approval card. Nothing hashed the payload, so the badge told a
+  human approving an external action that an integrity check had passed when no
+  check existed. It now renders `payloadChecksumLine(activeRequest.contentChanges)`,
+  which computes an FNV-1a32 over the actual payload and labels it
+  `(local integrity marker, not SHA-2)` — it does not claim cryptographic
+  verification it cannot perform.
+- `ProactiveRoutinesModal.tsx` hardcoded `Telegram Push Ready` and
+  `Cron Scheduler: Active on Oracle ARM Node` in its footer regardless of whether
+  any bot or daemon was reachable. It now reads `/api/telegram/status` and
+  `/api/daemon/status` and renders `UNKNOWN` until each answers, then
+  `live-connected` / `NOT CONNECTED` and `Cron Scheduler: running` / `not running`.
+- `BlueprintRoadmapModal.tsx` seeded `completionPercentage: 100` and a
+  `100% Free Architecture Verified` header before `/api/blueprint` was ever
+  fetched, so a network failure left a fabricated "complete" panel on screen. The
+  state now starts at zero and the footer reports the measured percentage.
+- New `src/utils/checksumTruth.ts` (pure, dependency-free) holds
+  `fnv1a32Hex()`, `payloadChecksumLine()`, `telegramPushLabel()` and
+  `cronSchedulerLabel()`.
+
+### 🧪 Tests
+- `src/tests/fabricatedStatusClaims.test.ts` (8 tests): helper determinism and
+  honesty, plus source guards pinning each removed string. Negative-validated —
+  restoring all four fabrications fails exactly the three component guards
+  (3 failed | 5 passed); removing them passes 8/8.
+
+---
 
 ## [Unreleased] - 2026-09-21 02:36 (21:06 UTC) — Oracle VCN ingress rules are no longer reported as verified
 
