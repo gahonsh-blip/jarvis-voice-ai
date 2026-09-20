@@ -36,6 +36,7 @@ import {
   MOBILE_PERMISSION_DEFINITIONS,
 } from '../utils/mobileStatusEngine';
 import { AndroidPermissionCenter } from './AndroidPermissionCenter';
+import { payloadChecksumLine } from '../utils/checksumTruth';
 
 interface PermissionGatewayProps {
   isOpen?: boolean;
@@ -639,7 +640,7 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
 
               <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
                 <span>Length: {(activeRequest.contentChanges || '').length} characters</span>
-                <span>Payload Checksum: Verified SHA-Safe</span>
+                <span>{payloadChecksumLine(activeRequest.contentChanges)}</span>
               </div>
             </div>
 

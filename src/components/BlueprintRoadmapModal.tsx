@@ -48,10 +48,12 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
     inProgressPhases: number;
     completionPercentage: number;
   }>({
-    totalPhases: 10,
-    completedPhases: 1,
-    inProgressPhases: 9,
-    completionPercentage: 100,
+    // Zero until /api/blueprint answers. A pre-filled 100 here rendered as a
+    // fabricated "100% complete" before any real measurement arrived.
+    totalPhases: 0,
+    completedPhases: 0,
+    inProgressPhases: 0,
+    completionPercentage: 0,
   });
   const [selectedPhase, setSelectedPhase] = useState<number>(0);
   const [reportMarkdown, setReportMarkdown] = useState<string>('');
@@ -335,7 +337,7 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
 
         {/* Modal Footer */}
         <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
-          <span>HERMES JARVIS • 100% Free Architecture Verified</span>
+          <span>HERMES JARVIS • Archived design blueprint ({stats.completionPercentage}% checklist items ticked)</span>
           <div className="flex items-center gap-4">
             <span>Security Matrix: Active</span>
             <button
