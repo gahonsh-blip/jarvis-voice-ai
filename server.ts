@@ -34,7 +34,8 @@ import {
   getIntegrationsAuditReport,
   extractYouTubeVideoId,
   fetchYouTubeTranscriptData,
-  heuristicTranscriptSummarize,
+  buildYouTubeSummary,
+  YouTubeSummaryResult,
   YouTubeVideoInfo,
   YouTubeTranscriptSegment,
 } from './server_tools';
@@ -3065,10 +3066,11 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
         const takeaways = summaryResult.keyTakeaways && summaryResult.keyTakeaways.length > 0
           ? `\n\n💡 *Key Takeaways*:\n${summaryResult.keyTakeaways.slice(0, 5).join('\n')}`
           : '';
-        botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})\n\n${summaryResult.summary}${takeaways}`;
+        const notice = summaryResult.notice ? `\n\n⚠️ _${summaryResult.notice}_` : '';
+        botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})${notice}\n\n${summaryResult.summary}${takeaways}`;
         actionData = { type: 'youtube_summary', videoInfo: info, source: summaryResult.source };
       } else {
-        botReplyText = `❌ *YouTube Summarizer Notice*:\n${summaryResult.error || 'Failed to extract video content. Ensure the video is public and accessible.'}`;
+        botReplyText = `❌ *YouTube Summarizer Notice*:\n${summaryResult.success ? 'Failed to extract video content. Ensure the video is public and accessible.' : summaryResult.error}`;
       }
     }
   } else if (intentData.intent === 'check_project') {
@@ -6437,23 +6439,17 @@ app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
 // ==============================================================================
 // 8.6. YOUTUBE TRANSCRIPT EXTRACTION & AUTONOMOUS SUMMARIZER APIs
 // ==============================================================================
+interface YouTubeSummaryFailure {
+  success: false;
+  error: string;
+}
+
 async function summarizeYouTubeVideoCore(options: {
   url?: string;
   videoId?: string;
   detailLevel?: 'concise' | 'balanced' | 'detailed';
   language?: string;
-}): Promise<{
-  success: boolean;
-  videoInfo?: YouTubeVideoInfo;
-  summary?: string;
-  executiveOverview?: string;
-  keyTakeaways?: string[];
-  actionableInsights?: string[];
-  segments?: YouTubeTranscriptSegment[];
-  transcript?: string;
-  source?: 'gemini' | 'heuristic';
-  error?: string;
-}> {
+}): Promise<YouTubeSummaryResult | YouTubeSummaryFailure> {
   const target = (options.url || options.videoId || '').trim();
   if (!target) {
     return {
@@ -6521,12 +6517,18 @@ ${transcript.slice(0, 35000)}
       });
 
       const rawSummary = response.text?.trim() || '';
+      const result = buildYouTubeSummary({
+        videoInfo,
+        segments,
+        transcript,
+        description: videoInfo.description || '',
+        geminiRawSummary: rawSummary,
+      });
+      if (!result.summary) {
+        // Generation returned nothing usable — fall through to the honest path.
+        throw new Error('Gemini returned an empty summary');
+      }
 
-      // Extract key takeaways from markdown bullets
-      const takeawayMatches = rawSummary.match(/^[•\-\*]\s+(.+)$/gm) || [];
-      const extractedTakeaways = takeawayMatches.map((t) => t.trim());
-
-      // Audit Log
       memoryState.auditLogs.unshift({
         id: `log-yt-${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -6539,54 +6541,44 @@ ${transcript.slice(0, 35000)}
       });
       persistMemory();
 
-      return {
-        success: true,
-        videoInfo,
-        summary: rawSummary,
-        keyTakeaways: extractedTakeaways.length > 0 ? extractedTakeaways : undefined,
-        segments,
-        transcript,
-        source: 'gemini',
-      };
+      return result;
     } catch (geminiErr: any) {
-      console.warn('[YouTube Summarize] Gemini API notice, falling back to heuristic:', geminiErr?.message);
+      console.warn('[YouTube Summarize] Gemini API notice, falling back to extractive mode:', geminiErr?.message);
     }
   }
 
-  // Fallback heuristic summarizer
-  const heuristic = heuristicTranscriptSummarize(
-    videoInfo.title,
-    videoInfo.channel,
-    videoInfo.durationFormatted,
+  // Extractive fallback — quotes only what the transcript/description actually
+  // contains. It never invents content, and when there is nothing to quote the
+  // result reports PARTIAL with an empty summary rather than a fabricated one.
+  const geminiConfigured = Boolean(ai);
+  const result = buildYouTubeSummary({
+    videoInfo,
     segments,
-    videoInfo.description
-  );
-
-  const fallbackSummary = `### 📌 Executive Overview\n${heuristic.executiveSummary}\n\n### ⏱️ Key Takeaways\n${heuristic.keyTakeaways.join('\n')}\n\n### 💡 Actionable Insights\n${heuristic.actionableInsights.map((i) => `• ${i}`).join('\n')}`;
+    transcript,
+    description: videoInfo.description || '',
+    geminiRawSummary: null,
+    geminiFailed: geminiConfigured,
+  });
 
   memoryState.auditLogs.unshift({
     id: `log-yt-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: `🎥 Summarized YouTube Video: "${videoInfo.title}" via Autonomous Transcript Engine`,
+    action: result.source === 'extractive'
+      ? `🎥 Extracted key lines for YouTube video: "${videoInfo.title}" (no AI synthesis applied)`
+      : `🎥 YouTube summarization for "${videoInfo.title}" produced no content (no transcript or description available)`,
     levelRequired: 2,
     approvedBy: 'JARVIS_AUTONOMOUS_RESEARCH',
     status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    verificationStatus: result.verificationStatus === 'VERIFIED'
+      ? 'VERIFIED'
+      : geminiConfigured
+        ? 'PROVIDER_ERROR'
+        : 'MISSING_CREDENTIALS',
+    finalTruthState: result.verificationStatus === 'VERIFIED' ? 'VERIFIED' : 'PARTIAL',
   });
   persistMemory();
 
-  return {
-    success: true,
-    videoInfo,
-    summary: fallbackSummary,
-    executiveOverview: heuristic.executiveSummary,
-    keyTakeaways: heuristic.keyTakeaways,
-    actionableInsights: heuristic.actionableInsights,
-    segments,
-    transcript,
-    source: 'heuristic',
-  };
+  return result;
 }
 
 // REST APIs for YouTube Summarizer
@@ -8306,7 +8298,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const videoId = intentData.actionPayload?.videoId || extractYouTubeVideoId(targetUrl);
         const summaryRes = await summarizeYouTubeVideoCore({ url: targetUrl, videoId: videoId || undefined });
         if (summaryRes.success && summaryRes.videoInfo) {
-          spokenResponse = `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel} (${summaryRes.videoInfo.durationFormatted}) analyzed and summarized successfully.\n\n${summaryRes.summary}`;
+          const notice = summaryRes.notice ? `\n\n${summaryRes.notice}` : '';
+          spokenResponse = summaryRes.summary
+            ? `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel} (${summaryRes.videoInfo.durationFormatted}).${notice}\n\n${summaryRes.summary}`
+            : `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel}. ${summaryRes.notice || 'No transcript or description is available, so there is nothing to summarize.'}`;
           actionExecuted = true;
           actionDetail = {
             type: 'youtube_summary',
@@ -8314,7 +8309,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
             payload: summaryRes,
           };
         } else {
-          spokenResponse = `YouTube summarizer notice: ${summaryRes.error || 'Failed to extract video content. Please verify the URL.'}`;
+          spokenResponse = `YouTube summarizer notice: ${summaryRes.success ? 'Failed to extract video content. Please verify the URL.' : summaryRes.error}`;
           actionExecuted = true;
           actionDetail = { type: 'youtube_summary_error', title: 'YouTube Error', payload: summaryRes };
         }

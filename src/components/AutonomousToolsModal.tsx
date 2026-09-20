@@ -377,7 +377,16 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       const data = await res.json();
       if (data.success) {
         setYtResult(data);
-        showFeedback(`Successfully summarized "${data.videoInfo?.title}" (${data.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Autonomous Engine'})`);
+        const sourceLabel = data.source === 'gemini'
+          ? 'Gemini 2.5 Flash'
+          : data.source === 'extractive'
+            ? 'Extractive (quoted from video)'
+            : 'No content available';
+        if (data.source === 'none') {
+          showFeedback(data.notice || 'No transcript or description available for this video.', 'error');
+        } else {
+          showFeedback(`Summarized "${data.videoInfo?.title}" (${sourceLabel})`);
+        }
       } else {
         showFeedback(data.error || 'YouTube summarization failed', 'error');
       }
@@ -765,7 +774,11 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                           </span>
                           <span>•</span>
                           <span className="text-[10px] text-slate-500">
-                            Source: {ytResult.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Autonomous Engine'}
+                            Source: {ytResult.source === 'gemini'
+                              ? 'Gemini 2.5 Flash'
+                              : ytResult.source === 'extractive'
+                                ? 'Extractive — quoted from video'
+                                : 'No content available'}
                           </span>
                         </div>
                       </div>
@@ -831,8 +844,13 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                   {/* SubTab 1: Summary */}
                   {ytSubTab === 'summary' && (
                     <div className="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-4 font-mono text-xs leading-relaxed text-slate-200">
+                      {ytResult.notice && (
+                        <div className="p-3 rounded-lg bg-amber-950/60 border border-amber-500/40 text-amber-300 text-[11px]">
+                          {ytResult.notice}
+                        </div>
+                      )}
                       <div className="whitespace-pre-wrap selection:bg-rose-950 selection:text-rose-200">
-                        {ytResult.summary}
+                        {ytResult.summary || 'No summary text is available for this video.'}
                       </div>
                     </div>
                   )}

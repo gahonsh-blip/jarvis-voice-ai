@@ -970,6 +970,9 @@ export async function fetchYouTubeTranscriptData(
   }
 }
 
+// Extractive-only summarizer. It never invents content: when there is no
+// transcript or description to quote it returns zero items rather than a
+// plausible-sounding paragraph claiming to describe the video.
 export function heuristicTranscriptSummarize(
   title: string,
   channel: string,
@@ -977,13 +980,15 @@ export function heuristicTranscriptSummarize(
   segments: YouTubeTranscriptSegment[],
   description: string
 ): {
+  hasSourceText: boolean;
   executiveSummary: string;
   keyTakeaways: string[];
   bulletPoints: string[];
   actionableInsights: string[];
 } {
   const combinedText = segments.length > 0 ? segments.map((s) => s.text).join(' ') : description;
-  
+  const hasSourceText = combinedText.trim().length > 0;
+
   // Extract key sentences with highest keyword density
   const sentences = combinedText
     .split(/(?<=[.?!])\s+/)
@@ -991,30 +996,102 @@ export function heuristicTranscriptSummarize(
     .filter((s) => s.length > 25 && s.length < 240);
 
   const topSentences = sentences.slice(0, 6);
-
-  const keyTakeaways = topSentences.length > 0
-    ? topSentences.map((s) => `• ${s}`)
-    : [
-        `• Detailed discussion by ${channel} regarding "${title}".`,
-        `• Core thematic analysis covering technical architecture, tools, and execution strategies.`,
-        `• Practical recommendations and workflow optimizations outlined in the ${durationFormatted} runtime.`,
-      ];
-
+  const keyTakeaways = topSentences.map((s) => `• ${s}`);
   const bulletPoints = segments.slice(0, 8).map((s) => `[${s.timestamp}] ${s.text}`);
 
-  const executiveSummary = `In this video, **${channel}** presents "**${title}**" (${durationFormatted}). The content breaks down fundamental concepts, practical demonstrations, and critical takeaways for the viewer, focusing on streamlined execution and practical insights.`;
-
-  const actionableInsights = [
-    `Analyze the core concepts outlined by ${channel} to integrate into existing project workflows.`,
-    `Review key timestamps to dive deeper into specific implementation phases.`,
-    `Refer to the official video description and referenced repositories for extended documentation.`,
-  ];
+  const executiveSummary = hasSourceText
+    ? `Extractive outline of "${title}" by ${channel} (${durationFormatted}) — the lines below are quoted directly from the ${segments.length > 0 ? 'transcript' : 'video description'}, not an AI interpretation.`
+    : `No transcript or description is available for "${title}" by ${channel} (${durationFormatted}), so no content summary can be produced.`;
 
   return {
+    hasSourceText,
     executiveSummary,
     keyTakeaways,
     bulletPoints,
-    actionableInsights,
+    actionableInsights: topSentences,
+  };
+}
+
+export type YouTubeSummarySource = 'gemini' | 'extractive' | 'none';
+
+export interface YouTubeSummaryResult {
+  success: true;
+  videoInfo: YouTubeVideoInfo;
+  summary: string;
+  executiveOverview: string;
+  keyTakeaways: string[];
+  actionableInsights: string[];
+  segments: YouTubeTranscriptSegment[];
+  transcript: string;
+  source: YouTubeSummarySource;
+  verificationStatus: 'VERIFIED' | 'PARTIAL';
+  notice?: string;
+}
+
+// Single source of truth for the summarizer's output and its truthfulness
+// label. Dependency-free so it can be unit-tested without the HTTP layer.
+export function buildYouTubeSummary(params: {
+  videoInfo: YouTubeVideoInfo;
+  segments: YouTubeTranscriptSegment[];
+  transcript: string;
+  description: string;
+  geminiRawSummary?: string | null;
+  geminiFailed?: boolean;
+}): YouTubeSummaryResult {
+  const { videoInfo, segments, transcript, description, geminiRawSummary, geminiFailed } = params;
+  const base = { success: true as const, videoInfo, segments, transcript };
+
+  if (geminiRawSummary && geminiRawSummary.trim()) {
+    const rawSummary = geminiRawSummary.trim();
+    const extractedTakeaways = (rawSummary.match(/^[•\-\*]\s+(.+)$/gm) || []).map((t) => t.trim());
+    return {
+      ...base,
+      summary: rawSummary,
+      executiveOverview: rawSummary,
+      keyTakeaways: extractedTakeaways,
+      actionableInsights: [],
+      source: 'gemini',
+      verificationStatus: 'VERIFIED',
+    };
+  }
+
+  const heuristic = heuristicTranscriptSummarize(
+    videoInfo.title,
+    videoInfo.channel,
+    videoInfo.durationFormatted,
+    segments,
+    description
+  );
+
+  if (heuristic.hasSourceText) {
+    const summary = `### 📌 Extractive Overview\n${heuristic.executiveSummary}\n\n### ⏱️ Quoted Key Lines\n${heuristic.keyTakeaways.join('\n')}\n\n### 💡 Quoted Insights\n${heuristic.actionableInsights.map((i) => `• ${i}`).join('\n')}`;
+    return {
+      ...base,
+      summary,
+      executiveOverview: heuristic.executiveSummary,
+      keyTakeaways: heuristic.keyTakeaways,
+      actionableInsights: heuristic.actionableInsights,
+      source: 'extractive',
+      verificationStatus: 'VERIFIED',
+      notice: geminiFailed
+        ? 'AI synthesis was unavailable for this request; the summary is quoted directly from the transcript/description.'
+        : 'Summary is quoted directly from the transcript/description (extractive mode).',
+    };
+  }
+
+  // No transcript and no description: there is nothing real to summarize.
+  return {
+    ...base,
+    success: true,
+    summary: '',
+    executiveOverview: '',
+    keyTakeaways: [],
+    actionableInsights: [],
+    source: 'none',
+    verificationStatus: 'PARTIAL',
+    notice: geminiFailed
+      ? 'AI synthesis failed and this video exposes no transcript or description, so no summary can be produced.'
+      : 'AI synthesis is not configured and this video exposes no transcript or description, so no summary can be produced.',
   };
 }
 
