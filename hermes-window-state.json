@@ -6,17 +6,32 @@
   "current_item": 54,
   "current_item_title": "Secret/token protection audit",
   "current_item_status": "PARTIAL",
-  "last_commit": "d4d32e8",
+  "last_commit": "9190b9b",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {"item": 1, "reason": "physical Android device required"},
-    {"item": 2, "reason": "physical Android device required"},
-    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
-    {"item": 50, "reason": "physical Android device required"},
-    {"item": 55, "reason": "physical Android device / Windows host required"}
+    {
+      "item": 1,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 2,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 8,
+      "reason": "Windows host required for the PowerShell capture leg"
+    },
+    {
+      "item": 50,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 55,
+      "reason": "physical Android device / Windows host required"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 3 (21:35 IST WORK, fire #3). No new code slice. Real finding: prior slot claimed HUD commits baf3ea1/344a1e2 were pushed to origin/feature/hermes-full-completion; they were NOT (merge-base --is-ancestor NOT-IN-REMOTE; remote head was d106c73). Recovered by committing 354994a and pushing all three commits; verified via git ls-remote -> 354994a. State branch had advanced to f46dc88 concurrently; pushes were rejected as non-FF and were NOT force-pushed. Report pushed as d4d32e8. Gates NOT RUN this slot (no source changed); prior 46 files / 682 tests inherited, not re-observed."
+  "notes": "Slot 3 (21:35 IST WORK, fire #3). No new code slice; no source file changed. DURABLE RESULT: remote.origin.fetch has ONLY '+refs/heads/main:refs/remotes/origin/main', so refs/remotes/origin/feature/hermes-full-completion is never advanced by fetch and any slot judging remote state from it reads a stale value. Check remote with 'git ls-remote' or an explicit refspec fetch. An earlier finding this slot claiming the prior slot's push was fabricated was WRONG and has been withdrawn in automation/reports/hermes-window-log.md (commit 9190b9b); 'git push' said Everything up-to-date at 354994a and merge-base --is-ancestor 354994a origin/feature/hermes-full-completion exits 0 after an explicit fetch, so the prior push claim is consistent with observation. State branch genuinely advanced concurrently (f46dc88 -> 17decb8); two pushes were rejected as non-fast-forward and were NOT force-pushed; state published as 7136cda. Gates NOT RUN this slot. Prior 46 files / 682 tests carried over from 21:05, not re-observed."
 }
