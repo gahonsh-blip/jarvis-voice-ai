@@ -408,13 +408,13 @@ Lint:     exit 0 (tsc --noEmit, npm run lint)
 Build:    exit 0 (npm run build; dist/server.cjs 816,011 bytes)
 E2E:      NOT RUN this slot (server-side E2E suites pass as part of the 49-file run)
 Security: No .env staged; no credentials in diff; no node_modules/dist tracked.
-          git check-ignore -v .env -> .gitignore:2:.env
+          git check-ignore -v .env -> .gitignore:4:.env
 
 Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 10 row),
                docs/CHANGELOG.md
 Branch:  feature/hermes-full-completion
-Commit:  2858f23 (test) + 447c375 (docs+report) + 15adb69 (state branch)
-Push:    succeeded — test 4c8e6ce..2858f23, docs 5e43c3f..447c375 on feature/hermes-full-completion; state 98b2df4..15adb69 on automation/hermes-state. No force-push.
+Commit:  2858f23 (test) + 447c375 (docs+report) + e861ab5 (report ref fix)
+Push:    succeeded — test 4c8e6ce..2858f23, docs 5e43c3f..e861ab5 on feature/hermes-full-completion; state 98b2df4..f0a2c1c on automation/hermes-state. No force-push. Remote tip == local HEAD (verified).
 
 PR:         not opened/refreshed this slot (work slot, not finalization)
 Main merge: NOT MERGED — awaiting human approval (never auto-merge)
