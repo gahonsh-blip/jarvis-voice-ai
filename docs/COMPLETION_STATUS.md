@@ -4,7 +4,20 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 21:35 IST — HUD honesty fix. The header rendered
+Last cycle: 2026-09-20 22:05 IST — Workspace path-containment fix. The file
+routes in `server_tools.ts` guarded against escape with a bare string-prefix
+test, `absolute.startsWith(PROJECT_ROOT)`. A string prefix is not a directory
+boundary: `/workspace/project/jarvis-voice-ai-EXT` (and any sibling directory
+whose name shares the root's prefix) satisfies it, so `../jarvis-voice-ai-EXT/x`
+passed the guard and resolved outside the authorised workspace. `safeResolvePath`
+now normalises and requires segment-wise containment (`escapesRoot`), and rejects
+both traversal above the root and prefix-sibling targets. Regression test
+`src/tests/workspacePathContainment.test.ts` (9 tests); negative-validated by
+reverting the fix — 4 of 9 fail, including the `-EXT` sibling case and `..`
+traversal. Gates observed on this tree: lint exit 0, vitest 47 files / 691 tests
+passed, build exit 0.
+
+Prior cycle: 2026-09-20 21:35 IST — HUD honesty fix. The header rendered
 `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as literal constants, so it asserted a live
 phone link and a specific safety level regardless of backend state. Both
 indicators now read `/api/telegram/status` (`config.isLiveConnected`, which
@@ -57,7 +70,7 @@ files / 675 tests, clean lint, clean build.
 | :--- | :--- | :--- | :--- |
 | 8 | Real Windows screenshot capture | `VERIFIED` (implementation) | `screenshotStore.ts` captures via PowerShell `CopyFromScreen` on Windows, `screencapture` on macOS, `import` on Linux. The old canvas-drawn placeholder is gone. Physical Windows leg pending a Windows host. |
 | 9 | Screenshot file existence/path/size verification | `VERIFIED` | `verifyScreenshotFile()` stats the file, rejects missing/empty/directory targets, parses real PNG IHDR dimensions from the bytes, and records a sha256. Covered by `screenshotStore.test.ts` (13 tests). |
-| 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. |
+| 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. The file routes' workspace boundary was not actually sound until 2026-09-20 22:05 IST: `safeResolvePath` used a bare string-prefix test, so a sibling directory sharing the root's name prefix escaped the workspace. Now segment-checked (see Last cycle), guarded by `src/tests/workspacePathContainment.test.ts`. |
 | 11 | Action result verification | `VERIFIED` | `ActionVerifier` no longer returns unconditional success (`|| true` removed). Clicks require an observed screen change; edits require a disk re-read; tests require parsed runner output; screenshots require a captured file. |
 | 12 | Browser real-action + permission flow | `VERIFIED` | `ScreenshotModal.tsx` uses `getDisplayMedia` when permitted, otherwise asks the host to capture via `/api/computer-operator/screenshot`. A denied permission reports `permission_denied`, not a simulated image. |
 | 13 | Zero-fake-success for all tools | `VERIFIED` (computer control) | Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. |

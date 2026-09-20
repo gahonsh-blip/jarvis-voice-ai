@@ -290,3 +290,77 @@ reproducible trap and is the durable result of this slot.
 force-push was used. That part stands.
 
 **Gates:** NOT RUN. No source file changed this slot.
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:05
+Window date: 2026-09-20   Window slots completed so far: 4
+
+Completed:
+- #10 Real Computer Operator actions (file routes) — `server_tools.ts`
+  `safeResolvePath` confirmed containment with `absolute.startsWith(PROJECT_ROOT)`.
+  A string prefix is not a directory boundary, so `../jarvis-voice-ai-EXT/x`
+  resolved outside the workspace and passed the guard. Now segment-checked
+  (`escapesRoot`) and rejects prefix-sibling targets. Evidence:
+  `src/tests/workspacePathContainment.test.ts` (9 tests pass); negative-validated
+  by reverting the fix (4 of 9 fail).
+
+In Progress:
+- #54 Secret/token protection audit — `PARTIAL`, carried from prior slots. No
+  credential work this slot; nothing new observed.
+
+Remaining:
+- #25/#26 social auth + platform API, #30 real Telegram delivery — all need live
+  provider credentials this sandbox does not have. #1/#2/#50/#55 need an Android
+  device; #8 needs a Windows host.
+
+Bugs Found:
+- Path-containment escape (above), found by reading `safeResolvePath` and testing
+  the prefix-sibling case directly.
+
+Bugs Fixed:
+- The containment escape. Proof: 9/9 pass with the fix; reverting the guard fails
+  4 tests, including the `-EXT` sibling and `..` traversal cases.
+
+Tests:    691 passed / 47 files (npx vitest run, 20.30s)
+Lint:     exit 0 (tsc --noEmit)
+Build:    exit 0 — dist/server.cjs 815,943 bytes
+E2E:      NOT RUN separately this slot (the suite's E2E files ran inside the 691)
+Security: NOT RUN — no external audit tooling; git check-ignore not re-run this slot
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md,
+               automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  e594ad2
+Push:    succeeded — origin/feature/hermes-full-completion 9190b9b..e594ad2
+
+PR:         none opened this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; the verified artifact is the deployment unit
+
+Blocked:
+- #1/#2/#50/#55 — physical Android device
+- #8 — Windows host
+- #25/#26/#30 — live provider credentials
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #54 Secret/token protection audit — continue the credential-pattern audit; it is
+  the highest non-hardware item still `PARTIAL`.
+
+हिंदी सारांश (एक पंक्ति):
+- वर्कस्पेस पाथ कंटेनमेंट बग ठीक किया गया; lint, tests और build सभी पास।
+
+---
+
+Process note (durable, for the next slot):
+This slot's local clone had only `main` in its fetch refspec, so I initially
+branched from a stale local `main` and my first commit sat 26 commits behind the
+real branch tip. The fix: fetch the owned branch with an explicit refspec
+(`git fetch origin feature/hermes-full-completion:refs/remotes/origin/feature/...`)
+or read `git ls-remote`, then re-base the work with `git cherry-pick`. The first
+push attempt was rejected as non-fast-forward; no force-push was used. This
+confirms the trap recorded by slot 3.
