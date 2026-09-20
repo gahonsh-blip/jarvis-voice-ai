@@ -86,6 +86,36 @@ const REDACTION_PATTERNS: { category: string; regex: RegExp; placeholder: string
     regex: /\b(?:cvv|cvc|security code)\s*[:=]\s*\d{3,4}\b/gi,
     placeholder: 'cvv: [REDACTED]',
   },
+  // 12. Stripe secret/restricted keys (`sk_live_`, `sk_test_`, `rk_live_`, `rk_test_`)
+  {
+    category: 'Stripe Key',
+    regex: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b/g,
+    placeholder: '[REDACTED_STRIPE_KEY]',
+  },
+  // 13. Slack tokens (`xoxb-`/`xoxp-`/`xoxa-`/`xoxr-`/`xoxs-`)
+  {
+    category: 'Slack Token',
+    regex: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
+    placeholder: '[REDACTED_SLACK_TOKEN]',
+  },
+  // 14. npm automation/publish tokens
+  {
+    category: 'npm Token',
+    regex: /\bnpm_[A-Za-z0-9]{36,}/g,
+    placeholder: '[REDACTED_NPM_TOKEN]',
+  },
+  // 15. Hugging Face access tokens
+  {
+    category: 'Hugging Face Token',
+    regex: /\bhf_[A-Za-z0-9]{34,}\b/g,
+    placeholder: '[REDACTED_HF_TOKEN]',
+  },
+  // 16. SendGrid API keys (`SG.<22>.<43>`)
+  {
+    category: 'SendGrid Key',
+    regex: /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}\b/g,
+    placeholder: '[REDACTED_SENDGRID_KEY]',
+  },
 ];
 
 /**

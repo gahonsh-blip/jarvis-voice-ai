@@ -48,4 +48,43 @@ describe('credential redaction', () => {
   it('leaves clean text untouched', () => {
     expect(redactSecrets('the battery is at 80 percent')).toBe('the battery is at 80 percent');
   });
+
+  // Regression: a live probe found the following real token families passed
+  // through redaction unchanged, so screenshots and command streams leaked them.
+  it('redacts a Stripe secret key (sk_live_ / rk_test_)', () => {
+    const body = '51H8xYzAbCdEfGhIjKlMnOpQrStUvWxYz0123456789';
+    const sk = 'sk_' + 'live_' + body;
+    const rk = 'rk_' + 'test_' + body;
+    expect(redactSecrets(`stripe=${sk}`)).toContain('[REDACTED_STRIPE_KEY]');
+    expect(redactSecrets(`stripe=${rk}`)).not.toContain(rk);
+  });
+
+  it('redacts Slack bot and user tokens', () => {
+    const bot = ['xoxb', '123456789012', '1234567890123', 'AbCdEfGhIjKlMnOpQrStUvWx'].join('-');
+    const user = ['xoxp', '123456789012', '1234567890123', '1234567890123', 'abcdefabcdefabcdefabcdefabcdefab'].join('-');
+    expect(redactSecrets(`SLACK=${bot}`)).not.toContain(bot);
+    expect(redactSecrets(`SLACK=${user}`)).not.toContain(user);
+  });
+
+  it('redacts an npm token', () => {
+    const token = 'npm_' + 'a'.repeat(40);
+    expect(redactSecrets(`//registry.npmjs.org/:_authToken=${token}`)).not.toContain(token);
+  });
+
+  it('redacts a Hugging Face token', () => {
+    const token = 'hf_' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7';
+    expect(redactSecrets(`token=${token}`)).not.toContain(token);
+  });
+
+  it('redacts a SendGrid API key', () => {
+    const token = 'SG.' + 'a'.repeat(22) + '.' + 'b'.repeat(43);
+    expect(redactSecrets(`key=${token}`)).not.toContain(token);
+  });
+
+  it('does not redact a Twilio account SID (public identifier, not a secret)', () => {
+    // The auth token is the secret; the SID is a public account identifier and
+    // redacting it would only destroy legitimate logs.
+    const sid = 'AC' + '0123456789abcdef0123456789abcdef';
+    expect(redactSecrets(`account=${sid}`)).toContain(sid);
+  });
 });

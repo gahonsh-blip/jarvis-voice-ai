@@ -4,7 +4,12 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-19 — Production hardening (items 51-60) plus a full green suite (43 files / 623 tests) and a clean build.
+Last cycle: 2026-09-20 — Secret-redaction hardening. A live probe found five
+real token families (Stripe, Slack, npm, Hugging Face, SendGrid) passing through
+`redactSecrets` unchanged; patterns added and covered by 6 new tests. Full suite
+43 files / 629 tests, clean lint, clean build. All 60 backlog items were already
+implemented, so no new item could be advanced this cycle (see "Known
+limitations").
 
 ## Status legend
 
@@ -252,7 +257,7 @@ is connected to this environment.
 | 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. |
 | 52 | Permission matrix finalization | `VERIFIED` | `src/utils/hardening/permissionMatrix.ts` holds one ordered matrix that all callers share. The first matching entry wins, so a command containing both `read` and `delete` classifies as destructive. An unrecognised action is refused at level 4 and requires approval — it is never defaulted to safe. `POST /api/security/evaluate` exposes it. 19 unit tests plus E2E. |
 | 53 | Kill-switch testing | `VERIFIED` | `POST /api/security/evaluate` checks the emergency stop before the level check, so an engaged kill switch blocks even a level-1 read action with category `kill_switch`. E2E toggles the switch on, asserts the block, then releases it. `isBlockedByKillSwitch` unit-tested both ways. |
-| 54 | Secret/token protection audit | `PARTIAL` | Two real bugs found and fixed this cycle (see below): a malformed OpenAI key regex that matched no key at all, and a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line. `git check-ignore` now confirms `.env` is ignored. The vault secret is no longer hardcoded. No credential rotation was performed against live providers here. |
+| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; and — this cycle — five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged. `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded. The added patterns are covered by `src/tests/credentialRedactor.test.ts` (15 tests). No credential rotation was performed against live providers here. |
 | 55 | Real-device E2E test suite | `NOT_AVAILABLE` | No Android device or Windows host is attached in this environment. The server-side legs are covered by E2E tests; the on-device checklist remains in `docs/ANDROID_BRIDGE.md`. |
 | 56 | Offline-mode E2E tests | `VERIFIED` | `src/tests/offlineOnline.e2e.test.ts` boots a real server with `GEMINI_API_KEY` blanked and asserts health, memory read/write round-trip, local intent classification, a verified backup, and that permissions stay enforced offline. 6 offline tests. |
 | 57 | Online-mode E2E tests | `VERIFIED` | Same file. Confirms core endpoints answer, and that each integration status endpoint with `configured: false` never reports `connected: true` or `status: connected`. 2 online tests. |
@@ -282,6 +287,23 @@ is connected to this environment.
    redaction patterns, so every `conn.accessToken = decrypted` was reported as a
    leak, burying the real findings. Rewritten to flag only quoted literals and
    unmistakable token shapes: the same run now returns 0 CRITICAL and 0 HIGH.
+6. **Five real token families passed through redaction unchanged.** A live probe
+   of `redactSecrets` found Stripe secret/restricted keys (`sk_live_`,
+   `rk_test_`), Slack tokens (`xoxb-`, `xoxp-`), npm tokens (`npm_`), Hugging
+   Face tokens (`hf_`) and SendGrid keys (`SG.<22>.<43>`) all survived
+   byte-for-byte. Because this function masks any text that leaves the system —
+   screenshots, terminal streams, logs — each was a live exposure. Patterns were
+   added for all five; `src/tests/credentialRedactor.test.ts` now has 6 new
+   regression tests (15 total). A Twilio account SID was deliberately left
+   unredacted: it is a public identifier, not a secret, and the test pins that.
+7. **Two divergent redaction engines existed, and the operator chat path used
+   the weaker one.** `computerOperatorEngine.ts` carried its own `redactSecrets`
+   with a narrower pattern set, and `operatorChatIntegration.ts` imported that
+   one to redact operator status messages. It missed all five families fixed in
+   (6), so the same token would be masked in a screenshot but printed verbatim
+   into a chat-rendered operator line. The engine function now composes the
+   engine's legacy pattern with the shared engine's patterns, making that path a
+   superset. Regression test added to `computerOperatorEngine.test.ts`.
 
 ---
 
@@ -371,6 +393,11 @@ is connected to this environment.
   party is required. Items 51, 54 and 60 stay `PARTIAL`, and item 55 stays
   `NOT_AVAILABLE`, because no third-party audit, live credential rotation, or
   physical device was available in this environment.
+- The 2026-09-20 cycle advanced no new backlog item: every item is already
+  implemented, and each remaining `PARTIAL`/`NOT_AVAILABLE` is blocked on a
+  physical Android device, a Windows host, live third-party credentials, or an
+  external auditor. The cycle was spent on a real bug hunt in the secret
+  redaction engine (item 54's subject) and the fix is recorded above.
 - The `server.ts` token vault reports `NOT_CONFIGURED` unless `APP_SECRET` or
   `SESSION_SECRET` is set. With no secret, tokens are encrypted under a random
   per-process key and will not survive a restart.

@@ -69,6 +69,15 @@ leaves the system. Two patterns were found to be broken and were fixed:
   `https://api.telegram.org/bot<token>` — the only realistic location of a bot
   token. Replaced with a `(?<![0-9])` lookbehind.
 
+A later cycle ran a live probe over common token families and found five more
+that `redactSecrets` left untouched: Stripe secret/restricted keys
+(`sk_live_`/`rk_test_`), Slack tokens (`xoxb-`/`xoxp-`), npm tokens (`npm_`),
+Hugging Face tokens (`hf_`), and SendGrid keys (`SG.<22>.<43>`). Patterns for all
+five are now applied, with six regression tests. A Twilio account SID (`AC`+32
+hex) is intentionally **not** redacted: it is a public account identifier, and
+masking it would only corrupt legitimate logs. The rotate-able Twilio auth token
+is the secret and is caught by the generic credential patterns.
+
 `.gitignore` must contain a `.env` line and must be UTF-8. The committed file was
 UTF-16, so git honoured none of it; `git check-ignore .env` confirms the current
 file works.
