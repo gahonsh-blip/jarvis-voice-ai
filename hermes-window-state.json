@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-20",
   "window_started_at": "2026-09-20T05:51:23Z",
-  "last_slot_at": "2026-09-20T19:09:00Z",
-  "slots_completed": 7,
+  "last_slot_at": "2026-09-20T20:15:00Z",
+  "slots_completed": 8,
   "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools (UI + sample fixtures + offline intent engine audited)",
+  "current_item_title": "Zero-fake-success for all tools (host telemetry surface audited)",
   "current_item_status": "PARTIAL",
-  "last_commit": "9328344",
+  "last_commit": "00da222",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -33,5 +33,5 @@
     }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 7 (01:05 IST WORK, fire #7). Third widening of the item-13 zero-fake-success audit: UI, sample fixtures, and the offline intent engine. Found/fixed: SecurityMatrixModal.tsx footer hardcoded 'Security Matrix Status: 100% Operational' regardless of /api/security (now renders fetched level or states unavailable); mobileStatusEngine.ts SAMPLE_NOTIFICATIONS asserted 'Always Free ARM VM health check: 100% nominal uptime' (reworded); localJarvisEngine.ts mobile_personal_status briefing defaulted permissions to true and every reading to plausible constants so a no-phone briefing looked measured (permissions now default false, fields nullable, briefing says no phone connected); weather inquiry answered 27C/48%/New Delhi with no provider (now actionExecuted:false); 'how are you' claimed 'All systems nominal' with no health check (now refuses). Guards in toolSurfaceTruthfulness.test.ts; assertions pinning old strings rewritten in localJarvisEngine.test.ts, conversationalPipelineRegression.test.ts, voiceAndHindiModes.test.ts. NEGATIVE-VALIDATED: restoring temperatureC ?? 27 fails the telemetry guard; restored after. Prior-slot guards re-run and passing: documentSearchTruthfulness.test.ts + gitToolsTruthfulness.test.ts = 2 files / 11 tests. Gates OBSERVED on tip: npx vitest run 53 files / 760 tests passed, tsc --noEmit clean, build emitted dist/server.cjs. Commits 482b0c4, af6ed6c, 96eb599 pushed (fast-forward). Item 13 remains PARTIAL: the sweep is pattern-driven; known remaining gap is that SAMPLE_* fixtures in mobileStatusEngine.ts are rendered by compileMobileStatusData as if real and are not labelled as sample data in the UI. NEXT: label/gate those SAMPLE_* fixtures, or move to the next non-VERIFIED backlog item. Post-report: the remote branch advanced to 618c54e (a concurrent slot made the YouTube summarizer extractive-only) on top of my 96eb599; fast-forwarded and pushed 9328344 (docs note only). Re-ran the four truthfulness guards on the merged tip: 4 files / 30 tests passed."
+  "notes": "Slot 8 (01:35 IST WORK, fire #8; started ~01:36 because the previous sandbox ran long). Item 13 zero-fake-success continued onto the HOST TELEMETRY surface. Found by running the real full suite: src/tests/hostTelemetry.test.ts failed with expected 107 to be less than or equal to 100. Root cause from reading the source: getHostCpuUsagePercent() probed os.cpuUsage, which is not a Node API (undefined on node v22.23.2), so that branch was dead and every reading came from the load-average proxy, which divided the 1-min load average by the core count WITHOUT clamping. Fixed: clamp to 100, dead branch removed, clampCpuPercent() exported. src/tests/hostTelemetry.test.ts now 8 tests / 8 passed. NEGATIVE-VALIDATED: replacing round(Math.min(v,100)) with round(v) makes the new assertion fail with 107 vs 100; restored after. The number is rendered live by HUDHeader.tsx, the Oracle Cloud modal and the spoken briefing, so an impossible 107% was being presented as measured. Gates OBSERVED on tip 00da222: npx vitest run 55 files / 772 tests passed, tsc --noEmit clean, build emitted dist/server.cjs (833708 bytes). Commits: 0096510 (fix+tests), 00da222 (docs+report). Rebase note: the remote advanced to 2c04ada while I worked (a concurrent slot android-bridge commit); fetched, rebased my fix on top, re-ran the targeted test, then pushed 2c04ada..0096510 and 0096510..00da222. Item 13 remains PARTIAL: the sweep is pattern-driven and a tool-by-tool inventory of server_tools.ts / server.ts is still outstanding; the SAMPLE_* fixtures in mobileStatusEngine.ts are still rendered by compileMobileStatusData without a sample-data label. NEXT: audit hudTelemetry.ts, OracleCloudModal.tsx and the server.ts VM-status routes for the same class of unmeasured-value-presented-as-measured bug."
 }
