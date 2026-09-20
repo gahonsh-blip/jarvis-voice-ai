@@ -708,3 +708,76 @@ Operational note for the human owner: two slots independently fixed the same bug
 this run. The fires overlap by ~5 minutes and neither slot could see the other's
 in-flight work. Recommend serialising fires, or requiring each slot to re-check the
 remote branch head and this log immediately before implementing.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:25 (coarse scheduled fire 02:05, fire #9)
+Window date: 2026-09-20 (window opened 21:00 IST 2026-09-20; IST calendar date is now 2026-09-21)
+Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success — Oracle Cloud VM surface (a finished slice of a PARTIAL item).
+  src/components/OracleCloudModal.tsx reported invented VM metrics when
+  /api/oracle-cloud/status was absent or partial. Removed: `{vmStatus?.uptimeHours || 342}
+  hours continuous` (a `||`, so a genuinely reported 0 was rewritten to 342), the constant
+  ONLINE badge, `Public IP: 129.154.42.108`, a copyable
+  `ssh -i ~/.ssh/oracle_arm_key ubuntu@129.154.42.108` for an address no server reported,
+  and the static header/disk specs (VM.Standard.A1.Flex, 4 OCPU, 24 GB, 200 GB).
+  New src/utils/vmTelemetryDisplay.ts normalises every value (normalizeUptimeHours,
+  normalizePublicIp, normalizeMetricPercent clamped 0-100, normalizeGigabytes,
+  normalizeVmStatus, buildSshCommand); absent values now render UNKNOWN / em dash.
+  Evidence: src/tests/vmTelemetryDisplay.test.ts (6 tests) + the Oracle block in
+  src/tests/toolSurfaceTruthfulness.test.ts (18 tests in file) — 18/18 pass.
+  Negative-validated: restoring `|| 342`, `|| '129.154.42.108'` and the constant ONLINE
+  fails exactly 3 of the 18; restored afterwards, 18/18 green.
+
+In Progress:
+- #13 remains PARTIAL. The audit is still tool-surface-by-tool-surface; the server.ts
+  VM-status / Oracle telemetry numeric surfaces have not been swept yet, and no
+  physical Android device has exercised any of these paths.
+
+Bugs Found:
+- OracleCloudModal.tsx fabricated VM uptime/public IP/status/specs whenever the status
+  endpoint was missing or partial (found by reading the component against the
+  /api/oracle-cloud/status payload shape).
+- `|| 342` also corrupted a real measurement: a reported uptime of 0 hours was displayed
+  as 342 hours, because `||` treats 0 as absent. `??` with an explicit normaliser is used now.
+
+Bugs Fixed:
+- Above two. Verification: the negative validation described under Completed — 3 of the
+  18 truthfulness assertions fail with the fabrications reintroduced and pass with the fix.
+
+Tests:    56 test files / 791 tests passed (npx vitest run, EXIT=0)
+Lint:     npm run lint (tsc --noEmit) — clean, exit 0
+Build:    npm run build — exit 0; dist/server.cjs emitted, 835675 bytes
+E2E:      NOT RUN — no browser/E2E harness exercised this slot; no physical device present
+Security: git check-ignore -v .env → .gitignore:4:.env (ignored); git status --short → clean
+          (no staged/stray files); grep for token/private-key patterns across the new commit
+          → no matches. No .env, node_modules or dist is staged.
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 evidence + current cycle), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  42cd1e0 (fix + tests), 684078f (docs); this report is a further commit
+Push:    succeeded — origin/feature/hermes-full-completion 42cd1e0 then 684078f
+
+PR:         not refreshed this slot (WORK slot; PR is refreshed in the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present in this
+            sandbox; dist/server.cjs (835675 bytes) is the verified artifact.
+
+Blocked:
+- #1, #2, #50, #55 — require a physical Android device.
+- #8 — requires a Windows host for the PowerShell capture leg.
+
+Human Approval Required:
+- None this slot. No permission-gate or main-branch action was taken.
+
+Next Slot:
+- Continue #13 on the server.ts VM-status / Oracle telemetry numeric surfaces (the durable
+  state NEXT pointer), then hudTelemetry.ts. Same zero-fake-success method: read the route
+  against the response shape, guard unmeasured numbers, negative-validate.
+
+हिंदी सारांश (एक पंक्ति):
+- Oracle Cloud मॉडल अब VM की बनी-बनाई uptime/IP/status नहीं दिखाता — जो रिपोर्ट नहीं हुई वह
+  UNKNOWN दिखती है; 791 टेस्ट पास, lint और build स्वच्छ, बदलाव पुश हो गया।
