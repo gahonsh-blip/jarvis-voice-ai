@@ -65,6 +65,7 @@ import {
 } from './src/utils/computerOperator';
 import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/androidBridgeGateway';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
+import { classifyApprovalOutcome } from './src/utils/hardening/approvalResolution';
 import {
   buildDeliveryReceipt,
   classifyTelegramError,
@@ -5844,7 +5845,10 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
   }
 
   try {
-    let executionResult: any = { executed: true };
+    // No default "executed: true" — a request whose execution branch never runs
+    // must not be recorded as executed. An unmatched request leaves this null
+    // and resolves as UNVERIFIED.
+    let executionResult: any = null;
 
     // Execute based on platform / payload
     if (targetReq.platform === 'YouTube' || targetReq.exactAction.toLowerCase().includes('youtube')) {
@@ -5871,24 +5875,36 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       }
     }
 
-    const updated = updateActionRequestStatus(id, 'EXECUTED', {
-      resultUrn: executionResult?.post?.livePostUrl || executionResult?.issueUrl || 'urn:jarvis:executed:' + id,
+    const resolution = classifyApprovalOutcome(executionResult);
+
+    const updated = updateActionRequestStatus(id, resolution.executed ? 'EXECUTED' : 'FAILED', {
+      resultUrn: resolution.evidenceRef,
+      errorReason: resolution.executed ? undefined : resolution.errorReason,
       resolvedBy: approver,
     });
 
     memoryState.auditLogs.unshift({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      action: `EXECUTED Approved Action: ${targetReq.exactAction} on ${targetReq.target}`,
+      action: `${resolution.executed ? 'EXECUTED' : 'UNCONFIRMED'} Approved Action: ${targetReq.exactAction} on ${targetReq.target}`,
       levelRequired: targetReq.level,
       approvedBy: approver,
-      status: 'EXECUTED',
-      verificationStatus: 'VERIFIED',
-      finalTruthState: 'VERIFIED',
+      status: resolution.outcome,
+      verificationStatus: resolution.outcome === 'VERIFIED' ? 'VERIFIED' : 'UNVERIFIED',
+      providerUrn: resolution.evidenceRef,
+      errorReason: resolution.executed ? undefined : resolution.errorReason,
+      finalTruthState: resolution.outcome,
     });
 
     persistMemory();
-    res.json({ success: true, request: updated, executionResult, message: 'Action executed successfully.' });
+    res.json({
+      success: resolution.executed,
+      request: updated,
+      executionResult,
+      outcome: resolution.outcome,
+      message: resolution.message,
+      error: resolution.executed ? undefined : resolution.errorReason,
+    });
   } catch (err: any) {
     const updated = updateActionRequestStatus(id, 'FAILED', { errorReason: err.message, resolvedBy: approver });
     res.status(500).json({ success: false, request: updated, error: err.message });

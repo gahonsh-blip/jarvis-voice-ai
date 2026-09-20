@@ -151,6 +151,11 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
         if (data.success) {
           showNotification(`✅ Authorized & Executed: "${reqToApprove.exactAction}"`, 'success');
           if (onSpeak) onSpeak(`Level 4 permission granted. Action ${reqToApprove.exactAction} executed successfully, Sir.`);
+        } else if (data.outcome === 'UNVERIFIED') {
+          // Approval was recorded, but no provider confirmed the action. Never
+          // tell the operator it executed.
+          showNotification(`⚠️ Not confirmed: ${data.message || 'no provider confirmation received.'}`, 'error');
+          if (onSpeak) onSpeak('Approval recorded, but the action could not be confirmed as executed, Sir.');
         } else {
           showNotification(data.error || 'Execution halted', 'error');
           if (onSpeak) onSpeak(`Execution notice: ${data.error || 'Execution halted'}`);
