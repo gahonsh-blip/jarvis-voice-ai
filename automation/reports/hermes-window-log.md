@@ -1157,4 +1157,118 @@ non-VERIFIED backlog item if the inventory closes.
   inventory across `server_tools.ts` tool result strings.
 
 हिंदी सारांश (एक पंक्ति):
-- अनुमोदन मार्ग में झूठा "EXECUTED/VERIFIED" दर्ज होना बंद किया; 8 नए टेस्ट पास, lint और build दोनों exit 0।
+- अनुमोदन मार्ग में झूठा "EXECUTED/VERIFIED" दर्ज होना बंद किया; 8 नए टेस्ट पास, lint और build दोनों exit 0।---
+
+## Slot 15 — WORK SLOT — 2026-09-21 04:06 IST (2026-09-20 22:36 UTC)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:06
+Window date: 2026-09-20 (window spans midnight IST; guard keys on this value)
+Window slots completed so far: 15
+
+Completed:
+- #13 Zero-fake-success for all tools — continued onto the **Oracle Cloud
+  instance run state and public address**, which is the surface slot 14 named as
+  the next target. `oracleCloudState` in `server.ts` seeded `status: 'RUNNING'`
+  and a literal `publicIp`, plus `uptimeHours = measured + 342` and
+  `Math.random()` jitter around constants (14.8% CPU, 3.4 GB RAM). The UI
+  normalisers earlier slots added only reject a *missing* value, so a seeded
+  constant passed through them untouched and rendered as an observed run state
+  with a copyable `ssh` target. `publicIp` and `status` now seed `null`;
+  `src/utils/hardening/ociInstanceTruth.ts` records only what is provable
+  in-process (a hostname match proves this process is *running on* the declared
+  instance — a lower bound, labelled as such; a public address is never
+  derivable that way); `statusObservedAt` records when a status was really read;
+  the Telegram reply, the `/api/oracle-cloud` integrations matrix and
+  `OracleCloudModal.tsx` all render through `describeRunState`/`describePublicIp`
+  as `NOT_OBSERVED` / `not observed`; the modal header now labels shape/OCPU/RAM
+  as the declared plan rather than readings.
+  Evidence: `server.ts` (`oracleCloudState`, `refreshOracleMetrics`,
+  `observeOciInstance`, the `/api/oracle-cloud` route, the Telegram status
+  branch), `src/utils/hardening/ociInstanceTruth.ts` (new),
+  `src/components/OracleCloudModal.tsx`, `src/types.ts`; tests
+  `src/tests/ociInstanceTruth.test.ts` + the Oracle block in
+  `src/tests/toolSurfaceTruthfulness.test.ts` — 33/33 passed observed.
+- Docs accuracy: `docs/COMPLETION_STATUS.md` "Known limitations" still described
+  `publicIp` and `status` as static deployment metadata, which the fix made
+  false. Rewritten to the declared-plan / observed / unobservable split.
+
+In Progress:
+- #13 Zero-fake-success for all tools — status stays `PARTIAL`. The Oracle
+  observation branch is unit-tested, not exercised against a real OCI instance,
+  and the sweep is pattern-driven over named surfaces, not a per-tool inventory.
+
+Remaining:
+- #13 is the only item actively advanced. Every other non-`VERIFIED` item is
+  blocked on hardware or a credential (see Blocked), so no backlog item beyond
+  #13 could be advanced this slot.
+
+Bugs Found:
+- `oracleCloudState` seeded a lifecycle state and a public address that nothing
+  in the process observes. Found by reading the state seed in `server.ts` after
+  slot 14 flagged `/api/oracle-cloud/status` as the next candidate: the seeded
+  value is what made every downstream normaliser pass — the normalisers were
+  never the bug on this surface, the seed was.
+- The repository's own source guard in `toolSurfaceTruthfulness.test.ts` matches
+  the literal address *as text*, so the explanatory comment I first wrote in
+  `server.ts` reintroduced the very string the guard exists to catch. Found by
+  running the guard against my own change.
+
+Bugs Fixed:
+- Seeded OCI run state and public IP removed from `oracleCloudState`; a supplied
+  constant can no longer masquerade as a measurement on `/api/oracle-cloud`,
+  Telegram, or the modal. Verified by 33/33 targeted tests.
+- Negative validation: restoring the literal `publicIp` failed exactly 2 tests
+  ("the state does not assert a constant RUNNING status or a literal public IP"
+  and "both start unobserved and are filled only by the host observation"),
+  and 33/33 passed again after reverting from the backup. The guard therefore
+  moves with the fix rather than passing either way.
+
+Tests:    Targeted: 2 files / 33 tests, all passed (observed).
+          Full suite on be203c2: `npx vitest run` — 59 files / 824 tests passed
+          (19.62s), observed.
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 (observed).
+Build:    `npm run build` exit 0 (observed); `dist/server.cjs` 841726 bytes
+          (822.0 kb).
+E2E:      NOT RUN — no emulator, device, or browser harness in this sandbox.
+Security: `git check-ignore -v .env` confirms `.env` is ignored; no token, key
+          or password was written to any file; the push used the remote URL
+          only; `.env` untouched and untracked. No dependency-audit run this
+          slot (`npm audit` NOT RUN — recorded as such, not claimed).
+          The permission gateway was not touched or weakened.
+
+Documentation: `docs/COMPLETION_STATUS.md` (Last cycle block, item 13 cell,
+Known limitations), `docs/CHANGELOG.md`, this log.
+Branch:  feature/hermes-full-completion
+Commit:  be203c2 (fix), d54b1e3 (docs)
+Push:    succeeded — be203c2 pushed (2770b1c..be203c2), d54b1e3 pushed
+         (be203c2..d54b1e3) to origin/feature/hermes-full-completion; state
+         cf02f4b pushed to origin/automation/hermes-state.
+
+PR:         NONE — no pull request exists for this branch yet.
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no `DEPLOY_URL` or hosting integration is present in
+            this environment; the verified artifact is `dist/server.cjs`
+            (841726 bytes). No deployment was attempted and none is claimed.
+
+Blocked:
+- #1, #2, #50 — physical Android device required.
+- #8 — Windows host required for the PowerShell capture leg.
+- #55 — physical Android device / Windows host required.
+- #13 is not blocked, but cannot leave `PARTIAL` without a real OCI instance or a
+  live Oracle API credential.
+
+Human Approval Required:
+- A human should read the final verification report and merge the PR to `main`;
+  this window never merges automatically.
+- Oracle API credentials (and a real instance) if item 13's observation branch is
+  to be exercised end to end.
+
+Next Slot:
+- `04:35` IST is the FINALIZATION slot: run the full verification, the security
+  checks, open the PR to `main` with the observed evidence, and write the final
+  window state. No new development.
+
+हिंदी सारांश (एक पंक्ति):
+- ओरेकल क्लाउड इंस्टेंस की स्थिति और पब्लिक IP अब नकली तौर पर "देखी गई" के रूप
+  में नहीं दिखाई जाती — दोनों `NOT_OBSERVED` रिपोर्ट करते हैं, 33/33 टेस्ट पास।
