@@ -4,12 +4,17 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-20 — Secret-redaction hardening. A live probe found five
-real token families (Stripe, Slack, npm, Hugging Face, SendGrid) passing through
-`redactSecrets` unchanged; patterns added and covered by 6 new tests. Full suite
-43 files / 630 tests, clean lint, clean build. All 60 backlog items were already
-implemented, so no new item could be advanced this cycle (see "Known
-limitations").
+Last cycle: 2026-09-20 — Oracle Cloud telemetry honesty fix. `GET
+/api/oracle-cloud`, the Telegram cloud-telemetry reply and the voice
+`cloud_telemetry` path fabricated CPU/RAM/disk numbers: `oracleCloudState.metrics`
+sat at hardcoded constants (14.8% CPU, 3.4 GB RAM, 18.2% disk) and the endpoint
+re-jittered CPU/RAM with `Math.random()` on every request, so JARVIS spoke
+invented load figures as if they were live telemetry. Metrics are now sampled
+from the real daemon host via `src/utils/hardening/hostTelemetry.ts`; anything
+not measurable (bandwidth, temperature) reports `null`/unavailable instead of a
+plausible constant. Covered by `src/tests/hostTelemetry.test.ts` (6 tests). Full
+suite 44 files / 636 tests, clean lint, clean build. No new backlog item could be
+advanced (see "Known limitations").
 
 ## Status legend
 
@@ -367,6 +372,32 @@ is connected to this environment.
 8. **Bridge status misclassification** — permission gaps were reported as
    hardware limits. Now `PERMISSION_REQUIRED` with the grant named.
 
+## Bugs found and fixed (cycle 3 — infrastructure telemetry honesty)
+
+1. **Oracle Cloud metrics were fabricated and spoken as fact** — `oracleCloudState.metrics`
+   held hardcoded constants (14.8% CPU, 3.4 GB RAM, 18.2% disk, 1240 MB
+   bandwidth, 38.5 °C) and `GET /api/oracle-cloud` overwrote CPU and RAM with
+   `12 + Math.random() * 5` and `3.2 + Math.random() * 0.4` on every request.
+   Three consumer paths repeated the fiction: the Telegram `cloud_telemetry`
+   reply printed `3.4 GB / 24 GB` as a literal, and the voice engine said
+   "running at {cpu}% CPU and 3.4 GB RAM". Replaced with a real host sample
+   (`src/utils/hardening/hostTelemetry.ts`): CPU from `os.loadavg()` normalised
+   by core count, RAM used/total/percent from `os.totalmem()`/`os.freemem()`,
+   disk from `fs.statfs`. Bandwidth and temperature are not measurable from
+   Node here, so they are `null` and the UI renders `—` instead of inventing a
+   number. `metricsSource`/`metricsSampledAt` now record provenance, and the
+   state is re-sampled at boot and per request so the modal, Telegram and voice
+   paths cannot quote a stale or invented value. Verified live:
+   `curl /api/oracle-cloud` returned RAM total 15.62 GiB (host truth: 16.77 GB
+   `os.totalmem()`), matching the machine rather than the old `24 GB` literal.
+2. **The Oracle UI masked missing data with plausible fallbacks** —
+   `OracleCloudModal.tsx` used `|| 14.8` and `|| 3.4` on CPU and RAM and
+   hardcoded `36.4 / 200 GB` storage with a fixed `18.2%` bar, so a failed or
+   absent reading displayed a realistic-looking number. Fallbacks removed;
+   missing values render as `—` with a zero-width bar.
+
+---
+
 ## Known limitations
 
 - No physical Android device has been used in this environment. Items 1 and 2
@@ -393,6 +424,14 @@ is connected to this environment.
   party is required. Items 51, 54 and 60 stay `PARTIAL`, and item 55 stays
   `NOT_AVAILABLE`, because no third-party audit, live credential rotation, or
   physical device was available in this environment.
+- The Oracle Cloud VM values in `oracleCloudState` (public IP, 4 OCPU, 24 GB
+  shape, 200 GB boot volume, `uptimeHours`) are deployment metadata, not
+  measurements, and remain static. Only CPU/RAM/disk are live host samples. The
+  process runs in this container, not on the Oracle ARM VM, so the live figures
+  describe the daemon host rather than the VM in the UI's framing — `metricsSource`
+  says `live_host` to make that unambiguous. Real VM-level telemetry needs a
+  request against the Oracle API with a live credential, which is not available
+  here.
 - The 2026-09-20 cycle advanced no new backlog item: every item is already
   implemented, and each remaining `PARTIAL`/`NOT_AVAILABLE` is blocked on a
   physical Android device, a Windows host, live third-party credentials, or an

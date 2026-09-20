@@ -91,6 +91,10 @@ import {
   verifyDeployment,
   deploymentBlockers,
 } from './src/utils/hardening/deploymentVerification';
+import {
+  sampleHostTelemetry,
+  type HostTelemetry,
+} from './src/utils/hardening/hostTelemetry';
 import { AutonomousGoalRunner } from './src/utils/autonomous/goalRunner';
 import type { StepDescriptor } from './src/utils/autonomous/stepLibrary';
 import {
@@ -1386,13 +1390,20 @@ let oracleCloudState = {
   sshPort: 22,
   status: 'RUNNING' as const,
   uptimeHours: Math.floor((Date.now() - new Date(DAEMON_BOOT_TIME).getTime()) / 3600000) + 342,
+  // Live host measurements. The previous version jittered around hardcoded
+  // constants (14.8% CPU, 3.4 GB RAM) with Math.random(), so the UI and the
+  // spoken responses reported invented numbers as if they were real telemetry.
   metrics: {
-    cpuUsage: 14.8,
-    ramUsage: 3.4,
-    diskUsage: 18.2,
-    bandwidthUsedMb: 1240,
-    tempCelsius: 38.5,
+    cpuUsage: null as number | null,
+    ramUsedGb: null as number | null,
+    ramTotalGb: null as number | null,
+    ramUsage: null as number | null,
+    diskUsage: null as number | null,
+    bandwidthUsedMb: null as number | null,
+    tempCelsius: null as number | null,
   },
+  metricsSource: 'unavailable' as 'live_host' | 'unavailable',
+  metricsSampledAt: null as string | null,
   firewallRules: [
     { port: 22, proto: 'tcp' as const, label: 'SSH Remote Terminal (Restricted IP)', active: true },
     { port: 80, proto: 'tcp' as const, label: 'HTTP Web Panel (Nginx Proxy)', active: true },
@@ -1401,6 +1412,27 @@ let oracleCloudState = {
     { port: 8443, proto: 'tcp' as const, label: 'Telegram Webhook Ingress Gateway', active: true },
   ],
 };
+
+// Re-sample the live host metrics into the shared Oracle state. Called at boot
+// and on every /api/oracle-cloud request so Telegram and voice replies quote the
+// same real values as the modal, never a stale or invented number.
+function refreshOracleMetrics(): void {
+  const sample: HostTelemetry = sampleHostTelemetry();
+  oracleCloudState.metrics = {
+    cpuUsage: sample.cpuUsage,
+    ramUsedGb: sample.ramUsedGb,
+    ramTotalGb: sample.ramTotalGb,
+    ramUsage: sample.ramUsage,
+    diskUsage: sample.diskUsage,
+    // Bandwidth and temperature are not measurable from Node on this host.
+    bandwidthUsedMb: null,
+    tempCelsius: null,
+  };
+  oracleCloudState.metricsSource = 'live_host';
+  oracleCloudState.metricsSampledAt = sample.sampledAt;
+}
+
+refreshOracleMetrics();
 
 // Security Matrix State
 let securityMatrixState = {
@@ -3038,7 +3070,10 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       ],
     };
   } else if (intentData.intent === 'cloud_telemetry') {
-    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${oracleCloudState.status} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${oracleCloudState.metrics.cpuUsage}% | *RAM*: ${oracleCloudState.metrics.ramUsage} GB / 24 GB\n• *Cost*: ₹0 / Always Free Guaranteed\n• *IP*: ${oracleCloudState.publicIp}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
+    const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+    const cpuLine = live?.cpuUsage != null ? `${live.cpuUsage}%` : 'unavailable';
+    const ramLine = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : 'unavailable';
+    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${oracleCloudState.status} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${cpuLine} | *RAM*: ${ramLine}\n• *Metrics Source*: ${live ? 'live host telemetry' : 'unavailable'}\n• *Cost*: ₹0 / Always Free Guaranteed\n• *IP*: ${oracleCloudState.publicIp}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
     actionData = { type: 'telemetry', metrics: oracleCloudState.metrics };
   } else if (intentData.intent === 'security_audit') {
     botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: Level ${securityMatrixState.currentLevel} (Create Mode with Human Approval)\n• *Human Approval*: Enforced for all external actions\n• *Credential Protection*: Passwords & API tokens strictly isolated\n• *Recent Audit Logs*: ${memoryState.auditLogs.length} verified events`;
@@ -3090,7 +3125,7 @@ User message: "${clean}".`,
       if (lower.includes('who are you') || lower.includes('तुम कौन हो') || lower.includes('aap kaun ho')) {
         botReplyText = `I am *HERMES JARVIS*, your autonomous mobile-controlled AI assistant running 24/7 on an Oracle Cloud Always Free ARM VM.`;
       } else if (lower.includes('how are you') || lower.includes('kaise ho') || lower.includes('kaisa hai')) {
-        botReplyText = `All systems operating at nominal efficiency, ${memoryState.name || 'Sir'}. CPU load is ${oracleCloudState.metrics.cpuUsage}% and memory usage is 3.4 GB / 24 GB.`;
+        botReplyText = `All systems operating at nominal efficiency, ${memoryState.name || 'Sir'}. CPU load is currently unavailable on this host.`;
       } else if (lower.includes('thank') || lower.includes('धन्यवाद') || lower.includes('shukriya')) {
         botReplyText = `Always at your service, ${memoryState.name || 'Sir'}. Let me know if you need any other tasks executed.`;
       } else {
@@ -3917,12 +3952,11 @@ app.post('/api/telegram/broadcast', async (req: Request, res: Response) => {
 });
 
 // Oracle Cloud VM Telemetry APIs
+// Metrics are sampled from the real daemon host on every request. When a value
+// cannot be measured it stays null and is reported as unavailable — never
+// replaced with a plausible-looking constant.
 app.get('/api/oracle-cloud', (req: Request, res: Response) => {
-  const jitterCpu = Number((12 + Math.random() * 5).toFixed(1));
-  const jitterRam = Number((3.2 + Math.random() * 0.4).toFixed(1));
-  oracleCloudState.metrics.cpuUsage = jitterCpu;
-  oracleCloudState.metrics.ramUsage = jitterRam;
-
+  refreshOracleMetrics();
   res.json(oracleCloudState);
 });
 
@@ -8239,9 +8273,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'cloud_telemetry': {
-        spokenResponse = `Oracle Always Free ARM VM is running at ${oracleCloudState.metrics.cpuUsage}% CPU and 3.4 GB RAM with zero monthly cost.`;
+        const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+        const cpuPart = live?.cpuUsage != null ? `${live.cpuUsage}% CPU` : 'CPU usage unavailable';
+        const ramPart = live?.ramUsedGb != null ? `${live.ramUsedGb} GB RAM` : 'RAM usage unavailable';
+        spokenResponse = `Oracle Always Free ARM VM host telemetry: ${cpuPart}, ${ramPart}. Metrics are read live from the daemon host.`;
         actionExecuted = true;
-        actionDetail = { type: 'cloud_telemetry', title: 'Oracle VM Nominal', payload: oracleCloudState.metrics };
+        actionDetail = { type: 'cloud_telemetry', title: 'Oracle VM Telemetry', payload: oracleCloudState.metrics };
         break;
       }
       case 'security_audit': {

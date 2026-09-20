@@ -322,12 +322,16 @@ export interface OracleVMStatus {
   status: 'RUNNING' | 'PROVISIONING' | 'STOPPED';
   uptimeHours: number;
   metrics: {
-    cpuUsage: number;
-    ramUsage: number;
-    diskUsage: number;
-    bandwidthUsedMb: number;
-    tempCelsius: number;
+    cpuUsage: number | null;
+    ramUsedGb: number | null;
+    ramTotalGb: number | null;
+    ramUsage: number | null;
+    diskUsage: number | null;
+    bandwidthUsedMb: number | null;
+    tempCelsius: number | null;
   };
+  metricsSource?: 'live_host' | 'unavailable';
+  metricsSampledAt?: string | null;
   firewallRules: { port: number; proto: 'tcp' | 'udp'; label: string; active: boolean }[];
 }
 

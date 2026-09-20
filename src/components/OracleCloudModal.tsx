@@ -96,12 +96,12 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <Cpu className="w-4 h-4 text-cyan-400" />
               </div>
               <div className="text-2xl font-mono font-bold text-slate-100">
-                {vmStatus?.metrics.cpuUsage || 14.8}%
+                {vmStatus?.metrics.cpuUsage != null ? `${vmStatus.metrics.cpuUsage}%` : '—'}
               </div>
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
                   className="bg-cyan-400 h-full transition-all duration-300"
-                  style={{ width: `${vmStatus?.metrics.cpuUsage || 14.8}%` }}
+                  style={{ width: `${vmStatus?.metrics.cpuUsage ?? 0}%` }}
                 />
               </div>
             </div>
@@ -112,26 +112,33 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <Server className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="text-2xl font-mono font-bold text-slate-100">
-                {vmStatus?.metrics.ramUsage || 3.4} <span className="text-sm font-normal text-slate-400">/ 24 GB</span>
+                {vmStatus?.metrics.ramUsedGb != null ? vmStatus.metrics.ramUsedGb : '—'}{' '}
+                <span className="text-sm font-normal text-slate-400">
+                  / {vmStatus?.metrics.ramTotalGb ?? '?'} GB
+                </span>
               </div>
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
                   className="bg-emerald-400 h-full transition-all duration-300"
-                  style={{ width: `${((vmStatus?.metrics.ramUsage || 3.4) / 24) * 100}%` }}
+                  style={{ width: `${vmStatus?.metrics.ramUsage ?? 0}%` }}
                 />
               </div>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col gap-2">
               <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-                <span>STORAGE</span>
+                <span>STORAGE USED</span>
                 <HardDrive className="w-4 h-4 text-purple-400" />
               </div>
               <div className="text-2xl font-mono font-bold text-slate-100">
-                36.4 <span className="text-sm font-normal text-slate-400">/ 200 GB</span>
+                {vmStatus?.metrics.diskUsage != null ? `${vmStatus.metrics.diskUsage}%` : '—'}{' '}
+                <span className="text-sm font-normal text-slate-400">of 200 GB</span>
               </div>
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-purple-400 h-full" style={{ width: '18.2%' }} />
+                <div
+                  className="bg-purple-400 h-full transition-all duration-300"
+                  style={{ width: `${vmStatus?.metrics.diskUsage ?? 0}%` }}
+                />
               </div>
             </div>
 
