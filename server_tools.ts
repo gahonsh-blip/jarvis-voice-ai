@@ -263,6 +263,57 @@ export function realFsList(subDir: string = '.'): { success: boolean; files?: st
   }
 }
 
+/**
+ * Search the workspace for files whose name matches a query. Returns the real
+ * relative paths and byte sizes read from disk. Never invents a match: an empty
+ * result means the file genuinely is not in the workspace.
+ */
+export function realFsSearch(query: string, maxResults: number = 10): {
+  success: boolean;
+  matches?: { path: string; sizeBytes: number }[];
+  error?: string;
+} {
+  const term = (query || '').trim().toLowerCase();
+  if (!term) return { success: false, error: 'No search term provided.' };
+
+  const skipDirs = new Set(['node_modules', 'dist', '.git', 'build', 'coverage']);
+  const found: { path: string; sizeBytes: number }[] = [];
+
+  const walk = (dir: string): void => {
+    if (found.length >= maxResults) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (found.length >= maxResults) return;
+      if (entry.name.startsWith('.') || skipDirs.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.toLowerCase().includes(term)) {
+        let sizeBytes = 0;
+        try {
+          sizeBytes = fs.statSync(full).size;
+        } catch {
+          continue;
+        }
+        found.push({ path: path.relative(PROJECT_ROOT, full), sizeBytes });
+      }
+    }
+  };
+
+  try {
+    walk(PROJECT_ROOT);
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+
+  return { success: true, matches: found };
+}
+
 export function realFsRead(filePath: string): { success: boolean; content?: string; error?: string; sizeBytes?: number } {
   const { safePath, error } = safeResolvePath(filePath);
   if (error || !safePath) return { success: false, error };

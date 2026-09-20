@@ -20,6 +20,7 @@ import {
   updateActionRequestStatus,
   realFsList,
   realFsRead,
+  realFsSearch,
   realFsWrite,
   realFsDelete,
   realGitStatus,
@@ -3052,23 +3053,48 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       ],
     };
   } else if (intentData.intent === 'find_document') {
-    const doc = intentData.actionPayload?.query || 'Document';
-    botReplyText = `🔍 *FILE SEARCH RESULT*\n\nFound matching file in memory storage:\n📄 \`${doc}\`\n• *Path*: \`/workspace/storage/documents/${doc}\`\n• *Size*: 42.5 KB\n• *Summary*: Specification brief for client project milestone.`;
-    actionData = { type: 'file_found', query: doc };
+    const doc = intentData.actionPayload?.query || '';
+    const search = realFsSearch(doc);
+    if (search.success && search.matches && search.matches.length > 0) {
+      const listing = search.matches
+        .map((m) => `• \`${m.path}\` (${(m.sizeBytes / 1024).toFixed(1)} KB)`)
+        .join('\n');
+      botReplyText = `🔍 *FILE SEARCH RESULT*\n\nSearched the workspace for "${doc}". ${search.matches.length} match(es):\n${listing}`;
+      actionData = { type: 'file_found', query: doc, matches: search.matches };
+    } else if (search.success) {
+      botReplyText = `🔍 *FILE SEARCH RESULT*\n\nNo file matching "${doc}" exists in the workspace. I did not find a document to report.`;
+      actionData = { type: 'file_not_found', query: doc };
+    } else {
+      botReplyText = `🔍 *FILE SEARCH UNAVAILABLE*\n\nCould not search the workspace: ${search.error}`;
+      actionData = { type: 'file_search_unavailable', error: search.error };
+    }
   } else if (intentData.intent === 'schedule_morning_report') {
-    botReplyText = `⏰ *SCHEDULE CONFIRMED*\n\nSir, I have scheduled your proactive Morning Briefing for *09:00 AM IST*.\n\nI will push the task checklist and server health directly to your phone.`;
-    actionData = { type: 'scheduled', time: '09:00 AM' };
+    const telegramLinked = !!activeTelegramChatId && !!getCleanTelegramToken();
+    const delivery = telegramLinked
+      ? 'A Telegram chat is linked, so the briefing will be pushed there.'
+      : 'No Telegram chat is currently linked, so nothing will be delivered until you connect one.';
+    botReplyText = `⏰ *SCHEDULE ACTIVE*\n\nThe proactive Morning Briefing runs daily at *09:00 AM IST* on this server's scheduler. ${delivery}`;
+    actionData = { type: 'schedule_morning_report', time: '09:00 AM IST', telegramLinked };
   } else if (intentData.intent === 'generate_quotation') {
-    botReplyText = `💼 *QUOTATION GENERATED*\n\n• *Client*: Aarav Tech Solutions\n• *Total Estimate*: ₹65,000 (10 Days Delivery)\n• *Milestones*: 3 phases\n\nReady for client review. All details logged in Freelance Pipeline.`;
-    actionData = { type: 'quotation_ready', amount: 65000 };
-    inlineKeyboard = {
-      inline_keyboard: [
-        [
-          { text: '📊 View Freelance Leads', callback_data: 'cmd_view_leads' },
-          { text: '☁️ Server Telemetry', callback_data: 'cmd_cloud_telemetry' },
+    const withQuote = memoryState.freelanceLeads.filter((l) => !!l.quotation);
+    if (withQuote.length === 0) {
+      botReplyText = `💼 *NO QUOTATION FOUND*\n\nNo quotation has been generated yet — the freelance pipeline has no lead with a prepared quotation. I did not generate one.`;
+      actionData = { type: 'quotation_not_available' };
+    } else {
+      const listing = withQuote
+        .map((l) => `• *${l.clientName}* — ${l.quotation!.totalPrice} ${l.budgetEstimate.currency} (${l.quotation!.timelineDays} days)`)
+        .join('\n');
+      botReplyText = `💼 *EXISTING QUOTATIONS*\n\n${withQuote.length} lead(s) with a prepared quotation:\n${listing}\n\nThese are stored pipeline records. No new quotation was generated.`;
+      actionData = { type: 'quotation_ready', leads: withQuote.map((l) => ({ id: l.id, clientName: l.clientName, quotation: l.quotation })) };
+      inlineKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '📊 View Freelance Leads', callback_data: 'cmd_view_leads' },
+            { text: '☁️ Server Telemetry', callback_data: 'cmd_cloud_telemetry' },
+          ],
         ],
-      ],
-    };
+      };
+    }
   } else if (intentData.intent === 'cloud_telemetry') {
     const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
     const cpuLine = live?.cpuUsage != null ? `${live.cpuUsage}%` : 'unavailable';
@@ -3411,7 +3437,9 @@ async function checkAndRunSchedulerJobs() {
       console.log('[Scheduler]', logEntry);
 
       if (activeTelegramChatId && getCleanTelegramToken()) {
-        const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir! Cloud nodes on Oracle Always Free ARM VM are 100% nominal.\n\n• *Pending Quotations*: 2 leads\n• *Social Posts*: 1 draft awaiting approval\n• *Security Level*: Level 2 Active\n\nHave a productive day!`;
+        const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
+        const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
+        const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
         sendRealTelegramMessage(activeTelegramChatId, morningText).catch(() => {});
       }
       persistMemory();
@@ -8287,28 +8315,57 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'create_social_post': {
-        spokenResponse = 'I have prepared today\'s social media post draft and queued it in Human Approval Mode.';
-        actionExecuted = true;
-        actionDetail = { type: 'create_social_post', title: 'Social Post Drafted', payload: { topic: 'AI Agent Architecture' } };
+        const draft = memoryState.socialPosts.find((p) => p.status === 'pending_approval');
+        if (draft) {
+          spokenResponse = `The latest social media draft on ${draft.platform} is awaiting your approval in Human Approval Mode.`;
+          actionExecuted = true;
+          actionDetail = { type: 'create_social_post', title: 'Existing Draft Awaiting Approval', payload: { postId: draft.id, topic: draft.topic, platform: draft.platform } };
+        } else {
+          spokenResponse = 'There is no social media draft awaiting approval. I did not create one — use the draft command to generate a post.';
+          actionExecuted = false;
+          actionDetail = { type: 'create_social_post', title: 'No Draft Available', payload: { posts: memoryState.socialPosts.length } };
+        }
         break;
       }
       case 'find_document': {
-        const query = intentData.actionPayload?.query || 'Document';
-        spokenResponse = `Searching memory archives for "${query}". Document located in project workspace.`;
-        actionExecuted = true;
-        actionDetail = { type: 'find_document', title: `Located: ${query}`, payload: { filename: query } };
+        const query = intentData.actionPayload?.query || '';
+        const search = realFsSearch(query);
+        if (search.success && search.matches && search.matches.length > 0) {
+          const list = search.matches.map((m) => m.path).join(', ');
+          spokenResponse = `Found ${search.matches.length} file(s) matching ${query}: ${list}.`;
+          actionExecuted = true;
+          actionDetail = { type: 'find_document', title: `Found: ${query}`, payload: search.matches };
+        } else if (search.success) {
+          spokenResponse = `No file matching ${query} exists in the workspace.`;
+          actionExecuted = true;
+          actionDetail = { type: 'find_document', title: `Not found: ${query}`, payload: { matches: [] } };
+        } else {
+          spokenResponse = `Document search is unavailable: ${search.error}`;
+          actionExecuted = false;
+          actionDetail = { type: 'find_document', title: 'Search Unavailable', payload: { error: search.error } };
+        }
         break;
       }
       case 'schedule_morning_report': {
-        spokenResponse = 'Understood, Sir. Proactive Morning Briefing scheduled for 9:00 AM on your Telegram mobile gateway.';
-        actionExecuted = true;
-        actionDetail = { type: 'schedule_morning_report', title: 'Scheduled Morning Briefing (9 AM)' };
+        const telegramLinked = !!activeTelegramChatId && !!getCleanTelegramToken();
+        spokenResponse = telegramLinked
+          ? 'The proactive Morning Briefing already runs daily at 9 AM IST on this server scheduler, and a Telegram chat is linked for delivery.'
+          : 'The proactive Morning Briefing runs daily at 9 AM IST on this server scheduler, but no Telegram chat is linked so nothing will be delivered yet.';
+        actionExecuted = telegramLinked;
+        actionDetail = { type: 'schedule_morning_report', title: 'Morning Briefing Schedule (09:00 AM IST)', payload: { telegramLinked } };
         break;
       }
       case 'generate_quotation': {
-        spokenResponse = 'Client requirement parsed. Instant project quotation prepared with milestone breakdown.';
-        actionExecuted = true;
-        actionDetail = { type: 'generate_quotation', title: 'Quotation Generated', payload: { amount: 65000 } };
+        const withQuote = memoryState.freelanceLeads.filter((l) => !!l.quotation);
+        if (withQuote.length > 0) {
+          spokenResponse = `${withQuote.length} lead has a prepared quotation stored in the freelance pipeline. I did not generate a new one.`;
+          actionExecuted = true;
+          actionDetail = { type: 'generate_quotation', title: 'Existing Quotations', payload: withQuote.map((l) => ({ id: l.id, totalPrice: l.quotation!.totalPrice })) };
+        } else {
+          spokenResponse = 'No quotation has been generated yet, so there is nothing to report.';
+          actionExecuted = false;
+          actionDetail = { type: 'generate_quotation', title: 'No Quotation Available', payload: { leads: memoryState.freelanceLeads.length } };
+        }
         break;
       }
       case 'cloud_telemetry': {
