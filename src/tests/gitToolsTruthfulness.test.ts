@@ -75,4 +75,18 @@ describe('git tools report real state, never fabricated state', () => {
     expect(Array.isArray(log.commits)).toBe(true);
     expect(log.commits!.length).toBeGreaterThan(0);
   });
+
+  it('realGitStatus reports a null branch on detached HEAD instead of inventing "main"', () => {
+    // A git that succeeds but prints nothing on stdout is exactly what
+    // `git rev-parse --abbrev-ref HEAD` produces on a detached HEAD.
+    const stub = path.join(fakeBin, 'git');
+    fs.writeFileSync(stub, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(stub, 0o755);
+    process.env.PATH = `${fakeBin}:/usr/bin:/bin`;
+
+    const status = realGitStatus();
+    expect(status.success).toBe(true);
+    expect(status.branch).toBeNull();
+    expect(status.branch).not.toBe('main');
+  });
 });

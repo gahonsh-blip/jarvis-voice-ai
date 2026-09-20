@@ -336,7 +336,7 @@ export function realFsDelete(filePath: string): { success: boolean; error?: stri
 // ==============================================================================
 // 5. REAL GIT & REPOSITORY EXECUTION TOOLS
 // ==============================================================================
-export function realGitStatus(): { success: boolean; branch?: string; statusText?: string; clean?: boolean; error?: string } {
+export function realGitStatus(): { success: boolean; branch?: string | null; statusText?: string; clean?: boolean; error?: string } {
   try {
     const branch = execSync('git rev-parse --abbrev-ref HEAD 2>/dev/null', { cwd: PROJECT_ROOT, timeout: 3000 })
       .toString()
@@ -346,7 +346,7 @@ export function realGitStatus(): { success: boolean; branch?: string; statusText
       .trim();
     return {
       success: true,
-      branch: branch || 'main',
+      branch: branch || null,
       statusText: statusOutput || 'Working tree clean (no uncommitted changes)',
       clean: !statusOutput,
     };

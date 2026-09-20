@@ -8138,14 +8138,15 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'git_status_tool': {
         const git = realGitStatus();
-        actionDetail = { type: 'git_status', title: git.success ? `Git: ${git.branch}` : 'Git: UNKNOWN', payload: git };
+        const branchLabel = git.branch ?? 'detached HEAD';
+        actionDetail = { type: 'git_status', title: git.success ? `Git: ${branchLabel}` : 'Git: UNKNOWN', payload: git };
         if (!git.success) {
           spokenResponse = language.startsWith('hi')
             ? `Git जानकारी अनुपलब्ध है। ${git.error}`
             : `Git status is unavailable. ${git.error}`;
           actionExecuted = false;
         } else {
-          spokenResponse = `Git repository active on branch ${git.branch}. ${git.clean ? 'Working directory is clean.' : git.statusText}`;
+          spokenResponse = `Git repository active on branch ${branchLabel}. ${git.clean ? 'Working directory is clean.' : git.statusText}`;
           actionExecuted = true;
         }
         break;
@@ -8265,8 +8266,8 @@ app.post('/api/chat', async (req: Request, res: Response) => {
             }
           })();
           spokenResponse = git.clean
-            ? `Project audit: on branch ${git.branch}, working tree is clean.`
-            : `Project audit: on branch ${git.branch}, the working tree has uncommitted changes.`;
+            ? `Project audit: on branch ${git.branch ?? 'detached HEAD'}, working tree is clean.`
+            : `Project audit: on branch ${git.branch ?? 'detached HEAD'}, the working tree has uncommitted changes.`;
           actionExecuted = true;
           actionDetail = {
             type: 'check_project',
