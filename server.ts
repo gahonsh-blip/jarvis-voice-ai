@@ -8234,7 +8234,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'tools_audit': {
         const audit = getIntegrationsAuditReport();
-        spokenResponse = `Integrations audit complete: ${audit.summary.connected} verified real integrations online, ${audit.summary.notConfigured} pending environment configuration.`;
+        spokenResponse = `Integrations audit: ${audit.summary.connected} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
         actionExecuted = true;
         actionDetail = { type: 'tools_audit', title: 'Integrations Matrix', payload: audit };
         break;
@@ -8249,9 +8249,40 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'check_project': {
-        spokenResponse = 'Auditing active project repositories on Oracle Cloud VM. Codebase is clean with zero open regressions.';
-        actionExecuted = true;
-        actionDetail = { type: 'check_project', title: 'Project Audit Complete', payload: { branches: 2, status: 'nominal' } };
+        // Report the real working tree instead of a fixed "2 branches / nominal"
+        // payload. If git cannot be queried in this environment, say so rather
+        // than asserting a clean codebase.
+        const git = realGitStatus();
+        if (git.success) {
+          const branchCount = (() => {
+            try {
+              return execSync('git branch --list 2>/dev/null', { timeout: 3000 })
+                .toString()
+                .split('\n')
+                .filter((line) => line.trim().length > 0).length;
+            } catch {
+              return null;
+            }
+          })();
+          spokenResponse = git.clean
+            ? `Project audit: on branch ${git.branch}, working tree is clean.`
+            : `Project audit: on branch ${git.branch}, the working tree has uncommitted changes.`;
+          actionExecuted = true;
+          actionDetail = {
+            type: 'check_project',
+            title: 'Project Audit Complete',
+            payload: {
+              branch: git.branch,
+              clean: git.clean,
+              statusText: git.statusText,
+              branches: branchCount,
+            },
+          };
+        } else {
+          spokenResponse = 'Project audit unavailable: git could not be queried in this environment.';
+          actionExecuted = false;
+          actionDetail = { type: 'check_project', title: 'Project Audit Unavailable', payload: { error: git.error } };
+        }
         break;
       }
       case 'create_social_post': {

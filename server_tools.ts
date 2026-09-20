@@ -971,12 +971,16 @@ export function heuristicTranscriptSummarize(
 // 10. INTEGRATIONS DIAGNOSTICS MATRIX (TRUTH-IN-EXECUTION AUDITOR)
 // ==============================================================================
 export function getIntegrationsAuditReport(): {
-  summary: { total: number; connected: number; notConfigured: number };
+  summary: { total: number; connected: number; notConfigured: number; notAvailable: number };
   items: {
     id: string;
     name: string;
     category: string;
-    status: 'REAL_WORKING' | 'NOT_CONNECTED';
+    // REAL_WORKING is only ever used when this process can actually see the
+    // integration's credentials. NOT_AVAILABLE means the integration cannot be
+    // configured in this environment at all, so it must never be counted as a
+    // "verified real integration online".
+    status: 'REAL_WORKING' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
     reason: string;
     requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean }[];
     capabilities: string[];
@@ -1072,10 +1076,16 @@ export function getIntegrationsAuditReport(): {
       id: 'oracle_cloud',
       name: 'Oracle Cloud Always Free ARM VM',
       category: 'Cloud Infrastructure',
-      status: 'REAL_WORKING' as const,
-      reason: 'Always Free Ampere A1 (4 OCPUs, 24 GB RAM) ₹0 infrastructure daemon active.',
+      // This process runs in a container, not on the Oracle ARM VM. The VM shape,
+      // public IP and uptime are deployment metadata constants, not a measurement
+      // of any live host, and no Oracle API credential is available here, so the
+      // integration cannot be confirmed at all. Reporting REAL_WORKING here was a
+      // fabrication that inflated the "verified real integrations" count.
+      status: 'NOT_AVAILABLE' as const,
+      reason:
+        'No Oracle Cloud API credential or VM-level telemetry source is available in this environment; this process runs in a container, not on the Oracle ARM VM. The only live figures available describe the daemon host and are reported with metricsSource=live_host.',
       requiredEnvVars: [],
-      capabilities: ['24/7 Persistent Daemon', '₹0 Always Free Guarantee', 'Durable JSON Persistence', 'Process Supervision'],
+      capabilities: ['Deployment metadata only — not a verified live integration in this environment'],
     },
     {
       id: 'facebook',
@@ -1119,11 +1129,14 @@ export function getIntegrationsAuditReport(): {
   ];
 
   const connectedCount = items.filter((i) => i.status === 'REAL_WORKING').length;
+  const notConfiguredCount = items.filter((i) => i.status === 'NOT_CONNECTED').length;
+  const notAvailableCount = items.filter((i) => i.status === 'NOT_AVAILABLE').length;
   return {
     summary: {
       total: items.length,
       connected: connectedCount,
-      notConfigured: items.length - connectedCount,
+      notConfigured: notConfiguredCount,
+      notAvailable: notAvailableCount,
     },
     items,
   };

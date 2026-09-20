@@ -93,7 +93,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
 
   // Integrations Audit State
   const [auditReport, setAuditReport] = useState<{
-    summary: { total: number; connected: number; notConfigured: number };
+    summary: { total: number; connected: number; notConfigured: number; notAvailable: number };
     items: IntegrationAuditItem[];
   } | null>(null);
 
@@ -1294,12 +1294,15 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                     Truth-in-Execution Integrations Matrix
                   </h3>
                   <p className="text-xs text-slate-400 font-mono">
-                    Zero fake success states. Audits all official OAuth and REST API integrations for real credentials.
+                    Zero fake success states. Audits all official OAuth and REST API integrations for credentials actually present in this environment; presence of a credential is not a live connection test.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 font-mono text-xs">
                   <span className="px-2.5 py-1 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300">
                     {auditReport.summary.connected} Connected
+                  </span>
+                  <span className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                    {auditReport.summary.notAvailable} Not Available Here
                   </span>
                   <span className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300">
                     {auditReport.summary.notConfigured} Pending Setup
