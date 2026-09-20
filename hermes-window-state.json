@@ -1,22 +1,37 @@
 {
   "window_date": "2026-09-20",
   "window_started_at": "2026-09-20T05:51:23Z",
-  "last_slot_at": "2026-09-20T20:55:00Z",
-  "slots_completed": 9,
+  "last_slot_at": "2026-09-20T20:58:00Z",
+  "slots_completed": 10,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools (host telemetry surface audited)",
   "current_item_status": "PARTIAL",
-  "last_commit": "85024cf",
+  "last_commit": "cf82366",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {"item": 1, "reason": "physical Android device required"},
-    {"item": 2, "reason": "physical Android device required"},
-    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
-    {"item": 50, "reason": "physical Android device required"},
-    {"item": 55, "reason": "physical Android device / Windows host required"}
+    {
+      "item": 1,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 2,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 8,
+      "reason": "Windows host required for the PowerShell capture leg"
+    },
+    {
+      "item": 50,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 55,
+      "reason": "physical Android device / Windows host required"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 9 (WORK, scheduled fire 02:05 IST) continued item 13 zero-fake-success onto the ORACLE CLOUD VM surface. src/components/OracleCloudModal.tsx fabricated VM metrics whenever /api/oracle-cloud/status was absent or partial: a 342-hour uptime fallback under a constant ONLINE badge, a hardcoded public IP 129.154.42.108 with a copyable ssh command for an address no server reported, and static header/disk specs (VM.Standard.A1.Flex, 4 OCPU, 24 GB, 200 GB). New src/utils/vmTelemetryDisplay.ts normalises every display value (normalizeUptimeHours, normalizePublicIp, normalizeMetricPercent clamped 0-100, normalizeGigabytes, normalizeVmStatus, buildSshCommand); absent values render UNKNOWN / em dash. This also closes the previous slot's NEXT pointer for OracleCloudModal.tsx. Evidence: src/tests/vmTelemetryDisplay.test.ts (6 tests) and the Oracle block in src/tests/toolSurfaceTruthfulness.test.ts (18 tests in file), 18/18 passing. NEGATIVE-VALIDATED: restoring the 342 fallback, the hardcoded IP and the constant ONLINE fails exactly 3 of the 18; restored after. Gates OBSERVED on the pushed tip: npx vitest run 56 files / 791 tests passed (EXIT=0), npm run lint (tsc --noEmit) exit 0, npm run build exit 0 emitting dist/server.cjs (835675 bytes). Commits: 42cd1e0 (fix + tests), 684078f (docs), 85024cf (report). Push note: the first push was REJECTED (remote had advanced 3 commits from a concurrent slot: dbd3385, 3b14abf, b4bd54f, all in mobileStatusEngine/localJarvisEngine which my commit does not touch); fetched, rebased 42cd1e0 onto b4bd54f with no conflicts, then pushed b4bd54f..42cd1e0. Item 13 remains PARTIAL: the sweep is still tool-surface-by-tool-surface. NEXT: server.ts VM-status / Oracle telemetry numeric surfaces, then hudTelemetry.ts."
+  "notes": "Slot 10 (WORK, 02:27 IST). NO backlog item advanced: this slot independently fixed the OracleCloudModal.tsx 342-uptime fabrication (commit 067d63e, 12/12 hudTelemetry tests, negative-validated) but the push was REJECTED - a concurrent slot had already landed a strictly BROADER fix for the same file at 42cd1e0 (src/utils/vmTelemetryDisplay.ts covering uptime, hardcoded public IP 129.154.42.108, constant ONLINE, ssh clipboard command and shape/disk specs; 2 test files, 31 tests). I DROPPED my narrower duplicate and rebased onto 42cd1e0 rather than re-land redundant code. NEW GAP RECORDED for the next slot: server.ts:1412 seeds hardcoded firewallRules (five ports 22/80/443/3000/8443, every entry active:true) while OracleCloudModal.tsx:213 renders a green checkmark per rule under the heading Zero Accidental Ingress; nothing probes a port, rule.active is never read, so the checkmark is unconditional - a security-relevant fabrication inviting a human to trust unverified ingress exposure. server.ts:1390-1391 also still seeds status RUNNING and publicIp 129.154.42.108; whether /api/oracle-cloud/status serves them is UNKNOWN (/api/oracle-cloud/status was NOT run this slot). Tests OBSERVED this slot: 3 files / 31 passed (hudTelemetry, vmTelemetryDisplay, toolSurfaceTruthfulness). npm run lint exit 0 OBSERVED. Build NOT RUN. Security audit NOT RUN. E2E NOT RUN. Commit cf82366 is the report only; 42cd1e0 carries the code. NEXT: fix the firewallRules fabrication (probe the ports, or render each rule UNVERIFIED and drop the unconditional checkmark) and normalise the seeded status/publicIp; then re-check /api/oracle-cloud/status."
 }
