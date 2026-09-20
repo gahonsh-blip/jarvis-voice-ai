@@ -4,6 +4,35 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-21 02:19 (20:49 UTC) — Sample telemetry can no longer be spoken as a real reading
+
+### 🛡️ Truthfulness
+- `processOfflineCommand()` in `src/utils/localJarvisEngine.ts` decided whether
+  to speak a mobile section from `available` alone. `compileMobileStatusData()`
+  in `src/utils/mobileStatusEngine.ts` returns placeholder fixtures that carry
+  `available: true` *and* `isSample: true`, so a device-less briefing was
+  narrated as fact ("Device battery is at 91%", "You have 7 priority
+  notifications"). Every section now also gates on `isSample`, and the weather
+  branch reads `mobileStatus.weather` instead of the fixed 27°C / 48% /
+  'New Delhi' constants.
+- `MobilePersonalStatusModal.tsx` stamped "Real-Time Generated Telemetry" on the
+  briefing card even when the data was sample data; the badge now reflects
+  whether the snapshot was a fixture or a live read.
+
+### 🧪 Tests
+- `src/tests/localJarvisEngine.test.ts` and
+  `src/tests/mobileStatusEngine.test.ts` cover the fixture-vs-measurement
+  distinction. Negative-validated: reverting the `isSample` gate makes the
+  engine test fail with the fixture values spoken as real.
+
+### 📝 Notes
+- The spoken briefing intentionally still states sample counts, but only inside
+  a label ("2 sample notifications, including 1 priority alerts (sample data,
+  not read from this device)"). An earlier assertion that the counts be omitted
+  was wrong and was rewritten to assert the label instead.
+
+---
+
 ## [Unreleased] - 2026-09-21 02:10 — Notification redaction can no longer be switched off
 
 ### 🔒 Privacy

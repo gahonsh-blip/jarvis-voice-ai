@@ -4,7 +4,41 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-21 02:10 IST — Android notification privacy (item 4) was
+Last cycle: 2026-09-21 02:19 IST (2026-09-20 20:49 UTC) — zero-fake-success: the sample-data gap left
+open by every earlier slot is now closed end to end (item 13). The offline
+intent engine `processOfflineCommand()` in `src/utils/localJarvisEngine.ts`
+gated each mobile section on `available` alone, while
+`compileMobileStatusData()` in `src/utils/mobileStatusEngine.ts` returns
+placeholder fixtures flagged `isSample: true` that still carry
+`available: true` (battery 91%, 7 notifications, 4 events, 9 emails). A
+sample-flagged section was therefore spoken as a measurement; the engine now
+also gates on `isSample`, so a fixture can never be narrated as a reading.
+The same file had already been edited this slot to read weather from
+`mobileStatus?.weather` instead of the fixed 27C / 48% / 'New Delhi'
+constants (verified: no `New Delhi` or `27` temperature literal remains on
+the command path). Evidence: `npx vitest run src/tests/localJarvisEngine.test.ts`
+31 of 32 passed before the last assertion was corrected; the offending test
+asserted the sample counts must be absent from the spoken text, but
+`generateMorningBriefing()` deliberately speaks them while labelling them
+("2 sample notifications, including 1 priority alerts (sample data, not read
+from this device)"), so the test was rewritten to assert the real invariant —
+the counts appear only inside a sample label. It now passes. Negative
+validation: with the `isSample` gate reverted to `true`, the test fails with
+`expected 'Good morning...Device battery is at 91%...You have 7 priority
+notifications...' not to match /91%|27C|7 priority|4 events|9/` — that is
+the fake section being spoken as real, so the guard is load-bearing. Fix
+restored immediately (`grep -c "isSample !== true"` = 5). Also in this slot
+the briefing card badge in `src/components/MobilePersonalStatusModal.tsx`
+unconditionally read "Real-Time Generated Telemetry" even when
+`statusData.isSample`; it now reads "Generated from sample fixtures" or
+"Generated from live telemetry reads". Gates observed on tip
+`dbd3385` (committed 2026-09-20 20:49 UTC): lint exit 0, vitest 55 files / 781 tests passed, build exit 0
+(`dist/server.cjs` 835675 bytes). Per the honesty rules this stays `PARTIAL`:
+the audit is still pattern- and test-driven, not a per-tool proof, and no
+physical Android device was present, so the live-telemetry branch is
+unexercised.
+
+Previous cycle: 2026-09-21 02:10 IST — Android notification privacy (item 4) was
 re-audited after the 2026-09-21 01:05 IST slot left `sensitiveFilteringEnabled` as an
 owner-controllable switch. That change was wrong and has been reverted in
 substance: with filtering off, `handleIncomingNotification()` stored the raw
@@ -227,7 +261,7 @@ files / 675 tests, clean lint, clean build.
 | 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. The file routes' workspace boundary was not actually sound until 2026-09-20 22:05 IST: `safeResolvePath` used a bare string-prefix test, so a sibling directory sharing the root's name prefix escaped the workspace. Now segment-checked (see Last cycle), guarded by `src/tests/workspacePathContainment.test.ts`. The computer-operator permission gate itself also has direct coverage now: `src/tests/permissionGuard.test.ts` (9 tests, 2026-09-20 23:05 IST) asserts the emergency-stop block, the finance exclusion, the destructive-command and security-bypass guards, the Level 4 human gate, and that a blocked action must never be read as "no approval needed". |
 | 11 | Action result verification | `VERIFIED` | `ActionVerifier` no longer returns unconditional success (`|| true` removed). Clicks require an observed screen change; edits require a disk re-read; tests require parsed runner output; screenshots require a captured file. |
 | 12 | Browser real-action + permission flow | `VERIFIED` | `ScreenshotModal.tsx` uses `getDisplayMedia` when permitted, otherwise asks the host to capture via `/api/computer-operator/screenshot`. A denied permission reports `permission_denied`, not a simulated image. |
-| 13 | Zero-fake-success for all tools | `PARTIAL` | **2026-09-21 01:05 IST — third widening, UI + offline intent engine.** `SecurityMatrixModal.tsx` footer hardcoded `Security Matrix Status: 100% Operational` regardless of whether `/api/security` answered; now renders the fetched level or says the state is unavailable. `mobileStatusEngine.ts` `SAMPLE_NOTIFICATIONS` asserted `Always Free ARM VM health check: 100% nominal uptime` as a notification body; reworded to a maintenance notice. `src/utils/localJarvisEngine.ts`: the `mobile_personal_status` briefing defaulted every permission to `true` and every reading to a plausible constant (78% battery, 27C, 5 notifications, 3 events, 2 emails), so a no-phone briefing looked measured; the weather inquiry answered 27C / 48% / 'New Delhi' with no provider; `how are you` answered `All systems nominal. Ready to assist.` with no health check. Fixed: permissions now default `false`, unmeasured fields are nullable and the briefing reports no phone connected, the weather inquiry returns `actionExecuted: false`, and the greeting refuses to claim health. Guarded by `src/tests/toolSurfaceTruthfulness.test.ts` (14 tests over `server.ts` and the engine source; negative-validated: restoring `temperatureC ?? 27` fails the telemetry guard and the code was restored). Four assertions pinning the old strings were rewritten (`localJarvisEngine.test.ts`, `conversationalPipelineRegression.test.ts`, `voiceAndHindiModes.test.ts`). **Still NOT `VERIFIED`** - the sweep is pattern-driven, so it shows the audited strings are gone, not that every surface is honest. Known remaining gap: the `SAMPLE_*` fixtures in `mobileStatusEngine.ts` are sample data that `compileMobileStatusData` renders as if real and the UI does not label them as samples. A tool-by-tool inventory of all surfaces is still outstanding. |  Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. **2026-09-20 23:35 IST — the claim did not hold repo-wide:** `realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned `success: true` on *every* git failure with invented data (branch `main`, three fabricated commit subjects, `"Diff tool nominal."`), which propagated to the Autonomous Tools HUD, `/api/tools/git/*` and the `git_status_tool` voice intent. Fixed; guarded by `src/tests/gitToolsTruthfulness.test.ts` (6 tests, negative-validated: 4 of 6 fail with the fix reverted). Remaining scope before this can return to `VERIFIED`: the same audit has not yet been run across every tool surface. |
+| 13 | Zero-fake-success for all tools | `PARTIAL` | **2026-09-21 02:19 IST (20:49 UTC) — sample-fixture gap closed.** The `SAMPLE_*` fixtures in `mobileStatusEngine.ts` carry `available: true`, so `processOfflineCommand()`'s `available`-only gate spoke them as readings; the engine now gates on `isSample` too, and the weather path no longer falls back to 27C / 48% / 'New Delhi'. `MobilePersonalStatusModal.tsx` briefing badge no longer claims 'Real-Time Generated Telemetry' for sample data. Guarded by `src/tests/localJarvisEngine.test.ts` and `src/tests/mobileStatusEngine.test.ts` (46 tests across the two files, all passing; negative-validated: reverting the `isSample` gate makes the engine test fail with the fixture values spoken as real). Gates on `dbd3385`: lint exit 0, vitest 781/781, build exit 0. Still `PARTIAL` — the sweep is pattern-driven and no physical device exercised the live branch. **2026-09-21 01:05 IST — third widening, UI + offline intent engine.** `SecurityMatrixModal.tsx` footer hardcoded `Security Matrix Status: 100% Operational` regardless of whether `/api/security` answered; now renders the fetched level or says the state is unavailable. `mobileStatusEngine.ts` `SAMPLE_NOTIFICATIONS` asserted `Always Free ARM VM health check: 100% nominal uptime` as a notification body; reworded to a maintenance notice. `src/utils/localJarvisEngine.ts`: the `mobile_personal_status` briefing defaulted every permission to `true` and every reading to a plausible constant (78% battery, 27C, 5 notifications, 3 events, 2 emails), so a no-phone briefing looked measured; the weather inquiry answered 27C / 48% / 'New Delhi' with no provider; `how are you` answered `All systems nominal. Ready to assist.` with no health check. Fixed: permissions now default `false`, unmeasured fields are nullable and the briefing reports no phone connected, the weather inquiry returns `actionExecuted: false`, and the greeting refuses to claim health. Guarded by `src/tests/toolSurfaceTruthfulness.test.ts` (14 tests over `server.ts` and the engine source; negative-validated: restoring `temperatureC ?? 27` fails the telemetry guard and the code was restored). Four assertions pinning the old strings were rewritten (`localJarvisEngine.test.ts`, `conversationalPipelineRegression.test.ts`, `voiceAndHindiModes.test.ts`). **Still NOT `VERIFIED`** - the sweep is pattern-driven, so it shows the audited strings are gone, not that every surface is honest. Known remaining gap: the `SAMPLE_*` fixtures in `mobileStatusEngine.ts` are sample data that `compileMobileStatusData` renders as if real and the UI does not label them as samples. A tool-by-tool inventory of all surfaces is still outstanding. |  Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. **2026-09-20 23:35 IST — the claim did not hold repo-wide:** `realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned `success: true` on *every* git failure with invented data (branch `main`, three fabricated commit subjects, `"Diff tool nominal."`), which propagated to the Autonomous Tools HUD, `/api/tools/git/*` and the `git_status_tool` voice intent. Fixed; guarded by `src/tests/gitToolsTruthfulness.test.ts` (6 tests, negative-validated: 4 of 6 fail with the fix reverted). Remaining scope before this can return to `VERIFIED`: the same audit has not yet been run across every tool surface. |
 
 ### Computer control — what is real vs. not
 
@@ -639,3 +673,17 @@ is connected to this environment.
 - The `server.ts` token vault reports `NOT_CONFIGURED` unless `APP_SECRET` or
   `SESSION_SECRET` is set. With no secret, tokens are encrypted under a random
   per-process key and will not survive a restart.
+- Clock note, found this slot: the slot time labels written into this file in
+  this window run ahead of the commit timestamps that `date` reports. The
+  20:49 UTC commit of this slot is labelled `02:19 IST` above, but a commit
+  that `git log` stamped `2026-09-20 20:32 UTC` is labelled `02:10 IST`
+  earlier in this file, and the 20:12 UTC commit is labelled `00:15 IST` in
+  `docs/CHANGELOG.md`. Labelling is therefore inconsistent by up to a couple
+  of hours. No code depends on these strings; they are report metadata only.
+  The `git log` timestamp is the reliable record and is what the commit SHAs
+  quoted here resolve to.
+- Item 13 remains `PARTIAL` even though the sample-fixture speech gap is closed.
+  What is proven is that the audited surfaces no longer narrate fixtures as
+  measurements; there is no exhaustive per-tool inventory, and the
+  live-telemetry branch of `compileMobileStatusData()` has never run against a
+  real Android device, so it is `UNVERIFIED` rather than working or broken.
