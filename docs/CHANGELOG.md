@@ -3,6 +3,45 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 03:05 IST (2026-09-21 21:35 UTC) — Permission Gateway no longer asserts an unqueried kill-switch state
+
+### Bug fix
+- `PermissionGateway.tsx` is the screen a human reads before approving an
+  irreversible Level 4 action, and its emergency pill, lockout banner and
+  approval button were all driven by `emergency.emergencyPaused`. The component
+  seeded that state as `{ emergencyPaused: false }` and fetched
+  `/api/emergency/status` inside the same `try` block as the approval queue
+  lists, so a failed status request was swallowed and the initial "not paused"
+  value stood. The result was a green `ACTIVE` badge, no banner, and an enabled
+  `YES / APPROVE & EXECUTE` button on the strength of a value nobody had
+  fetched. A payload whose `emergencyPaused` was not a boolean fell through to
+  the same green branch.
+
+### Fix
+- New `src/utils/emergencyTruth.ts`: pure tri-state
+  (`emergencyLiveness` → `ACTIVE | ENGAGED | UNKNOWN`, plus
+  `emergencyStatusKnown` and `emergencyLivenessLabel`). `UNKNOWN` until a real
+  boolean has been observed, so an unqueried value can never read as healthy.
+- `PermissionGateway.tsx` seeds the emergency state as `null` and fetches the
+  status in its own `try` block whose failure leaves liveness at `UNKNOWN` — it
+  can no longer silently resolve to "not paused". The header renders an explicit
+  `STATUS UNKNOWN` badge with a matching banner, and
+  `approvalBlocked = killSwitchEngaged || !statusKnown` disables
+  `YES / APPROVE & EXECUTE` and makes `handleApprove()` return early while the
+  state is unknown. No render path reads `emergency.emergencyPaused` any more.
+
+### Tests
+- New `src/tests/permissionGatewayEmergencyLiveness.test.ts` (9 cases): the
+  tri-state over `null` / `undefined` / missing-boolean / paused / hard-switch,
+  `emergencyStatusKnown`, that an unobserved status is never `ACTIVE`, the
+  labels, and source guards pinning the `null` seed, the derived
+  `approvalBlocked`, the fail-closed `!statusKnown` early return and the absence
+  of the raw flag read. Negative-validated: restoring a single raw read makes
+  the source guard fail (`1 failed | 8 passed`); restored → 9/9. Full suite
+  `67 files / 963 tests passed`; lint (`tsc --noEmit`) exit 0; build exit 0
+  (`dist/server.cjs` 852453 bytes).
+
+---
 ## [Unreleased] - 2026-09-22 02:35 IST (2026-09-21 21:05 UTC) — Level-4 safety gate enforced on the host dispatch path
 
 ### Bug fix

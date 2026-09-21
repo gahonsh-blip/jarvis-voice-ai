@@ -4,56 +4,84 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 02:35 IST (2026-09-21 21:05 UTC) — **WORK SLOT**, the
-02:35 IST fire of the 2026-09-22 window (state counter `slots_completed` 14 → 15).
-Item 51 (`Complete security audit`) / the Level-4 finance exclusion gate.
+Last cycle: 2026-09-22 03:05 IST (2026-09-21 21:35 UTC) — **WORK SLOT**, the
+03:05 IST fire of the 2026-09-22 window (state counter `slots_completed` 15 → 16).
+Item 51 (`Complete security audit`) / kill-switch liveness honesty in the
+Permission Gateway.
 
-**The executor that actually touches the operating system never consulted the
-permission guard.** `HostActionExecutor.execute()` in
-`src/utils/computerOperator/actionExecutorHost.ts` resolved the workspace path
-and then shelled out. It had no `PermissionGuard` call anywhere in the file, so
-a `TERMINAL_COMMAND` whose text was financial — `transfer money to the client` —
-was handed to the real shell. The same executor also received an `approved` flag
-from the engine's resume path and lifted the Level-4 approval gate whenever it
-was set, so an approval granted for one action could carry a finance action
-through. This is the same class of defect the slot-13/14 keyword sweep was
-fixing, one layer further down and on the path with real side effects.
+**The screen a human reads before approving an irreversible action asserted a
+kill-switch state nobody had queried.** `PermissionGateway.tsx` heads the Level 4
+approval flow with the emergency-stop badge, and it derived that badge from
+`emergency.emergencyPaused` alone. The component's emergency state started at
+`{ emergencyPaused: false }`, and the emergency status was fetched in the *same*
+`try` block as the approval queue lists — so when `/api/emergency/status` failed,
+the `catch` swallowed it and the component kept the initial "not paused" value.
+The result was a green `ACTIVE` pill on the header, no lockout banner, and an
+enabled `YES / APPROVE & EXECUTE` button, all on the strength of a value that had
+never been fetched. Separately, any state that was not literally `paused` — a
+missing field, an unexpected payload shape — also fell through to the green
+branch. This is the same honesty defect class as the slot-6 telephony badges, on
+the gateway control itself.
 
-Fixed by giving the never-permissible rules a single owner.
-`PermissionGuard.permanentBlock()` in
-`src/utils/computerOperator/permissionGuard.ts` now returns the block recorded
-against an action for emergency stop, the Level-4 finance exclusion, and
-security bypass. `PermissionGuard.evaluateHostSafety()` and the browser-side
-`ActionExecutor.forwardToHost()` both call it, so the two executors cannot drift
-apart — the duplicate section-4 block previously copied into `evaluateAction()`
-was removed. `HostActionExecutor.safetyRefusal()` consults it before any
-dispatch: a held destructive command returns `PERMISSION_REQUIRED` with the
-Level-4 human gate named, everything else permanent returns `BLOCKED` with the
-guard's own reason, and `approved: true` cannot lift the finance exclusion.
-`server.ts`'s kill-switch check now delegates to the shared
-`isEmergencyStopActive()` / `emergencyStopFailureReason()` in
-`src/utils/hardening/emergencyStop.ts` instead of re-reading `getEmergencyState()`
-itself, so the HTTP layer and the executors read one kill switch.
+Fixed with a pure tri-state that refuses to infer a healthy state.
+`src/utils/emergencyTruth.ts` exports `emergencyLiveness(status)` — `ENGAGED` when
+either the global pause or the hard kill switch is set, `UNKNOWN` until a real
+boolean has actually been observed — plus `emergencyStatusKnown()` and
+`emergencyLivenessLabel()`. `PermissionGateway.tsx` seeds its emergency state as
+`null`, fetches `/api/emergency/status` in its own `try` block whose failure
+leaves the liveness at `UNKNOWN` (it can no longer silently resolve to "not
+paused"), renders an explicit `STATUS UNKNOWN` badge with a matching banner
+instead of the green pill, and derives `approvalBlocked = killSwitchEngaged ||
+!statusKnown` so the `YES / APPROVE & EXECUTE` control is disabled and
+`handleApprove()` returns early while the kill-switch state is unknown. Every
+`emergency.emergencyPaused` read in the component was replaced; the raw flag is
+no longer referenced in any render path.
 
-Guarded by a new `HostActionExecutor — Level-4 safety gate (item 51)` block in
-`src/tests/hostActionExecutor.test.ts` (6 cases: finance text blocked even when
-`approved`, security bypass blocked, unapproved Level-4 held, emergency stop
-blocked, and the ordinary read-only path still executing).
-Negative-validated: making `safetyRefusal()` return `null` (gate disabled) fails
-exactly 5 of the 6 new cases — observed `5 failed | 39 passed` of 44 in that
-file; gate restored → `44 passed` of 44, and the full suite `66 files / 954
-tests passed`. Gates on `bd79593`: lint (`tsc --noEmit`) exit 0; build exit 0
-(`dist/server.cjs` 852453 bytes / 832.5 kb).
+Guarded by the new `src/tests/permissionGatewayEmergencyLiveness.test.ts`
+(9 cases: the tri-state for `null` / `undefined` / missing-boolean / paused /
+hard-switch, `emergencyStatusKnown`, that an unobserved status is never `ACTIVE`,
+the labels, and source guards pinning the `null` seed, the derived
+`approvalBlocked`, the fail-closed `!statusKnown` early return, and the absence
+of `emergency.emergencyPaused`). Negative-validated: restoring a single raw read
+(`disabled={loading || emergency.emergencyPaused || killSwitchEngaged}`) fails
+exactly the source guard — observed `1 failed | 8 passed` of 9; restored →
+`9 passed`, and `permissionGatewayEmergencyLiveness.test.ts` +
+`fabricatedStatusClaims.test.ts` together `2 files / 17 tests passed`. Full suite
+`67 files / 963 tests passed`. Gates on `8d37cea`: lint (`tsc --noEmit`) exit 0;
+build exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb).
 
 Item 51 stays `PARTIAL`: the audit remains a pattern scan plus targeted gates,
 not an external penetration test, and no third-party assessment was performed.
+
+Previous cycle: 2026-09-22 02:35 IST (2026-09-21 21:05 UTC) — **WORK SLOT**, the
+02:35 IST fire. Item 51 (`Complete security audit`) / the Level-4 finance
+exclusion gate. `HostActionExecutor.execute()` in
+`src/utils/computerOperator/actionExecutorHost.ts` resolved the workspace path
+and then shelled out, with no `PermissionGuard` call anywhere in the file, so a
+`TERMINAL_COMMAND` whose text was financial — `transfer money to the client` —
+reached the real shell; the `approved` flag it received from the engine's resume
+path also lifted the Level-4 approval gate unconditionally. Fixed by giving the
+never-permissible rules a single owner: `PermissionGuard.permanentBlock()` now
+returns the block recorded for emergency stop, the Level-4 finance exclusion and
+security bypass; `evaluateHostSafety()` and the browser-side
+`ActionExecutor.forwardToHost()` both call it; `HostActionExecutor.safetyRefusal()`
+consults it before any dispatch (a held destructive command returns
+`PERMISSION_REQUIRED`, everything else permanent returns `BLOCKED`, and
+`approved: true` cannot lift the finance exclusion); `server.ts`'s kill-switch
+check delegates to the shared `isEmergencyStopActive()`. Guarded by the
+`HostActionExecutor — Level-4 safety gate` block in
+`src/tests/hostActionExecutor.test.ts` (6 cases). Negative-validated: returning
+`null` from `safetyRefusal()` fails exactly 5 of the 6 (observed
+`5 failed | 39 passed` of 44); all 44 pass with the gate restored. Gates on
+`bd79593`: lint exit 0, vitest **66 files / 954 tests passed**, build exit 0
+(`dist/server.cjs` 852453 bytes / 832.5 kb).
 
 Previous cycle: 2026-09-22 02:06 IST (2026-09-21 20:36 UTC) — **WORK SLOT**,
 the 02:05 IST fire. Item 51 (`Complete security audit`) / the Level-4 finance
 exclusion gate. `isFinanceBlocked()` in `server_tools.ts` listed `'money
 transfer'` but **not** the far more natural `'transfer money'`, so a plain
-fund-transfer instruction — `isFinanceBlocked('transfer money to the client')`
-— returned `blocked: false` and would have sailed past the strict finance
+fund-transfer instruction — `isFinanceBlocked('transfer money to the client')` —
+returned `blocked: false` and would have sailed past the strict finance
 exclusion filter that guards the live approval path (`createPendingActionRequest`
 rejects a finance action before it can ever be approved). The Computer Operator
 `PermissionGuard` (`src/utils/computerOperator/permissionGuard.ts`) carried the
@@ -873,7 +901,7 @@ is connected to this environment.
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. **2026-09-22 02:35 IST — the Level-4 finance exclusion gate on the dispatch path.** The executor that actually touches the OS (`HostActionExecutor.execute`) never consulted `PermissionGuard` at all: it resolved the workspace path, then ran the command, so a `TERMINAL_COMMAND` carrying financial text was executed by the real shell, and the `approved` flag (added to the engine's resume path) lifted the Level-4 approval gate unconditionally. `PermissionGuard.permanentBlock()` now owns the never-permissible rules (emergency stop, finance exclusion, security bypass), `evaluateHostSafety()` and the browser-side `ActionExecutor.forwardToHost()` both call it, the host gate maps a held destructive command to `PERMISSION_REQUIRED` and everything else (finance / bypass / kill switch) to `BLOCKED`, and `approved` cannot lift the finance exclusion. `server.ts`'s `emergencyActive()` now delegates to the shared `isEmergencyStopActive()` so the HTTP layer and the executor cannot drift. Guarded by the new `HostActionExecutor — Level-4 safety gate` block in `src/tests/hostActionExecutor.test.ts` (6 cases). Negative-validated: returning `null` from `safetyRefusal` fails exactly 5 of the 6 (observed `5 failed | 39 passed` of 44), and all 44 pass with the gate restored. Gates on `bd79593`: lint exit 0, vitest **66 files / 954 tests passed**, build exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb). |
+| 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. **2026-09-22 02:35 IST — the Level-4 finance exclusion gate on the dispatch path.** The executor that actually touches the OS (`HostActionExecutor.execute`) never consulted `PermissionGuard` at all: it resolved the workspace path, then ran the command, so a `TERMINAL_COMMAND` carrying financial text was executed by the real shell, and the `approved` flag (added to the engine's resume path) lifted the Level-4 approval gate unconditionally. `PermissionGuard.permanentBlock()` now owns the never-permissible rules (emergency stop, finance exclusion, security bypass), `evaluateHostSafety()` and the browser-side `ActionExecutor.forwardToHost()` both call it, the host gate maps a held destructive command to `PERMISSION_REQUIRED` and everything else (finance / bypass / kill switch) to `BLOCKED`, and `approved` cannot lift the finance exclusion. `server.ts`'s `emergencyActive()` now delegates to the shared `isEmergencyStopActive()` so the HTTP layer and the executor cannot drift. Guarded by the new `HostActionExecutor — Level-4 safety gate` block in `src/tests/hostActionExecutor.test.ts` (6 cases). Negative-validated: returning `null` from `safetyRefusal` fails exactly 5 of the 6 (observed `5 failed | 39 passed` of 44), and all 44 pass with the gate restored. Gates on `bd79593`: lint exit 0, vitest **66 files / 954 tests passed**, build exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb). **2026-09-22 03:05 IST — kill-switch liveness honesty on the Permission Gateway itself.** `PermissionGateway.tsx` — the screen a human reads before approving an irreversible Level 4 action — derived its emergency badge from `emergency.emergencyPaused` alone, seeded that state as `{ emergencyPaused: false }`, and fetched `/api/emergency/status` inside the same `try` block as the approval queue lists, so a failed status request was swallowed and the component kept the initial "not paused" value: green `ACTIVE` pill, no lockout banner, and an enabled `YES / APPROVE & EXECUTE` button on the strength of a value nobody had fetched. Any non-boolean shape also fell through to the green branch. `src/utils/emergencyTruth.ts` is now a pure tri-state (`emergencyLiveness` / `emergencyStatusKnown` / `emergencyLivenessLabel`): `ENGAGED` when the pause or hard switch is set, `UNKNOWN` until a real boolean is observed. The component seeds `null`, fetches the emergency status separately so a failure cannot resolve to "not paused", renders an explicit `STATUS UNKNOWN` badge and banner, and derives `approvalBlocked = killSwitchEngaged || !statusKnown` so approval is disabled and `handleApprove()` returns early while the state is unknown; no render path reads the raw flag. Guarded by the new `src/tests/permissionGatewayEmergencyLiveness.test.ts` (9 cases). Negative-validated: restoring one raw read (`disabled={loading || emergency.emergencyPaused || killSwitchEngaged}`) fails exactly the source guard — observed `1 failed | 8 passed` of 9; restored → 9/9, and the full suite **67 files / 963 tests passed**. Gates on `8d37cea`: lint (`tsc --noEmit`) exit 0, build exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb). |
 | 52 | Permission matrix finalization | `VERIFIED` | `src/utils/hardening/permissionMatrix.ts` holds one ordered matrix that all callers share. The first matching entry wins, so a command containing both `read` and `delete` classifies as destructive. An unrecognised action is refused at level 4 and requires approval — it is never defaulted to safe. `POST /api/security/evaluate` exposes it. 19 unit tests plus E2E. |
 | 53 | Kill-switch testing | `VERIFIED` | `POST /api/security/evaluate` checks the emergency stop before the level check, so an engaged kill switch blocks even a level-1 read action with category `kill_switch`. E2E toggles the switch on, asserts the block, then releases it. `isBlockedByKillSwitch` unit-tested both ways. |
 | 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; HUD surfaces that asserted unverified credential/link state; and — 2026-09-20 22:35 IST — a caller-ID masking leak. `maskPhoneNumber` in `src/utils/telephonyPermissions.ts` returned `+9198765*****` for `+91 9876543210`, exposing the country code plus eight subscriber digits, while the sibling helper in `androidBridgeEngine.ts` already masked the same input as `+91 ******3210`. The telephony helper now matches that canonical `+91 ******3210` form (`src/tests/telephonyPermissions.test.ts`, 24 tests; negative-validated — 8 of 24 fail against the old implementation). `HUDHeader.tsx` no longer printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; it polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (22 tests). A second leak sweep on 2026-09-20 23:55 UTC found six more families that passed through unredacted (Google OAuth client secrets, Discord bot tokens, GitLab PATs, DigitalOcean tokens, labelled AWS secret keys, connection-string passwords); they are now covered. No credential rotation was performed against live providers here. |
