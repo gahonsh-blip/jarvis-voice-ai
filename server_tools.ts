@@ -2,6 +2,12 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { exec, execSync } from 'child_process';
+import {
+  describeEmailConduit,
+  isEmailTransportImplemented,
+  EMAIL_CAPABILITY_NOTE,
+  type EmailConduitStatus,
+} from './src/utils/emailConduitTruth';
 
 // ==============================================================================
 // 1. GLOBAL EMERGENCY STOP / PAUSE ENGINE
@@ -654,6 +660,8 @@ export async function realWebFetch(targetUrl: string): Promise<{
 // ==============================================================================
 export function realEmailStatus(): {
   configured: boolean;
+  status: EmailConduitStatus;
+  transportImplemented: boolean;
   service: string;
   senderAddress?: string;
   missingEnvVars: string[];
@@ -667,15 +675,20 @@ export function realEmailStatus(): {
   if (!user) missing.push('GMAIL_USER');
   if (!pass) missing.push('GMAIL_APP_PASSWORD');
 
-  const configured = Boolean(user && pass);
+  const credentialsPresent = Boolean(user && pass);
+  const truth = describeEmailConduit(credentialsPresent);
 
   return {
-    configured,
+    // `configured` is retained for existing callers but now only ever means
+    // "credentials are present", never "a sender exists".
+    configured: credentialsPresent,
+    status: truth.status,
+    transportImplemented: isEmailTransportImplemented(),
     service: host.includes('gmail') ? 'Gmail (Google Workspace SMTP)' : `Custom SMTP (${host})`,
     senderAddress: user || undefined,
     missingEnvVars: missing,
-    message: configured
-      ? `Email outbound conduit configured as ${user}. Level 4 confirmation required for all sends.`
+    message: credentialsPresent
+      ? `SMTP credentials present for ${user}, but ${EMAIL_CAPABILITY_NOTE}`
       : `Email is NOT configured. Provide ${missing.join(' and ')} in environment settings to enable outbound email actions.`,
   };
 }
@@ -1190,15 +1203,20 @@ export function getIntegrationsAuditReport(): {
       id: 'email',
       name: 'Email Outbound Service (SMTP / Google Workspace)',
       category: 'Communications',
-      status: emailConnected ? ('REAL_WORKING' as const) : ('NOT_CONNECTED' as const),
+      // Credential presence was reported as REAL_WORKING with the reason "SMTP
+      // Conduit verified for client notifications and quotations", but no SMTP
+      // client or send route exists in this build. A sender that does not exist
+      // cannot be REAL_WORKING, so the status is pinned to NOT_AVAILABLE and is
+      // never derived from the env vars.
+      status: 'NOT_AVAILABLE' as const,
       reason: emailConnected
-        ? 'SMTP Conduit verified for client notifications and quotations.'
-        : 'GMAIL_USER or GMAIL_APP_PASSWORD not configured.',
+        ? `SMTP credentials are present, but ${EMAIL_CAPABILITY_NOTE}`
+        : 'GMAIL_USER or GMAIL_APP_PASSWORD not configured, and no outbound SMTP transport exists in this build.',
       requiredEnvVars: [
         { key: 'GMAIL_USER', label: 'Gmail / SMTP Account', configured: emailUser, isSecret: false },
         { key: 'GMAIL_APP_PASSWORD', label: 'Gmail App Password', configured: emailPass, isSecret: true },
       ],
-      capabilities: ['Quotation Email Dispatch', 'Client Inquiries', 'Drafting', 'Level 4 Approval Enforced'],
+      capabilities: ['Credentials only — quotation/inquiry dispatch is NOT implemented in this build'],
     },
     {
       id: 'oracle_cloud',

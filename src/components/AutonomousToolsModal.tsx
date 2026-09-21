@@ -1280,7 +1280,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
 
               <div
                 className={`p-4 rounded-xl border flex items-center justify-between font-mono text-xs ${
-                  emailStatus?.configured
+                  emailStatus?.transportImplemented
                     ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
                     : 'bg-amber-950/60 border-amber-500/40 text-amber-200'
                 }`}
@@ -1291,12 +1291,17 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                 </div>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                    emailStatus?.configured
+                    emailStatus?.transportImplemented
                       ? 'bg-emerald-900 border border-emerald-500 text-emerald-300'
                       : 'bg-amber-900 border border-amber-500 text-amber-300'
                   }`}
                 >
-                  {emailStatus?.configured ? 'READY' : 'NOT CONFIGURED'}
+                  {/* Badge reflects whether a sender exists, not whether credentials do. */}
+                  {emailStatus?.transportImplemented
+                    ? 'READY'
+                    : emailStatus?.configured
+                      ? 'CREDENTIALS ONLY — NO SENDER'
+                      : 'NOT CONFIGURED'}
                 </span>
               </div>
             </div>
