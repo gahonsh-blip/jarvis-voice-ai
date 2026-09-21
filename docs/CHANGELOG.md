@@ -3,6 +3,35 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 00:36 IST (2026-09-21 19:06 UTC) — Computer Operator panel no longer claims an unmeasured screen
+
+### Bug fix
+- `ComputerOperatorModal.tsx` drew a green dot with the literal
+  `STANDBY: SCREEN SYNCHRONIZED` from the mere absence of a running task, even
+  when the host desktop could not be observed (`probeHostState()` returns
+  `observed: false` on a headless host).
+- The same panel's resolution badge rendered `0x0` for an unobservable host, and
+  a field labelled `Resolution:` displayed `currentObservation?.platform ||
+  'linux-arm64'` — a platform name presented as a measured dimension.
+
+### Fix
+- New `src/utils/computerOperator/observationTruth.ts`: `screenSyncState()` /
+  `screenSyncLabel()` hold at `ILLUSTRATIVE` (built-in preview) or `UNOBSERVED`
+  (absent/ambiguous observation) and report `SCREEN OBSERVED FROM HOST` only for
+  a genuine observation; `observationResolutionLabel()` returns `UNKNOWN` rather
+  than `0x0`; `observationPlatformLabel()` labels the platform as a platform;
+  `observationAmbiguityNotice()` surfaces the host's own `ambiguityReason`.
+- The status dot is red for `UNOBSERVED`, grey for `ILLUSTRATIVE`, never green.
+
+### Tests
+- `src/tests/observationTruth.test.ts` — 19 tests over the helpers plus source
+  guards on the removed literals. Negative-validated: reintroducing
+  `STANDBY: SCREEN SYNCHRONIZED` fails exactly the source guard (1 failed | 18
+  passed); restored to 19/19.
+- Gates on `61ad02e`: lint (`tsc --noEmit`) exit 0, vitest 64 files / 922 tests
+  passed, build exit 0 (`dist/server.cjs` 843115 bytes / 823.4 kb).
+
+---
 ## [Unreleased] - 2026-09-22 00:17 IST (2026-09-21 18:47 UTC) — Social credential presence is no longer reported as a live connection
 
 ### Bug fix
