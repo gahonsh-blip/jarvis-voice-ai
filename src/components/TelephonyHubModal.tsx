@@ -47,6 +47,7 @@ import {
   getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
+import { telephonyEndpointLabel, telephonyBrainLabel } from '../utils/telephonyEndpointTruth';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
 import {
   downloadCallHistoryCsv,
@@ -106,6 +107,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     isConfigured: boolean;
     provider?: { id: string; name: string };
   } | null>(null);
+  const [geminiConfigured, setGeminiConfigured] = useState<boolean | undefined>(undefined);
 
   React.useEffect(() => {
     fetch('/api/telephony/status')
@@ -113,6 +115,17 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
       .then((data) => {
         if (data && data.success) {
           setProviderStatus(data);
+        }
+      })
+      .catch(() => {});
+
+    // The Gemini reasoning path is only "ready" if the key is actually present;
+    // /api/health reports that directly, so readiness is measured, not assumed.
+    fetch('/api/health')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.geminiEnabled === 'boolean') {
+          setGeminiConfigured(data.geminiEnabled);
         }
       })
       .catch(() => {});
@@ -1245,21 +1258,28 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     </div>
                   )}
 
-                  {/* Webhook Endpoints */}
+                  {/* Webhook Endpoints — inventory and every badge are derived
+                      from routes actually registered in server.ts, not asserted. */}
                   <div className="rounded-xl bg-slate-950 border border-slate-800 p-3">
                     <div className="text-[11px] font-mono text-cyan-400 uppercase mb-2">Live Webhook Endpoints</div>
                     <div className="space-y-1 text-xs font-mono text-slate-300">
                       <div className="flex items-center justify-between">
                         <span>POST /api/telephony/incoming</span>
-                        <span className="text-emerald-400 text-[10px]">LIVE & READY</span>
+                        <span className="text-emerald-400 text-[10px]">
+                          {telephonyEndpointLabel('/api/telephony/incoming', true)}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span>POST /api/telephony/twiml/voice</span>
-                        <span className="text-emerald-400 text-[10px]">TwiML ACTIVE</span>
+                        <span>POST /api/telephony/twiml/turn</span>
+                        <span className="text-emerald-400 text-[10px]">
+                          {telephonyEndpointLabel('/api/telephony/twiml/turn', true)}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span>POST /api/telephony/handle-turn</span>
-                        <span className="text-emerald-400 text-[10px]">GEMINI BRAIN READY</span>
+                        <span className="text-cyan-300 text-[10px]">
+                          {telephonyBrainLabel(providerStatus?.isConfigured, geminiConfigured)}
+                        </span>
                       </div>
                     </div>
                   </div>

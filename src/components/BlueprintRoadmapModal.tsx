@@ -339,7 +339,9 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
         <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
           <span>HERMES JARVIS • Archived design blueprint ({stats.completionPercentage}% checklist items ticked)</span>
           <div className="flex items-center gap-4">
-            <span>Security Matrix: Active</span>
+            {/* This modal never queries the security posture, so it must not
+                assert one. Live state is shown by the Security Matrix panel. */}
+            <span>Security Matrix: live status in Security Matrix panel</span>
             <button
               onClick={onClose}
               className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"

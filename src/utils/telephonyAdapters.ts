@@ -3,6 +3,7 @@ import {
   TelephonyCallState,
   TelephonyStatus,
 } from '../types/telephonyProvider';
+import { TELEPHONY_TWIML_TURN_PATH } from './telephonyEndpointTruth';
 
 /**
  * Base abstract or utility functions for Telephony Adapters
@@ -96,7 +97,7 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
 
     try {
       const from = params.fromNumber || this.phoneNumber;
-      const callbackUrl = `${this.webhookBaseUrl || 'https://hermes-jarvis.local'}/api/telephony/twiml/voice`;
+      const callbackUrl = `${this.webhookBaseUrl || 'https://hermes-jarvis.local'}${TELEPHONY_TWIML_TURN_PATH}`;
       
       const auth = Buffer.from(`${this.accountSid}:${this.authToken}`).toString('base64');
       const body = new URLSearchParams({
