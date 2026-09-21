@@ -116,6 +116,61 @@ export function replyDispatchSpeech(outcome: ReplyDispatchOutcome, language?: st
   }
 }
 
+/**
+ * The pending-queue status an event should carry after a dispatch attempt.
+ *
+ * A reply handed to the bridge is NOT `EXECUTED` — the device has not confirmed
+ * it, and the server reports confirmation only through the separate
+ * `action/confirm` route. So a dispatched reply is `AUTHORIZED` (approved and
+ * sent), never `EXECUTED`, and a dispatch that was refused by a gate is
+ * `REJECTED` rather than a generic failure.
+ */
+export function replyEventStatusForOutcome(
+  outcome: ReplyDispatchOutcome
+): 'AUTHORIZED' | 'REJECTED' | 'FAILED' | 'PENDING_APPROVAL' {
+  switch (outcome) {
+    case 'DISPATCHED':
+    case 'UNVERIFIED':
+      return 'AUTHORIZED';
+    case 'BLOCKED':
+      return 'REJECTED';
+    case 'NOT_CONFIGURED':
+      return 'PENDING_APPROVAL';
+    default:
+      return 'FAILED';
+  }
+}
+
+/** Audit projection for a dispatch attempt, read from the observed outcome only. */
+export interface ReplyAuditProjection {
+  eventType: 'REPLY_APPROVED' | 'ACTION_DENIED' | 'CAPABILITY_UNAVAILABLE';
+  authorizationState: 'APPROVED' | 'BLOCKED' | 'PENDING';
+  result: 'UNVERIFIED' | 'DENIED' | 'UNAVAILABLE' | 'FAILED';
+}
+
+/**
+ * The audit entry must not call an unconfirmed dispatch a `SUCCESS`. The server
+ * answers `DISPATCHED, verified: false`, so the honest result is `UNVERIFIED` —
+ * only the confirm route may record `SUCCESS`.
+ */
+export function replyAuditProjection(outcome: ReplyDispatchOutcome): ReplyAuditProjection {
+  switch (outcome) {
+    case 'DISPATCHED':
+    case 'UNVERIFIED':
+      return { eventType: 'REPLY_APPROVED', authorizationState: 'APPROVED', result: 'UNVERIFIED' };
+    case 'BLOCKED':
+      return { eventType: 'ACTION_DENIED', authorizationState: 'BLOCKED', result: 'DENIED' };
+    case 'NOT_CONFIGURED':
+      return {
+        eventType: 'CAPABILITY_UNAVAILABLE',
+        authorizationState: 'PENDING',
+        result: 'UNAVAILABLE',
+      };
+    default:
+      return { eventType: 'REPLY_APPROVED', authorizationState: 'APPROVED', result: 'FAILED' };
+  }
+}
+
 /** Speech for a refusal decided before any request is sent. */
 export function replyRefusalSpeech(refusal: ReplyDispatchRefusal, language?: string): string {
   const hi = (language || '').toLowerCase().startsWith('hi');

@@ -327,7 +327,7 @@ export interface MobileAuditEntry {
   actionRequested?: string;
   permissionState?: MobilePermissionState;
   authorizationState?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'AUTO' | 'BLOCKED';
-  result?: 'SUCCESS' |'FAILED' |'DENIED' |'UNAVAILABLE';
+  result?: 'SUCCESS' |'FAILED' |'DENIED' |'UNAVAILABLE' | 'UNVERIFIED';
   masked?: string;
 }
 

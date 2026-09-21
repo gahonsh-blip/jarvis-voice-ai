@@ -6,6 +6,8 @@ import {
   replyDispatchOutcome,
   replyDispatchSpeech,
   replyRefusalSpeech,
+  replyEventStatusForOutcome,
+  replyAuditProjection,
 } from '../utils/mobileReplyDispatchTruth';
 
 // Regression guard: the pending-approval REPLY button previously marked an event
@@ -106,6 +108,37 @@ describe('reply speech never claims confirmed delivery', () => {
   });
 });
 
+describe('event status and audit reflect what was observed, never a confirmed delivery', () => {
+  it('a handed-off reply is AUTHORIZED, never EXECUTED (the device has not confirmed)', () => {
+    expect(replyEventStatusForOutcome('DISPATCHED')).toBe('AUTHORIZED');
+    expect(replyEventStatusForOutcome('UNVERIFIED')).toBe('AUTHORIZED');
+  });
+
+  it('a gated refusal is REJECTED and an unreachable bridge leaves the event pending', () => {
+    expect(replyEventStatusForOutcome('BLOCKED')).toBe('REJECTED');
+    expect(replyEventStatusForOutcome('NOT_CONFIGURED')).toBe('PENDING_APPROVAL');
+    expect(replyEventStatusForOutcome('FAILED')).toBe('FAILED');
+  });
+
+  it('an unconfirmed dispatch is not logged as SUCCESS', () => {
+    expect(replyAuditProjection('DISPATCHED')).toEqual({
+      eventType: 'REPLY_APPROVED',
+      authorizationState: 'APPROVED',
+      result: 'UNVERIFIED',
+    });
+    expect(replyAuditProjection('UNVERIFIED').result).toBe('UNVERIFIED');
+  });
+
+  it('a blocked dispatch is audited as denied, not as an approval', () => {
+    expect(replyAuditProjection('BLOCKED')).toEqual({
+      eventType: 'ACTION_DENIED',
+      authorizationState: 'BLOCKED',
+      result: 'DENIED',
+    });
+    expect(replyAuditProjection('NOT_CONFIGURED').eventType).toBe('CAPABILITY_UNAVAILABLE');
+  });
+});
+
 describe('MobileBridgeModal no longer fabricates an authorized reply', () => {
   const src = fs.readFileSync(path.resolve(__dirname, '../components/MobileBridgeModal.tsx'), 'utf8');
 
@@ -121,5 +154,12 @@ describe('MobileBridgeModal no longer fabricates an authorized reply', () => {
     expect(src).toContain('replyDispatchDecision');
     expect(src).toContain("'/api/mobile/bridge/message/reply'");
     expect(src).toContain('approved: true');
+  });
+
+  it('does not mark a handed-off reply EXECUTED or a dispatch SUCCESS', () => {
+    expect(src).not.toContain("outcome === 'DISPATCHED' ? 'EXECUTED' : 'FAILED'");
+    expect(src).not.toContain("outcome === 'DISPATCHED' ? 'SUCCESS' : 'FAILED'");
+    expect(src).toContain('replyEventStatusForOutcome');
+    expect(src).toContain('replyAuditProjection');
   });
 });

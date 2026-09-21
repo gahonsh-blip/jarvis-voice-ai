@@ -42,7 +42,18 @@ import {
   replyDispatchOutcome,
   replyDispatchSpeech,
   replyRefusalSpeech,
+  replyEventStatusForOutcome,
+  replyAuditProjection,
 } from '../utils/mobileReplyDispatchTruth';
+
+const EVENT_STATUS_LABEL: Record<string, string> = {
+  PENDING_APPROVAL: 'PENDING APPROVAL',
+  AUTHORIZED: 'AUTHORIZED — AWAITING DEVICE CONFIRMATION',
+  EXECUTED: 'CONFIRMED BY DEVICE',
+  REJECTED: 'REJECTED',
+  FAILED: 'FAILED',
+  EXPIRED: 'EXPIRED',
+};
 
 function nextPolicy(current: MobileCategoryPolicy): MobileCategoryPolicy {
   if (current === 'ALLOW') return 'ASK';
@@ -184,14 +195,15 @@ export const MobileBridgeModal: React.FC<Props> = ({
     }
 
     const outcome = replyDispatchOutcome(httpStatus, body);
-    updatePendingEventStatus(ev.eventId, outcome === 'DISPATCHED' ? 'EXECUTED' : 'FAILED');
+    // A handed-off reply is not EXECUTED (the device has not confirmed it), and
+    // an unconfirmed dispatch is not a SUCCESS in the audit log.
+    updatePendingEventStatus(ev.eventId, replyEventStatusForOutcome(outcome));
+    const auditProjection = replyAuditProjection(outcome);
     logMobileAudit({
-      eventType: outcome === 'DISPATCHED' ? 'REPLY_SENT' : 'ACTION_DENIED',
       application: ev.appLabel || ev.displaySubtitle,
       actionRequested: 'SEND_REPLY',
       permissionState: 'GRANTED',
-      authorizationState: 'APPROVED',
-      result: outcome === 'DISPATCHED' ? 'SUCCESS' : 'FAILED',
+      ...auditProjection,
     });
     setSimNotice('REPLY ' + outcome + ' (HTTP ' + httpStatus + ')');
     onSpeak(replyDispatchSpeech(outcome, activeLanguage));
@@ -239,7 +251,7 @@ export const MobileBridgeModal: React.FC<Props> = ({
               <div key={ev.eventId} className="p-3 rounded-xl border border-amber-700/50 bg-amber-950/20">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-mono font-bold text-amber-200 uppercase">{ev.kind.replace(/_/g, ' ')}</span>
-                  <span className="text-[9px] font-mono text-slate-400">{ev.status}</span>
+                  <span className={`text-[9px] font-mono ${ev.status === 'EXECUTED' ? 'text-emerald-300' : ev.status === 'AUTHORIZED' ? 'text-amber-300' : 'text-slate-400'}`}>{EVENT_STATUS_LABEL[ev.status] ?? ev.status}</span>
                 </div>
                 <p className="text-sm font-bold text-white font-mono">{ev.displayTitle}</p>
                 <p className="text-[11px] text-slate-400 font-mono mt-0.5">{ev.displaySubtitle}</p>
