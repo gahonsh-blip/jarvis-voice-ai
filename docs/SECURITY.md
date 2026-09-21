@@ -48,6 +48,24 @@ as distinct from `APPROVE`, and must never default to consent on an unparsed rep
   (`requiresHumanApproval` stays `false`, `dangerCategory`
   `FINANCE_RESTRICTION`) — a blocked finance action must be read as `BLOCKED`,
   never as `NEEDS_APPROVAL`.
+- **The exclusion is now enforced where the action is actually dispatched.**
+  On 2026-09-22 02:35 IST the executor with real side effects —
+  `HostActionExecutor.execute()` (`src/utils/computerOperator/actionExecutorHost.ts`)
+  — was found to contain no `PermissionGuard` call at all: it resolved the
+  workspace path and then ran the command, so a `TERMINAL_COMMAND` whose text
+  was financial reached the real shell. It also took a caller-supplied
+  `approved` flag and lifted the Level-4 gate whenever it was set. A keyword
+  list is only a guard if the code path that runs the action consults it.
+  `PermissionGuard.permanentBlock()` is now the single owner of the
+  never-permissible categories (emergency stop, finance exclusion, security
+  bypass) and is called by both the browser-side `ActionExecutor.forwardToHost()`
+  and `HostActionExecutor.safetyRefusal()`. `approved: true` cannot lift any of
+  those; it only satisfies the ordinary Level-4 human gate. The kill-switch check
+  in `server.ts` delegates to `isEmergencyStopActive()` too, so the HTTP layer
+  and the executors share one definition of "the switch is engaged".
+  Covered by the `HostActionExecutor — Level-4 safety gate` block in
+  `src/tests/hostActionExecutor.test.ts`; negative-validated (disabling the gate
+  fails 5 of 6 new cases).
 
 ---
 

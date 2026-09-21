@@ -3,6 +3,38 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 02:35 IST (2026-09-21 21:05 UTC) — Level-4 safety gate enforced on the host dispatch path
+
+### Bug fix
+- `HostActionExecutor.execute()` in `src/utils/computerOperator/actionExecutorHost.ts`
+  contained no `PermissionGuard` call. The executor that actually shells out to
+  the OS resolved the workspace path and ran the command, so a `TERMINAL_COMMAND`
+  whose text was financial (`transfer money to the client`) was executed by the
+  real shell. The same executor accepted an `approved` flag and used it to lift
+  the Level-4 approval gate, so a single approval could carry a finance action
+  through. The earlier keyword sweeps hardened the guard's word list but the
+  executor never consulted the guard at all.
+
+### Fix
+- `PermissionGuard.permanentBlock()` is now the single owner of the
+  never-permissible categories: emergency stop, the Level-4 finance exclusion,
+  and security bypass. `PermissionGuard.evaluateHostSafety()` and the
+  browser-side `ActionExecutor.forwardToHost()` both call it, and the duplicated
+  section-4 block was removed from `evaluateAction()`.
+- `HostActionExecutor.safetyRefusal()` gates every dispatch: a held destructive
+  command returns `PERMISSION_REQUIRED`, everything else permanent returns
+  `BLOCKED`, and `approved: true` cannot lift the finance exclusion.
+- `server.ts`'s `emergencyActive()` delegates to the shared
+  `isEmergencyStopActive()` in `src/utils/hardening/emergencyStop.ts`.
+
+### Tests
+- New `HostActionExecutor — Level-4 safety gate (item 51)` block in
+  `src/tests/hostActionExecutor.test.ts` (6 cases). Negative-validated: disabling
+  the gate fails exactly 5 of 6 (`5 failed | 39 passed` of 44), all 44 pass with
+  it restored. Full suite `66 files / 954 tests passed`; build exit 0
+  (`dist/server.cjs` 852453 bytes).
+
+---
 ## [Unreleased] - 2026-09-22 02:06 IST (2026-09-21 20:36 UTC) — Finance exclusion gate closed for "transfer money"
 
 ### Bug fix

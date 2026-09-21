@@ -4,8 +4,52 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 02:06 IST (2026-09-21 20:36 UTC) — **WORK SLOT**, slot 13 of the
-2026-09-21 window. Item 51 (`Complete security audit`) / the Level-4 finance
+Last cycle: 2026-09-22 02:35 IST (2026-09-21 21:05 UTC) — **WORK SLOT**, the
+02:35 IST fire of the 2026-09-22 window (state counter `slots_completed` 14 → 15).
+Item 51 (`Complete security audit`) / the Level-4 finance exclusion gate.
+
+**The executor that actually touches the operating system never consulted the
+permission guard.** `HostActionExecutor.execute()` in
+`src/utils/computerOperator/actionExecutorHost.ts` resolved the workspace path
+and then shelled out. It had no `PermissionGuard` call anywhere in the file, so
+a `TERMINAL_COMMAND` whose text was financial — `transfer money to the client` —
+was handed to the real shell. The same executor also received an `approved` flag
+from the engine's resume path and lifted the Level-4 approval gate whenever it
+was set, so an approval granted for one action could carry a finance action
+through. This is the same class of defect the slot-13/14 keyword sweep was
+fixing, one layer further down and on the path with real side effects.
+
+Fixed by giving the never-permissible rules a single owner.
+`PermissionGuard.permanentBlock()` in
+`src/utils/computerOperator/permissionGuard.ts` now returns the block recorded
+against an action for emergency stop, the Level-4 finance exclusion, and
+security bypass. `PermissionGuard.evaluateHostSafety()` and the browser-side
+`ActionExecutor.forwardToHost()` both call it, so the two executors cannot drift
+apart — the duplicate section-4 block previously copied into `evaluateAction()`
+was removed. `HostActionExecutor.safetyRefusal()` consults it before any
+dispatch: a held destructive command returns `PERMISSION_REQUIRED` with the
+Level-4 human gate named, everything else permanent returns `BLOCKED` with the
+guard's own reason, and `approved: true` cannot lift the finance exclusion.
+`server.ts`'s kill-switch check now delegates to the shared
+`isEmergencyStopActive()` / `emergencyStopFailureReason()` in
+`src/utils/hardening/emergencyStop.ts` instead of re-reading `getEmergencyState()`
+itself, so the HTTP layer and the executors read one kill switch.
+
+Guarded by a new `HostActionExecutor — Level-4 safety gate (item 51)` block in
+`src/tests/hostActionExecutor.test.ts` (6 cases: finance text blocked even when
+`approved`, security bypass blocked, unapproved Level-4 held, emergency stop
+blocked, and the ordinary read-only path still executing).
+Negative-validated: making `safetyRefusal()` return `null` (gate disabled) fails
+exactly 5 of the 6 new cases — observed `5 failed | 39 passed` of 44 in that
+file; gate restored → `44 passed` of 44, and the full suite `66 files / 954
+tests passed`. Gates on `bd79593`: lint (`tsc --noEmit`) exit 0; build exit 0
+(`dist/server.cjs` 852453 bytes / 832.5 kb).
+
+Item 51 stays `PARTIAL`: the audit remains a pattern scan plus targeted gates,
+not an external penetration test, and no third-party assessment was performed.
+
+Previous cycle: 2026-09-22 02:06 IST (2026-09-21 20:36 UTC) — **WORK SLOT**,
+the 02:05 IST fire. Item 51 (`Complete security audit`) / the Level-4 finance
 exclusion gate. `isFinanceBlocked()` in `server_tools.ts` listed `'money
 transfer'` but **not** the far more natural `'transfer money'`, so a plain
 fund-transfer instruction — `isFinanceBlocked('transfer money to the client')`
@@ -829,7 +873,7 @@ is connected to this environment.
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. |
+| 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. **2026-09-22 02:35 IST — the Level-4 finance exclusion gate on the dispatch path.** The executor that actually touches the OS (`HostActionExecutor.execute`) never consulted `PermissionGuard` at all: it resolved the workspace path, then ran the command, so a `TERMINAL_COMMAND` carrying financial text was executed by the real shell, and the `approved` flag (added to the engine's resume path) lifted the Level-4 approval gate unconditionally. `PermissionGuard.permanentBlock()` now owns the never-permissible rules (emergency stop, finance exclusion, security bypass), `evaluateHostSafety()` and the browser-side `ActionExecutor.forwardToHost()` both call it, the host gate maps a held destructive command to `PERMISSION_REQUIRED` and everything else (finance / bypass / kill switch) to `BLOCKED`, and `approved` cannot lift the finance exclusion. `server.ts`'s `emergencyActive()` now delegates to the shared `isEmergencyStopActive()` so the HTTP layer and the executor cannot drift. Guarded by the new `HostActionExecutor — Level-4 safety gate` block in `src/tests/hostActionExecutor.test.ts` (6 cases). Negative-validated: returning `null` from `safetyRefusal` fails exactly 5 of the 6 (observed `5 failed | 39 passed` of 44), and all 44 pass with the gate restored. Gates on `bd79593`: lint exit 0, vitest **66 files / 954 tests passed**, build exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb). |
 | 52 | Permission matrix finalization | `VERIFIED` | `src/utils/hardening/permissionMatrix.ts` holds one ordered matrix that all callers share. The first matching entry wins, so a command containing both `read` and `delete` classifies as destructive. An unrecognised action is refused at level 4 and requires approval — it is never defaulted to safe. `POST /api/security/evaluate` exposes it. 19 unit tests plus E2E. |
 | 53 | Kill-switch testing | `VERIFIED` | `POST /api/security/evaluate` checks the emergency stop before the level check, so an engaged kill switch blocks even a level-1 read action with category `kill_switch`. E2E toggles the switch on, asserts the block, then releases it. `isBlockedByKillSwitch` unit-tested both ways. |
 | 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; HUD surfaces that asserted unverified credential/link state; and — 2026-09-20 22:35 IST — a caller-ID masking leak. `maskPhoneNumber` in `src/utils/telephonyPermissions.ts` returned `+9198765*****` for `+91 9876543210`, exposing the country code plus eight subscriber digits, while the sibling helper in `androidBridgeEngine.ts` already masked the same input as `+91 ******3210`. The telephony helper now matches that canonical `+91 ******3210` form (`src/tests/telephonyPermissions.test.ts`, 24 tests; negative-validated — 8 of 24 fail against the old implementation). `HUDHeader.tsx` no longer printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; it polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). `git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (22 tests). A second leak sweep on 2026-09-20 23:55 UTC found six more families that passed through unredacted (Google OAuth client secrets, Discord bot tokens, GitLab PATs, DigitalOcean tokens, labelled AWS secret keys, connection-string passwords); they are now covered. No credential rotation was performed against live providers here. |
