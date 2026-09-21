@@ -2099,3 +2099,92 @@ HUD; the sweep remains pattern-driven and item 13 stays `PARTIAL`.
 - Android ब्रिज का ऐप-लॉन्च अब झूठी सफलता नहीं बताता — चार असली गेट जोड़े गए,
   37/37 टेस्ट पास, फिक्स पुश हो गया।
 
+
+---
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:36
+Window date: 2026-09-21   Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools — outbound email / SMTP conduit slice.
+  Evidence: `src/utils/emailConduitTruth.ts` (new), `server_tools.ts`
+  (`realEmailStatus()` + the `email` integrations entry),
+  `src/components/AutonomousToolsModal.tsx` (email tab badge),
+  `src/tests/emailConduitTruthfulness.test.ts` (6 tests, observed 6/6 passing).
+
+In Progress:
+- #13 — remains `PARTIAL`. The sweep is pattern-driven and no tool-by-tool
+  inventory of every surface exists yet.
+
+Remaining:
+- #1/#2/#50/#55 blocked on a physical Android device; #8 blocked on a Windows
+  host. Remaining items are implemented and tested with their physical legs
+  `PARTIAL`/`NOT_AVAILABLE` (see `docs/COMPLETION_STATUS.md` "Known limitations").
+- Item 13 continues into the remaining HUD/communication surfaces next slot.
+
+Bugs Found:
+- `/api/tools/email/status` (`realEmailStatus()` in `server_tools.ts`) derived
+  `configured: true` from the mere presence of `GMAIL_USER` + `GMAIL_APP_PASSWORD`
+  and its message read "SMTP Transport Active. Level 4 confirmation required for
+  all sends." The Integrations Matrix `email` entry was hardcoded `REAL_WORKING`
+  with the reason "SMTP Conduit verified for client notifications and quotations"
+  and capabilities `Quotation Email Dispatch` / `Client Inquiries`.
+  `AutonomousToolsModal.tsx` drew an emerald `READY` badge and green panel border
+  from the same flag. No SMTP client, socket, or send route exists in this build
+  (`nodemailer` absent from `package.json`/`package-lock.json`; grep for
+  `createTransport`/`nodemailer`/`SMTPClient` across `src`, `server.ts`,
+  `server_tools.ts` matches only the new helper). Found by running the item-13
+  sweep over the communication surfaces named in the prior slot's state note.
+
+Bugs Fixed:
+- New `src/utils/emailConduitTruth.ts`: `isEmailTransportImplemented()` returns
+  false and is the single documented switch to flip when a real sender ships;
+  `describeEmailConduit()` returns `NOT_CONFIGURED` /
+  `CREDENTIALS_PRESENT_NO_TRANSPORT` with badge label
+  `CREDENTIALS ONLY — NO SENDER`, never `READY`; `EMAIL_CAPABILITY_NOTE` states
+  the transport is not implemented. `realEmailStatus()` now returns `status` +
+  `transportImplemented`; the `email` integration entry is pinned `NOT_AVAILABLE`
+  with a reason that never says "verified"; the modal badge keys off
+  `transportImplemented`.
+  Verification that proves it (negative validation): flipping
+  `isEmailTransportImplemented()` to `true` fails exactly 3 of the 6 guard tests
+  (observed `3 failed | 3 passed`); the fix was restored and 6/6 pass again.
+
+Tests:    65 files / 930 tests passed (npx vitest run, after the fix; targeted
+          guard file observed 6/6 passing before the full run)
+Lint:     exit 0 (npm run lint = tsc --noEmit)
+Build:    exit 0 (npm run build; dist/server.cjs 846921 bytes / 827.1 kb)
+E2E:      NOT RUN this slot (no E2E touched by this change)
+Security: NOT RUN (no dependency/audit change; the change removes a false
+          communications claim — no permission gate modified)
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle entry, item 13 evidence row,
+               Known limitations), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  b1103fa (fix), dd04ac4 (docs)
+Push:    succeeded — origin/feature/hermes-full-completion (both commits)
+
+PR:         NONE
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified build artifact
+            (dist/server.cjs) is the deployment unit available.
+
+Blocked:
+- #1/#2 (Real Android E2E / Real Screenshot) — require a physical Android device.
+- #8 — requires a Windows host for the PowerShell capture leg.
+- #50 — requires a physical Android device.
+- #55 — requires a physical device / Windows host.
+
+Human Approval Required:
+- None this slot. No permission gateway, credential, or merge decision was touched.
+
+Next Slot:
+- Continue item 13 into the remaining Autonomous Tools HUD / communication
+  surfaces, then communication items 30-34. (Slot 11 chose the Android Bridge and
+  slot 12 the email conduit; slot 13 should rotate to a surface not yet swept.)
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में ईमेल/SMTP सतह से झूठा "READY/verified" दावा हटाया गया — अब यह
+  स्पष्ट कहता है कि कोई भेजने वाला मौजूद नहीं है; 6 नए टेस्ट, lint/test/build
+  सब पास, बदलाव origin पर पुश कर दिया गया।
