@@ -2056,3 +2056,46 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - कंप्यूटर ऑपरेटर पैनल अब बिना मापे "स्क्रीन सिंक्रोनाइज़्ड" नहीं दिखाता — 19 नए
   टेस्ट, पूरी सूट 922/922 पास, फिक्स पुश हो गया।
+
+---
+
+## Slot — 2026-09-22 01:05 IST (2026-09-21 19:36 UTC) — WORK SLOT, slot 11
+
+Item 13 (`Zero-fake-success for all tools`) extended to the Android Bridge
+app-launch path.
+
+**Bug found:** `AndroidBridgeManager.openApplication()` in
+`src/utils/androidBridgeEngine.ts` recorded an `APP_OPENED` audit event with
+`result: 'UNSUPPORTED'` but ran no gates whatsoever, and
+`SimulatedAndroidAdapter.openApp()` in `src/utils/androidBridgeAdapter.ts`
+returned a hardcoded `success: true` reading `[SIMULATION_ONLY] Launch intent
+triggered`. `App.tsx`'s `handleOpenMobileApp` discarded the return value. A
+launch could therefore be presented as done on a disconnected bridge, under the
+Global Kill Switch, or on a device that does not report launch capability.
+
+**Fix:** `openApplication()` now checks the four real gates in order — bridge
+connected with a capability handshake, emergency stop, device `canOpenApp`, and
+the app privacy rule — returns `success: false` with a `blockedReason` on every
+path, and audits each refusal with its matching result (privacy-denied →
+`ACTION_DENIED`, previously `APP_OPENED`). The simulated adapter delegates to the
+engine instead of asserting success, and `App.tsx` speaks the real message.
+
+**Evidence:** `src/tests/androidMobileBridge.test.ts` Scenarios 17–18 (37 tests
+in file). Negative-validated: replacing the connection gate with `if (false)`
+fails Scenario 17 with `Cannot read properties of null (reading 'canOpenApp')`
+(1 failed | 36 skipped); restored to 37/37.
+
+Tests: 64 files / 924 tests passed. Lint (`tsc --noEmit`): exit 0.
+Build: exit 0 (`dist/server.cjs` 825.6 kb). E2E: NOT RUN. Security audit: NOT RUN.
+
+Branch: feature/hermes-full-completion · Commit: ffc5949 · Push: succeeded.
+PR: NONE opened this slot. Main merge: NOT MERGED — awaiting human approval.
+Deploy: NOT_CONFIGURED — no deployment target present in this environment.
+
+Next slot: continue item 13 into the communication path or the Autonomous Tools
+HUD; the sweep remains pattern-driven and item 13 stays `PARTIAL`.
+
+हिंदी सारांश (एक पंक्ति):
+- Android ब्रिज का ऐप-लॉन्च अब झूठी सफलता नहीं बताता — चार असली गेट जोड़े गए,
+  37/37 टेस्ट पास, फिक्स पुश हो गया।
+

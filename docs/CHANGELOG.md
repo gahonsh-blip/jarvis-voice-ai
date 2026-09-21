@@ -3,6 +3,31 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 01:05 IST (2026-09-21 19:36 UTC) — Android app launch no longer reports false success
+
+### Bug fix
+- `AndroidBridgeManager.openApplication()` recorded an `APP_OPENED` audit event
+  with `result: 'UNSUPPORTED'` but performed no gating, and
+  `SimulatedAndroidAdapter.openApp()` returned a hardcoded `success: true`.
+  A launch could therefore be presented as done on a disconnected bridge, under
+  the Global Kill Switch, or on a device without launch capability.
+
+### Fix
+- `openApplication()` checks four real gates — bridge connected with a capability
+  handshake, emergency stop, device `canOpenApp`, and the app privacy rule — and
+  returns `success: false` with a `blockedReason` on every path. Each refusal is
+  audited with the matching result; a privacy-denied app now records
+  `ACTION_DENIED` rather than `APP_OPENED`.
+- `SimulatedAndroidAdapter.openApp()` delegates to the engine instead of
+  asserting success, and `App.tsx`'s `handleOpenMobileApp` speaks the real result.
+
+### Test
+- `src/tests/androidMobileBridge.test.ts` Scenarios 17–18 cover disconnected,
+  emergency stop, unsupported capability, privacy-denied and
+  dispatched-but-unconfirmed paths. Negative-validated: removing the connection
+  gate fails Scenario 17 (1 failed | 36 skipped).
+
+---
 ## [Unreleased] - 2026-09-22 00:36 IST (2026-09-21 19:06 UTC) — Computer Operator panel no longer claims an unmeasured screen
 
 ### Bug fix
