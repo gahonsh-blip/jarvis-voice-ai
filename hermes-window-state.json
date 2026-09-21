@@ -1,37 +1,22 @@
 {
   "window_date": "2026-09-21",
   "window_started_at": "2026-09-21T16:06:00Z",
-  "last_slot_at": "2026-09-21T17:20:00Z",
-  "slots_completed": 4,
+  "last_slot_at": "2026-09-21T17:16:00Z",
+  "slots_completed": 5,
   "current_item": 48,
   "current_item_title": "Voice action confirmation",
   "current_item_status": "PARTIAL",
-  "last_commit": "03abbb3",
+  "last_commit": "963bdc3",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 2,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 8,
-      "reason": "Windows host required for the PowerShell capture leg"
-    },
-    {
-      "item": 50,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 55,
-      "reason": "physical device / Windows host required"
-    }
+    {"item": 1, "reason": "physical Android device required"},
+    {"item": 2, "reason": "physical Android device required"},
+    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
+    {"item": 50, "reason": "physical Android device required"},
+    {"item": 55, "reason": "physical device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "SLOT 4 (~22:05-22:15 IST fire, reported ~22:35 IST / 17:05 UTC) - WORK SLOT, arrived out of order after slot 3. Item 48 (voice action confirmation) corrected VERIFIED -> PARTIAL and a real safety bug fixed. interpretConfirmation in src/utils/voice/voiceSession.ts returned CONFIRMED for prohibitions: मत करो, mat karo, करो मत, do not do it, don't do it (measured before the fix). Cause: per-phrase substring RegExp matching let the affirmative token करो fire inside मत करो, and normalise() left don't intact. A refusal released a destructive command for execution - the same defect class as the slot-3 Android bridge bug. Fix (bddce98): whole-token phrase matching (containsPhrase); negation particle before an affirmative voids it (NEGATIVE_PARTICLES); Hindi verb-final prohibition करो मत voided by a narrow POST_NEGATIVE_PARTICLES set [mat, मत] with ना excluded so करो ना still confirms; normalise() rewrites don't/dont to not. Guard: four new cases in src/tests/voiceSession.test.ts (25 in file). Negative-validated: reverting voiceSession.ts fails exactly the two prohibition tests (2 failed | 23 passed). Observed gates on bddce98: npm run lint (tsc --noEmit) exit 0; npx vitest run 61 files / 866 tests passed in 18.49s; npm run build exit 0 (dist/server.cjs 842293 bytes / 822.6 kb). Docs: docs/COMPLETION_STATUS.md item 48 row corrected to PARTIAL, docs/CHANGELOG.md entry added; commits be991b2 (docs) and 58be3b0 (report). PR #4 open, non-draft, base main, mergeable_state clean, head 58be3b0; body refreshed via PATCH /pulls/4 with slot 3 + slot 4 evidence. Main merge: NOT MERGED - awaiting human approval. Deploy: NOT_CONFIGURED - no DEPLOY_URL or hosting integration in this sandbox. Blocked items carried forward unchanged. GitHub token var is $github_token (lowercase). Follow-up recovery commit 03abbb3 appended a slot-4 recovery note (PR body refresh + state branch republish) to automation/reports/hermes-window-log.md; ls-remote confirms both branches."
+  "notes": "SLOT 5 (22:35 IST fire, reported 22:36 IST / 17:06 UTC) - WORK SLOT. Item 48 (voice action confirmation) continued, taking the step AFTER the confirmation gate: the TTS feedback surface. Two surfaces reported a speech action that had not happened. (1) buildSpeechDiagnostics in src/utils/speechTtsEngine.ts returned statusMessage 'TTS Active: <voice>' for a merely SELECTED voice and set speechSynthesisAvailable true even where window.speechSynthesis is absent. (2) src/App.tsx utterance.onerror and the speak() catch wrote only ttsErrorState, leaving the stale 'TTS Active: Google US English (en-US)' string visible in the Settings diagnostics directly beneath the error - a confirmed failure contradicted by a shown success, on the surface the operator reads to judge whether JARVIS can speak. Fix: unsupported platform reports unsupported; a selected voice reports '... not yet confirmed by playback'; new applySpeechErrorToDiagnostics() rewrites the stale status to 'Speech error: <code>' while preserving the rest of the snapshot; both error paths route through it. Guards: src/tests/speechTtsEngine.test.ts 30 tests (5 new). Negative-validated TWICE: reverting the status logic fails the pending-playback test (observed 'expected TTS Active: Google US English (en-US) to contain not yet confirmed by playback'); reverting only the helper's status assignment fails exactly the stale-status test (1 failed | 29 passed). Observed gates on 2cf5516: npm run lint (tsc --noEmit) exit 0; npx vitest run 61 files / 871 tests passed in 19.35s; npm run build exit 0 (dist/server.cjs 842293 bytes / 822.6 kb). Docs: docs/COMPLETION_STATUS.md item 48 row appended and Last cycle rewritten, docs/CHANGELOG.md entry added; commit 963bdc3. Pushes: 03abbb3..2cf5516 (code) then 2cf5516..963bdc3 (docs), both to origin/feature/hermes-full-completion. Token note: the injected secret is lowercase $github_token; $GITHUB_TOKEN is EMPTY in this sandbox and the push hung on a password prompt until the remote URL used the lowercase variable. Item 48 remains PARTIAL - the confirmation gate is audited not exhaustive, and no real speech engine ran here so playback onset is unproven. Next slot: item 1 / next non-VERIFIED item per the mandated order."
 }
