@@ -3,6 +3,50 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 03:35 IST (2026-09-21 22:05 UTC) — Mobile reply dispatch no longer fabricates its approval or its result
+
+### Bug fix
+- `MobileBridgeModal.tsx` `dispatchReply` — the REPLY control on every pending
+  mobile-bridge event — asked for no approval, sent no request, and marked the
+  event `AUTHORIZED` while speaking "Reply authorized, Sir. Dispatching via the
+  Android bridge when connected." Its approval expression was
+  `isExplicitApproval('yes') ? 'REPLY_AUTHORIZED' : 'REPLY_AUTHORIZED'`: both
+  branches identical, so the computed answer was discarded, and
+  `isExplicitApproval` was never called with anything a user had said. The route
+  the speech described, `/api/mobile/bridge/message/reply`, refuses every request
+  lacking `approved: true`, so each of those "dispatches" claimed an HTTP call
+  that nobody made.
+
+### Fix
+- New `src/utils/mobileReplyDispatchTruth.ts`: `replyDispatchDecision(...)` is a
+  pure gate that refuses with `NOT_REPLY_EVENT`, `SENSITIVE_CONTENT`,
+  `NO_REPLY_TEXT` or `NO_DISTINCT_APPROVAL` and otherwise returns the verified
+  body and notification id; `replyDispatchOutcome(httpStatus, body)` maps the
+  *observed* response to `DISPATCHED | BLOCKED | FAILED | NOT_CONFIGURED |
+  UNVERIFIED` and never infers success from a transport status (any 2xx without
+  the server's dispatch outcome is `FAILED`; a device-claimed `verified` is
+  demoted to `UNVERIFIED`, because confirmation is a separate route); and
+  English/Hindi `replyDispatchSpeech` / `replyRefusalSpeech` that never say a
+  reply was delivered.
+- `MobileBridgeModal.tsx` now provides a reply text field and a distinct
+  `I APPROVE SENDING THIS REPLY` checkbox. Without that approval nothing is
+  requested and the event stays `PENDING_APPROVAL` — never `AUTHORIZED`. With no
+  paired bridge session token it reports `NOT_CONFIGURED` rather than pretending.
+  Otherwise it POSTs the real request and drives the event status, the audit
+  entry, the on-screen notice and the spoken line from the status and body it
+  actually received.
+
+### Tests
+- New `src/tests/mobileReplyDispatchTruth.test.ts` (16 tests): the four refusal
+  reasons, the approval requirement, and the outcome mapping over 0/4xx/5xx/2xx
+  bodies, plus source guards pinning the absence of the identical-branch ternary,
+  the absence of an unsupervised `AUTHORIZED` write, and the presence of the real
+  route call. Negative-validated: restoring the previous `MobileBridgeModal.tsx`
+  fails exactly the 3 source guards (`3 failed | 13 passed`); restored → 16/16.
+  Full suite 68 files / 979 tests passed; lint exit 0; build exit 0.
+
+
+
 ## [Unreleased] - 2026-09-22 03:05 IST (2026-09-21 21:35 UTC) — Permission Gateway no longer asserts an unqueried kill-switch state
 
 ### Bug fix

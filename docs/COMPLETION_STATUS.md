@@ -4,10 +4,22 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 03:05 IST (2026-09-21 21:35 UTC) — **WORK SLOT**, the
-03:05 IST fire of the 2026-09-22 window (state counter `slots_completed` 15 → 16).
-Item 51 (`Complete security audit`) / kill-switch liveness honesty in the
-Permission Gateway.
+Last cycle: 2026-09-22 03:35 IST (2026-09-21 22:05 UTC) — **WORK SLOT**, the
+03:35 IST fire of the 2026-09-22 window (state counter `slots_completed` 16 → 17).
+Item 31 (`Real notification reply`) and item 51's honesty sweep.
+
+**The mobile reply button reported a dispatch it never made.**
+`MobileBridgeModal.tsx` `dispatchReply` asked for no approval, sent no request,
+and marked the pending event `AUTHORIZED` while speaking "Reply authorized, Sir.
+Dispatching via the Android bridge when connected." Its approval expression was
+`isExplicitApproval('yes') ? 'REPLY_AUTHORIZED' : 'REPLY_AUTHORIZED'` — both
+branches identical, so whatever it computed was discarded, and
+`isExplicitApproval` was never called with a real answer. The route that speech
+described, `/api/mobile/bridge/message/reply`, refuses every request lacking
+`approved: true`, so every one of those "dispatches" was a claim about an HTTP
+call nobody made.
+
+The previous slot (03:05 IST) covered the following, still in force:
 
 **The screen a human reads before approving an irreversible action asserted a
 kill-switch state nobody had queried.** `PermissionGateway.tsx` heads the Level 4
@@ -769,7 +781,7 @@ Bugs found and fixed while building this:
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
 | 30 | Real Telegram delivery | `PARTIAL` | Delivery is now verified against Telegram's returned `message_id`. A confirmed send is `VERIFIED`; a 2xx without an id is `UNVERIFIED`; a blocked bot reports `PERMISSION_REQUIRED`. Evidence: `src/utils/communication/telegramDelivery.ts`, `src/tests/telegramDelivery.test.ts` (10 tests), `src/tests/telegramDelivery.e2e.test.ts` (3 tests against a real server with a local Telegram stand-in). The physical leg — a message reaching a real phone over api.telegram.org — still needs the operator's bot token and a real send. |
-| 31 | Real notification reply | `PARTIAL` | Reply route requires an explicit `approved: true` and reports `DISPATCHED`, never success, until the device confirms. Delivery on a real handset is unverified. |
+| 31 | Real notification reply | `PARTIAL` | Reply route requires an explicit `approved: true` and reports `DISPATCHED`, never success, until the device confirms. Delivery on a real handset is unverified. **2026-09-22 03:35 IST — the pending-approval REPLY button on the bridge screen no longer fabricates the approval or the dispatch.** `MobileBridgeModal.tsx` `dispatchReply` asked for no approval, sent no request, and set the event `AUTHORIZED` while speaking "Dispatching via the Android bridge"; its approval ternary had two identical branches, so the computed answer was discarded, and the route it claimed to have reached refuses every request without `approved: true`. The decision is now `src/utils/mobileReplyDispatchTruth.ts` (`replyDispatchDecision` refuses `NOT_REPLY_EVENT` / `SENSITIVE_CONTENT` / `NO_REPLY_TEXT` / `NO_DISTINCT_APPROVAL`; `replyDispatchOutcome` never infers success from an HTTP status), the UI takes a reply body plus a distinct `I APPROVE SENDING THIS REPLY` checkbox, leaves the event `PENDING_APPROVAL` on refusal, reports `NOT_CONFIGURED` without a paired session token, and drives status/audit/speech from the observed response. Guarded by `src/tests/mobileReplyDispatchTruth.test.ts` (16 tests; negative-validated — restoring the old component fails exactly the 3 source guards, `3 failed \| 13 passed`, restored → 16/16, full suite 68 files / 979 tests passed). Still `PARTIAL`: no real handset and no paired device received a reply, so device-side delivery remains unconfirmed. |
 | 32 | Call detection E2E | `PARTIAL` | Call state is reported from device telemetry, and the E2E suite covers the telemetry chain. No physical call has been detected by this host. |
 | 33 | Call answering | `PERMISSION_REQUIRED` | Answering is refused unless the device holds the dialer role; the refusal names the required grant. No real call has been answered. |
 | 34 | Message sending with approval | `PARTIAL` | Approval gate verified server-side (`approved: true` required, kill switch honoured). Real-device delivery unverified. **2026-09-21 22:06 IST** — the shared `evaluateOwnerApproval` parser read Hindi refusals as consent for both calls and messages: the bare verb stem `उठा` was an approval keyword and Devanagari matching used a prefix fallback, so `कॉल मत उठाओ` returned `APPROVE`. Stem dropped, whole-token matching enforced, rejection evaluated first. Guarded by `src/tests/androidMobileBridge.test.ts` (18 assertions), negative-validated (**7 tests fail** with the fix reverted, measured 22:47 IST). |
@@ -1056,6 +1068,39 @@ is connected to this environment.
 
 ---
 
+
+## Bugs found and fixed (cycle 5 — mobile reply dispatch honesty)
+
+1. **The mobile reply button reported a dispatch it never made** —
+   `MobileBridgeModal.tsx` `dispatchReply` asked for no approval, sent no
+   request, and marked the pending event `AUTHORIZED` while speaking
+   "Reply authorized, Sir. Dispatching via the Android bridge when connected."
+   Its approval expression was `isExplicitApproval('yes') ? 'REPLY_AUTHORIZED'
+   : 'REPLY_AUTHORIZED'` — both branches identical, so whatever it computed was
+   discarded, and `isExplicitApproval` was never called with a real answer
+   anyway. `/api/mobile/bridge/message/reply` refuses every request lacking
+   `approved: true`, so each of those "dispatches" described an HTTP call that
+   nobody made.
+
+   Fixed with a pure decision helper. `src/utils/mobileReplyDispatchTruth.ts`
+   exports `replyDispatchDecision(...)` (refuses with `NOT_REPLY_EVENT`,
+   `SENSITIVE_CONTENT`, `NO_REPLY_TEXT`, or `NO_DISTINCT_APPROVAL`), a returned
+   `replyDispatchOutcome(httpStatus, body)` that never infers success from a
+   transport status, and honest English/Hindi speech. `MobileBridgeModal.tsx`
+   now gives the operator a reply text field plus a distinct
+   `I APPROVE SENDING THIS REPLY` checkbox, refuses before any request when the
+   approval is absent (the event stays `PENDING_APPROVAL`, never `AUTHORIZED`),
+   reports `NOT_CONFIGURED` when no paired bridge session token is available
+   instead of pretending, and POSTs a real request whose observed status and
+   body drive the event status, the audit entry, the notice and the speech.
+   `DISPATCHED` is reported only for the server's own dispatch outcome and is
+   explicitly worded as not-yet-confirmed; a claimed device `verified` is
+   demoted to `UNVERIFIED` because confirmation is a separate route.
+
+   Guarded by the new `src/tests/mobileReplyDispatchTruth.test.ts` (16 tests).
+   Negative-validated: restoring the previous `MobileBridgeModal.tsx` fails
+   exactly the 3 source guards (`3 failed | 13 passed` of 16); restored → 16/16,
+   and the full suite is **68 files / 979 tests passed**.
 
 ## Bugs found and fixed (cycle 4 — telephony UI liveness honesty)
 
