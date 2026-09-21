@@ -1851,3 +1851,83 @@ webhook-endpoint surface.
 - `npm run build` exit 0 (`dist/server.cjs` 842396 bytes / 822.7 kb).
 - E2E: NOT RUN (no device/carrier). Security audit: NOT RUN beyond `.env`
   ignore/status checks.
+
+---
+
+## Slot 2026-09-21 23:35 IST (18:05 UTC) — WORK SLOT, slot 8
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:35
+Window date: 2026-09-21   Window slots completed so far: 8
+
+Completed:
+- #13 Zero-fake-success for all tools (extended to the social publishing UI) —
+  evidence: new `src/utils/socialPublishHonesty.ts` +
+  `src/tests/socialPublishHonesty.test.ts` (13 tests, all pass) +
+  `src/components/SocialMediaModal.tsx`. Observed: `npx vitest run
+  src/tests/socialPublishHonesty.test.ts` → 1 file / 13 tests passed.
+  `classifyProviderTestResponse` returns OK only for `success:true` +
+  `status:'VERIFIED'` + a non-empty `accountName`.
+- #28 Published-post verification (UI now matches the server) — the YouTube
+  approve path requires a provider video ID; a `success:true` without one is
+  reported `UNCONFIRMED`, not verified.
+
+In Progress:
+- #13 — remains PARTIAL; the sweep is pattern-driven. No tool-by-tool inventory.
+
+Remaining:
+- #13 further surfaces; items 25/26 stay PARTIAL (no live accounts here);
+  hardware/credential-blocked items (real Android E2E, real screenshot,
+  Telegram/telephony provider dispatch) unchanged.
+
+Bugs Found:
+- `SocialMediaModal.tsx` labelled a platform `CONNECTED` from credential
+  presence alone and rendered a green badge from it.
+- `handleTestConnection` trusted `success:true` and spoke
+  "<platform> connection verified live" without reading the provider's own
+  verification field or account name.
+- The modal header printed `Level 4 Approval Active` without fetching
+  `/api/security`; the YouTube studio repeated a literal Level-4 claim.
+- The YouTube approve path claimed a verified upload with no provider video ID.
+Found by reading the component against the server's actual
+`/api/social/platforms/test` response shape.
+
+Bugs Fixed:
+- All four. Verification: 13/13 targeted tests pass with the fix.
+  Negative validation: reverting the `VERIFIED`/account guard makes exactly
+  2 of 13 fail (`Expected "UNCONFIRMED" / Received "OK"`); restoring it passes
+  13/13.
+
+Tests:    899 passed / 899 (63 files) — `npx vitest run`
+Lint:     exit 0 — `npm run lint` (tsc --noEmit)
+Build:    exit 0 — `npm run build`; `dist/server.cjs` 842396 bytes (822.7 kb)
+E2E:      NOT RUN this slot
+Security: `git check-ignore -v .env` NOT RUN this slot; no secret written to any
+          file; branch push used the token only in the remote URL
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  b0e018c
+Push:    succeeded — origin/feature/hermes-full-completion (7ca348a..b0e018c)
+
+PR:         NONE this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this sandbox; `dist/server.cjs` is the verified artifact
+
+Blocked:
+- Real Android E2E / real screenshot — requires a physical device
+- Live social accounts — requires authorisation in a real provider account
+- Telegram / telephony provider dispatch — requires provider credentials
+
+Human Approval Required:
+- None this slot. (Merging feature/hermes-full-completion to main remains a
+  human decision.)
+
+Next Slot:
+- Continue the item 13 sweep, next on the computer-operator / screen-research
+  surface, since the social surface is now audited.
+
+हिंदी सारांश (एक पंक्ति):
+- Social Hub अब वह कनेक्शन और Level-4 approval नहीं बताता जो उसने कभी मापा नहीं;
+  13 टेस्ट के साथ फिक्स पुश हो गया, पूरी सूट 899/899 पास।

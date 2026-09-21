@@ -4,7 +4,30 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-21 23:35 IST (18:05 UTC) — **WORK SLOT**, slot 7 of the
+Last cycle: 2026-09-21 23:35 IST (18:05 UTC) — **WORK SLOT**, slot 8 of the
+2026-09-21 window. Item 13 (`Zero-fake-success for all tools`) extended to the
+**social publishing UI**, which had been fixed server-side (items 27-29) but
+still overstated on screen. Three unmeasured claims: (1) `SocialMediaModal.tsx`
+stamped `CONNECTED` on any platform whose credentials merely *exist* and drew a
+green badge from it — token presence is not a live connection; (2) the test handler
+trusted `success: true` alone and spoke *"<platform> connection verified live"*
+without reading the provider's own `status` or its account name; (3) the header
+printed `Level 4 Approval Active` without ever fetching `/api/security`, and the
+YouTube studio repeated a literal Level-4 claim. New
+`src/utils/socialPublishHonesty.ts` classifies the raw
+`/api/social/platforms/test` payload as `OK` **only** when it is `success: true`
+with `status: 'VERIFIED'` *and* a non-empty `accountName`; every other shape maps
+to `NOT_CONFIGURED` / `RECONNECT` / `FAILED` / `UNCONFIRMED`. The modal derives
+badges, the probe card and the spoken confirmation from that verdict, and the
+YouTube approve path now requires a provider video ID before it will claim a
+verified upload. Guarded by `src/tests/socialPublishHonesty.test.ts` (13 tests);
+negative-validated by reverting the `VERIFIED`/account guard, which fails exactly
+2 of 13 and passes 13/13 with it restored. Gates on `b0e018c`: lint exit 0,
+vitest 63 files / 899 tests passed, build exit 0 (`dist/server.cjs` 842396 bytes
+/ 822.7 kb). Item 13 remains `PARTIAL` — still a pattern-driven sweep; the
+social surface is now audited but no tool-by-tool inventory exists.
+
+Previous cycle: 2026-09-21 23:05 IST (17:35 UTC) — **WORK SLOT**, slot 7 of the
 2026-09-21 window. Continued the item 13 honesty sweep
 (`Zero-fake-success for all tools`) on the telephony surface the previous slot
 partly cleaned. Last night's fix removed `LIVE & READY` / `TwiML ACTIVE` /
@@ -503,7 +526,7 @@ native helper); until then they are honestly `NOT_AVAILABLE`.
 | 25 | Social account authentication | `PARTIAL` | LinkedIn OAuth connect/callback and token storage exist and are exercised against the API. YouTube/Instagram/Facebook credential checks report `MISSING_CREDENTIALS` when unset. No live production accounts were authorised in this environment, so end-to-end auth against real accounts is unverified. |
 | 26 | Real platform API integration | `PARTIAL` | LinkedIn publishes through the official REST Posts API (`/rest/posts`). A 2xx is only accepted as a post when the platform returns an identifier (`x-restli-id`/`location`). YouTube/Instagram/Facebook paths exist but have no live credentials here. |
 | 27 | Draft → approval → publish workflow | `VERIFIED` | `src/utils/social/publishRetry.ts` models the state machine and rejects illegal jumps. `DRAFT → PUBLISHED` is refused, `APPROVED` requires a named approver, and `PUBLISHED` requires a provider identifier. 14 workflow unit tests. |
-| 28 | Published-post verification | `VERIFIED` | The provider's own identifier is the only accepted proof. A 2xx with no identifier yields `UNVERIFIED`, never `VERIFIED`. Proven end-to-end by `socialPublish.e2e.test.ts`, which starts the real server against a mock LinkedIn. |
+| 28 | Published-post verification | `VERIFIED` | The provider's own identifier is the only accepted proof. The **UI** now matches the server: `SocialMediaModal.tsx` reports a YouTube upload as verified only when the response carries a provider video ID, otherwise `UNCONFIRMED` (`src/utils/socialPublishHonesty.ts`, 13 tests). A 2xx with no identifier yields `UNVERIFIED`, never `VERIFIED`. Proven end-to-end by `socialPublish.e2e.test.ts`, which starts the real server against a mock LinkedIn. |
 | 29 | Failure / retry handling | `VERIFIED` | `publishWithRetry` retries only failures it can show happened before the request was sent (5xx, rate limit, refused connection). Ambiguous and unrecognised failures — a dropped connection, a generic `fetch failed`, anything unclassified — are not retried, because the post may already exist; they report `UNVERIFIED`. 15 retry unit tests plus 7 E2E tests. |
 
 Key honesty properties, each covered by a test:

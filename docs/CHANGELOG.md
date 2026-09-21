@@ -3,6 +3,40 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-21 23:35 IST (18:05 UTC) — Social Hub stops reporting connections and approvals it never measured
+
+### Bug fix
+- `SocialMediaModal.tsx` labelled any platform whose credentials were merely
+  present as `CONNECTED` and rendered a green badge from that label. Presence of
+  a token is not a live connection — the server only learns a token still works
+  when a provider call is made.
+- `handleTestConnection` took `success: true` at face value and spoke
+  "<platform> connection verified live" without reading the provider's own
+  `status` field or the account name.
+- The modal header printed `Level 4 Approval Active` without ever fetching
+  `/api/security`; the YouTube studio repeated a literal Level-4 claim.
+- The YouTube approve path claimed a verified upload from `success: true` even
+  when no provider video ID was returned.
+
+### Fix
+- New `src/utils/socialPublishHonesty.ts`: `classifyProviderTestResponse`
+  accepts a result as `OK` only for `success: true` + `status: 'VERIFIED'` + a
+  non-empty `accountName`; everything else maps to `NOT_CONFIGURED`,
+  `RECONNECT`, `FAILED` or `UNCONFIRMED`. `connectionStatusLabel` describes a
+  present credential as "Credentials present — live connection not yet
+  verified", and `socialApprovalPostureLabel` renders the fetched permission
+  level or says the posture is unknown.
+- `SocialMediaModal.tsx` derives status badges, the probe card and the spoken
+  confirmation from the measured verdict, and requires a provider video ID
+  before reporting a verified YouTube upload.
+
+### Tests
+- `src/tests/socialPublishHonesty.test.ts` — 13 tests. Negative-validated:
+  reverting the `VERIFIED`/account guard fails exactly 2 of 13 and the suite
+  passes 13/13 with it restored.
+- Full suite: 63 files / 899 tests passed. Lint exit 0, build exit 0.
+
+---
 ## [Unreleased] - 2026-09-21 23:10 IST (17:40 UTC) — Telephony UI no longer advertises a webhook route the server never registers
 
 ### Bug fix
