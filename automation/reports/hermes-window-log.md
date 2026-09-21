@@ -2333,3 +2333,10 @@ Next Slot:
 - इस स्लॉट में पाया कि असली कमांड चलाने वाला HostActionExecutor फ़ाइनेंस-गार्ड
   को कभी नहीं पुकारता था; अब हर dispatch permanentBlock से गुज़रता है, 954 टेस्ट
   पास, lint और build पास।
+
+**Gate re-confirmation (03:02 IST, same run):** the three gates were re-run on the
+clean tip `0a829e0` (a docs-only commit on top of `bd79593`) and observed again:
+`npm run lint` exit 0; `npx vitest run` **66 files / 954 tests passed** in 19.61s;
+`npm run build` exit 0, `dist/server.cjs` **852453 bytes** (832.5 kb). No files
+changed by the gates — `git status --short` clean; `dist/` and `.env` are
+git-ignored.
