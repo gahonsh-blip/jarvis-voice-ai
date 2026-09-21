@@ -4455,6 +4455,14 @@ function getYouTubeRedirectUri(req?: Request, explicitUri?: string): string {
  * Multi-Platform Social Integrations Status Engine
  */
 function getPlatformIntegrationsStatus(req?: Request): any[] {
+  // Credentials being present is not a connection. This endpoint makes no
+  // provider call, so it can never certify that a credential still works.
+  // A platform with credentials is reported CONFIGURED and a live connection is
+  // proven only by `/api/social/platforms/test`. Labelling an unmeasured
+  // credential `CONNECTED` is exactly the fabricated success this project forbids.
+  const CRED_STATUS = 'CONFIGURED';
+  const CRED_MESSAGE = 'Credentials present but not verified. Run "Test connection" to confirm the account.';
+
   const conn = memoryState.linkedInConnection;
   const isLinkedInOAuthConnected = Boolean(conn && conn.connected && conn.accessToken);
   const staticLinkedInToken = (process.env.LINKEDIN_ACCESS_TOKEN || '').trim();
@@ -4487,14 +4495,15 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'linkedin',
       name: 'LinkedIn Personal Profile (Member Posts API)',
       category: 'Professional',
-      status: isLinkedInConnected ? 'CONNECTED' : 'NOT_CONFIGURED',
+      status: isLinkedInConnected ? CRED_STATUS : 'NOT_CONFIGURED',
+      errorMessage: isLinkedInConnected ? CRED_MESSAGE : undefined,
       authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_TOKEN' : 'OAUTH_2_0',
       accountName: conn?.name || (staticLinkedInToken ? 'Configured Member (Env Token)' : undefined),
       accountIdentifier: conn?.authorUrn || process.env.LINKEDIN_AUTHOR_URN || (conn?.memberSub ? `urn:li:person:${conn.memberSub}` : undefined),
       avatarUrl: conn?.picture || undefined,
       lastVerifiedAt: conn?.connectedAt || undefined,
       oauthStatus: {
-        connected: isLinkedInConnected,
+        connected: isLinkedInOAuthConnected,
         authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_ENV_TOKEN' : undefined,
         name: conn?.name || (staticLinkedInToken ? 'Configured Personal Member' : undefined),
         memberSub: conn?.memberSub,
@@ -4528,7 +4537,8 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'facebook',
       name: 'Facebook Page Graph API',
       category: 'Social',
-      status: (fbToken && fbPageId) ? 'CONNECTED' : 'NOT_CONFIGURED',
+      status: (fbToken && fbPageId) ? CRED_STATUS : 'NOT_CONFIGURED',
+      errorMessage: (fbToken && fbPageId) ? CRED_MESSAGE : undefined,
       accountName: fbPageId ? `Page ID: ${fbPageId}` : undefined,
       accountIdentifier: fbPageId || undefined,
       developerPortalUrl: 'https://developers.facebook.com',
@@ -4548,7 +4558,8 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'instagram',
       name: 'Instagram Professional / Business API',
       category: 'Visual',
-      status: (igToken && igId) ? 'CONNECTED' : 'NOT_CONFIGURED',
+      status: (igToken && igId) ? CRED_STATUS : 'NOT_CONFIGURED',
+      errorMessage: (igToken && igId) ? CRED_MESSAGE : undefined,
       accountName: igId ? `IG ID: ${igId}` : undefined,
       accountIdentifier: igId || undefined,
       developerPortalUrl: 'https://developers.facebook.com/docs/instagram-api',
@@ -4568,15 +4579,16 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'youtube',
       name: 'YouTube Data API v3 (Google Cloud OAuth 2.0)',
       category: 'Video',
-      status: hasValidYtCredentials ? 'CONNECTED' : (ytClientId || ytKey) ? 'AUTH_REQUIRED' : 'NOT_CONFIGURED',
+      status: hasValidYtCredentials ? CRED_STATUS : (ytClientId || ytKey) ? 'AUTH_REQUIRED' : 'NOT_CONFIGURED',
+      errorMessage: hasValidYtCredentials ? CRED_MESSAGE : undefined,
       authType: isYouTubeOAuthConnected ? 'OAUTH_2_0' : (ytAccess || ytRefresh) ? 'STATIC_TOKEN' : ytKey ? 'API_KEY' : 'OAUTH_2_0',
       accountName: ytConn?.channelTitle || (ytAccess || ytRefresh ? 'Configured Channel (Env Token)' : ytKey ? 'Google API Key (Metadata Only)' : undefined),
       accountIdentifier: ytConn?.channelId || process.env.YOUTUBE_CHANNEL_ID || undefined,
       avatarUrl: ytConn?.avatarUrl || undefined,
       lastVerifiedAt: ytConn?.connectedAt || undefined,
       youTubeOAuthStatus: {
-        connected: hasValidYtCredentials,
-        status: hasValidYtCredentials ? 'API_VERIFIED' : (ytClientId || ytKey) ? 'CONFIGURED' : 'NOT_CONFIGURED',
+        connected: isYouTubeOAuthConnected,
+        status: isYouTubeOAuthConnected ? 'API_VERIFIED' : 'CONFIGURED',
         authType: isYouTubeOAuthConnected ? 'OAUTH_2_0' : (ytAccess || ytRefresh) ? 'STATIC_ENV_TOKEN' : ytKey ? 'API_KEY' : undefined,
         channelTitle: ytConn?.channelTitle || (ytAccess || ytRefresh ? 'Configured Channel' : ytKey ? 'Google API Key (Metadata Only)' : undefined),
         channelId: ytConn?.channelId || process.env.YOUTUBE_CHANNEL_ID || undefined,
@@ -4588,7 +4600,8 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
         hasClientId: Boolean(ytClientId),
         hasClientSecret: Boolean(ytClientSecret),
         hasApiKey: Boolean(ytKey),
-        canPublish: hasValidYtCredentials,
+        canPublish: false,
+        message: 'Credentials present but not verified. Run "Test connection" to confirm the channel before publishing.',
         redirectUri: ytRedirectUri,
       },
       developerPortalUrl: 'https://console.cloud.google.com/apis/credentials',
@@ -4614,7 +4627,8 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'twitter',
       name: 'X / Twitter API v2 (Pay-per-use Tier)',
       category: 'Microblog',
-      status: (twitterBearer || twitterAccess) ? 'CONNECTED' : 'NOT_CONFIGURED',
+      status: (twitterBearer || twitterAccess) ? CRED_STATUS : 'NOT_CONFIGURED',
+      errorMessage: (twitterBearer || twitterAccess) ? CRED_MESSAGE : undefined,
       accountName: (twitterBearer || twitterAccess) ? 'Configured Dev Tier' : undefined,
       developerPortalUrl: 'https://developer.x.com',
       setupInstructions: [
@@ -5293,12 +5307,13 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
     }
   }
 
-  // 2. If static env token is present
+  // 2. If static env token is present, it has not been probed against Google,
+  //    so it is configured — never a verified connection or a publishing grant.
   if (staticToken) {
     return res.json({
-      connected: true,
-      status: 'API_VERIFIED',
-      canPublish: true,
+      connected: false,
+      status: 'CONFIGURED',
+      canPublish: false,
       authType: 'STATIC_ENV_TOKEN',
       channelTitle: 'Configured Channel (Env Token)',
       channelId: staticChannelId || undefined,
@@ -5306,6 +5321,7 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
       hasClientSecret: Boolean(clientSecret),
       hasApiKey: Boolean(apiKey),
       redirectUri,
+      message: 'A static YOUTUBE_ACCESS_TOKEN is present but has not been verified against Google. Run "Test connection" to confirm the channel before publishing.',
     });
   }
 

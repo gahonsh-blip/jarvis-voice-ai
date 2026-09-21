@@ -196,3 +196,47 @@ describe('the Oracle instance run state and address are never seeded', () => {
     expect(modalFlat).toContain('not read from a running instance');
   });
 });
+
+describe('a merely-present social credential is never reported as a connection', () => {
+  // `/api/social/platforms` makes no provider call, so credential *presence*
+  // cannot certify a live account. Before this guard, a platform with a token
+  // set was labelled `CONNECTED` (or `API_VERIFIED` for YouTube), and the Social
+  // Hub's account banner then asserted a member/channel it had never read.
+  const statusFn = (() => {
+    const start = serverSource.indexOf('function getPlatformIntegrationsStatus');
+    expect(start).toBeGreaterThan(-1);
+    // The next top-level route definition closes the function body.
+    const end = serverSource.indexOf('app.get(', start);
+    return serverSource.slice(start, end).replace(/\s+/g, ' ');
+  })();
+
+  it('none of the five platform branches label presence as CONNECTED', () => {
+    // The only safe literal for a mere credential is CONFIGURED / NOT_CONFIGURED /
+    // AUTH_REQUIRED. A 'CONNECTED' literal inside this function can only come
+    // from an unmeasured credential.
+    expect(statusFn).not.toContain("'CONNECTED'");
+    expect(statusFn).not.toContain('"CONNECTED"');
+  });
+
+  it('a configured credential carries an explicit not-verified message', () => {
+    expect(statusFn).toContain('const CRED_STATUS = \'CONFIGURED\'');
+    expect(statusFn).toContain('Credentials present but not verified');
+  });
+
+  it('the YouTube card is never publishing-capable from presence alone', () => {
+    // `canPublish: true` here drove the modal's "Ready to publish" badge
+    // (SocialMediaModal.tsx reads canPublish). It must require a probe.
+    expect(statusFn).toContain('canPublish: false');
+    expect(statusFn).not.toContain('canPublish: hasValidYtCredentials');
+    expect(statusFn).not.toContain('canPublish: true');
+  });
+
+  it('the YouTube status probe does not grant publishing to an unprobed env token', () => {
+    const probe = serverSource
+      .slice(serverSource.indexOf("app.get('/api/auth/youtube/status'"))
+      .replace(/\s+/g, ' ');
+    // The static-token branch must not return connected:true / API_VERIFIED.
+    expect(probe).not.toContain("if (staticToken) { return res.json({ connected: true, status: 'API_VERIFIED', canPublish: true");
+    expect(probe).toContain("return res.json({ connected: false, status: 'CONFIGURED', canPublish: false, authType: 'STATIC_ENV_TOKEN'");
+  });
+});
