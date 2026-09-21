@@ -17,13 +17,23 @@ All notable improvements, security updates, and feature additions are documented
 ### Fix
 - Both keyword lists now include `'transfer money'`, `'transfer funds'`,
   `'send funds'`, `'move money'` and `'transfer rupees'`.
+- Follow-up in the same slot: a parity case added to `permissionGuard.test.ts`
+  (five natural-language phrasings) proved the Computer Operator list was still
+  missing `'move money'` and `'transfer rupees'` — `evaluateAction` returned
+  `allowed: true` for both. Keyword list extended; the two finance files went
+  from `2 failed | 25 passed` to `27 passed (27)`.
 
 ### Tests
 - New `src/tests/financeGuard.test.ts` (13 tests) — the first direct coverage
   of `isFinanceBlocked` plus the finance-reject, emergency-stop,
   `PENDING_APPROVAL` and Level 3 label paths of `createPendingActionRequest`.
-  Negative-validated: neutering the keyword loop fails 6 of the 28
-  `permissionGuard.test.ts` assertions (6 failed | 22 passed), 28/28 restored.
+- `src/tests/permissionGuard.test.ts` — added 5 natural-language finance cases.
+- Negative-validated with observed counts: removing the new keywords from
+  `isFinanceBlocked()` fails **1 of 13** `financeGuard.test.ts` cases
+  (`1 failed | 12 passed`), restored to 13/13; removing them from
+  `FINANCE_KEYWORDS` fails 2 `permissionGuard.test.ts` cases, restored to 9/9.
+- Full suite: 66 files / 948 tests passed; lint `tsc --noEmit` exit 0; build
+  exit 0 (`dist/server.cjs` 847117 bytes / 827.3 kb).
 
 ---
 ## [Unreleased] - 2026-09-22 01:36 IST (2026-09-21 20:06 UTC) — No working email sender is reported

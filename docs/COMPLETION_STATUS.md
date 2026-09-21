@@ -18,11 +18,19 @@ same gap and did not even list `'money transfer'`. Both keyword lists now includ
 `'transfer rupees'`. `isFinanceBlocked` had **no direct test** before this slot.
 Guarded by `src/tests/financeGuard.test.ts` (13 tests), which also covers
 `createPendingActionRequest`'s finance-reject, the emergency-stop block, the
-normal `PENDING_APPROVAL` path and the Level 3 permission label;
-negative-validated — neutering the finance keyword loop fails exactly 6 of the
-28 `PermissionGuard` tests (`6 failed | 22 passed`) and passes 28/28 restored.
-Gates on `674c89c`: lint (`tsc --noEmit`) exit 0, vitest **66 files / 943 tests
-passed**, build exit 0 (`dist/server.cjs` 847080 bytes / 827.2 kb). There is no
+normal `PENDING_APPROVAL` path and the Level 3 permission label.
+Negative-validated twice, with exact observed counts:
+- `server_tools.ts` — removing `'transfer money'`/`'transfer funds'`/`'send funds'`
+  from `isFinanceBlocked()` fails **1 of 13** `financeGuard.test.ts` cases
+  (observed `1 failed | 12 passed`); restored → 13/13.
+- `permissionGuard.ts` — an added parity case in `permissionGuard.test.ts`
+  (five natural-language phrasings) exposed a real second gap: the keyword list
+  carried `'transfer money'`/`'transfer funds'`/`'send funds'` but **not**
+  `'move money'` or `'transfer rupees'`, so `evaluateAction` returned
+  `allowed: true` for those two. Adding both keywords fixed it: before the fix
+  the two files ran `2 failed | 25 passed`, after `27 passed (27)`.
+Gates on `f892957`: lint (`tsc --noEmit`) exit 0; vitest **66 files / 948 tests
+passed**; build exit 0 (`dist/server.cjs` 847117 bytes / 827.3 kb). There is no
 dedicated finance-gate item in the 60-item backlog, so this is recorded under
 item 51's security sweep.
 
