@@ -10,6 +10,10 @@ export type TelephonyCallState =
   | 'ENDING'
   | 'ENDED'
   | 'FAILED'
+  // Reported when an adapter holds no live provider control channel and
+  // therefore cannot observe the real call state. Distinct from IDLE, which
+  // asserts the call is not active.
+  | 'UNKNOWN'
   | 'HANDOFF_REQUIRED';
 
 export type TelephonyStatus =

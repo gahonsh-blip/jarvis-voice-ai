@@ -8179,6 +8179,19 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
       destinationNumber: dest,
     });
 
+    // Authorization succeeded, but the carrier dispatch is a separate fact.
+    // Do not report a placed call when no provider confirmed it — the route
+    // previously returned success:true regardless of dialResult.
+    if (!dialResult.success) {
+      return res.status(502).json({
+        success: false,
+        authorized: true,
+        status: 'PROVIDER_DISPATCH_FAILED',
+        session: sessionRes.session,
+        error: dialResult.error || 'The telephony provider did not confirm the outbound call.',
+      });
+    }
+
     res.json({
       success: true,
       authorized: true,

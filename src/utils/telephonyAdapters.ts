@@ -166,10 +166,16 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
         error: 'TELEPHONY_NOT_CONFIGURED: Cannot execute PSTN call transfer without active provider.',
       };
     }
+    // A TwiML <Dial> document is an instruction, not a confirmation. It only
+    // reaches the carrier when it is returned to Twilio inside a live webhook
+    // response; this method returns it to a caller that discards it. Reporting
+    // providerConfirmed:true here made the receptionist announce a handoff
+    // that never occurred. Return the TwiML for a live response to use, and
+    // keep the confirmation false.
     return {
-      success: true,
-      providerConfirmed: true,
-      message: `Call successfully transferred to verified clinic staff line: ${params.targetNumber}`,
+      success: false,
+      providerConfirmed: false,
+      error: 'TELEPHONY_TRANSFER_UNCONFIRMED: the transfer TwiML has not been delivered to Twilio in a live webhook response, so the handoff cannot be confirmed.',
       raw: {
         twiml: `<Response><Dial>${params.targetNumber}</Dial></Response>`,
       },
@@ -177,7 +183,9 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
   }
 
   async getCallStatus(callSessionId: string): Promise<{ state: TelephonyCallState; raw?: any }> {
-    return { state: 'IDLE' };
+    // This adapter does not query the Twilio Calls resource here, so it cannot
+    // observe the live state of the call.
+    return { state: 'UNKNOWN' };
   }
 
   async getCallRecordingStatus(callSessionId: string): Promise<{ recording: boolean; recordingUrl?: string }> {
@@ -231,7 +239,11 @@ export class TelnyxTelephonyProvider implements TelephonyProvider {
     initialGreeting?: string;
   }): Promise<{ success: boolean; providerCallId?: string; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, providerCallId: `telnyx_${Date.now()}` };
+    // No Telnyx Call Control API call is made from this process yet. A
+    // `telnyx_<timestamp>` string is not a carrier call id, and the outbound
+    // route would surface it as a placed call. Report the gap instead of
+    // inventing an identifier until the real Call Control call exists.
+    return { success: false, error: 'TELEPHONY_PROVIDER_DISPATCH_NOT_IMPLEMENTED: the Telnyx Call Control API is not invoked by this adapter, so this process cannot confirm an outbound call was placed.' };
   }
 
   async playAudio(params: { callSessionId: string; audioUrlOrText: string; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
@@ -248,11 +260,17 @@ export class TelnyxTelephonyProvider implements TelephonyProvider {
 
   async transferCall(params: { callSessionId: string; targetNumber: string }): Promise<{ success: boolean; providerConfirmed: boolean; message?: string; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, providerConfirmed: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, providerConfirmed: true, message: `Telnyx transfer to ${params.targetNumber}` };
+    // Nothing in this process issues a Telnyx Call Control `transfer` command,
+    // so no confirmation can be observed. `providerConfirmed` must stay false
+    // or the receptionist announces a live transfer that never happened.
+    return { success: false, providerConfirmed: false, error: 'TELEPHONY_PROVIDER_DISPATCH_NOT_IMPLEMENTED: the Telnyx Call Control transfer command is not invoked by this adapter, so the transfer is unconfirmed.' };
   }
 
   async getCallStatus(callSessionId: string): Promise<{ state: TelephonyCallState; raw?: any }> {
-    return { state: 'IDLE' };
+    // This adapter holds no Telnyx control-channel state, so it cannot report
+    // the live state of a call. UNKNOWN is the honest answer until the Call
+    // Control API is actually queried.
+    return { state: 'UNKNOWN' };
   }
 
   async getCallRecordingStatus(callSessionId: string): Promise<{ recording: boolean; recordingUrl?: string }> {
@@ -306,7 +324,9 @@ export class PlivoTelephonyProvider implements TelephonyProvider {
     initialGreeting?: string;
   }): Promise<{ success: boolean; providerCallId?: string; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, providerCallId: `plivo_${Date.now()}` };
+    // See the Telnyx adapter: no Plivo REST call is made here, so a
+    // `plivo_<timestamp>` string must not be presented as a placed call.
+    return { success: false, error: 'TELEPHONY_PROVIDER_DISPATCH_NOT_IMPLEMENTED: the Plivo REST API is not invoked by this adapter, so this process cannot confirm an outbound call was placed.' };
   }
 
   async playAudio(params: { callSessionId: string; audioUrlOrText: string; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
@@ -323,11 +343,14 @@ export class PlivoTelephonyProvider implements TelephonyProvider {
 
   async transferCall(params: { callSessionId: string; targetNumber: string }): Promise<{ success: boolean; providerConfirmed: boolean; message?: string; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, providerConfirmed: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, providerConfirmed: true, message: `Plivo dialed ${params.targetNumber}` };
+    // No Plivo transfer command is issued from this process, so the transfer
+    // is unconfirmed. Never report a confirmed handoff that nothing observed.
+    return { success: false, providerConfirmed: false, error: 'TELEPHONY_PROVIDER_DISPATCH_NOT_IMPLEMENTED: the Plivo transfer command is not invoked by this adapter, so the transfer is unconfirmed.' };
   }
 
   async getCallStatus(callSessionId: string): Promise<{ state: TelephonyCallState; raw?: any }> {
-    return { state: 'IDLE' };
+    // No Plivo control-channel state is held here; the live state is unknown.
+    return { state: 'UNKNOWN' };
   }
 
   async getCallRecordingStatus(callSessionId: string): Promise<{ recording: boolean; recordingUrl?: string }> {
