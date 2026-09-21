@@ -35,6 +35,19 @@ as distinct from `APPROVE`, and must never default to consent on an unparsed rep
 ## 2. Strict Financial Exclusions Guard
 - All financial, banking, crypto, and payment-related commands are blocked at the semantic parsing level.
 - Any query attempting fund transfers, credit card charges, or wallet movements triggers the `FINANCE_SECURITY_GUARD` rejection response.
+- This filter is exact-phrase based, so its coverage is only as good as its
+  keyword list. On 2026-09-22 02:06 IST a real gap was found and closed:
+  `isFinanceBlocked()` listed `'money transfer'` but not `'transfer money'`, so
+  `isFinanceBlocked('transfer money to the client')` returned `blocked: false`
+  and the same phrase passed the Computer Operator `PermissionGuard`
+  (`src/utils/computerOperator/permissionGuard.ts`), which had dropped even
+  `'money transfer'`. Both lists now include `'transfer money'`,
+  `'transfer funds'`, `'send funds'`, `'move money'` and `'transfer rupees'`;
+  `src/tests/financeGuard.test.ts` is the first direct coverage of the filter.
+  A refusal here is permanent and never offers an approval path
+  (`requiresHumanApproval` stays `false`, `dangerCategory`
+  `FINANCE_RESTRICTION`) — a blocked finance action must be read as `BLOCKED`,
+  never as `NEEDS_APPROVAL`.
 
 ---
 

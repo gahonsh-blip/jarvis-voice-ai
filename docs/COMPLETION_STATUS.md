@@ -4,7 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 01:36 IST (2026-09-21 20:06 UTC) — **WORK SLOT**, slot 12 of the
+Last cycle: 2026-09-22 02:06 IST (2026-09-21 20:36 UTC) — **WORK SLOT**, slot 13 of the
+2026-09-21 window. Item 51 (`Complete security audit`) / the Level-4 finance
+exclusion gate. `isFinanceBlocked()` in `server_tools.ts` listed `'money
+transfer'` but **not** the far more natural `'transfer money'`, so a plain
+fund-transfer instruction — `isFinanceBlocked('transfer money to the client')`
+— returned `blocked: false` and would have sailed past the strict finance
+exclusion filter that guards the live approval path (`createPendingActionRequest`
+rejects a finance action before it can ever be approved). The Computer Operator
+`PermissionGuard` (`src/utils/computerOperator/permissionGuard.ts`) carried the
+same gap and did not even list `'money transfer'`. Both keyword lists now include
+`'transfer money'`, `'transfer funds'`, `'send funds'`, `'move money'` and
+`'transfer rupees'`. `isFinanceBlocked` had **no direct test** before this slot.
+Guarded by `src/tests/financeGuard.test.ts` (13 tests), which also covers
+`createPendingActionRequest`'s finance-reject, the emergency-stop block, the
+normal `PENDING_APPROVAL` path and the Level 3 permission label;
+negative-validated — neutering the finance keyword loop fails exactly 6 of the
+28 `PermissionGuard` tests (`6 failed | 22 passed`) and passes 28/28 restored.
+Gates on `674c89c`: lint (`tsc --noEmit`) exit 0, vitest **66 files / 943 tests
+passed**, build exit 0 (`dist/server.cjs` 847080 bytes / 827.2 kb). There is no
+dedicated finance-gate item in the 60-item backlog, so this is recorded under
+item 51's security sweep.
+
+Previous cycle: 2026-09-22 01:36 IST (2026-09-21 20:06 UTC) — **WORK SLOT**, slot 12 of the
 2026-09-21 window. Item 13 (`Zero-fake-success for all tools`) extended to the
 **outbound email / SMTP conduit**. Three surfaces told the owner that a working
 email sender existed when none does. `realEmailStatus()` in `server_tools.ts`
@@ -980,6 +1002,25 @@ including source guards that pin the absence of the hardcoded strings and the
 literal-`true` call form). Negative-validated: restoring `VOICE AGENT ACTIVE`
 fails exactly the source guard (1 failed | 14 passed) and passes 15/15 with the
 fix.
+
+### 2026-09-22 02:06 IST — the finance exclusion gate missed the natural phrasing
+
+3. **`isFinanceBlocked()` did not block `'transfer money'`** — the strict
+   finance exclusion filter in `server_tools.ts` listed `'money transfer'` and
+   `'send money'` but not `'transfer money'`, so the plain-English instruction
+   `isFinanceBlocked('transfer money to the client')` returned
+   `blocked: false`. That filter is the gate `createPendingActionRequest`
+   consults to refuse a finance action before the (reversible) approval path is
+   ever offered, so this was the one place a fund transfer could look ordinary.
+   The Computer Operator `PermissionGuard`
+   (`src/utils/computerOperator/permissionGuard.ts`) had the same gap and had
+   dropped even `'money transfer'`. Both lists now carry `'transfer money'`,
+   `'transfer funds'`, `'send funds'`, `'move money'` and `'transfer rupees'`.
+   Found while adding the first direct test for `isFinanceBlocked`, which had
+   none. Guarded by `src/tests/financeGuard.test.ts` (13 tests) and pinned by
+   `src/tests/permissionGuard.test.ts` (28 tests); negative-validated by
+   neutering the keyword loop — 6 of 28 PermissionGuard tests fail (6 failed |
+   22 passed), 28/28 restored.
 
 ---
 

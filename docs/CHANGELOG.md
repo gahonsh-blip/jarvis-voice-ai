@@ -3,6 +3,29 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 02:06 IST (2026-09-21 20:36 UTC) — Finance exclusion gate closed for "transfer money"
+
+### Bug fix
+- `isFinanceBlocked()` in `server_tools.ts` listed `'money transfer'` but not
+  `'transfer money'`, so `isFinanceBlocked('transfer money to the client')`
+  returned `blocked: false`. This filter is what `createPendingActionRequest`
+  consults to refuse a finance action outright, before the approval path is
+  offered, so the most natural English phrasing of a fund transfer slipped past
+  the strict exclusion. `src/utils/computerOperator/permissionGuard.ts` had the
+  same gap and had dropped even `'money transfer'`.
+
+### Fix
+- Both keyword lists now include `'transfer money'`, `'transfer funds'`,
+  `'send funds'`, `'move money'` and `'transfer rupees'`.
+
+### Tests
+- New `src/tests/financeGuard.test.ts` (13 tests) — the first direct coverage
+  of `isFinanceBlocked` plus the finance-reject, emergency-stop,
+  `PENDING_APPROVAL` and Level 3 label paths of `createPendingActionRequest`.
+  Negative-validated: neutering the keyword loop fails 6 of the 28
+  `permissionGuard.test.ts` assertions (6 failed | 22 passed), 28/28 restored.
+
+---
 ## [Unreleased] - 2026-09-22 01:36 IST (2026-09-21 20:06 UTC) — No working email sender is reported
 
 ### Bug fix
