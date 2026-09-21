@@ -313,12 +313,92 @@ export class AndroidBridgeManager {
     }
   }
 
-  public openApplication(packageName: string): { success: boolean; message: string } {
+  public openApplication(packageName: string): {
+    success: boolean;
+    blockedReason?:
+      | 'MOBILE_NOT_CONNECTED'
+      | 'BLOCKED_EMERGENCY_STOP'
+      | 'OPEN_APP_UNSUPPORTED'
+      | 'APP_DENIED';
+    message: string;
+  } {
     // Launching an app is a device-side effect. Without a device acknowledgement
-    // we can only say we asked for it, not that it happened.
+    // we can only say we asked for it, not that it happened — so gates are
+    // checked first and success is never reported.
+    if (this.status === 'MOBILE_NOT_CONNECTED' || !this.capabilities) {
+      this.recordAudit({
+        eventType: 'ACTION_DENIED',
+        application: packageName,
+        actionRequested: 'Launch Application',
+        permissionState: 'DENIED',
+        authorizationState: 'MOBILE_NOT_CONNECTED',
+        result: 'REJECTED',
+        notes: `App launch requested for ${packageName} with no Android device connected`,
+      });
+      return {
+        success: false,
+        blockedReason: 'MOBILE_NOT_CONNECTED',
+        message: 'No Android device is connected to the bridge.',
+      };
+    }
+
+    if (this.isEmergencyStopActive) {
+      this.recordAudit({
+        eventType: 'ACTION_DENIED',
+        application: packageName,
+        actionRequested: 'Launch Application',
+        permissionState: 'DENIED',
+        authorizationState: 'BLOCKED_EMERGENCY_STOP',
+        result: 'BLOCKED_EMERGENCY_STOP',
+        notes: `App launch for ${packageName} blocked by Global Kill Switch`,
+      });
+      return {
+        success: false,
+        blockedReason: 'BLOCKED_EMERGENCY_STOP',
+        message: 'App launch blocked by Global Kill Switch.',
+      };
+    }
+
+    if (!this.capabilities.canOpenApp) {
+      this.recordAudit({
+        eventType: 'CAPABILITY_UNAVAILABLE',
+        application: packageName,
+        actionRequested: 'Launch Application',
+        permissionState: 'GRANTED',
+        authorizationState: 'CAPABILITY_MISSING',
+        result: 'UNSUPPORTED',
+        notes: 'Device does not report launch-intent capability',
+      });
+      return {
+        success: false,
+        blockedReason: 'OPEN_APP_UNSUPPORTED',
+        message: 'This device does not support launching applications via the bridge.',
+      };
+    }
+
+    const rule = this.settings.privacyRules[packageName];
+    if (rule && !rule.allowed) {
+      this.recordAudit({
+        eventType: 'ACTION_DENIED',
+        application: rule.appName,
+        actionRequested: 'Launch Application',
+        permissionState: 'DENIED',
+        authorizationState: 'APP_DENIED',
+        result: 'REJECTED',
+        notes: `Launch of ${packageName} denied by privacy policy`,
+      });
+      return {
+        success: false,
+        blockedReason: 'APP_DENIED',
+        message: `Application ${rule.appName} is denied by the privacy policy.`,
+      };
+    }
+
+    // Gates passed: dispatch the launch intent, but the app opening is still
+    // unconfirmed, so success stays false and the attempt is audited as dispatched.
     this.recordAudit({
       eventType: 'APP_OPENED',
-      application: packageName,
+      application: rule?.appName || packageName,
       actionRequested: 'Launch Application',
       permissionState: 'GRANTED',
       authorizationState: 'HUMAN_EXPLICIT_APPROVAL',

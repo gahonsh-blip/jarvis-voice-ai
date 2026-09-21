@@ -241,9 +241,12 @@ export class SimulatedAndroidBridgeAdapter implements AndroidBridgeAdapter {
   }
 
   public async openApp(packageName: string): Promise<{ success: boolean; message: string }> {
+    // Delegate to the engine so the simulation cannot report a success the
+    // bridge gates would have refused.
+    const res = androidBridgeEngine.openApplication(packageName);
     return {
-      success: true,
-      message: `[SIMULATION_ONLY] Launch intent triggered for ${packageName}`,
+      success: res.success,
+      message: `[SIMULATION_ONLY] ${res.message}`,
     };
   }
 

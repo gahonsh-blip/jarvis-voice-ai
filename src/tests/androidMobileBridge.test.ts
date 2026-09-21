@@ -567,4 +567,71 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
       expect(engine.getPendingEvent()?.type).toBe('CALL');
     });
   });
+
+  it('Scenario 17: openApplication gates truthfully — disconnected, emergency stop, unsupported, denied', () => {
+    const caps = {
+      deviceId: 'phone_open_app',
+      deviceName: 'Phone',
+      model: 'Phone',
+      osVersion: 'Android 14',
+      bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: true,
+      canAnswerCalls: true,
+      telecomRoleDialer: true,
+      answerCallsPermission: true,
+      canReadNotifications: true,
+      canInlineReply: true,
+      canOpenApp: true,
+      canLookupContacts: true,
+      isSimulation: false,
+    };
+
+    // 1. Disconnected bridge must refuse and audit the refusal
+    const disconnected = engine.openApplication('com.whatsapp');
+    expect(disconnected.success).toBe(false);
+    expect(disconnected.blockedReason).toBe('MOBILE_NOT_CONNECTED');
+    expect(engine.getAuditLogs()[0].result).toBe('REJECTED');
+
+    // 2. Emergency stop must block even with a capable device
+    engine.connectDevice(caps);
+    engine.setEmergencyStop(true);
+    const killed = engine.openApplication('com.whatsapp');
+    expect(killed.success).toBe(false);
+    expect(killed.blockedReason).toBe('BLOCKED_EMERGENCY_STOP');
+    expect(engine.getAuditLogs()[0].result).toBe('BLOCKED_EMERGENCY_STOP');
+    engine.setEmergencyStop(false);
+
+    // 3. Device without launch capability reports UNSUPPORTED
+    engine.connectDevice({ ...caps, canOpenApp: false });
+    const unsupported = engine.openApplication('com.whatsapp');
+    expect(unsupported.success).toBe(false);
+    expect(unsupported.blockedReason).toBe('OPEN_APP_UNSUPPORTED');
+
+    // 4. Privacy-denied app (banking default DENY) must be refused
+    engine.connectDevice(caps);
+    const denied = engine.openApplication('com.phonepe.app');
+    expect(denied.success).toBe(false);
+    expect(denied.blockedReason).toBe('APP_DENIED');
+
+    // 5. Gates pass -> dispatched, but the launch itself is never claimed as done
+    const dispatched = engine.openApplication('com.whatsapp');
+    expect(dispatched.success).toBe(false);
+    expect(dispatched.message).toContain('awaiting device confirmation');
+    const audit = engine.getAuditLogs()[0];
+    expect(audit.eventType).toBe('APP_OPENED');
+    expect(audit.result).toBe('UNSUPPORTED');
+  });
+
+  it('Scenario 18: Simulated adapter openApp propagates the engine gate instead of hardcoding success', async () => {
+    androidBridgeEngine.disconnectDevice();
+    const offline = await simulatedAndroidAdapter.openApp('com.whatsapp');
+    expect(offline.success).toBe(false);
+    expect(offline.message).toContain('[SIMULATION_ONLY]');
+    expect(offline.message).toContain('No Android device is connected');
+
+    await simulatedAndroidAdapter.connect();
+    const online = await simulatedAndroidAdapter.openApp('com.whatsapp');
+    expect(online.success).toBe(false);
+    expect(online.message).toContain('awaiting device confirmation');
+  });
 });

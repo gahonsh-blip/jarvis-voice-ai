@@ -534,11 +534,12 @@ export default function App() {
 
   const handleOpenMobileApp = useCallback((pkg?: string) => {
     if (pkg) {
-      androidBridgeEngine.openApplication(pkg);
+      const res = androidBridgeEngine.openApplication(pkg);
+      speakText(res.success ? `सर, ${pkg} खोल दिया गया है।` : `सर, ${res.message}`);
     }
     androidBridgeEngine.clearPendingEvent();
     setPendingMobileEvent(null);
-  }, []);
+  }, [speakText]);
 
   const handleDismissMobileMessage = useCallback(() => {
     androidBridgeEngine.clearPendingEvent();
