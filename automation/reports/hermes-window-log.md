@@ -2509,3 +2509,18 @@ Next Slot:
 
 ---
 
+
+## 2026-09-21T22:05Z — slot 17/16 (WORK)
+
+- Item worked: #31 Real notification reply (mobile-bridge reply dispatch honesty)
+- Status: PARTIAL (UI no longer fabricates approval/dispatch; no real handset)
+- Tests: full suite 68 files / 979 tests passed; tsc --noEmit exit 0; build exit 0 (dist/server.cjs 852453 bytes)
+- Commit: 3f6f6e4 (fix+test), d7c84c8 (docs)  Push: ok (feature/hermes-full-completion)
+- Notes / blockers:
+  - `src/components/MobileBridgeModal.tsx` `dispatchReply` asked for no approval, sent no request, set the pending event `AUTHORIZED`, and spoke "Reply authorized, Sir. Dispatching via the Android bridge when connected." Its approval expression was `isExplicitApproval('yes') ? 'REPLY_AUTHORIZED' : 'REPLY_AUTHORIZED'` — identical branches, answer discarded. `/api/mobile/bridge/message/reply` refuses any request without `approved: true`, so the claimed dispatch was never made.
+  - New `src/utils/mobileReplyDispatchTruth.ts`: `replyDispatchDecision` (refuses NOT_REPLY_EVENT / SENSITIVE_CONTENT / NO_REPLY_TEXT / NO_DISTINCT_APPROVAL), `replyDispatchOutcome(httpStatus, body)` which never infers success from a transport status (2xx without the server's dispatch outcome = FAILED; a device-claimed `verified` demoted to UNVERIFIED because confirmation is a separate route), and English/Hindi speech that never claims delivery.
+  - `MobileBridgeModal.tsx`: reply text field + distinct `I APPROVE SENDING THIS REPLY` checkbox; refusal happens before any request and leaves the event `PENDING_APPROVAL`; no paired session token reports `NOT_CONFIGURED`; status/audit/notice/speech all driven by the observed response.
+  - Guarded by new `src/tests/mobileReplyDispatchTruth.test.ts` (16 tests). Negative-validated: restoring the previous `MobileBridgeModal.tsx` fails exactly the 3 source guards (observed `3 failed | 13 passed` of 16); restored -> 16/16.
+  - Security: `.env` git-ignored (`git check-ignore -v .env` -> `.gitignore:4`) and untracked; secret-pattern scan of `git diff origin/main` returned only the previously-documented synthetic fixtures; no real credential.
+  - Blocked unchanged: #1/#2/#50/#55 need a physical Android device; #8 needs a Windows host.
+- Next slot: 04:05 IST WORK — next non-VERIFIED non-blocked item, or one more finished slice of #51. 04:35 IST is FINALIZATION.
