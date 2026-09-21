@@ -1737,3 +1737,22 @@ Next Slot:
 - वॉइस पुष्टि गेट में असली सुरक्षा बग पकड़ा और ठीक किया: "मत करो" जैसी मनाही को
   CONFIRMED पढ़ा जा रहा था; आइटम 48 को VERIFIED से PARTIAL किया गया।
 ```
+
+### Slot 4 recovery note — 2026-09-21 22:40 IST (17:10 UTC)
+
+Continuation of the 22:05 IST fire. The code/docs work above was already committed
+(`bddce98`, `be991b2`, `58be3b0`), but two follow-ups had not landed durably:
+
+- The PR #4 body lacked a Slot 3 and Slot 4 section. Refreshed via
+  `PATCH /pulls/4`; PR is open, non-draft, base `main`, `mergeable_state: clean`,
+  head `58be3b0`.
+- The `automation/hermes-state` branch carried slot 3 only. Republished on top of
+  the real remote tip (`1308273` -> `f677d39`) with `slots_completed: 4`,
+  `current_item: 48`, `current_item_status: PARTIAL`, `last_commit: 58be3b0`,
+  and the full blocked-items list preserved.
+- Noted for the next slot: the GitHub token variable is `$github_token`
+  (lowercase); `$GITHUB_TOKEN` returns 401 in this sandbox.
+
+Also observed in this continuation: `git ls-remote` is the reliable way to read
+the true remote state here - remote-tracking refs went stale twice and made a
+successful push look rejected.
