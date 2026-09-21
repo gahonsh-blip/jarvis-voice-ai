@@ -1809,3 +1809,45 @@ Item #48 `Voice action confirmation` — continued (the step *after* the gate).
 हिंदी सारांश: वॉइस TTS डायग्नॉस्टिक्स अब असफल स्पीच को "TTS Active" नहीं
 बताता; item #48 अभी भी PARTIAL है क्योंकि असली स्पीच इंजन यहाँ उपलब्ध नहीं।
 
+
+
+---
+
+## 2026-09-21 23:10 IST (17:40 UTC) — WORK SLOT (slot 6)
+
+Item 13 (`Zero-fake-success for all tools`, `PARTIAL`) advanced on the telephony
+webhook-endpoint surface.
+
+**Bugs found**
+1. `TelephonyHubModal.tsx` listed `POST /api/telephony/twiml/voice` as
+   `TwiML ACTIVE`, and `TwilioTelephonyProvider.startOutboundCall` in
+   `src/utils/telephonyAdapters.ts` used that same path as its post-answer
+   callback - but `server.ts` registers only `/api/telephony/incoming`,
+   `/api/telephony/handle-turn` and `/api/telephony/twiml/turn`. A carrier
+   following the advertised callback would have reached a 404. Found by grepping
+   the advertised endpoint strings against `app.post(` registrations in
+   `server.ts`.
+2. All three endpoint badges (`LIVE & READY`, `TwiML ACTIVE`, `GEMINI BRAIN READY`)
+   were hardcoded green, and `BlueprintRoadmapModal.tsx`'s footer asserted
+   `Security Matrix: Active` for a posture that modal never queried.
+
+**Bugs fixed**
+- New `src/utils/telephonyEndpointTruth.ts`: registered-route inventory,
+  `telephonyEndpointLabel()` (returns `NO SUCH ROUTE` for an unregistered path,
+  holds readiness at `UNKNOWN` until the status request answers),
+  `telephonyBrainLabel()` (derives from `/api/health`'s measured `geminiEnabled`),
+  and `TELEPHONY_TWIML_TURN_PATH`.
+- `telephonyAdapters.ts` Twilio callback now targets the real turn route.
+- `TelephonyHubModal.tsx` renders the derived labels instead of fixed badges.
+- `BlueprintRoadmapModal.tsx` footer no longer asserts the Security Matrix.
+
+**Verification**
+- `npx vitest run src/tests/telephonyEndpointTruth.test.ts` -> 11 passed
+  (25 passed across the three targeted files).
+- Negative-validated: restoring the non-existent path in the adapter fails
+  exactly the callback-path guard (1 failed | 10 passed); restored -> 11/11.
+- `npm run lint` (tsc --noEmit) exit 0.
+- `npx vitest run` -> 62 files / 882 tests passed.
+- `npm run build` exit 0 (`dist/server.cjs` 842396 bytes / 822.7 kb).
+- E2E: NOT RUN (no device/carrier). Security audit: NOT RUN beyond `.env`
+  ignore/status checks.

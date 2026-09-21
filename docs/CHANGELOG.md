@@ -3,6 +3,31 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-21 23:10 IST (17:40 UTC) — Telephony UI no longer advertises a webhook route the server never registers
+
+### Bug fix
+- `TelephonyHubModal.tsx` listed `POST /api/telephony/twiml/voice` as
+  `TwiML ACTIVE`, and `TwilioTelephonyProvider.startOutboundCall` in
+  `src/utils/telephonyAdapters.ts` used that same path as its post-answer
+  callback. `server.ts` registers only `/api/telephony/incoming`,
+  `/api/telephony/handle-turn` and `/api/telephony/twiml/turn`, so a carrier
+  following the advertised callback would have reached a 404.
+- All three endpoint badges (`LIVE & READY`, `TwiML ACTIVE`,
+  `GEMINI BRAIN READY`) and `BlueprintRoadmapModal.tsx`'s
+  `Security Matrix: Active` footer were hardcoded, asserting liveness and a
+  security posture no code path measured.
+- Fix: new `src/utils/telephonyEndpointTruth.ts` exports the registered-route
+  inventory, `telephonyEndpointLabel()` (returns `NO SUCH ROUTE` for an
+  unregistered path, holds readiness at `UNKNOWN` until the status request
+  answers) and `telephonyBrainLabel()` (derives state from `/api/health`'s
+  measured `geminiEnabled`). The Twilio adapter callback targets the real turn
+  route; the Security Matrix footer no longer asserts a posture it never queried.
+- Evidence: `npx vitest run src/tests/telephonyEndpointTruth.test.ts` → 11 passed;
+  negative-validated by restoring the non-existent path (1 failed | 10 passed),
+  then restored. `npm run lint` exit 0; `npx vitest run` → 62 files / 882 tests
+  passed; `npm run build` exit 0 (`dist/server.cjs` 842396 bytes / 822.7 kb).
+
+---
 ## [Unreleased] - 2026-09-21 22:36 IST (17:06 UTC) — TTS diagnostics no longer report a speech action that failed
 
 ### Bug fix
