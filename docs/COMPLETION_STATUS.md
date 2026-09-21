@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-21 22:06 IST (16:36 UTC) — **WORK SLOT**, slot 3 of the
+Last cycle: 2026-09-21 22:25 IST (16:55 UTC) — **WORK SLOT**, slot 4 of the
+2026-09-21 window. Item 48 (`Voice action confirmation`) corrected from
+`VERIFIED` to `PARTIAL` — a **safety regression the previous status hid.** The
+previous cycle had already fixed the same class of bug in the Android bridge
+(`evaluateOwnerApproval` reading a refusal as consent), but item 48 was left
+marked `VERIFIED` even though the voice confirmation gate carried the identical
+flaw. `interpretConfirmation` in `src/utils/voice/voiceSession.ts` matched each
+phrase with a substring `RegExp`, so the affirmative token `करो` fired inside the
+prohibition `मत करो` ("don't do it"), and `normalise()` left `don't` intact so it
+matched the carried-over `"don't"` negative entry. Measured before the fix:
+`मत करो`, `mat karo`, `do not do it`, `don't do it` and `karo mat` all returned
+`CONFIRMED` — a clear refusal read as permission to run a destructive command.
+Fixed: phrase matching is now whole-token (`containsPhrase`), a negation particle
+*before* an affirmative voids it (`NEGATIVE_PARTICLES`), the Hindi verb-final
+prohibition `करो मत` is voided by a deliberately narrow post-particle set
+(`POST_NEGATIVE_PARTICLES = ['mat','मत']` — `ना` is excluded, so `करो ना` = "please
+do" still confirms), and `normalise()` rewrites `don't`/`dont` to ` not ` while
+`not`/`never` were added to `NEGATIVE_PHRASES`. Guarded by four new
+`interpretConfirmation` cases in `src/tests/voiceSession.test.ts`: prohibitions
+are never `CONFIRMED` (and `मत करो`/`mat karo`/`karo mat` are `DECLINED`), negated
+English commands are never `CONFIRMED`, unambiguous affirmatives (`yes`, `ok`,
+`do it`, `proceed`, `haan`, `theek hai`, `कर दो`) still `CONFIRMED`, and `करो ना`
+still confirms. Negative-validated on 2026-09-21 22:25 IST: reverting only
+`src/utils/voice/voiceSession.ts` fails exactly the two prohibition tests (2
+failed | 23 passed of 25) and all 25 pass with the fix restored. Observed gates
+on `bddce98`: `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run` **61 files
+/ 866 tests passed** in 18.49s; `npm run build` exit 0 (`dist/server.cjs`
+842293 bytes / 822.6 kb). No other item changed status.
+
+Prior cycle: 2026-09-21 22:06 IST (16:36 UTC) — **WORK SLOT**, slot 3 of the
 2026-09-21 window. Items 2 and 34 (`PARTIAL`) advanced: the Android mobile-bridge
 owner-approval parser read a *refusal* as consent. `evaluateOwnerApproval` in
 `src/utils/androidBridgeEngine.ts` listed the bare Devanagari verb stem `उठा`
@@ -579,7 +608,7 @@ executed, so a request cannot smuggle arbitrary code into the runner.
 | :--- | :--- | :--- | :--- |
 | 46 | Full voice system | `PARTIAL` | Text-to-speech, locale/voice selection, and speech recognition are wired and selectable in Settings. The browser speech APIs cannot run under Node, so no automated test exercises real audio output. The voice *logic* is covered; the audio path is not. |
 | 47 | Continuous voice interaction | `PARTIAL` | `src/utils/voice/voiceSession.ts` implements the continuous-session state machine (`IDLE → AWAITING_WAKE → LISTENING → CONFIRMING → PROCESSING`), and the recogniser now runs in `continuous` mode with auto-restart in hands-free mode. The state machine is covered by 14 unit tests. Audio capture itself is untested here, so the loop is not claimed as end-to-end verified. |
-| 48 | Voice action confirmation | `VERIFIED` | Sensitive commands are held in `CONFIRMING` and only released on a clear spoken yes. `interpretConfirmation` treats an empty reply, unrelated speech, and a mixed "yes no wait" as `UNCLEAR`, which never executes. Confirmation timeout and decline both leave the command unrun. 12 unit tests. |
+| 48 | Voice action confirmation | `PARTIAL` | Sensitive commands are held in `CONFIRMING` and only released on a clear spoken yes. `interpretConfirmation` treats an empty reply, unrelated speech, and a mixed "yes no wait" as `UNCLEAR`, which never executes. Confirmation timeout and decline both leave the command unrun. **2026-09-21 22:25 IST — demoted from `VERIFIED`.** Phrase matching was a substring regex, so the affirmative token `करो` fired inside the prohibition `मत करो`, and `do not do it` / `don't do it` matched the carried-over `"don't"` negative entry — all five prohibitions returned `CONFIRMED`, i.e. a refusal read as permission to run a destructive command. Now whole-token matching with negation voiding (a particle before an affirmative voids it; `mat`/`मत` after the verb voids the Hindi prohibition `करो मत`; `ना` deliberately stays affirmative so `करो ना` = "please do" confirms). Guarded by `src/tests/voiceSession.test.ts` (25 tests; negative-validated, reverting `voiceSession.ts` fails exactly the 2 prohibition tests, 2 failed \| 23 passed). Why still `PARTIAL`, not `VERIFIED`: the negation sets are hand-maintained English/Hindi lists, so this proves the audited prohibitions are handled, not that every phrasing in either language is; and no real microphone or recogniser output exercises this gate in this environment. |
 | 49 | Wake Word | `VERIFIED` | `src/utils/voice/wakeWord.ts` detects the wake phrase and returns the command that followed. It matches on word boundaries, so a word merely containing "jarvis" does not trigger. Recogniser mis-hearings (`jarviz`, `jarvish`, `जार्विस`, …) are accepted; a custom wake word replaces the built-in aliases entirely. 15 unit tests. |
 | 50 | Hands-free Android control | `NOT_AVAILABLE` | No Android device is attached in this environment. The wake word and confirmation logic exist and are tested, but the phone-side path cannot be demonstrated here. |
 
@@ -587,6 +616,14 @@ executed, so a request cannot smuggle arbitrary code into the runner.
 
 Real and tested: wake-word detection, the continuous-session state machine, and
 the confirmation gate. These are pure logic and run under the test runner.
+
+Negation lesson (2026-09-21 22:25 IST): the confirmation gate was `VERIFIED`
+until a prohibition was measured as consent. Both safety parsers in this repo —
+the Android owner-approval parser and this voice gate — shared the same defect:
+a substring/prefix match let an affirmative token fire inside a negated phrase.
+The invariant to hold when touching either gate: matching is whole-token, and a
+negation particle voids an affirmative. A new affirmative phrase requires a
+matching negation test; a green suite is not evidence that a refusal is rejected.
 
 Not verified: actual microphone capture and actual speech synthesis. The Web
 Speech API is a browser feature and is absent under Node, so the audio path

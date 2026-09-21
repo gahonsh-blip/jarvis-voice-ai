@@ -3,6 +3,28 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-21 22:25 IST (16:55 UTC) — Voice confirmation gate no longer reads a refusal as consent
+
+### Security / bug fix
+- `interpretConfirmation` in `src/utils/voice/voiceSession.ts` returned
+  `CONFIRMED` for *prohibitions*: `मत करो` ("don't do it"), `mat karo`,
+  `करो मत`, `do not do it` and `don't do it`. Each phrase was matched with a
+  substring `RegExp`, so the affirmative token `करो` fired inside `मत करो`; and
+  `normalise()` left `don't` intact, matching the carried-over `"don't"` negative
+  entry. A clear refusal released a destructive command for execution.
+- This is the same class of defect as the owner-approval parser below, in the
+  voice path. Item 48 had been marked `VERIFIED`; it is corrected to `PARTIAL`.
+- Fix: whole-token phrase matching (`containsPhrase`); a negation particle before
+  an affirmative voids it (`NEGATIVE_PARTICLES`); the Hindi verb-final
+  prohibition `करो मत` is voided by a narrow post-particle set
+  (`['mat','मत']` — `ना` excluded, so `करो ना` = "please do" still confirms);
+  `normalise()` rewrites `don't`/`dont` to ` not ` and `not`/`never` joined
+  `NEGATIVE_PHRASES`.
+- Guard: four new cases in `src/tests/voiceSession.test.ts` (25 tests in file).
+  Negative-validated: reverting `src/utils/voice/voiceSession.ts` fails exactly
+  the two prohibition tests (2 failed | 23 passed); all 25 pass with the fix.
+
+---
 ## [Unreleased] - 2026-09-21 22:06 IST (16:36 UTC) — Owner approval parser no longer reads a refusal as consent
 
 ### Security / bug fix
