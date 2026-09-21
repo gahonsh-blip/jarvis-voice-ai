@@ -3,6 +3,38 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 04:05 IST (2026-09-21 22:36 UTC) — A handed-off reply is no longer logged as a confirmed delivery
+
+### Bug fix
+- `MobileBridgeModal.tsx` `dispatchReply` — after the 03:35 IST slot stopped it
+  fabricating its approval, its outcome handling still read a success. On the
+  positive branch it set the pending event `EXECUTED` and wrote
+  `result: 'SUCCESS'` into the mobile audit log, but the only server answer that
+  takes that branch is `DISPATCHED, verified: false`. A reply handed to the
+  bridge is not a reply the handset confirmed — confirmation arrives only through
+  the separate `/api/mobile/bridge/action/confirm` route — so the queue showed a
+  delivered reply and the audit log recorded an irreversible success neither of
+  which had happened.
+
+### Fix
+- `src/utils/mobileReplyDispatchTruth.ts` gains `replyEventStatusForOutcome`
+  (`DISPATCHED`/`UNVERIFIED` → `AUTHORIZED`; `BLOCKED` → `REJECTED`;
+  `NOT_CONFIGURED` → `PENDING_APPROVAL`; else `FAILED`) and
+  `replyAuditProjection` (`DISPATCHED`/`UNVERIFIED` → `REPLY_APPROVED` /
+  `UNVERIFIED`; `BLOCKED` → `ACTION_DENIED` / `DENIED`; `NOT_CONFIGURED` →
+  `CAPABILITY_UNAVAILABLE` / `UNAVAILABLE`).
+- `MobileBridgeModal.tsx` derives the queue status and the audit entry from the
+  observed outcome, so only `action/confirm` can record `EXECUTED`/`SUCCESS`.
+- The queue renders `AUTHORIZED — AWAITING DEVICE CONFIRMATION` and `EXECUTED`
+  as `CONFIRMED BY DEVICE`, so the screen names which state is actually known.
+- `src/types/mobileBridge.ts` `MobileAuditEntry.result` gains `UNVERIFIED`.
+
+### Tests
+- `src/tests/mobileReplyDispatchTruth.test.ts` 16 → 21 tests, covering both
+  projections and pinning the absence of the old expressions. Negative-validated:
+  the old expressions restored fail exactly one guard (`1 failed | 20 passed`).
+
+---
 ## [Unreleased] - 2026-09-22 03:35 IST (2026-09-21 22:05 UTC) — Mobile reply dispatch no longer fabricates its approval or its result
 
 ### Bug fix
