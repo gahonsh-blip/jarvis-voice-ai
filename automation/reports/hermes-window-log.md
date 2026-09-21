@@ -1756,3 +1756,56 @@ Continuation of the 22:05 IST fire. The code/docs work above was already committ
 Also observed in this continuation: `git ls-remote` is the reliable way to read
 the true remote state here - remote-tracking refs went stale twice and made a
 successful push look rejected.
+
+---
+
+## Slot 5 — 2026-09-21 22:36 IST (17:06 UTC) — WORK SLOT
+
+Item #48 `Voice action confirmation` — continued (the step *after* the gate).
+
+### Completed
+- #48 TTS diagnostics honesty — `src/utils/speechTtsEngine.ts` +
+  `src/App.tsx`. `buildSpeechDiagnostics` reported `TTS Active: <voice>` for a
+  merely selected voice and assumed `speechSynthesisAvailable: true` with no
+  `window.speechSynthesis`; `utterance.onerror`/catch wrote only `ttsErrorState`
+  and left the stale success string on screen. Fixed: unsupported platform
+  reports unsupported, a selected voice reports "not yet confirmed by playback",
+  and new `applySpeechErrorToDiagnostics()` clears the stale status on both error
+  paths. Tests: `src/tests/speechTtsEngine.test.ts` 30 passed (5 new).
+
+### Bugs Found
+- `buildSpeechDiagnostics` fabricated a successful TTS state from voice
+  selection alone.
+- `App.tsx` left `TTS Active: …` visible under a confirmed `ttsErrorState`
+  (contradictory success/failure on the Settings diagnostics panel).
+
+### Bugs Fixed
+- Both above. Negative-validated twice: reverting the status logic fails the
+  "pending playback" test (`expected 'TTS Active: Google US English (en-US)' to
+  contain 'not yet confirmed by playback'`); reverting only the helper's status
+  assignment fails exactly the stale-status test (1 failed | 29 passed).
+
+### Gates (observed on 2cf5516)
+- Lint: `npm run lint` (tsc --noEmit) exit 0 — clean.
+- Tests: `npx vitest run` → 61 files / 871 tests passed.
+- Build: `npm run build` exit 0; `dist/server.cjs` 842293 bytes (822.6 kb).
+- E2E: NOT RUN (no device/browser speech engine in this sandbox).
+- Security: no `.env` touched; no token/key written to any file.
+
+### Push
+- `03abbb3..2cf5516` → `origin/feature/hermes-full-completion` succeeded.
+- Note: token is injected as lowercase `${github_token}`; `${GITHUB_TOKEN}` is
+  empty here. Push hung on a password prompt until the URL used the lowercase
+  variable.
+
+### Status
+- #48 remains `PARTIAL` — the confirmation gate is audited, not exhaustive, and
+  no real speech engine ran, so playback onset is unproven.
+
+### Next Slot
+- #1 Real Android Mobile Bridge / next non-`VERIFIED` item per the mandated
+  order; continue the honesty sweep only where a real surface exists.
+
+हिंदी सारांश: वॉइस TTS डायग्नॉस्टिक्स अब असफल स्पीच को "TTS Active" नहीं
+बताता; item #48 अभी भी PARTIAL है क्योंकि असली स्पीच इंजन यहाँ उपलब्ध नहीं।
+

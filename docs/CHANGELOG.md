@@ -3,6 +3,27 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-21 22:36 IST (17:06 UTC) — TTS diagnostics no longer report a speech action that failed
+
+### Bug fix
+- `buildSpeechDiagnostics` in `src/utils/speechTtsEngine.ts` returned
+  `statusMessage: "TTS Active: <voice>"` whenever a voice resolved, and claimed
+  `speechSynthesisAvailable: true` even where `window.speechSynthesis` does not
+  exist. A selected voice is not a spoken utterance.
+- `src/App.tsx` handled `utterance.onerror` (and the `speak()` catch) by writing
+  only `ttsErrorState`, leaving the stale `TTS Active: <voice>` string visible in
+  the Settings diagnostics — a shown failure contradicted by a shown success, on
+  the surface the operator uses to judge whether JARVIS can speak.
+- Fix: an unsupported platform now reports unsupported; a merely selected voice
+  reports `... not yet confirmed by playback`; the new
+  `applySpeechErrorToDiagnostics()` rewrites the stale status to
+  `Speech error: <code>` while preserving the rest of the snapshot, and both
+  error paths route through it.
+- Evidence: `npx vitest run src/tests/speechTtsEngine.test.ts` → 30 passed
+  (5 new); negative-validated twice. `npm run lint` exit 0;
+  `npx vitest run` → 61 files / 871 tests passed; `npm run build` exit 0.
+
+---
 ## [Unreleased] - 2026-09-21 22:25 IST (16:55 UTC) — Voice confirmation gate no longer reads a refusal as consent
 
 ### Security / bug fix
