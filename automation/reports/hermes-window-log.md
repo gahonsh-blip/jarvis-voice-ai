@@ -2524,3 +2524,23 @@ Next Slot:
   - Security: `.env` git-ignored (`git check-ignore -v .env` -> `.gitignore:4`) and untracked; secret-pattern scan of `git diff origin/main` returned only the previously-documented synthetic fixtures; no real credential.
   - Blocked unchanged: #1/#2/#50/#55 need a physical Android device; #8 needs a Windows host.
 - Next slot: 04:05 IST WORK — next non-VERIFIED non-blocked item, or one more finished slice of #51. 04:35 IST is FINALIZATION.
+
+
+---
+
+## 2026-09-21T22:36Z — work slot (04:05 IST fire, 2026-09-22 window)
+
+- Item worked: #31 Real notification reply (mobile-bridge reply dispatch outcome honesty)
+- Status: PARTIAL (outcome no longer read as delivery; no real handset)
+- Tests: full suite 68 files / 984 tests passed (20.48s); targeted `src/tests/mobileReplyDispatchTruth.test.ts` 21/21
+- Lint: `tsc --noEmit` exit 0  Build: exit 0 (dist/server.cjs 852453 bytes)
+- Commits: 042ae07 (fix+test), 71a095c (docs)  Push: ok (feature/hermes-full-completion)
+- Notes / blockers:
+  - Follow-on to the 03:35 IST slot. `dispatchReply`'s positive branch still set the pending event `EXECUTED` and wrote `result: 'SUCCESS'` to the audit log, but the only server answer on that branch is `DISPATCHED, verified: false` — handed to the bridge, not confirmed by the handset. Confirmation arrives only via `/api/mobile/bridge/action/confirm`. So the queue showed a delivered reply and the irreversible-action audit recorded a success that had not happened.
+  - New `src/utils/mobileReplyDispatchTruth.ts` exports: `replyEventStatusForOutcome` (DISPATCHED|UNVERIFIED -> AUTHORIZED; BLOCKED -> REJECTED; NOT_CONFIGURED -> PENDING_APPROVAL; else FAILED) and `replyAuditProjection` (DISPATCHED|UNVERIFIED -> REPLY_APPROVED/UNVERIFIED; BLOCKED -> ACTION_DENIED/DENIED; NOT_CONFIGURED -> CAPABILITY_UNAVAILABLE/UNAVAILABLE).
+  - `MobileBridgeModal.tsx` drives queue status, audit entry and speech from those projections; queue renders `AUTHORIZED — AWAITING DEVICE CONFIRMATION` and `EXECUTED` as `CONFIRMED BY DEVICE`. `MobileAuditEntry.result` gained `UNVERIFIED` (tsc-required). Flags, approval checkbox, permission gate and route contract unchanged.
+  - Guarded by `src/tests/mobileReplyDispatchTruth.test.ts` (16 -> 21 tests). Negative-validated: old expressions restored fail exactly one guard (observed `1 failed | 20 passed` of 21); restored -> 21/21.
+  - Security: `.env` git-ignored and untracked; `git status --short` clean; secret-pattern scan of `git diff origin/main` returned only the previously-documented synthetic fixtures. `npm audit` NOT RUN (no such script in package.json).
+  - Counter note: `slots_completed`=18 while only 16 fires are scheduled (21:05..04:35 IST); manual dispatches also incremented it, so it is a progress counter, not a slot index.
+  - Blocked unchanged: #1/#2/#50/#55 need a physical Android device; #8 needs a Windows host.
+- Next slot: 04:35 IST FINALIZATION — full verification, PR #4 body refresh, state `finalized:true`. No new development.
