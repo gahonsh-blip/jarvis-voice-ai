@@ -13,6 +13,7 @@ import {
   auditTrailCounts,
   describeAuditTrail,
 } from './src/utils/hardening/auditTrailTruth';
+import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -7203,8 +7204,9 @@ function bridgeFailureOutcome(reason: string): ExecutionOutcome {
 }
 
 function emergencyActive(): boolean {
-  const emergency = getEmergencyState();
-  return Boolean(emergency.emergencyPaused || emergency.hardKillSwitchTriggered);
+  // Delegates to the shared helper so the HTTP layer and the host executor
+  // cannot drift apart on what "the kill switch is engaged" means.
+  return isEmergencyStopActive();
 }
 
 // ---- 1. Pairing ------------------------------------------------------------

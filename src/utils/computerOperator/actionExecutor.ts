@@ -18,6 +18,7 @@ import {
   type ExecutionReceipt,
 } from '../executionTruth';
 import { ScreenObserver } from './screenObserver';
+import { PermissionGuard } from './permissionGuard';
 
 export interface ActionExecutionResult {
   actionId: string;
@@ -222,6 +223,25 @@ export class ActionExecutor {
   }
 
   private static async forwardToHost(action: ComputerAction, finish: Finish): Promise<ActionExecutionResult> {
+    // Defense in depth: refuse a permanently-prohibited action here as well as on
+    // the host, so the UI never even sends a finance/destructive request.
+    const safety = PermissionGuard.evaluateHostSafety(action);
+    if (safety) {
+      return finish({
+        success: false,
+        message: safety.blockReason || 'Action blocked by the security policy.',
+        receipt: buildReceipt({
+          action: action.type,
+          target: action.description,
+          outcome: 'BLOCKED',
+          detailEn: safety.blockReason || 'Action blocked by the security policy.',
+          detailHi: 'सुरक्षा नीति द्वारा कार्य अवरुद्ध।',
+          evidence: null,
+          failureReason: safety.dangerCategory || 'BLOCKED_BY_POLICY',
+        }),
+      });
+    }
+
     try {
       const res = await fetch('/api/computer-operator/execute-action', {
         method: 'POST',

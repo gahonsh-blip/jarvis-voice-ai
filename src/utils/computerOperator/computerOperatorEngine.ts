@@ -28,7 +28,10 @@ import { redactSecrets } from './credentialRedactor';
  * it is holding.
  */
 export interface ActionBackend {
-  executeAction(action: ComputerAction): Promise<{
+  executeAction(
+    action: ComputerAction,
+    options?: { approved?: boolean }
+  ): Promise<{
     success: boolean;
     message: string;
     output?: string;
@@ -338,9 +341,10 @@ export class ComputerOperatorEngine {
       messageHi: 'मानव ऑपरेटर द्वारा Level 4 स्वीकृति प्राप्त। निष्पादन पुनः प्रारंभ।',
     });
 
-    // Execute the approved action
+    // Execute the approved action. This is the one dispatch path that may carry
+    // `approved: true`; the host executor holds a Level-4 action without it.
     if (task.currentAction) {
-      await this.executor.executeAction(task.currentAction);
+      await this.executor.executeAction(task.currentAction, { approved: true });
     }
 
     task.status = 'COMPLETED';

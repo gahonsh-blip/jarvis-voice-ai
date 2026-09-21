@@ -16,6 +16,8 @@ import { ComputerAction, ScreenObservation } from '../../types/computerOperator'
 import { buildReceipt, makeEvidence, type ExecutionReceipt } from '../executionTruth';
 import { captureScreenshot, getCaptureAvailability } from './screenshotStore';
 import { probeHostState, describeHostScreen } from './hostProbe';
+import { PermissionGuard } from './permissionGuard';
+import { isEmergencyStopActive } from '../hardening/emergencyStop';
 
 export interface HostActionResult {
   actionId: string;
@@ -30,6 +32,15 @@ export interface HostExecutorOptions {
   workspaceRoot: string;
   /** Hard ceiling on a single command's runtime. */
   commandTimeoutMs?: number;
+}
+
+export interface HostExecuteOptions {
+  /**
+   * Set only by the approval path (`ComputerOperatorEngine.resumeApprovedTask`)
+   * once a named human has authorized a Level-4 / approval-gated action. Every
+   * other caller leaves this false, so an unapproved gated action is held.
+   */
+  approved?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -171,8 +182,58 @@ export class HostActionExecutor {
     };
   }
 
+  /**
+   * Safety gate every dispatch must pass before the OS is touched.
+   *
+   * Returns the blocked/held result, or `null` when the action may run.
+   */
+  private safetyRefusal(action: ComputerAction, options?: HostExecuteOptions): HostActionResult | null {
+    const emergencyStop = isEmergencyStopActive();
+
+    const safety = PermissionGuard.evaluateHostSafety(action, emergencyStop);
+    if (safety) {
+      // A destructive command is held for a named human; anything else that
+      // fires here (finance, security bypass, kill switch) is permanent.
+      const held = safety.requiresHumanApproval === true;
+      return {
+        actionId: action.id,
+        receipt: buildReceipt({
+          action: action.type,
+          target: action.description,
+          outcome: held ? 'PERMISSION_REQUIRED' : 'BLOCKED',
+          detailEn: safety.blockReason || 'Action blocked by the security policy.',
+          detailHi: 'सुरक्षा नीति द्वारा कार्य अवरुद्ध।',
+          evidence: null,
+          failureReason: held ? 'HUMAN_APPROVAL_REQUIRED' : safety.dangerCategory || 'BLOCKED_BY_POLICY',
+        }),
+      };
+    }
+
+    // Level-4 / approval-gated action that no human has authorized yet.
+    const evaluation = PermissionGuard.evaluateAction(action, emergencyStop);
+    if (!options?.approved && (evaluation.requiresHumanApproval || evaluation.securityLevel === 4)) {
+      return {
+        actionId: action.id,
+        receipt: buildReceipt({
+          action: action.type,
+          target: action.description,
+          outcome: 'PERMISSION_REQUIRED',
+          detailEn: evaluation.blockReason || 'Explicit human approval is required before this action can run.',
+          detailHi: 'इस कार्य को चलाने से पहले मानव की स्पष्ट स्वीकृति आवश्यक है।',
+          evidence: null,
+          failureReason: 'HUMAN_APPROVAL_REQUIRED',
+        }),
+      };
+    }
+
+    return null;
+  }
+
   /** Runs one action against the real host. */
-  async execute(action: ComputerAction): Promise<HostActionResult> {
+  async execute(action: ComputerAction, options?: HostExecuteOptions): Promise<HostActionResult> {
+    const refusal = this.safetyRefusal(action, options);
+    if (refusal) return refusal;
+
     try {
       switch (action.type) {
         case 'TERMINAL_COMMAND':
@@ -611,13 +672,13 @@ export class HostActionExecutor {
    * server can install this executor directly via
    * `ComputerOperatorEngine.setExecutor(...)`.
    */
-  async executeAction(action: ComputerAction): Promise<{
+  async executeAction(action: ComputerAction, options?: HostExecuteOptions): Promise<{
     success: boolean;
     message: string;
     output?: string;
     error?: string;
   }> {
-    const result = await this.execute(action);
+    const result = await this.execute(action, options);
     return {
       success: result.receipt.verified,
       message: result.receipt.detailEn,

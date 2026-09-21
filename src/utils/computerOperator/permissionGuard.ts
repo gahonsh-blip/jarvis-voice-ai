@@ -53,22 +53,29 @@ const FINANCE_KEYWORDS = [
 
 export class PermissionGuard {
   /**
-   * Assesses a computer action against the Level 1-4 security hierarchy
+   * Checks the categories that are never permissible under any circumstances —
+   * the emergency stop, the Level-4 finance exclusion, and security-bypass
+   * attempts. Human approval cannot lift any of these, and neither the HTTP
+   * layer nor a low-level executor may skip them.
+   *
+   * @returns the blocking evaluation, or `null` when no permanent rule fires.
    */
-  public static evaluateAction(action: ComputerAction, emergencyStopActive: boolean = false): GuardEvaluation {
-    // 1. Check Global Emergency Stop
+  public static permanentBlock(
+    action: ComputerAction,
+    emergencyStopActive: boolean = false
+  ): GuardEvaluation | null {
     if (emergencyStopActive) {
       return {
         allowed: false,
         requiresHumanApproval: false,
         securityLevel: action.securityLevel,
         blockReason: 'Action blocked: Global Emergency Stop is currently active.',
+        dangerCategory: 'EMERGENCY_STOP',
       };
     }
 
-    const desc = `${action.description} ${action.command || ''} ${action.filePath || ''} ${action.text || ''}`.toLowerCase();
+    const desc = this.describe(action);
 
-    // 2. Strict Finance Exclusions Guard (Permanently blocked from autonomous operation)
     for (const kw of FINANCE_KEYWORDS) {
       if (desc.includes(kw)) {
         return {
@@ -81,20 +88,6 @@ export class PermissionGuard {
       }
     }
 
-    // 3. Destructive Command / Malicious Action Guard
-    for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
-      if (pattern.test(desc)) {
-        return {
-          allowed: false,
-          requiresHumanApproval: true,
-          securityLevel: 4,
-          blockReason: 'Destructive system command detected. Autonomous execution blocked.',
-          dangerCategory: 'DESTRUCTIVE_SYSTEM_COMMAND',
-        };
-      }
-    }
-
-    // 4. Security Bypass / CAPTCHA / Credential Theft Guard
     if (
       desc.includes('captcha') ||
       desc.includes('bypass authentication') ||
@@ -111,7 +104,49 @@ export class PermissionGuard {
       };
     }
 
-    // 5. Level 4 Actions: Deleting files, sending external messages, publishing
+    return null;
+  }
+
+  /** Lower-cased haystack of every free-text field an action carries. */
+  private static describe(action: ComputerAction): string {
+    return `${action.description} ${action.command || ''} ${action.filePath || ''} ${action.text || ''}`.toLowerCase();
+  }
+
+  /**
+   * Assesses a computer action against the Level 1-4 security hierarchy
+   */
+  public static evaluateAction(action: ComputerAction, emergencyStopActive: boolean = false): GuardEvaluation {
+    // 1. Check Global Emergency Stop
+    if (emergencyStopActive) {
+      return {
+        allowed: false,
+        requiresHumanApproval: false,
+        securityLevel: action.securityLevel,
+        blockReason: 'Action blocked: Global Emergency Stop is currently active.',
+        dangerCategory: 'EMERGENCY_STOP',
+      };
+    }
+
+    const desc = this.describe(action);
+
+    // 2. Permanent prohibitions (finance exclusion, security bypass).
+    const permanent = this.permanentBlock(action, emergencyStopActive);
+    if (permanent) return permanent;
+
+    // 3. Destructive Command / Malicious Action Guard
+    for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
+      if (pattern.test(desc)) {
+        return {
+          allowed: false,
+          requiresHumanApproval: true,
+          securityLevel: 4,
+          blockReason: 'Destructive system command detected. Autonomous execution blocked.',
+          dangerCategory: 'DESTRUCTIVE_SYSTEM_COMMAND',
+        };
+      }
+    }
+
+    // 4. Level 4 Actions: Deleting files, sending external messages, publishing
     if (
       action.securityLevel === 4 ||
       action.requiresHumanApproval ||
@@ -145,6 +180,42 @@ export class PermissionGuard {
       requiresHumanApproval: false,
       securityLevel: action.securityLevel || 1,
     };
+  }
+
+  /**
+   * Safety-only re-check intended for the executors that actually touch the OS.
+   *
+   * `evaluateAction` also carries the Level-4 human gate, which a low-level
+   * executor must not re-apply: the only legitimate way to run a gated action is
+   * after `resumeApprovedTask` resolves the pending approval. This method
+   * returns just the permanently prohibited categories plus the emergency stop,
+   * so the decision cannot be skipped by a dispatch path that forgot to call
+   * `evaluateAction` at all.
+   *
+   * @returns the blocking evaluation, or `null` when the action is not
+   *          prohibited outright by a safety rule.
+   */
+  public static evaluateHostSafety(
+    action: ComputerAction,
+    emergencyStopActive: boolean = false
+  ): GuardEvaluation | null {
+    const permanent = this.permanentBlock(action, emergencyStopActive);
+    if (permanent) return permanent;
+
+    const desc = this.describe(action);
+    for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
+      if (pattern.test(desc)) {
+        return {
+          allowed: false,
+          requiresHumanApproval: true,
+          securityLevel: 4,
+          blockReason: 'Destructive system command detected. Autonomous execution blocked.',
+          dangerCategory: 'DESTRUCTIVE_SYSTEM_COMMAND',
+        };
+      }
+    }
+
+    return null;
   }
 
   /**

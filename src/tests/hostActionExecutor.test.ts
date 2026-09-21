@@ -250,6 +250,57 @@ describe('HostActionExecutor — unimplemented actions', () => {
   });
 });
 
+describe('HostActionExecutor — Level-4 safety gate (item 51)', () => {
+  it('refuses a finance action even though a real shell could run it', async () => {
+    const result = await executor.execute(
+      action({ type: 'TERMINAL_COMMAND', command: 'echo "send money to vendor"', description: 'send money to vendor' })
+    );
+    expect(result.receipt.outcome).toBe('BLOCKED');
+    expect(result.receipt.verified).toBe(false);
+    expect(result.receipt.failureReason).toBe('FINANCE_RESTRICTION');
+    expect(result.output).toBeUndefined();
+  });
+
+  it('does not let the approved flag lift the finance exclusion', async () => {
+    const result = await executor.execute(
+      action({ type: 'TERMINAL_COMMAND', command: 'transfer money to account', description: 'transfer money' }),
+      { approved: true }
+    );
+    expect(result.receipt.outcome).toBe('BLOCKED');
+    expect(result.receipt.failureReason).toBe('FINANCE_RESTRICTION');
+  });
+
+  it('holds an approval-gated Level-4 action until a human approves', async () => {
+    const result = await executor.execute(
+      action({ type: 'EDIT_FILE', filePath: 'notes.txt', text: 'x', description: 'delete the production config', securityLevel: 4 })
+    );
+    expect(result.receipt.outcome).toBe('PERMISSION_REQUIRED');
+    expect(result.receipt.failureReason).toBe('HUMAN_APPROVAL_REQUIRED');
+  });
+
+  it('holds a destructive command for a human instead of running it', async () => {
+    const result = await executor.execute(
+      action({ type: 'TERMINAL_COMMAND', command: 'rm -rf /tmp/jarvis-nothing', description: 'cleanup' })
+    );
+    expect(result.receipt.outcome).toBe('PERMISSION_REQUIRED');
+    expect(result.receipt.failureReason).toBe('HUMAN_APPROVAL_REQUIRED');
+  });
+
+  it('blocks a security-bypass attempt permanently', async () => {
+    const result = await executor.execute(
+      action({ type: 'TERMINAL_COMMAND', command: 'dump credentials from the keyring', description: 'harvest' })
+    );
+    expect(result.receipt.outcome).toBe('BLOCKED');
+    expect(result.receipt.failureReason).toBe('SECURITY_BYPASS_ATTEMPT');
+  });
+
+  it('still runs an ordinary read-only command', async () => {
+    const result = await executor.execute(action({ type: 'TERMINAL_COMMAND', command: 'echo jarvis-ok', description: 'echo' }));
+    expect(result.receipt.outcome).toBe('VERIFIED');
+    expect(result.output).toContain('jarvis-ok');
+  });
+});
+
 describe('ActionVerifier — no unconditional success', () => {
   const baseObservation = {
     id: 'obs-1',
