@@ -1,37 +1,22 @@
 {
   "window_date": "2026-09-22",
   "window_started_at": "2026-09-21T16:06:00Z",
-  "last_slot_at": "2026-09-21T21:05:00Z",
-  "slots_completed": 15,
+  "last_slot_at": "2026-09-21T21:35:00Z",
+  "slots_completed": 16,
   "current_item": 51,
-  "current_item_title": "Complete security audit (Level-4 finance exclusion gate)",
+  "current_item_title": "Complete security audit (kill-switch liveness honesty in the Permission Gateway)",
   "current_item_status": "PARTIAL",
-  "last_commit": "1c7e61b",
+  "last_commit": "d5e625c",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 2,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 8,
-      "reason": "Windows host required for the PowerShell capture leg"
-    },
-    {
-      "item": 50,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 55,
-      "reason": "physical device / Windows host required"
-    }
+    {"item": 1, "reason": "physical Android device required"},
+    {"item": 2, "reason": "physical Android device required"},
+    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
+    {"item": 50, "reason": "physical Android device required"},
+    {"item": 55, "reason": "physical device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "SLOT 15 (02:35 IST fire / 2026-09-21 21:05 UTC) - WORK SLOT. Item 51 again, but this time not a keyword sweep: src/utils/computerOperator/actionExecutorHost.ts HostActionExecutor.execute() contained NO PermissionGuard call at all. It resolved the workspace path and then shelled out, so a financial TERMINAL_COMMAND ('transfer money to the client') reached the real shell. It also lifted the Level-4 approval gate whenever the caller passed approved:true, so one approval could carry a never-permissible category (finance / security bypass / emergency stop) through. Fix: PermissionGuard.permanentBlock() in src/utils/computerOperator/permissionGuard.ts is now the single owner of the never-permissible categories; PermissionGuard.evaluateHostSafety() and the browser-side ActionExecutor.forwardToHost() both call it, and the duplicated section-4 block was removed from evaluateAction(). HostActionExecutor.safetyRefusal() gates every dispatch (held destructive -> PERMISSION_REQUIRED, permanent -> BLOCKED); approved:true cannot lift the finance exclusion but still satisfies the ordinary Level-4 human gate. server.ts emergencyActive() now delegates to the shared isEmergencyStopActive() in src/utils/hardening/emergencyStop.ts. New test block 'HostActionExecutor - Level-4 safety gate (item 51)' in src/tests/hostActionExecutor.test.ts (6 cases). Negative validation: with safetyRefusal() disabled, 5 failed | 39 passed of 44 in that file; restored, 44 passed of 44. Observed gates on bd79593: npm run lint (tsc --noEmit) exit 0; npx vitest run 66 files / 954 tests passed; npm run build exit 0 (dist/server.cjs 852453 bytes / 832.5 kb). Commits bd79593 (fix+test), 3c9a8e7 (docs: COMPLETION_STATUS/CHANGELOG/SECURITY), 0a829e0 (window report). PR #4 open, non-draft, mergeable_state=clean, body refreshed with a Slot 15 section. Item 51 stays PARTIAL - pattern scan plus targeted gates only, no independent external pen-test (NOT RUN, not available here). Security: .env git-ignored and untracked, git status --short clean, no token/key in diff. Next slot (04:35 FINALIZATION): full lint + vitest + build on the frozen tip, security checks, leave PR #4 one-click mergeable. Final tip after window report commit: 81e91a5. Final tip: 1c7e61b."
+  "notes": "SLOT 16 (03:05 IST fire / 2026-09-21 21:35 UTC) - WORK SLOT. Item 51 again, same honesty-defect class as the slot-6 telephony badges but on the gateway control itself. src/components/PermissionGateway.tsx - the screen a human reads before approving an irreversible Level 4 action - drove its emergency badge, lockout banner and approval button from emergency.emergencyPaused alone, seeded that state as { emergencyPaused: false }, and fetched /api/emergency/status inside the SAME try block as the approval queue lists. A failed status request was therefore swallowed, the initial 'not paused' value stood, and the UI showed a green ACTIVE pill, no banner, and an ENABLED 'YES / APPROVE & EXECUTE' button on the strength of a value nobody had fetched. Any payload whose emergencyPaused was not a boolean also fell through to the green branch. Fix: new pure, dependency-free tri-state src/utils/emergencyTruth.ts - emergencyLiveness() returns ACTIVE | ENGAGED | UNKNOWN (UNKNOWN until a real boolean is observed), plus emergencyStatusKnown() and emergencyLivenessLabel(). PermissionGateway.tsx seeds emergency as null, fetches the status in its own try block whose failure leaves liveness at UNKNOWN (can no longer silently resolve to 'not paused'), renders an explicit STATUS UNKNOWN badge with a matching banner, and derives approvalBlocked = killSwitchEngaged || !statusKnown - the Level 4 approve button is disabled={loading || approvalBlocked} and handleApprove() returns early when !statusKnown. No render path reads emergency.emergencyPaused any more. New test src/tests/permissionGatewayEmergencyLiveness.test.ts (9 cases): tri-state for null/undefined/missing-boolean/paused/hard-switch, emergencyStatusKnown, unobserved status never ACTIVE, labels, and source guards pinning the null seed, derived approvalBlocked, fail-closed !statusKnown early return and absence of the raw flag read. Negative validation: restoring a single raw read (disabled={loading || emergency.emergencyPaused || killSwitchEngaged}) fails exactly the source guard, observed 1 failed | 8 passed of 9; restored -> 9 passed. Observed gates on 8d37cea: npm run lint (tsc --noEmit) exit 0; npx vitest run 67 files / 963 tests passed; npm run build exit 0 (dist/server.cjs 852453 bytes / 832.5 kb). Commits 8d37cea (fix+test), f114f87 (docs: COMPLETION_STATUS/CHANGELOG), d5e625c (window report). PR #4 open, non-draft. Item 51 stays PARTIAL - pattern scan plus targeted gates only, no independent external pen-test (NOT RUN, not available here). Security: .env git-ignored (git check-ignore .env -> .gitignore:4) and untracked, git status --short clean, no token/key in diff vs origin/main. Next slot (03:35 IST, WORK): continue item 51 with one more small finished slice, or move to the next non-VERIFIED item once every remaining item is blocked-only. Finalization slot is 04:35 IST. Final tip: d5e625c."
 }
