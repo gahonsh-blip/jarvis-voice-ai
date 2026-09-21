@@ -830,52 +830,46 @@ export class AndroidBridgeManager {
         return regex.test(pNorm);
       }
 
-      // For Devanagari Hindi phrases
+      // For Devanagari Hindi phrases: match whole tokens only. Loose prefix
+      // matching is unsafe here because verb stems appear inside negated
+      // phrases ("उठाओ" inside "मत उठाओ"), which would read a refusal as consent.
       const tokens = pNorm.split(/\s+/);
       if (tokens.includes(kNorm)) return true;
       if (kNorm.includes(' ')) {
         return pNorm.includes(kNorm);
       }
-      return tokens.some((t) => t === kNorm || t.startsWith(kNorm));
+      return false;
     };
 
-    // Call approvals
-    const callApprovalKeywords = ['हाँ', 'हां', 'जी', 'उठा', 'answer', 'yes', 'कॉल उठा', 'फोन उठा'];
-    const callRejectKeywords = ['नहीं', 'मत', 'काट', 'रहने', 'cancel', 'no', 'decline', 'reject'];
+    // Call approvals. 'उठा' is deliberately excluded: it is a verb stem that
+    // also occurs inside refusals ("मत उठा"), so it is ambiguous on its own.
+    const callApprovalKeywords = ['हाँ', 'हां', 'जी', 'answer', 'yes', 'कॉल उठा', 'फोन उठा', 'उठा लो'];
+    const callRejectKeywords = ['नहीं', 'नही', 'मत', 'काट', 'रहने', 'cancel', 'no', 'decline', 'reject'];
 
     // Message approvals
     const msgApprovalKeywords = ['हाँ', 'हां', 'जी', 'जवाब', 'भेज', 'रिप्लाई', 'reply', 'send', 'yes'];
-    const msgRejectKeywords = ['नहीं', 'मत', 'रहने', 'cancel', 'no', 'dismiss'];
+    const msgRejectKeywords = ['नहीं', 'नही', 'मत', 'रहने', 'cancel', 'no', 'dismiss'];
 
-    if (current.type === 'CALL') {
-      const isApprove = callApprovalKeywords.some((p) => {
+    const keywordMatrix = current.type === 'CALL'
+      ? { approve: callApprovalKeywords, reject: callRejectKeywords }
+      : current.type === 'MESSAGE'
+      ? { approve: msgApprovalKeywords, reject: msgRejectKeywords }
+      : null;
+
+    if (keywordMatrix) {
+      const matches = (p: string) => {
         const normP = p.replace(/\u0901/g, '\u0902');
         return matchesKeyword(normHindi, normP);
-      });
-      if (isApprove) {
-        return { decision: 'APPROVE', targetType: 'CALL', matchedPhrase: clean };
+      };
+
+      // Negation takes precedence. A single spoken phrase must never satisfy the
+      // Level-4 human approval gate by contradicting itself: "नहीं उठाओ" is a
+      // refusal, not consent, even though it also contains the verb stem "उठा".
+      if (keywordMatrix.reject.some(matches)) {
+        return { decision: 'REJECT', targetType: current.type, matchedPhrase: clean };
       }
-      const isReject = callRejectKeywords.some((p) => {
-        const normP = p.replace(/\u0901/g, '\u0902');
-        return matchesKeyword(normHindi, normP);
-      });
-      if (isReject) {
-        return { decision: 'REJECT', targetType: 'CALL', matchedPhrase: clean };
-      }
-    } else if (current.type === 'MESSAGE') {
-      const isApprove = msgApprovalKeywords.some((p) => {
-        const normP = p.replace(/\u0901/g, '\u0902');
-        return matchesKeyword(normHindi, normP);
-      });
-      if (isApprove) {
-        return { decision: 'APPROVE', targetType: 'MESSAGE', matchedPhrase: clean };
-      }
-      const isReject = msgRejectKeywords.some((p) => {
-        const normP = p.replace(/\u0901/g, '\u0902');
-        return matchesKeyword(normHindi, normP);
-      });
-      if (isReject) {
-        return { decision: 'REJECT', targetType: 'MESSAGE', matchedPhrase: clean };
+      if (keywordMatrix.approve.some(matches)) {
+        return { decision: 'APPROVE', targetType: current.type, matchedPhrase: clean };
       }
     }
 

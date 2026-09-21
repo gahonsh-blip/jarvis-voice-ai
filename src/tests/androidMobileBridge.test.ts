@@ -488,4 +488,83 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     androidBridgeEngine.updatePermission('message_reply', 'GRANTED');
     expect(androidBridgeEngine.getPermissions().message_reply).toBe('GRANTED');
   });
+
+  describe('Owner approval parsing — negation must never grant consent', () => {
+    const capabilities = {
+      deviceId: 'pixel_8_pro',
+      deviceName: 'Pixel 8 Pro',
+      model: 'Pixel 8 Pro',
+      osVersion: 'Android 14',
+      bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: true,
+      canAnswerCalls: true,
+      telecomRoleDialer: true,
+      answerCallsPermission: true,
+      canReadNotifications: true,
+      canInlineReply: true,
+      canOpenApp: true,
+      canLookupContacts: true,
+      isSimulation: false,
+    };
+
+    beforeEach(() => {
+      engine.connectDevice(capabilities);
+      engine.handleIncomingCall({
+        callerName: 'Rahul Verma',
+        callerNumber: '+91 9876543210',
+      });
+    });
+
+    // Regression: these phrases previously parsed as APPROVE. The Devanagari
+    // verb stem "उठा" occurs inside refusals such as "नहीं उठा", and the old
+    // matcher accepted it as an approval keyword — satisfying the Level-4 human
+    // authorization gate with a refusal.
+    it.each([
+      'नहीं उठाओ',
+      'कॉल मत उठाओ',
+      'नहीं उठा',
+      'मत उठा',
+      'कॉल नहीं उठाना',
+    ])('treats call refusal "%s" as REJECT, never APPROVE', (phrase) => {
+      const result = engine.evaluateOwnerApproval(phrase);
+      expect(result.decision).toBe('REJECT');
+      expect(result.targetType).toBe('CALL');
+    });
+
+    it.each(['हाँ', 'हाँ, कॉल उठा लो', 'उठा लो', 'कॉल उठा', 'answer', 'yes'])(
+      'still treats genuine approval "%s" as APPROVE',
+      (phrase) => {
+        expect(engine.evaluateOwnerApproval(phrase).decision).toBe('APPROVE');
+      }
+    );
+
+    it.each(['नहीं', 'नहीं, मत करो', 'cancel', 'no', 'काट दो'])(
+      'still treats genuine rejection "%s" as REJECT',
+      (phrase) => {
+        expect(engine.evaluateOwnerApproval(phrase).decision).toBe('REJECT');
+      }
+    );
+
+    it('treats message negation as REJECT and message consent as APPROVE', () => {
+      const msgEngine = new AndroidBridgeManager();
+      msgEngine.connectDevice(capabilities);
+      msgEngine.handleIncomingNotification({
+        packageName: 'com.whatsapp',
+        appName: 'WhatsApp',
+        title: 'Rahul Verma',
+        text: 'Kal milte hain',
+      });
+
+      expect(msgEngine.evaluateOwnerApproval('मत भेजो').decision).toBe('REJECT');
+      expect(msgEngine.evaluateOwnerApproval('नहीं भेजना').decision).toBe('REJECT');
+      expect(msgEngine.evaluateOwnerApproval('भेज दो').decision).toBe('APPROVE');
+    });
+
+    it('leaves the call awaiting approval when the owner said not to answer', () => {
+      const evalResult = engine.evaluateOwnerApproval('कॉल मत उठाओ');
+      expect(evalResult.decision).toBe('REJECT');
+      expect(engine.getPendingEvent()?.status).toBe('AWAITING_APPROVAL');
+      expect(engine.getPendingEvent()?.type).toBe('CALL');
+    });
+  });
 });
