@@ -1405,3 +1405,23 @@ Item #13 (Zero-fake-success for all tools, `PARTIAL` -> advanced):
   (`dist/server.cjs` 842580 bytes).
 - **Push:** succeeded (`adce988..b043386` on `feature/hermes-full-completion`).
 - Main merge: NOT MERGED - awaiting human approval. Deploy: NOT_CONFIGURED.
+
+
+---
+
+## 2026-09-21 21:51 IST (16:21 UTC) - slot 1 continuation: independent re-verification
+
+Re-observed the negative validation myself instead of relying on the prior
+claim: checked out `b043386^` for `src/utils/telephonyAdapters.ts` only, ran
+`npx vitest run src/tests/telephonyProviderHonesty.test.ts` -> 1 file failed,
+**6 of 6 tests failed** (e.g. `expected 'IDLE' to be 'UNKNOWN' // Object.is
+equality`, telephonyProviderHonesty.test.ts:137). Restored the file from
+`b043386` -> **6/6 pass** in 186ms. Working tree confirmed clean afterwards.
+
+Also confirmed the real remote tips with `git ls-remote`:
+`feature/hermes-full-completion` = `2c6e289`, `automation/hermes-state` =
+`85fdcfe`. PR #4 retitled from the stale "nightly window 2026-09-20" title to
+"HERMES JARVIS - autonomous night window (in progress, 2026-09-21 slot 1)" and
+its body prefixed with this cycle's section, so the open PR is not misleading
+about which window it represents. PR remains open, non-draft,
+`mergeable_state: clean`.
