@@ -1373,3 +1373,35 @@ audit   clean (no .env, no tracked node_modules/dist, no real secret in diff)
 merge   branch ahead_by 78, behind_by 0 — no conflict expected
 PR      opened this slot to main (never auto-merged)
 ```
+
+
+---
+
+## 2026-09-21 21:43 IST (16:13 UTC) - WORK SLOT (slot 1 of 16)
+
+Item #13 (Zero-fake-success for all tools, `PARTIAL` -> advanced):
+
+- **Bug found and fixed.** `src/utils/telephonyAdapters.ts` -
+  `TelnyxTelephonyProvider` and `PlivoTelephonyProvider` returned
+  `startOutboundCall { success: true, providerCallId: 'telnyx_<ts>' }` /
+  `'plivo_<ts>'` while never calling their carrier API, and `transferCall`
+  `{ providerConfirmed: true, success: true }` unconditionally.
+  `telephonySessionManager.ts` speaks "Transferring your call to our clinic
+  staff now, please hold the line." and sets `handoffStatus: 'CONFIRMED'` when
+  `providerConfirmed` is true, so a caller heard a live handoff that never
+  happened. `TwilioTelephonyProvider.transferCall` had the same defect (a
+  `<Dial>` TwiML returned to a caller that discards it is an instruction, not a
+  confirmation). All three `getCallStatus` returned `'IDLE'` without observing
+  anything.
+- `server.ts` `/api/telephony/outbound-call` returned `success: true` regardless
+  of `dialResult`; it now returns 502 `PROVIDER_DISPATCH_FAILED`.
+- `src/types/telephonyProvider.ts`: `UNKNOWN` added to `TelephonyCallState`.
+- **Test:** `src/tests/telephonyProviderHonesty.test.ts` (6 tests).
+  Negative-validated - with the fix reverted, all 6 fail
+  (`expected 'IDLE' to be 'UNKNOWN'`; the Telnyx/Plivo assertions observe the
+  fabricated `providerCallId`). With the fix, 6/6 pass.
+- **Gates observed on `b043386`:** lint (`tsc --noEmit`) exit 0; `npx vitest run`
+  60 files / 830 tests passed in 18.86s; `npm run build` exit 0
+  (`dist/server.cjs` 842580 bytes).
+- **Push:** succeeded (`adce988..b043386` on `feature/hermes-full-completion`).
+- Main merge: NOT MERGED - awaiting human approval. Deploy: NOT_CONFIGURED.

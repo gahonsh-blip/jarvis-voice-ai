@@ -3,6 +3,37 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-21 21:43 IST (16:13 UTC) — Telephony adapters no longer fabricate confirmed provider actions
+
+### Truthfulness / bug fix
+- `TelnyxTelephonyProvider` and `PlivoTelephonyProvider` in
+  `src/utils/telephonyAdapters.ts` returned `startOutboundCall`
+  `{ success: true, providerCallId: 'telnyx_<ts>' }` / `'plivo_<ts>'` while never
+  calling their carrier API at all, and returned `transferCall`
+  `{ providerConfirmed: true, success: true }` unconditionally.
+- That reached a caller. `telephonySessionManager.ts` speaks *"Transferring your
+  call to our clinic staff now, please hold the line."* and sets
+  `handoffStatus: 'CONFIRMED'` whenever `providerConfirmed` is true, so a patient
+  was told a live handoff had happened when nothing was dispatched. The
+  synthesized ids also flowed into the session record as a real provider call id.
+- `TwilioTelephonyProvider.transferCall` carried the same confirmed-transfer
+  defect: a `<Dial>` TwiML document is an instruction that only reaches the
+  carrier inside a live webhook response, but the method returned it to a caller
+  that discards it. It now returns the TwiML in `raw` for a live response to use
+  while keeping `providerConfirmed` false.
+- All three adapters returned `getCallStatus` `{ state: 'IDLE' }`, asserting the
+  call was not active when nothing had been observed. They now return `UNKNOWN`,
+  added to the `TelephonyCallState` union in `src/types/telephonyProvider.ts`.
+- The `/api/telephony/outbound-call` route in `server.ts` returned
+  `success: true` regardless of the dispatch result; it now returns 502
+  `PROVIDER_DISPATCH_FAILED` when the provider did not confirm the call.
+- Guarded by `src/tests/telephonyProviderHonesty.test.ts` (6 tests).
+  Negative-validated: all 6 fail with the fix reverted (`expected 'IDLE' to be
+  'UNKNOWN'`; the Telnyx/Plivo assertions observe the fabricated
+  `providerCallId`), all 6 pass with it. Gates on `b043386`: lint exit 0,
+  vitest 60 files / 830 tests passed, build exit 0.
+
+---
 ## [Unreleased] - 2026-09-21 04:06 (22:36 UTC) — Oracle instance run state and address are no longer seeded as observed facts
 
 ### Truthfulness
