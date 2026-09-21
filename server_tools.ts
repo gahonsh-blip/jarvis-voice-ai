@@ -53,7 +53,8 @@ export function isFinanceBlocked(textOrAction: string): { blocked: boolean; reas
   const lower = String(textOrAction).toLowerCase();
   const financeKeywords = [
     'upi', 'gpay', 'phonepe', 'paytm', 'bhim', 'netbanking', 'bank account',
-    'banking', 'account transfer', 'money transfer', 'credit card', 'debit card',
+    'banking', 'account transfer', 'money transfer', 'transfer money', 'transfer funds',
+    'send funds', 'move money', 'transfer rupees', 'credit card', 'debit card',
     'cvv', 'wallet balance', 'crypto', 'cryptocurrency', 'bitcoin', 'btc', 'eth',
     'ethereum', 'usdt', 'binance', 'crypto trading', 'stocks trading', 'zerodha',
     'groww', 'loan approval', 'apply loan', 'payment gateway', 'stripe charge',
