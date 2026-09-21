@@ -9,6 +9,11 @@ import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
 import {
+  AUDIT_LOG_SOURCE_RECORDED,
+  auditTrailCounts,
+  describeAuditTrail,
+} from './src/utils/hardening/auditTrailTruth';
+import {
   getEmergencyState,
   toggleEmergencyStop,
   activateEmergencyKillSwitch,
@@ -267,6 +272,11 @@ export interface AuditLogEntry {
   providerUrn?: string;
   finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED' | string;
   actionId?: string;
+  /**
+   * Provenance. Present only on entries this process appended itself; seeds and
+   * legacy persisted rows lack it and are never presented as executed work.
+   */
+  source?: string;
 }
 
 export interface ServerSocialPost {
@@ -410,38 +420,27 @@ const defaultSocialPosts: ServerSocialPost[] = [
   },
 ];
 
-const defaultAuditLogs: AuditLogEntry[] = [
-  {
-    id: 'log-1',
-    timestamp: new Date(Date.now() - 7200000).toISOString(),
-    action: 'Read Git Repository Status (Level 1)',
-    levelRequired: 1,
-    approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  },
-  {
-    id: 'log-2',
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    action: 'Draft Social Media Post for LinkedIn (Level 2)',
-    levelRequired: 2,
-    approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  },
-  {
-    id: 'log-3',
-    timestamp: new Date(Date.now() - 900000).toISOString(),
-    action: 'Generate Client Quotation ₹45,000 (Level 2)',
-    levelRequired: 2,
-    approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  },
-];
+// A cold start begins with an empty audit trail. This array previously seeded
+// three fabricated records — a Level 1 repository read, a Level 2 LinkedIn
+// draft and a Level 2 client quotation — each stamped 'EXECUTED' and
+// /VERIFIED, none of which this process had performed. The Security Matrix
+// rendered them as "Real-Time Execution Logs", so the operator saw invented
+// external work presented as executed and verified.
+const defaultAuditLogs: AuditLogEntry[] = [];
+
+/**
+ * Append an audit entry and stamp its provenance. Every write to
+ * `memoryState.auditLogs` must go through here so the trail can distinguish
+ * events this process really recorded from seeds and legacy rows.
+ */
+function pushAuditEntry(entry: AuditLogEntry): AuditLogEntry {
+  entry.source = AUDIT_LOG_SOURCE_RECORDED;
+  memoryState.auditLogs.unshift(entry);
+  if (memoryState.auditLogs.length > 100) {
+    memoryState.auditLogs = memoryState.auditLogs.slice(0, 100);
+  }
+  return entry;
+}
 
 const defaultFreelanceLeads: ServerFreelanceLead[] = [
   {
@@ -740,10 +739,7 @@ export function addAuditLog(
     verificationStatus: 'VERIFIED',
     finalTruthState: 'VERIFIED',
   };
-  memoryState.auditLogs.unshift(entry);
-  if (memoryState.auditLogs.length > 100) {
-    memoryState.auditLogs = memoryState.auditLogs.slice(0, 100);
-  }
+  pushAuditEntry(entry);
   persistMemory();
 }
 
@@ -2663,7 +2659,7 @@ async function executeApprovedAction(
       errorReason: 'Target post not found in memory registry',
       finalTruthState: 'FAILED',
     };
-    memoryState.auditLogs.unshift(fallbackAudit);
+    pushAuditEntry(fallbackAudit);
     persistMemory();
     return {
       success: false,
@@ -2711,7 +2707,7 @@ async function executeApprovedAction(
       verificationStatus: 'STANDBY',
       finalTruthState: 'REJECTED',
     };
-    memoryState.auditLogs.unshift(rejectAudit);
+    pushAuditEntry(rejectAudit);
     persistMemory();
 
     return {
@@ -2736,7 +2732,7 @@ async function executeApprovedAction(
       finalTruthState: 'FAILED',
       errorReason: 'Operation blocked: Global Kill Switch / Emergency Stop is active.',
     };
-    memoryState.auditLogs.unshift(killAudit);
+    pushAuditEntry(killAudit);
     persistMemory();
     return {
       success: false,
@@ -2792,7 +2788,7 @@ async function executeApprovedAction(
       errorReason:
         'No external provider is configured for this channel, so the broadcast could not be verified. No engagement metrics are reported.',
     };
-    memoryState.auditLogs.unshift(internalAudit);
+    pushAuditEntry(internalAudit);
     persistMemory();
 
     return {
@@ -2824,7 +2820,7 @@ async function executeApprovedAction(
     providerUrn: result.providerUrn,
     finalTruthState: result.finalTruthState,
   };
-  memoryState.auditLogs.unshift(auditEntry);
+  pushAuditEntry(auditEntry);
   persistMemory();
 
   return {
@@ -3206,7 +3202,7 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
     botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${describeRunState(oracleCloudState.status)} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${cpuLine} | *RAM*: ${ramLine}\n• *Metrics Source*: ${live ? 'live host telemetry' : 'unavailable'}\n• *Cost*: ₹0 / Always Free Guaranteed\n• *IP*: ${describePublicIp(oracleCloudState.publicIp)}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
     actionData = { type: 'telemetry', metrics: oracleCloudState.metrics };
   } else if (intentData.intent === 'security_audit') {
-    botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: Level ${securityMatrixState.currentLevel} (Create Mode with Human Approval)\n• *Human Approval*: Enforced for all external actions\n• *Credential Protection*: Passwords & API tokens strictly isolated\n• *Recent Audit Logs*: ${memoryState.auditLogs.length} verified events`;
+    botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: Level ${securityMatrixState.currentLevel} (Create Mode with Human Approval)\n• *Human Approval*: Enforced for all external actions\n• *Credential Protection*: Passwords & API tokens strictly isolated\n• *Audit Trail*: ${describeAuditTrail(memoryState.auditLogs)} (${auditTrailCounts(memoryState.auditLogs).total} total)`;
     actionData = { type: 'security_audit', level: securityMatrixState.currentLevel };
   } else if (intentData.intent === 'set_name') {
     const detectedName = intentData.actionPayload?.name || clean.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
@@ -3801,6 +3797,7 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
       leadsCount: memoryState.freelanceLeads.length,
       postsCount: memoryState.socialPosts.length,
       auditLogsCount: memoryState.auditLogs.length,
+      recordedAuditLogs: auditTrailCounts(memoryState.auditLogs).recorded,
       lastPersisted: lastPersistedTimestamp,
     },
     integrations: (() => {
@@ -4217,7 +4214,7 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
   memoryState.socialPosts.unshift(newPost);
 
   // Add Level 2 audit log
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `Draft ${platform} Post: "${newPost.topic}" (Level 2)`,
@@ -4307,7 +4304,7 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
   });
 
   // Add Level 2 Audit Log for draft creation
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `Stage YouTube Video: "${validTitle}" (${validPrivacy.toUpperCase()}) - Level 4 Gate Staged`,
@@ -4372,7 +4369,7 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
   });
 
   // Add Level 2 Audit Log for draft creation
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `Draft YouTube Test Video: "${title}" (Privacy: ${validPrivacy.toUpperCase()}) - Level 4 Gate Staged`,
@@ -5576,6 +5573,10 @@ app.get('/api/security', (req: Request, res: Response) => {
     credentialLeakProtection: securityMatrixState.credentialLeakProtection,
     levels: securityMatrixState.levels,
     auditLogs: memoryState.auditLogs,
+    // Never let a client read the raw array length as a count of confirmed work: seed
+    // and legacy rows are reported separately from real recorded events.
+    auditLogCounts: auditTrailCounts(memoryState.auditLogs),
+    auditTrailSummary: describeAuditTrail(memoryState.auditLogs),
   });
 });
 
@@ -5603,6 +5604,11 @@ app.get('/api/actions/audit', (req: Request, res: Response) => {
   res.json({
     auditLogs: memoryState.auditLogs,
     totalLogs: memoryState.auditLogs.length,
+    // `totalLogs` may include carried-over legacy rows; `recordedLogs` counts
+    // only entries this process appended, so a client never reads the array
+    // length as a count of confirmed events.
+    recordedLogs: auditTrailCounts(memoryState.auditLogs).recorded,
+    summary: describeAuditTrail(memoryState.auditLogs),
     timestamp: new Date().toISOString(),
   });
 });
@@ -5690,7 +5696,7 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
   const updated = toggleEmergencyStop(requestedBy, reason);
 
   // Add audit log
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-emerg-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: updated.emergencyPaused
@@ -5729,7 +5735,7 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
   telegramConfig.webhookStatus = 'waiting_token';
 
   // 3. Log immutable Level 4 Audit Event
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-killswitch-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killResult.clearedTasksCount} pending PermissionGateway item(s).`,
@@ -5769,7 +5775,7 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
     });
   }
 
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-resume-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `🟢 SYSTEM RESUMED by ${requestedBy}: Subsystems returned to standard Level 1-4 permission mode.`,
@@ -5866,7 +5872,7 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
 
   if (decision === 'REJECT') {
     const updated = updateActionRequestStatus(id, 'REJECTED', { resolvedBy: approver });
-    memoryState.auditLogs.unshift({
+    pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `REJECTED Action "${updated?.exactAction || id}" by ${approver}`,
@@ -5933,7 +5939,7 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       resolvedBy: approver,
     });
 
-    memoryState.auditLogs.unshift({
+    pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `${resolution.executed ? 'EXECUTED' : 'UNCONFIRMED'} Approved Action: ${targetReq.exactAction} on ${targetReq.target}`,
@@ -5985,7 +5991,7 @@ app.post('/api/tools/fs/write', (req: Request, res: Response) => {
   }
   const result = realFsWrite(filePath, content);
   if (result.success) {
-    memoryState.auditLogs.unshift({
+    pushAuditEntry({
       id: `log-fs-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `Modified Workspace File: "${filePath}" (${result.bytesWritten} bytes)`,
@@ -6005,7 +6011,7 @@ app.post('/api/tools/fs/delete', (req: Request, res: Response) => {
   if (!filePath) return res.status(400).json({ error: 'path is required' });
   const result = realFsDelete(filePath);
   if (result.success) {
-    memoryState.auditLogs.unshift({
+    pushAuditEntry({
       id: `log-fs-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `Deleted Workspace Resource: "${filePath}"`,
@@ -6602,7 +6608,7 @@ ${transcript.slice(0, 35000)}
         throw new Error('Gemini returned an empty summary');
       }
 
-      memoryState.auditLogs.unshift({
+      pushAuditEntry({
         id: `log-yt-${Date.now()}`,
         timestamp: new Date().toISOString(),
         action: `🎥 Summarized YouTube Video: "${videoInfo.title}" (${videoInfo.channel}) via Gemini 2.5 Flash`,
@@ -6633,7 +6639,7 @@ ${transcript.slice(0, 35000)}
     geminiFailed: geminiConfigured,
   });
 
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-yt-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: result.source === 'extractive'

@@ -417,6 +417,11 @@ export interface SecurityMatrixState {
     errorReason?: string;
     providerUrn?: string;
     finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED' | string;
+    /**
+     * Provenance marker. Absent on seeds and legacy rows, which are therefore
+     * never rendered as executed or verified.
+     */
+    source?: string;
   }[];
 }
 

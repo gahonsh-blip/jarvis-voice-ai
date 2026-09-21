@@ -14,6 +14,7 @@ import {
   ToggleRight,
 } from 'lucide-react';
 import { SecurityMatrixState } from '../types';
+import { normalizeAuditLog } from '../utils/hardening/auditTrailTruth';
 
 interface Props {
   isOpen: boolean;
@@ -210,11 +211,19 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
           <div className="flex flex-col gap-2">
             <span className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
               <History className="w-4 h-4 text-cyan-400" />
-              Security Audit Trail (Real-Time Execution Logs)
+              Security Audit Trail (recorded events only)
             </span>
 
             <div className="flex flex-col gap-1.5 font-mono text-xs">
-              {securityState?.auditLogs.map((log) => (
+              {securityState && securityState.auditLogs.length === 0 && (
+                <p className="p-3 rounded-lg bg-slate-900/60 border border-dashed border-slate-800 text-slate-400">
+                  No audit events recorded by this process yet. Rows without provenance are
+                  never listed as executed or verified.
+                </p>
+              )}
+              {securityState?.auditLogs.map((log) => {
+                const provenance = normalizeAuditLog(log);
+                return (
                 <div
                   key={log.id}
                   className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-2"
@@ -230,23 +239,25 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     <span className="text-slate-500">By: {log.approvedBy}</span>
                     <span
                       className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
-                        log.status === 'VERIFIED' || log.status === 'EXECUTED'
+                        provenance.confirmed
                           ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                          : log.status === 'NOT_PUBLISHED'
+                          : provenance.status === 'NOT_PUBLISHED' || !provenance.recorded
                           ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                          : log.status === 'BLOCKED' || log.status === 'FAILED'
+                          : provenance.status === 'BLOCKED' || provenance.status === 'FAILED'
                           ? 'bg-rose-950 text-rose-300 border border-rose-800'
                           : 'bg-slate-800 text-slate-300'
                       }`}
                     >
-                      {log.status}
+                      {provenance.status}
                     </span>
+                    <span className="text-slate-500">{provenance.provenanceLabel}</span>
                     <span className="text-slate-500">
                       {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
