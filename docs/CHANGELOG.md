@@ -3,6 +3,35 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 01:36 IST (2026-09-21 20:06 UTC) — No working email sender is reported
+
+### Bug fix
+- The outbound email surface reported a live sender that does not exist.
+  `realEmailStatus()` set `configured: true` from the mere presence of
+  `GMAIL_USER` + `GMAIL_APP_PASSWORD` and spoke *"SMTP Transport Active. Level 4
+  confirmation required for all sends."*; the Integrations Matrix `email` entry
+  was hardcoded `REAL_WORKING` with the reason *"SMTP Conduit verified for client
+  notifications and quotations"* and capabilities `Quotation Email Dispatch` /
+  `Client Inquiries`; and `AutonomousToolsModal.tsx` drew an emerald `READY`
+  badge and green panel border from that flag. No SMTP client, socket, or send
+  route exists in this build.
+
+### Fix
+- New `src/utils/emailConduitTruth.ts`: `isEmailTransportImplemented()` is the
+  single switch to flip when a real sender ships, `describeEmailConduit()`
+  returns `NOT_CONFIGURED` / `CREDENTIALS_PRESENT_NO_TRANSPORT` with a badge
+  label of `CREDENTIALS ONLY — NO SENDER`, and `EMAIL_CAPABILITY_NOTE` states
+  plainly that the transport is not implemented.
+- `realEmailStatus()` now returns `status` + `transportImplemented` alongside the
+  credential flags; the `email` integration entry is pinned `NOT_AVAILABLE` with
+  a reason that never claims verification.
+
+### Test
+- `src/tests/emailConduitTruthfulness.test.ts` (6 tests) pins the credential-only
+  labelling and the absence of any transport claim. Negative-validated: flipping
+  `isEmailTransportImplemented()` to `true` fails exactly 3 of the 6 tests.
+
+---
 ## [Unreleased] - 2026-09-22 01:05 IST (2026-09-21 19:36 UTC) — Android app launch no longer reports false success
 
 ### Bug fix
