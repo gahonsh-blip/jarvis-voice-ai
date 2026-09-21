@@ -41,6 +41,14 @@ import {
   FileVideo,
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
+import {
+  classifyProviderTestResponse,
+  verifiedAccountName,
+  describeProviderVerdict,
+  connectionStatusLabel,
+  isUsableCredential,
+  socialApprovalPostureLabel,
+} from '../utils/socialPublishHonesty';
 
 interface Props {
   isOpen: boolean;
@@ -62,6 +70,13 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   const [platforms, setPlatforms] = useState<PlatformIntegrationInfo[]>([]);
   const [testingPlatform, setTestingPlatform] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; status: string; message: string; accountName?: string }>>({});
+  // The permission posture is only known once /api/security has answered — the
+  // header must not print a Level 4 gate before it has.
+  const [securityLevel, setSecurityLevel] = useState<number | null>(null);
+  const [securityLevelLoaded, setSecurityLevelLoaded] = useState<boolean>(false);
+  // The platform list is also fetched twice on open (here and the OAuth tab);
+  // this flag names whether the list currently on screen is a real measurement.
+  const [platformsLoaded, setPlatformsLoaded] = useState<boolean>(false);
   const [expandedPlatform, setExpandedPlatform] = useState<string | null>('linkedin');
   const [isConnectingOAuth, setIsConnectingOAuth] = useState<boolean>(false);
   const [isDraftingTestVideo, setIsDraftingTestVideo] = useState<boolean>(false);
@@ -79,7 +94,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   const [ytVideoBase64, setYtVideoBase64] = useState<string | null>(null);
   const [ytVideoTitle, setYtVideoTitle] = useState<string>('HERMES JARVIS Autonomous Core Overview');
   const [ytVideoDesc, setYtVideoDesc] = useState<string>(
-    'Automated end-to-end technical overview from HERMES JARVIS Autonomous Core.\n\n• Architecture: Oracle Always Free ARM Cloud + Gemini AI\n• Security Layer: Level-4 Human Authorization Matrix\n• Engine: YouTube Data API v3 (videos.insert)\n• Zero Fake Success Verified.'
+    'Automated end-to-end technical overview from HERMES JARVIS Autonomous Core.\n\n• Architecture: Oracle Always Free ARM Cloud + Gemini AI\n• Security Layer: Human Authorization Gateway\n• Engine: YouTube Data API v3 (videos.insert)'
   );
   const [ytVideoTags, setYtVideoTags] = useState<string[]>([
     'JARVIS',
@@ -124,6 +139,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     if (isOpen) {
       fetchPosts();
       fetchPlatforms();
+      fetchSecurityPosture();
     }
   }, [isOpen]);
 
@@ -186,9 +202,25 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       const data = await res.json();
       if (data.platforms) {
         setPlatforms(data.platforms);
+        setPlatformsLoaded(true);
       }
     } catch (err) {
       console.warn('Failed to fetch platform integrations:', err);
+    }
+  };
+
+  // Reads the live permission posture so the header reports the real level
+  // instead of advertising a Level 4 gate it never checked.
+  const fetchSecurityPosture = async () => {
+    try {
+      const res = await fetch('/api/security');
+      const data = await res.json();
+      const level = typeof data.currentLevel === 'number' ? data.currentLevel : null;
+      setSecurityLevel(level);
+      setSecurityLevelLoaded(level !== null);
+    } catch (err) {
+      console.warn('Failed to fetch security posture:', err);
+      setSecurityLevelLoaded(false);
     }
   };
 
@@ -347,17 +379,27 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       });
       const data = await res.json();
 
-      if (data.success && data.post) {
+      if (data.success && data.post && data.post.providerUrn) {
         setYtStagedPost(data.post);
         setSelectedPost(data.post);
         setPosts((prev) => prev.map((p) => (p.id === data.post.id ? data.post : p)));
         setYtUploadResult({
           success: true,
-          message: data.message || 'Video successfully uploaded and verified on YouTube!',
+          message: data.message || 'Video uploaded — YouTube returned a video ID for it.',
           videoId: data.post.providerUrn,
-          videoUrl: data.post.videoUrl || (data.post.providerUrn ? `https://www.youtube.com/watch?v=${data.post.providerUrn}` : undefined),
+          videoUrl: data.post.videoUrl || `https://www.youtube.com/watch?v=${data.post.providerUrn}`,
         });
-        onSpeak('YouTube video verified and live on YouTube, Sir.');
+        onSpeak('YouTube returned a video ID for the upload, Sir.');
+      } else if (data.success && data.post) {
+        // success without a provider ID is not an upload we can point at.
+        setYtStagedPost(data.post);
+        setSelectedPost(data.post);
+        setYtUploadResult({
+          success: false,
+          message: data.message || 'The server reported success but YouTube returned no video ID.',
+          errorReason: 'UNCONFIRMED: no provider video ID was returned, so the upload cannot be verified.',
+        });
+        onSpeak('Upload reported success but returned no video ID — unverified, Sir.');
       } else {
         const errorMsg = data.errorReason || data.message || 'Upload could not be published.';
         setYtStagedPost(data.post || ytStagedPost);
@@ -524,10 +566,16 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         ...prev,
         [platformKey]: data,
       }));
-      if (data.success) {
-        onSpeak(`${platformKey} connection verified live, Sir.`);
+      // A probe that returned success without naming the account proved the
+      // credential answered, not that we are connected to a known identity.
+      const verdict = classifyProviderTestResponse(data);
+      const account = verifiedAccountName(data);
+      if (verdict === 'OK' && account) {
+        onSpeak(`${platformKey} verified live against ${account}, Sir.`);
+      } else if (verdict === 'OK') {
+        onSpeak(`${platformKey} answered, but did not name the account — unverified, Sir.`);
       } else {
-        onSpeak(`${platformKey} connection reported: ${data.status}. Check configuration.`);
+        onSpeak(`${platformKey} connection reported: ${data.status || 'unverified'}. Check configuration.`);
       }
       fetchPlatforms();
     } catch (err: any) {
@@ -656,9 +704,14 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   };
 
   const linkedInInfo = platforms.find((p) => p.id === 'linkedin');
-  const isLinkedInConnected = linkedInInfo?.status === 'CONNECTED';
+  // `status === 'CONNECTED'` means credentials are present, not that the token
+  // was proven live. Only the explicit test probe (status VERIFIED + a named
+  // account) promotes a platform to a verified connection.
+  const linkedInTestVerdict = classifyProviderTestResponse(testResults['linkedin']);
+  const isLinkedInConnected = linkedInTestVerdict === 'OK' && isUsableCredential(linkedInInfo?.status, platformsLoaded);
   const ytInfo = platforms.find((p) => p.id === 'youtube');
-  const isYouTubeConnected = ytInfo?.status === 'CONNECTED';
+  const youTubeTestVerdict = classifyProviderTestResponse(testResults['youtube']);
+  const isYouTubeConnected = youTubeTestVerdict === 'OK' && isUsableCredential(ytInfo?.status, platformsLoaded);
   const ytOauth = ytInfo?.youTubeOAuthStatus;
 
   if (!isOpen) return null;
@@ -675,13 +728,13 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-100">Multi-Social Media & Growth Engine</h2>
-                <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                  <ShieldAlert className="w-3 h-3 text-emerald-400" />
-                  Level 4 Approval Active
+                <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1">
+                  <ShieldAlert className="w-3 h-3 text-amber-400" />
+                  {socialApprovalPostureLabel(securityLevel, securityLevelLoaded)}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Official APIs for LinkedIn, Facebook, Instagram, YouTube & X/Twitter with Zero Fake Success
+                Real provider endpoints for LinkedIn, Facebook, Instagram, YouTube &amp; X/Twitter — a connection is reported verified only after a live provider probe names the account
               </p>
             </div>
           </div>
@@ -1109,10 +1162,10 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     ) : selectedPost.status === 'not_published' || selectedPost.finalTruthState === 'NOT_PUBLISHED' ? (
                       <span className="text-amber-400 font-bold flex items-center gap-1.5">
                         <ShieldAlert className="w-4 h-4" />
-                        Held in Draft (No Fake Success)
+                        Held in Draft — Not Published
                       </span>
                     ) : (
-                      <span>Status: Awaiting Human Action (Level 4)</span>
+                      <span>Status: Awaiting Human Authorization</span>
                     )}
                   </div>
 
@@ -1361,11 +1414,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                 <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col gap-2 text-xs font-sans">
                   <span className="font-bold text-slate-300 flex items-center gap-1.5 font-mono">
                     <ShieldAlert className="w-4 h-4 text-emerald-400" />
-                    Level-4 Zero Fake Success Policy
+                    Publish Authorization Policy
                   </span>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Every video staged in this studio is queued in a strict Level 4 Human Authorization Gateway.
-                    No bytes will be transmitted to Google Cloud until you explicitly click <strong>Approve & Upload</strong>.
+                    Every video staged in this studio is queued behind a Human Authorization Gateway.
+                    No bytes will be transmitted to Google Cloud until you explicitly click <strong>Approve &amp; Upload</strong>.
                   </p>
                 </div>
               </div>
@@ -1627,7 +1680,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                         ) : (
                           <ShieldAlert className="w-4 h-4 text-amber-400" />
                         )}
-                        {ytUploadResult.success ? 'Upload Success & Verified' : 'Level 4 Publish Held (Zero Fake Success)'}
+                        {ytUploadResult.success ? 'Upload Success & Verified' : 'Publish Held — Not Uploaded'}
                       </span>
                       {ytUploadResult.videoId && (
                         <span className="text-[10px] text-emerald-400 font-bold">ID: {ytUploadResult.videoId}</span>
@@ -1735,25 +1788,26 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           </div>
                           <p className="text-xs text-slate-400 font-mono">
                             {p.accountName
-                              ? `Authenticated: ${p.accountName}`
-                              : 'Status: Ready for 1-Click OAuth Connection'}
+                              ? `Reported account: ${p.accountName} — live connection not yet verified`
+                              : connectionStatusLabel(p.status, platformsLoaded)}
                           </p>
                         </div>
                       </div>
 
                       {/* Action Buttons & Status Badge */}
                       <div className="flex items-center gap-2.5 flex-wrap">
-                        {/* Status Badge */}
+                        {/* Status Badge — the raw server status, never promoted
+                            by the UI. Credentials present is not a live link. */}
                         <span
                           className={`px-3 py-1 rounded-lg text-xs font-mono font-bold border ${
                             p.status === 'CONNECTED' || p.status === 'VERIFIED'
-                              ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
+                              ? 'bg-slate-800 text-slate-300 border-slate-600'
                               : p.status === 'AUTH_REQUIRED' || p.status === 'EXPIRED'
                               ? 'bg-amber-950/80 text-amber-300 border-amber-700'
                               : 'bg-slate-800 text-slate-400 border-slate-700'
                           }`}
                         >
-                          {p.status}
+                          {connectionStatusLabel(p.status, platformsLoaded)}
                         </span>
 
                         {/* LinkedIn OAuth 1-Click Action Buttons */}
@@ -1916,21 +1970,31 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     )}
 
                     {/* Live Test Diagnostic Output */}
-                    {testResult && (
-                      <div
-                        className={`p-3 rounded-xl text-xs font-mono border ${
-                          testResult.success
-                            ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200'
-                            : 'bg-amber-950/40 border-amber-800 text-amber-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 font-bold mb-1">
-                          {testResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <ShieldAlert className="w-4 h-4 text-amber-400" />}
-                          <span>Live Probe Result: {testResult.status}</span>
+                    {testResult && (() => {
+                      const verdict = classifyProviderTestResponse(testResult);
+                      const account = verifiedAccountName(testResult);
+                      const isVerified = verdict === 'OK';
+                      return (
+                        <div
+                          className={`p-3 rounded-xl text-xs font-mono border ${
+                            isVerified
+                              ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200'
+                              : 'bg-amber-950/40 border-amber-800 text-amber-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 font-bold mb-1">
+                            {isVerified ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <ShieldAlert className="w-4 h-4 text-amber-400" />}
+                            <span>
+                              Live Probe Result: {isVerified ? `VERIFIED — ${account}` : testResult.status || 'UNCONFIRMED'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] leading-relaxed">{describeProviderVerdict(verdict, account, testResult.message)}</p>
+                          {testResult.message && (
+                            <p className="text-[11px] leading-relaxed opacity-70 mt-1">Provider message: {testResult.message}</p>
+                          )}
                         </div>
-                        <p className="text-[11px] leading-relaxed">{testResult.message}</p>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Expanded Setup Guide & Variables Checklist */}
                     {isExpanded && (
