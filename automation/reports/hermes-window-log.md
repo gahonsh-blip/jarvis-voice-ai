@@ -1425,3 +1425,70 @@ Also confirmed the real remote tips with `git ls-remote`:
 its body prefixed with this cycle's section, so the open PR is not misleading
 about which window it represents. PR remains open, non-draft,
 `mergeable_state: clean`.
+
+
+---
+
+## 2026-09-21 21:54 IST (16:24 UTC) — slot 2: audit-trail provenance (backlog item 13)
+
+**Slot:** WORK | window date 2026-09-21 | window slots completed so far: 2
+
+### Item advanced
+- **#13 Zero-fake-success for all tools — `PARTIAL` (advanced).**
+  `GET /api/actions/audit` returned `totalLogs: memoryState.auditLogs.length` as
+  its only count, and `GET /api/system/health` returned the same number as
+  `auditLogsCount`. `jarvis_memory.json` ships 23 persisted rows that carry no
+  `source` field, so rows carried over from a previous process were
+  indistinguishable from events this process actually appended.
+  `HERMES_API_CONTRACT.md` presents the audit count as evidence of actions taken,
+  which makes the inflated number a correctness claim rather than a cosmetic label.
+  Fix: both endpoints now report `recordedLogs` / `recordedAuditLogs` derived from
+  `auditTrailCounts().recorded` (entries stamped `AUDIT_LOG_SOURCE_RECORDED`)
+  alongside an `auditTrail` summary from `describeAuditTrail()` that names the
+  carried-over count explicitly. `totalLogs` is retained and documented as the raw
+  array length.
+  Files: `src/utils/hardening/auditTrailTruth.ts`,
+  `src/tests/hardening/auditTrailTruth.test.ts`, `server.ts`.
+
+### Evidence
+- Targeted suite: `npx vitest run src/tests/hardening/auditTrailTruth.test.ts` ->
+  **1 file passed, 14/14 tests passed** (re-run after rebase onto the slot-1 tip).
+- Negative validation (self-observed): restoring the previously seeded
+  `Read Git Repository Status (Level 1)` row fails exactly **2 of 14** --
+  `does not seed a repository read as EXECUTED` and
+  `starts a cold process with an empty audit trail` -- and passes **14/14** with
+  the seeded row removed.
+- Full gates on `3d18aa4` (code tip):
+  - `npm run lint` (`tsc --noEmit`): **exit 0**
+  - `npx vitest run`: **61 files / 844 tests passed**
+  - `npm run build`: **exit 0**, `dist/server.cjs` 842830 bytes (823.1 kb)
+- Security: `git check-ignore -v .env` matched `.gitignore:4:.env`;
+  `git status --short` empty; `dist` and `node_modules` confirmed ignored and
+  untracked; `git diff --stat origin/main` shows 132 files, no `.env`, no secrets.
+- Commit / push: `3d18aa4` (code) then `0c737ea` (docs), both pushed to
+  `feature/hermes-full-completion`. The remote branch had moved ahead between
+  this session's clone and its first push (slot 1 pushed `84647d7`); the local
+  commit was rebased onto `FETCH_HEAD` and pushed -- no force, no history rewrite.
+
+### Bugs found
+- The audit-count conflation above. Found by reading the two endpoints against
+  the persisted `jarvis_memory.json` seed rather than trusting the endpoint's
+  own field name.
+
+### Status
+- Tests: 61 files / 844 passed. Lint: exit 0. Build: exit 0.
+- E2E: NOT RUN (no device/browser harness in this sandbox).
+- PR: #4 (still open, non-draft); body not yet refreshed for this slot.
+- Main merge: **NOT MERGED — awaiting human approval.**
+- Deploy: NOT_CONFIGURED — no `DEPLOY_URL` or hosting integration in this sandbox.
+- Blocked: items 1, 2, 50 (physical Android device), 8 (Windows host), 55
+  (Android device / Windows host).
+
+### Next slot
+- Continue the item 13 sweep on a surface not yet audited — the remaining
+  router/UI surfaces that report counts or connection state without a backing
+  observation. Keep the pattern-driven honest framing: still `PARTIAL`.
+
+### hi-IN summary
+- Audit log count now reports recorded events and names carried-over rows
+  separately; 14/14 tests pass, lint and build green. No fabricated claim.
