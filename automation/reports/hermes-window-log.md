@@ -2427,3 +2427,9 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - Level-4 फ़ाइनेंस एक्सक्लूज़न गेट अब हर dispatch पथ पर लागू है (पहले OS-command पथ पर कतई लागू नहीं था); lint 0, 66 फ़ाइलें/954 टेस्ट पास, build 0 — आइटम #51 अभी भी PARTIAL है, PR #4 इंसानी मंज़ूरी का इंतज़ार कर रहा है।
+
+### Slot 15 — post-report correction (03:05 IST)
+- Code branch tip advanced to `81e91a5` by this slot's report commit (report-only; tree identical to `0a829e0` where the gates were observed).
+- `automation/hermes-state` published at `2d3950c` with `slots_completed=15`, `last_commit=81e91a5`, `finalized=false`.
+- PR #4 body corrected: the branch-tip line now reads `81e91a5` instead of `0a829e0`.
+- Earlier rejected state push was a stale shallow remote-tracking ref; resolved by force-fetching the true remote ref (no force-push to any branch).
