@@ -3,6 +3,20 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+
+## [Unreleased] - 2026-09-22 04:35 IST (2026-09-21 23:07 UTC) — Window finalization (no code change)
+
+### Verification
+- Frozen tip `499045e` re-verified end to end: `npm run lint` (`tsc --noEmit`)
+  exit 0; `npx vitest run` 68 files / 984 tests passed (19.91 s); `npm run build`
+  exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb).
+- Security: `.env` git-ignored and untracked; `git status --short` clean; ignored
+  paths limited to `dist/` and `node_modules/`; secret-pattern scan of
+  `git diff origin/main` returns only the documented synthetic fixtures/tests.
+- No new development started. #31 remains `PARTIAL`; blocked set unchanged
+  (#1/#2/#50/#55 physical Android device, #8 Windows host). PR #4 left open,
+  non-draft, mergeable; `main` not merged — awaits human approval.
+
 ## [Unreleased] - 2026-09-22 04:05 IST (2026-09-21 22:36 UTC) — A handed-off reply is no longer logged as a confirmed delivery
 
 ### Bug fix
