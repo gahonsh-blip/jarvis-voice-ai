@@ -29,6 +29,34 @@ describe('interpretConfirmation', () => {
   it('treats unrelated speech as unclear', () => {
     expect(interpretConfirmation('what time is it')).toBe('UNCLEAR');
   });
+
+  it('never reads a prohibition as consent', () => {
+    // "मत करो" / "mat karo" contain the affirmative token करो/karo; a whole-token
+    // match plus negation-voiding must reject them.
+    for (const phrase of ['मत करो', 'mat karo', 'karo mat', 'करो मत']) {
+      expect(interpretConfirmation(phrase)).not.toBe('CONFIRMED');
+    }
+    expect(interpretConfirmation('मत करो')).toBe('DECLINED');
+    expect(interpretConfirmation('mat karo')).toBe('DECLINED');
+    expect(interpretConfirmation('karo mat')).toBe('DECLINED');
+  });
+
+  it('never reads an English negated command as consent', () => {
+    for (const phrase of ['do not do it', "don't do it", 'do not proceed', 'not ok']) {
+      expect(interpretConfirmation(phrase)).not.toBe('CONFIRMED');
+    }
+  });
+
+  it('still accepts an unambiguous affirmative after normalisation', () => {
+    for (const phrase of ['yes', 'ok', 'do it', 'proceed', 'haan', 'theek hai', 'कर दो']) {
+      expect(interpretConfirmation(phrase)).toBe('CONFIRMED');
+    }
+  });
+
+  it('accepts a Hindi encouraging particle as consent, not a negation', () => {
+    // "करो ना" means "please do"; ना must not be a post-particle.
+    expect(interpretConfirmation('करो ना')).toBe('CONFIRMED');
+  });
 });
 
 describe('requiresVoiceConfirmation', () => {

@@ -13,6 +13,9 @@
 //      that is not a clear yes is treated as not-confirmed: silence, an unclear
 //      reply, and an explicit no all take the same safe path. A command is
 //      never executed on an ambiguous answer.
+//   3. Negation voids consent. "मत करो", "करो मत", "not do it" and
+//      "don't do it" are prohibitions, not approvals; matching is whole-token
+//      so `करो` cannot fire inside `मत करो`.
 // ==============================================================================
 
 export type VoiceSessionState =
@@ -64,27 +67,91 @@ export const AFFIRMATIVE_PHRASES = [
 export const NEGATIVE_PHRASES = [
   'no',
   'nope',
-  'nah',
+  'not',
+  'never',
   'cancel',
   'stop',
   'abort',
-  "don't",
-  'dont',
   'never mind',
   'nevermind',
   'nahi',
   'nahin',
+  'mat',
   'रुको',
   'नहीं',
+  'मत',
   'रद्द',
 ];
+
+/**
+ * Negation particles. A particle *before* an affirmative voids it, so
+ * "मत करो" / "mat karo" / "not do it" can never be read as consent. A verb-final
+ * Hindi prohibition ("करो मत") is handled by the post-particle set below.
+ */
+export const NEGATIVE_PARTICLES = [
+  'no',
+  'not',
+  'never',
+  'na',
+  'nah',
+  'nahi',
+  'nahin',
+  'mat',
+  'ना',
+  'नहीं',
+  'मत',
+];
+
+/**
+ * Particles that also negate when they *follow* the verb, as Hindi prohibitions
+ * commonly do ("करो मत"). Deliberately narrow: "करो ना" means "please do", so
+ * `ना` must not appear here.
+ */
+export const POST_NEGATIVE_PARTICLES = ['mat', 'मत'];
 
 function normalise(text: string): string {
   return text
     .toLowerCase()
+    .replace(/don['’]?t\b/g, ' not ')
     .replace(/[.,!?;:।"'“”]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function tokenize(normalised: string): string[] {
+  return normalised ? normalised.split(' ') : [];
+}
+
+/**
+ * True when `phrase` occurs as a whole-word run in `tokens`, ignoring any
+ * occurrence that a negation particle has voided.
+ *
+ * `before` voids the match (मत करो, not do it); `after` voids it only for the
+ * verb-final Hindi prohibitions (करो मत). Matching whole tokens rather than a
+ * substring is what stops `करो` from firing inside `मत करो`.
+ */
+function containsPhrase(
+  tokens: string[],
+  phrase: string,
+  before: readonly string[],
+  after: readonly string[]
+): boolean {
+  const words = phrase.split(' ');
+  for (let i = 0; i + words.length <= tokens.length; i++) {
+    let match = true;
+    for (let j = 0; j < words.length; j++) {
+      if (tokens[i + j] !== words[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (!match) continue;
+    if (i > 0 && before.includes(tokens[i - 1])) continue;
+    const end = i + words.length;
+    if (end < tokens.length && after.includes(tokens[end])) continue;
+    return true;
+  }
+  return false;
 }
 
 export type ConfirmationVerdict = 'CONFIRMED' | 'DECLINED' | 'UNCLEAR';
@@ -97,13 +164,14 @@ export type ConfirmationVerdict = 'CONFIRMED' | 'DECLINED' | 'UNCLEAR';
  */
 export function interpretConfirmation(transcript: string): ConfirmationVerdict {
   const cleaned = normalise(transcript);
-  if (!cleaned) return 'UNCLEAR';
+  const tokens = tokenize(cleaned);
+  if (tokens.length === 0) return 'UNCLEAR';
 
-  const hasYes = AFFIRMATIVE_PHRASES.some(
-    (p) => new RegExp(`(?:^|\\s)${p}(?:\\s|$)`, 'i').test(cleaned)
+  const hasYes = AFFIRMATIVE_PHRASES.some((p) =>
+    containsPhrase(tokens, p, NEGATIVE_PARTICLES, POST_NEGATIVE_PARTICLES)
   );
-  const hasNo = NEGATIVE_PHRASES.some(
-    (p) => new RegExp(`(?:^|\\s)${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`, 'i').test(cleaned)
+  const hasNo = NEGATIVE_PHRASES.some((p) =>
+    containsPhrase(tokens, p, [], [])
   );
 
   if (hasYes && hasNo) return 'UNCLEAR';
