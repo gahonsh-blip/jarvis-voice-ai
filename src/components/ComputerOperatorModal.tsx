@@ -30,6 +30,13 @@ import {
   ScreenInterpreter,
   TaskTracker,
 } from '../utils/computerOperator';
+import {
+  observationAmbiguityNotice,
+  observationPlatformLabel,
+  observationResolutionLabel,
+  screenSyncLabel,
+  screenSyncState,
+} from '../utils/computerOperator/observationTruth';
 
 interface ComputerOperatorModalProps {
   isOpen: boolean;
@@ -165,6 +172,8 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   };
 
   const interpretation = currentObservation ? ScreenInterpreter.interpret(currentObservation) : null;
+  const syncState = screenSyncState(currentObservation, observationIsPreview);
+  const ambiguityNotice = observationAmbiguityNotice(currentObservation, observationIsPreview);
 
   return (
     <div
@@ -336,13 +345,13 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                   <span className="truncate">{currentObservation?.windowTitle || 'Desktop Observation'}</span>
                 </div>
                 <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-900">
-                  {currentObservation?.screenResolution.width}x{currentObservation?.screenResolution.height}
+                  {observationResolutionLabel(currentObservation)}
                 </div>
               </div>
 
-              {observationIsPreview && (
+              {ambiguityNotice && (
                 <div className="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/40 text-amber-300 text-[11px] font-mono">
-                  ILLUSTRATIVE PREVIEW — the live desktop could not be reached, so this view is not real screen state.
+                  {ambiguityNotice}
                 </div>
               )}
 
@@ -420,15 +429,23 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <div
                       className={`w-2 h-2 rounded-full ${
-                        isRunning ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
+                        isRunning
+                          ? 'bg-amber-400 animate-pulse'
+                          : syncState === 'OBSERVED'
+                          ? 'bg-emerald-400'
+                          : syncState === 'UNOBSERVED'
+                          ? 'bg-red-400'
+                          : 'bg-slate-500'
                       }`}
                     />
                     <span>
-                      {isRunning ? 'OPERATOR ACTIVE: OBSERVING SCREEN' : 'STANDBY: SCREEN SYNCHRONIZED'}
+                      {isRunning
+                        ? 'OPERATOR ACTIVE: OBSERVING SCREEN'
+                        : screenSyncLabel(currentObservation, observationIsPreview)}
                     </span>
                   </div>
                   <div className="text-slate-500">
-                    Resolution: {currentObservation?.platform || 'linux-arm64'}
+                    {observationPlatformLabel(currentObservation)}
                   </div>
                 </div>
               </div>
