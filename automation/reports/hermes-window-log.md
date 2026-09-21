@@ -2433,3 +2433,79 @@ Next Slot:
 - `automation/hermes-state` published at `2d3950c` with `slots_completed=15`, `last_commit=81e91a5`, `finalized=false`.
 - PR #4 body corrected: the branch-tip line now reads `81e91a5` instead of `0a829e0`.
 - Earlier rejected state push was a stale shallow remote-tracking ref; resolved by force-fetching the true remote ref (no force-push to any branch).
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:05
+Window date: 2026-09-22   Window slots completed so far: 16
+
+Completed:
+- #51 Complete security audit — PARTIAL (advanced). Slice: kill-switch liveness
+  honesty in the Permission Gateway. Bug: `src/components/PermissionGateway.tsx`
+  derived its emergency badge/banner/approval-button from
+  `emergency.emergencyPaused`, seeded state as `{ emergencyPaused: false }`, and
+  fetched `/api/emergency/status` inside the same try block as the queue lists,
+  so a failed status request was swallowed and the green `ACTIVE` pill plus an
+  enabled `YES / APPROVE & EXECUTE` button stood on an unqueried value. Fix: new
+  pure tri-state `src/utils/emergencyTruth.ts` (`emergencyLiveness` /
+  `emergencyStatusKnown` / `emergencyLivenessLabel`); the component seeds `null`,
+  fetches the status separately so a failure leaves liveness UNKNOWN, renders an
+  explicit `STATUS UNKNOWN`, and derives
+  `approvalBlocked = killSwitchEngaged || !statusKnown`. Evidence:
+  `src/tests/permissionGatewayEmergencyLiveness.test.ts` 9/9 passed.
+
+In Progress:
+- #51 — the audit remains a pattern scan plus targeted gates; no external
+  penetration test was performed (NOT AVAILABLE here).
+
+Remaining:
+- #51 continues, plus any hardening item not yet VERIFIED; #1/#2/#8/#50/#55 are
+  blocked on hardware (Android device / Windows host).
+
+Bugs Found:
+- PermissionGateway asserted a kill-switch state nobody had fetched (above).
+- Any payload whose `emergencyPaused` was not a boolean also fell through to the
+  green branch, because the badge was a single negation.
+
+Bugs Fixed:
+- Both, via the tri-state + fail-closed `!statusKnown` guard. Negative-validated:
+  restoring one raw read (`disabled={loading || emergency.emergencyPaused ||
+  killSwitchEngaged}`) fails exactly the source guard — observed
+  `1 failed | 8 passed` of 9; restored -> 9/9.
+
+Tests:    67 files / 963 tests passed (npx vitest run, observed)
+Lint:     `tsc --noEmit` exit 0 (npm run lint)
+Build:    exit 0 — dist/server.cjs 852453 bytes / 832.5 kb
+E2E:      NOT RUN (no Android device or Windows host in this environment)
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env` (ignored);
+          `git status --short` clean; diff vs origin/main contains no `.env`,
+          `node_modules`, `dist` or token/key file (only `.env.example`, a
+          template). No secret was printed.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  f114f87 (docs), 8d37cea (fix+test)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #4 (refreshed this slot) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified artifact (dist/server.cjs)
+            is the deployment unit available.
+
+Blocked:
+- #1/#2/#50/#55 — physical Android device required
+- #8 — Windows host required for the PowerShell capture leg
+
+Human Approval Required:
+- Merge of PR #4 to `main`, after a human reads this window's verification report.
+
+Next Slot:
+- #51 continues (03:35 fire) with another small verified slice, or the next
+  non-VERIFIED item once every remaining item is blocked-only.
+
+हिंदी सारांश (एक पंक्ति):
+- Permission Gateway अब बिना पूछे हुए kill-switch की स्थिति को हरा ACTIVE नहीं
+  दिखाता; अज्ञात स्थिति पर approval बंद रहता है, test ने इसे साबित किया।
+
+
+---
+
