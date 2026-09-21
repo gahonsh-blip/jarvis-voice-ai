@@ -37,6 +37,8 @@ const FINANCE_KEYWORDS = [
   'transfer money',
   'transfer funds',
   'send funds',
+  'move money',
+  'transfer rupees',
   'credit card',
   'cvv',
   'crypto',

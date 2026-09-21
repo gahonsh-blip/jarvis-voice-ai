@@ -30,6 +30,21 @@ describe('PermissionGuard — finance exclusion', () => {
     expect(result.requiresHumanApproval).toBe(false);
     expect(result.dangerCategory).toBe('FINANCE_RESTRICTION');
   });
+
+  it.each([
+    'transfer money to the client account',
+    'transfer funds to the vendor',
+    'send funds via the payment link',
+    'move money out of the wallet',
+    'transfer rupees to the supplier',
+  ])('blocks the natural-language phrasing: %s', (description) => {
+    const result = PermissionGuard.evaluateAction(
+      makeAction({ type: 'TERMINAL_COMMAND', command: description, description: 'automate the task' }),
+    );
+    expect(result.allowed).toBe(false);
+    expect(result.requiresHumanApproval).toBe(false);
+    expect(result.dangerCategory).toBe('FINANCE_RESTRICTION');
+  });
 });
 
 describe('PermissionGuard — destructive command guard', () => {
