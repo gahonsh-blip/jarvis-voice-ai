@@ -3,6 +3,35 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-21 21:54 IST (16:24 UTC) — Audit trail reports recorded events, not carried-over rows
+
+### Truthfulness / bug fix
+- `GET /api/actions/audit` exposed `totalLogs: memoryState.auditLogs.length` as its
+  only count, and `GET /api/system/health` exposed the same number as
+  `auditLogsCount`. `jarvis_memory.json` ships 23 persisted rows with no `source`
+  field, so rows carried over from a previous process were indistinguishable from
+  events this process actually appended. The API contract document describes the
+  audit count as evidence of actions taken, which makes an inflated count a
+  correctness claim rather than a cosmetic label.
+- Both endpoints now report `recordedLogs` / `recordedAuditLogs`, derived from
+  `auditTrailCounts().recorded` — entries stamped `AUDIT_LOG_SOURCE_RECORDED` —
+  plus `auditTrail` with a plain-language `describeAuditTrail()` summary naming
+  the carried-over count explicitly. `totalLogs` is retained and documented as the
+  raw array length.
+- New `src/utils/hardening/auditTrailTruth.ts` (`auditTrailCounts`,
+  `describeAuditTrail`, `AUDIT_LOG_SOURCE_RECORDED`) and
+  `src/tests/hardening/auditTrailTruth.test.ts` (14 tests), including a cold-start
+  guard that the seed array is empty.
+- Negative-validated: restoring the previously seeded
+  `Read Git Repository Status (Level 1)` row fails exactly 2 of 14
+  (`does not seed a repository read as EXECUTED`,
+  `starts a cold process with an empty audit trail`) and passes 14/14 with it
+  removed.
+- Gates on `3d18aa4`: `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run`
+  61 files / 844 tests passed; `npm run build` exit 0 (`dist/server.cjs`
+  842830 bytes / 823.1 kb).
+
+---
 ## [Unreleased] - 2026-09-21 21:43 IST (16:13 UTC) — Telephony adapters no longer fabricate confirmed provider actions
 
 ### Truthfulness / bug fix
