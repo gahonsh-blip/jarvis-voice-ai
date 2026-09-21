@@ -1593,3 +1593,60 @@ unsanctioned external action — a trust failure worse than a missing feature.
 ### hi-IN summary
 - Android bridge का approval parser "कॉल मत उठाओ" जैसे इनकार को APPROVE समझ रहा
   था; अब वह REJECT देता है, 862 टेस्ट पास, lint और build हरे।
+
+---
+
+## Slot 4 — WORK — 2026-09-21 22:35 IST (17:05 UTC)
+
+**Focus:** close the one loose end left by slot 3 — the PR was open but its body
+still described slot 1 and the operations that depend on GitHub credentials.
+
+### What was done
+- Resolved the "GitHub API 401 Bad credentials" blocker recorded by the previous
+  slot: the token is exported as `$github_token` (lowercase), not `GITHUB_TOKEN`.
+  With the correct variable the API answers normally.
+- Confirmed the pull request for this branch exists and is healthy:
+  **PR #4** — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4 — open,
+  non-draft, base `main`, head `feature/hermes-full-completion` at `d1f03cc`,
+  `mergeable: true`, `mergeable_state: clean`, 90 commits, 132 changed files.
+- Refreshed the PR body (`PATCH /pulls/4`) with a slot-3 section: the item
+  34/33 negation-gate fix, the corrected negative-validation count (**7**, not
+  the "2" originally claimed), the observed gates, the `npm audit` finding, the
+  device/Windows blockers, and an explicit "NOT MERGED — awaiting human
+  approval" statement.
+- Published the missing window state for slot 3 to `automation/hermes-state`
+  (`2b500a3..f336a96`); the state file had never been written for that fire, so
+  `slots_completed` was stuck at 2.
+
+### Observed this slot
+- `git check-ignore -v .env` -> `.gitignore:4:.env` (env file ignored).
+- `git status --short` -> clean.
+- Diff scan over `f3ebc8b^..d1f03cc` for token/key/password -> no credential
+  material; only the tokenizer sense of "token" matched.
+- `npm audit` -> **3 moderate severity vulnerabilities** (`express 4.22.2`
+  depends on a vulnerable `qs`). Pre-existing; reported, not fixed this slot.
+- No source file was modified this slot, so the full suite was already verified
+  on `d1f03cc` (61 files / 862 tests passed; lint exit 0; build exit 0) and was
+  not re-run — stated as such rather than re-asserted.
+
+### Status
+- Tests: 61 files / 862 passed (verified on `d1f03cc`, unchanged tree).
+- Lint: exit 0 (on `d1f03cc`). Build: exit 0 (on `d1f03cc`).
+- E2E: NOT RUN (no device/browser harness in this sandbox).
+- PR: **#4**, open, non-draft, mergeable_state `clean`, body refreshed.
+- Main merge: **NOT MERGED — awaiting human approval.**
+- Deploy: NOT_CONFIGURED — no `DEPLOY_URL` or hosting integration present.
+- Blocked: items 1, 2, 50, 55 (physical Android device), 8 (Windows host).
+
+### Human approval required
+- Review and merge PR #4 to `main`.
+- Decide whether the 3 moderate `npm audit` findings warrant an upgrade.
+
+### Next slot
+- A device-independent Android Bridge / hardening item, or extending the
+  approval-parser hardening to the other spoken-confirmation parsers.
+
+### hi-IN summary
+- GitHub टोकन का सही नाम `$github_token` था, जिससे PR #4 मिला और उसका विवरण
+  अद्यतन किया गया; स्लॉट 3 की state भी प्रकाशित की गई।
+
