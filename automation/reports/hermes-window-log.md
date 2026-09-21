@@ -1999,3 +1999,60 @@ Next Slot:
 - सोशल सर्वर अब केवल क्रेडेंशियल मौजूद होने को 'CONNECTED' नहीं कहता — 4 नए गार्ड,
   पूरी सूट 903/903 पास, फिक्स पुश हो गया।
 
+
+
+---
+
+## Slot 10 — WORK — 2026-09-22 00:36 IST (2026-09-21 19:06 UTC)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:36
+Window date: 2026-09-21   Window slots completed so far: 10
+
+Completed:
+- #13 Zero-fake-success for all tools (extended) — Computer Operator / Screen
+  Researcher panel. `ComputerOperatorModal.tsx` rendered three unmeasured
+  live-screen claims even when the host desktop was unobservable
+  (`probeHostState()` -> `observed:false` on this headless container): a green
+  `STANDBY: SCREEN SYNCHRONIZED` dot, a `0x0` resolution badge, and a
+  `Resolution:` field whose value was `currentObservation?.platform ||
+  'linux-arm64'`. New `src/utils/computerOperator/observationTruth.ts` derives
+  all three from the real observation. Evidence:
+  `src/tests/observationTruth.test.ts` (19 tests) observed passing.
+
+In Progress:
+- #25/#26 Social account authentication / Real platform API integration —
+  PARTIAL; untouched this slot. Live OAuth is NOT_AVAILABLE here.
+
+Bugs Found:
+- Computer Operator panel asserted a synchronized live screen, a measured
+  resolution, and a platform-as-dimension with no observation behind them.
+
+Bugs Fixed:
+- Same. Negative-validated: reintroducing the `STANDBY: SCREEN SYNCHRONIZED`
+  literal fails exactly the source guard — observed `1 failed | 18 passed`;
+  restored, re-observed 19/19.
+
+Tests:    922 passed / 922, 64 files (npx vitest run, observed)
+Lint:     pass — npm run lint (tsc --noEmit) exit 0
+Build:    pass — npm run build exit 0; dist/server.cjs 843115 bytes (823.4 kb)
+E2E:      NOT RUN
+Security: `git check-ignore -v .env` -> .gitignore:4:.env; `git status --short`
+          clean; secret-pattern scan vs origin/main: synthetic fixtures only.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  8e874a4 (fix 61ad02e + docs 8e874a4)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE opened this slot (finalization slot will open/refresh)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Next Slot:
+- Continue the item 13 sweep on the remaining Computer Operator surfaces
+  (command-stream telemetry, task HUD), then communication items #30-#34.
+
+हिंदी सारांश (एक पंक्ति):
+- कंप्यूटर ऑपरेटर पैनल अब बिना मापे "स्क्रीन सिंक्रोनाइज़्ड" नहीं दिखाता — 19 नए
+  टेस्ट, पूरी सूट 922/922 पास, फिक्स पुश हो गया।
