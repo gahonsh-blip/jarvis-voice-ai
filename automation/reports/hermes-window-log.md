@@ -1596,10 +1596,11 @@ unsanctioned external action — a trust failure worse than a missing feature.
 
 ---
 
-## Slot 4 — WORK — 2026-09-21 22:35 IST (17:05 UTC)
+## Slot 3 — WORK — 2026-09-21 22:05 IST (16:36 UTC)
 
-**Focus:** close the one loose end left by slot 3 — the PR was open but its body
-still described slot 1 and the operations that depend on GitHub credentials.
+**Focus:** close the one loose end left by the previous fire — the PR was open but
+its body still described slot 1, and one deferred operation depended on GitHub
+credentials.
 
 ### What was done
 - Resolved the "GitHub API 401 Bad credentials" blocker recorded by the previous
@@ -1614,7 +1615,7 @@ still described slot 1 and the operations that depend on GitHub credentials.
   the "2" originally claimed), the observed gates, the `npm audit` finding, the
   device/Windows blockers, and an explicit "NOT MERGED — awaiting human
   approval" statement.
-- Published the missing window state for slot 3 to `automation/hermes-state`
+- Published the missing window state for the previous fire to `automation/hermes-state`
   (`2b500a3..f336a96`); the state file had never been written for that fire, so
   `slots_completed` was stuck at 2.
 
