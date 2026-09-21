@@ -4,7 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-21 23:35 IST (18:05 UTC) — **WORK SLOT**, slot 8 of the
+Last cycle: 2026-09-22 00:17 IST (2026-09-21 18:47 UTC) — **WORK SLOT**, slot 9 of the
+2026-09-21 window. Items 25/26 (`Social account authentication` / `Real platform
+API integration`) advanced. The **server** side of the social surface still
+overstated, even after the previous slot fixed the UI: `/api/social/platforms`
+(`getPlatformIntegrationsStatus`) labelled a platform `CONNECTED` — and YouTube
+`API_VERIFIED` with `canPublish: true` — from the mere *presence* of credentials,
+although the endpoint makes no provider call and cannot certify a live account.
+The Social Hub then drew a green connected badge and a member/channel banner from
+that unmeasured label. A credential-bearing platform is now reported `CONFIGURED`
+with an explicit *"Credentials present but not verified"* message; a live
+connection is only ever proven by `/api/social/platforms/test`. The same defect
+existed in `/api/auth/youtube/status`, whose static-token branch returned
+`connected: true` / `status: 'API_VERIFIED'` / `canPublish: true` for an
+`YOUTUBE_ACCESS_TOKEN` that had never been probed against Google; it now returns
+`connected: false` / `CONFIGURED` / `canPublish: false`. Guarded by 4 new cases in
+`src/tests/toolSurfaceTruthfulness.test.ts`; negative-validated by reintroducing
+the `'CONNECTED'` literal, which fails the guard (observed **1 failed | 27
+passed**), restored to 28/28. Gates on `d6fa2a5`: lint (`tsc --noEmit`) exit 0,
+vitest 63 files / 903 tests passed, build exit 0 (`dist/server.cjs` 843115 bytes
+/ 823.4 kb). Items 25/26 remain `PARTIAL` — end-to-end auth against real
+production accounts is still `NOT_AVAILABLE` in this environment.
+
+Previous cycle: 2026-09-21 23:35 IST (18:05 UTC) — **WORK SLOT**, slot 8 of the
 2026-09-21 window. Item 13 (`Zero-fake-success for all tools`) extended to the
 **social publishing UI**, which had been fixed server-side (items 27-29) but
 still overstated on screen. Three unmeasured claims: (1) `SocialMediaModal.tsx`
@@ -523,7 +545,7 @@ native helper); until then they are honestly `NOT_AVAILABLE`.
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 25 | Social account authentication | `PARTIAL` | LinkedIn OAuth connect/callback and token storage exist and are exercised against the API. YouTube/Instagram/Facebook credential checks report `MISSING_CREDENTIALS` when unset. No live production accounts were authorised in this environment, so end-to-end auth against real accounts is unverified. |
+| 25 | Social account authentication | `PARTIAL` | LinkedIn OAuth connect/callback and token storage exist and are exercised against the API. YouTube/Instagram/Facebook credential checks report `MISSING_CREDENTIALS` when unset. No live production accounts were authorised in this environment, so end-to-end auth against real accounts is unverified. **2026-09-22 00:17 IST** — `/api/social/platforms` had labelled any platform whose credentials merely *exist* as `CONNECTED` (and YouTube `API_VERIFIED` with `canPublish: true`) although the endpoint makes no provider call; the Social Hub then rendered a member/channel banner from it. A present credential is now `CONFIGURED` with an explicit not-verified message, and YouTube `canPublish` is `false` until a probe confirms the channel. Same defect in `/api/auth/youtube/status`, where an unprobed static env token returned `connected: true` / `API_VERIFIED` / `canPublish: true`. Pinned by `src/tests/toolSurfaceTruthfulness.test.ts` (4 new guards), negative-validated. |
 | 26 | Real platform API integration | `PARTIAL` | LinkedIn publishes through the official REST Posts API (`/rest/posts`). A 2xx is only accepted as a post when the platform returns an identifier (`x-restli-id`/`location`). YouTube/Instagram/Facebook paths exist but have no live credentials here. |
 | 27 | Draft → approval → publish workflow | `VERIFIED` | `src/utils/social/publishRetry.ts` models the state machine and rejects illegal jumps. `DRAFT → PUBLISHED` is refused, `APPROVED` requires a named approver, and `PUBLISHED` requires a provider identifier. 14 workflow unit tests. |
 | 28 | Published-post verification | `VERIFIED` | The provider's own identifier is the only accepted proof. The **UI** now matches the server: `SocialMediaModal.tsx` reports a YouTube upload as verified only when the response carries a provider video ID, otherwise `UNCONFIRMED` (`src/utils/socialPublishHonesty.ts`, 13 tests). A 2xx with no identifier yields `UNVERIFIED`, never `VERIFIED`. Proven end-to-end by `socialPublish.e2e.test.ts`, which starts the real server against a mock LinkedIn. |

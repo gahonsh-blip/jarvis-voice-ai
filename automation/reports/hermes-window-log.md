@@ -1931,3 +1931,71 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - Social Hub अब वह कनेक्शन और Level-4 approval नहीं बताता जो उसने कभी मापा नहीं;
   13 टेस्ट के साथ फिक्स पुश हो गया, पूरी सूट 899/899 पास।
+
+---
+
+## Slot 9 — 2026-09-22 00:17 IST (2026-09-21 18:47 UTC) — WORK SLOT
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:17
+Window date: 2026-09-21 (window started 21:05 IST; this slot fires 00:05 IST 2026-09-22)
+Window slots completed so far: 9
+
+Completed:
+- #25/#26 Social account authentication / Real platform API integration (`PARTIAL`
+  → still `PARTIAL`, server honesty slice landed) — `getPlatformIntegrationsStatus`
+  in `server.ts` labelled a platform `CONNECTED` (YouTube `API_VERIFIED`,
+  `canPublish: true`) from credential presence alone, though the endpoint makes no
+  provider call. Now `CONFIGURED` + explicit not-verified message; YouTube
+  `canPublish: false` until probed. `/api/auth/youtube/status` static-token branch
+  changed from `connected:true`/`API_VERIFIED`/`canPublish:true` to
+  `connected:false`/`CONFIGURED`/`canPublish:false`. Evidence:
+  `src/tests/toolSurfaceTruthfulness.test.ts` 4 new guards, 28/28 passed.
+
+In Progress:
+- #25/#26 — live OAuth against real production accounts remains NOT_AVAILABLE here.
+
+Remaining:
+- #13 zero-fake-success sweep (PARTIAL); computer-operator / screen-research surface
+  not yet audited. #30-#34 communication items PARTIAL/PERMISSION_REQUIRED.
+  #46-#48, #50-#51, #54-#55, #60 remain non-VERIFIED.
+
+Bugs Found:
+- `/api/social/platforms`: unmeasured credential reported as CONNECTED/API_VERIFIED
+  and `canPublish: true`. Found by reading server branch literals against the
+  endpoint's own behaviour (it performs no provider call).
+- `/api/auth/youtube/status`: static env token granted `connected:true` before any probe.
+
+Bugs Fixed:
+- Both above. Verification: reintroducing the `'CONNECTED'` literal fails the new
+  guard (observed 1 failed | 27 passed); with the fix, 28/28 pass.
+
+Tests:    63 files / 903 tests passed (npx vitest run, full suite)
+Lint:     passed — `npm run lint` (tsc --noEmit) exit 0
+Build:    passed — `npm run build` exit 0 (dist/server.cjs 843115 bytes / 823.4 kb)
+E2E:      toolSurfaceTruthfulness.test.ts source-guard suite; no live-provider E2E (NOT_AVAILABLE)
+Security: no .env touched; no token printed or written to a file; remote URL via env only
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  d6fa2a5 (code fix) + docs commit
+Push:    succeeded → origin/feature/hermes-full-completion
+PR:         NONE opened this slot (finalization slot will open/refresh)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- #25/#26 live provider auth — requires real production credentials
+- #1/#2/#50/#55 — physical Android device
+- #8 — Windows host for the PowerShell capture leg
+
+Human Approval Required: none this slot.
+
+Next Slot:
+- Continue the item 13 sweep on the computer-operator / screen-research surface,
+  then communication items #30-#34.
+
+हिंदी सारांश (एक पंक्ति):
+- सोशल सर्वर अब केवल क्रेडेंशियल मौजूद होने को 'CONNECTED' नहीं कहता — 4 नए गार्ड,
+  पूरी सूट 903/903 पास, फिक्स पुश हो गया।
+

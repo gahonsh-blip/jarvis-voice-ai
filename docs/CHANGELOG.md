@@ -3,6 +3,30 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
+## [Unreleased] - 2026-09-22 00:17 IST (2026-09-21 18:47 UTC) — Social credential presence is no longer reported as a live connection
+
+### Bug fix
+- `/api/social/platforms` (`getPlatformIntegrationsStatus`) labelled a platform
+  `CONNECTED` — and YouTube `API_VERIFIED` with `canPublish: true` — from the mere
+  presence of credentials, although the endpoint makes no provider call and cannot
+  certify a live account. The Social Hub then drew a green connected badge and a
+  member/channel banner from that unmeasured label.
+- `/api/auth/youtube/status` returned `connected: true` / `status: 'API_VERIFIED'`
+  / `canPublish: true` for a static `YOUTUBE_ACCESS_TOKEN` that had never been
+  probed against Google.
+
+### Fix
+- A credential-bearing platform is now reported `CONFIGURED` with an explicit
+  *"Credentials present but not verified. Run "Test connection"..."* message
+  (`CRED_STATUS`/`CRED_MESSAGE` in `server.ts`). A live connection is only ever
+  proven by `/api/social/platforms/test`.
+- YouTube `canPublish` is `false` on `/api/social/platforms` until a probe
+  confirms the channel, and the static-token branch of `/api/auth/youtube/status`
+  now returns `connected: false` / `CONFIGURED` / `canPublish: false`.
+- Guarded by 4 new cases in `src/tests/toolSurfaceTruthfulness.test.ts`;
+  negative-validated by reintroducing the `'CONNECTED'` literal (observed
+  **1 failed | 27 passed**), restored to 28/28.
+
 ## [Unreleased] - 2026-09-21 23:35 IST (18:05 UTC) — Social Hub stops reporting connections and approvals it never measured
 
 ### Bug fix
