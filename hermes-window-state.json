@@ -1,37 +1,22 @@
 {
   "window_date": "2026-09-21",
   "window_started_at": "2026-09-21T16:06:00Z",
-  "last_slot_at": "2026-09-21T17:40:00Z",
-  "slots_completed": 6,
+  "last_slot_at": "2026-09-21T18:30:00Z",
+  "slots_completed": 8,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "fff779e",
+  "last_commit": "eae4e78",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 2,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 8,
-      "reason": "Windows host required for the PowerShell capture leg"
-    },
-    {
-      "item": 50,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 55,
-      "reason": "physical device / Windows host required"
-    }
+    {"item": 1, "reason": "physical Android device required"},
+    {"item": 2, "reason": "physical Android device required"},
+    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
+    {"item": 50, "reason": "physical Android device required"},
+    {"item": 55, "reason": "physical device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "SLOT 6 (23:05 IST fire, reported 23:10 IST / 17:40 UTC) - WORK SLOT. Item 13 (zero-fake-success sweep) widened to the telephony webhook-endpoint surface. Two defects: (1) TelephonyHubModal listed POST /api/telephony/twiml/voice as 'TwiML ACTIVE' AND TwilioTelephonyProvider.startOutboundCall used that same non-existent path as its post-answer callback, while server.ts registers only /api/telephony/incoming, /api/telephony/handle-turn and /api/telephony/twiml/turn - a carrier following the advertised callback would 404; (2) three endpoint badges (LIVE & READY / TwiML ACTIVE / GEMINI BRAIN READY) and BlueprintRoadmapModal's 'Security Matrix: Active' footer were hardcoded. Fix: new src/utils/telephonyEndpointTruth.ts (registered-route inventory, telephonyEndpointLabel returning NO SUCH ROUTE for unregistered paths and UNKNOWN until status answers, telephonyBrainLabel from /api/health's measured geminiEnabled, TELEPHONY_TWIML_TURN_PATH); adapter callback retargeted; modal renders derived labels; Security Matrix footer no longer asserts. Guard: src/tests/telephonyEndpointTruth.test.ts 11 tests. Negative-validated: restoring the non-existent path fails exactly the callback-path guard (observed 1 failed | 10 passed), restored 11/11. Observed gates on afdf463: npm run lint (tsc --noEmit) exit 0; npx vitest run 62 files / 882 tests passed; npm run build exit 0 (dist/server.cjs 842396 bytes / 822.7 kb). Docs: docs/COMPLETION_STATUS.md (Last cycle rewritten, item 13 row appended, limitations note), docs/CHANGELOG.md, automation/reports/hermes-window-log.md; commit fff779e. Item 13 stays PARTIAL - still a pattern-driven sweep. Next slot: continue the sweep on the next unaudited tool surface."
+  "notes": "SLOT 8 (23:35 IST fire, reported 23:35 IST / 18:05 UTC) - WORK SLOT. Item 13 (zero-fake-success sweep) extended to the SOCIAL PUBLISHING UI, which had been fixed server-side (items 27-29) but still overstated on screen. Four defects in src/components/SocialMediaModal.tsx: (1) any platform whose credentials merely exist was labelled CONNECTED and drew a green badge - token presence is not a live connection; (2) handleTestConnection trusted success:true alone and spoke '<platform> connection verified live' without reading the provider's own status field or account name; (3) the header printed 'Level 4 Approval Active' without ever fetching /api/security, and the YouTube studio repeated a literal Level-4 claim; (4) the YouTube approve path claimed a verified upload from success:true even with no provider video ID. Fix: new src/utils/socialPublishHonesty.ts - classifyProviderTestResponse returns OK only for success:true + status:'VERIFIED' + a non-empty accountName, mapping every other shape to NOT_CONFIGURED / RECONNECT / FAILED / UNCONFIRMED; connectionStatusLabel describes a present credential as 'Credentials present - live connection not yet verified'; socialApprovalPostureLabel renders the fetched permission level or says the posture is unknown. The modal derives badges, the probe card and the spoken confirmation from that verdict and requires a provider video ID before claiming a verified YouTube upload. Guard: src/tests/socialPublishHonesty.test.ts 13 tests. Negative-validated: reverting the VERIFIED/account guard fails exactly 2 of 13 (observed 'Expected UNCONFIRMED Received OK'), restored 13/13. Observed gates: npm run lint (tsc --noEmit) exit 0; npx vitest run 63 files / 899 tests passed; npm run build exit 0 (dist/server.cjs 842396 bytes / 822.7 kb). Commits b0e018c (fix) and eae4e78 (docs + window log), both pushed to origin/feature/hermes-full-completion. Item 13 stays PARTIAL - still a pattern-driven sweep; item 28's UI claim now matches its server-side proof. Next slot: continue the sweep on the computer-operator / screen-research surface."
 }
