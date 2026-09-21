@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-21 21:54 IST (16:24 UTC) — **WORK SLOT**, slot 2 of the
+Last cycle: 2026-09-21 22:06 IST (16:36 UTC) — **WORK SLOT**, slot 3 of the
+2026-09-21 window. Items 2 and 34 (`PARTIAL`) advanced: the Android mobile-bridge
+owner-approval parser read a *refusal* as consent. `evaluateOwnerApproval` in
+`src/utils/androidBridgeEngine.ts` listed the bare Devanagari verb stem `उठा`
+("lift/answer") as an approval keyword and matched Devanagari keywords with
+`token.startsWith(keyword)`, so a spoken command such as `कॉल मत उठाओ`
+("don't answer the call") — and `नहीं उठा`, `मत उठा`, `कॉल नहीं उठाना` — returned
+`decision: 'APPROVE'`. Because this result is what the Level-4 human
+authorization gate consumes, a refusal could satisfy the very gate that exists to
+prevent an unsanctioned external action. Fixed: the ambiguous bare stem is
+dropped (`उठा लो` replaces it), Devanagari keywords now require whole-token
+equality (`token === keyword`) with no prefix fallback, and rejection keywords are
+evaluated before approval keywords so a self-contradicting phrase resolves to
+`REJECT`. Guarded by the new
+`describe('Owner approval parsing — negation must never grant consent')` block in
+`src/tests/androidMobileBridge.test.ts` (18 assertions): five refusal phrases must
+be `REJECT`, six genuine approvals must still be `APPROVE`, five genuine
+rejections must stay `REJECT`, message negation (`मत भेजो`, `नहीं भेजना`) must be
+`REJECT` while `भेज दो` is `APPROVE`, and a refused call must remain
+`AWAITING_APPROVAL`. Negative-validated on 2026-09-21 22:47 IST by restoring
+`src/utils/androidBridgeEngine.ts` from `f3ebc8b^`: **7 of the new tests fail**
+(`expected 'APPROVE' to be 'REJECT'`) and all 35 pass again with the fix
+restored. Note: the `f3ebc8b` commit message says "2 of the new tests fail"; that
+figure was wrong and is superseded by this measured 7. History was not rewritten
+to correct it.
+Observed gates on `f3ebc8b`: `npm run lint` (`tsc --noEmit`) exit 0;
+`npx vitest run` **61 files / 862 tests passed** in 19.40s; `npm run build` exit 0
+(`dist/server.cjs` 842293 bytes / 822.6 kb). No other item changed status.
+
+Prior cycle: 2026-09-21 21:54 IST (16:24 UTC) — **WORK SLOT**, slot 2 of the
 2026-09-21 window. Item 13 (`PARTIAL`) advanced: `/api/actions/audit` and
 `/api/system/health` reported only the raw audit-array length, and the 23 rows
 persisted in `jarvis_memory.json` carry no provenance, so carried-over rows were
@@ -349,7 +378,7 @@ files / 675 tests, clean lint, clean build.
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
 | 1 | Real Android Mobile Bridge connection | `PARTIAL` | Authenticated pairing + capability handshake verified by `androidBridge.e2e.test.ts` (real server process). Physical device leg unverified. |
-| 2 | Android → JARVIS → Server E2E test | `PARTIAL` | Full server-side chain verified E2E. Device-to-server leg needs hardware. |
+| 2 | Android → JARVIS → Server E2E test | `PARTIAL` | Full server-side chain verified E2E. Device-to-server leg needs hardware. **2026-09-21 22:06 IST** — the owner-approval leg of the chain was reading refusals as consent (see item 34); a refused call now stays `AWAITING_APPROVAL` and the guard is pinned in `src/tests/androidMobileBridge.test.ts`. |
 | 3 | Real Android battery/status telemetry | `VERIFIED` (server) | Device-reported telemetry only; fabricated defaults removed. |
 | 4 | Real Android notifications integration | `VERIFIED` (server) | Notification listener gated and replay-protected. Sensitive-content filter is now tested: `src/tests/mobileNotificationPrivacy.test.ts` (39 tests). A garbled Hindi OTP matcher that let Hindi OTP bodies through was found and fixed 2026-09-20 21:05 IST. 2026-09-21 02:10 IST: a regression introduced by the 01:05 IST slot had made the redaction guard switchable off via `sensitiveFilteringEnabled`; that was reverted (guard is unconditional, field removed) and is pinned by `src/tests/androidBridgePrivacySettings.test.ts` (5 tests), negative-validated. |
 | 5 | Real Android location/GPS integration | `VERIFIED` (server) | `ACCESS_FINE_LOCATION` gating with real coordinates accepted. |
@@ -454,7 +483,7 @@ Bugs found and fixed while building this:
 | 31 | Real notification reply | `PARTIAL` | Reply route requires an explicit `approved: true` and reports `DISPATCHED`, never success, until the device confirms. Delivery on a real handset is unverified. |
 | 32 | Call detection E2E | `PARTIAL` | Call state is reported from device telemetry, and the E2E suite covers the telemetry chain. No physical call has been detected by this host. |
 | 33 | Call answering | `PERMISSION_REQUIRED` | Answering is refused unless the device holds the dialer role; the refusal names the required grant. No real call has been answered. |
-| 34 | Message sending with approval | `PARTIAL` | Approval gate verified server-side (`approved: true` required, kill switch honoured). Real-device delivery unverified. |
+| 34 | Message sending with approval | `PARTIAL` | Approval gate verified server-side (`approved: true` required, kill switch honoured). Real-device delivery unverified. **2026-09-21 22:06 IST** — the shared `evaluateOwnerApproval` parser read Hindi refusals as consent for both calls and messages: the bare verb stem `उठा` was an approval keyword and Devanagari matching used a prefix fallback, so `कॉल मत उठाओ` returned `APPROVE`. Stem dropped, whole-token matching enforced, rejection evaluated first. Guarded by `src/tests/androidMobileBridge.test.ts` (18 assertions), negative-validated (**7 tests fail** with the fix reverted, measured 22:47 IST). |
 
 ### Communication — what is real vs. not
 

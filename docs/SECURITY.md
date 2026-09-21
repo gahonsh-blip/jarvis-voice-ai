@@ -14,6 +14,22 @@ HERMES JARVIS enforces a strict 4-level permission policy across all subsystems:
 ### Level 4 Invariant:
 No external write, upload, or broadcasting action can occur without explicit human approval ("YES / APPROVE").
 
+### Spoken-approval parsing (Android bridge)
+The approval gate is only as strong as the parser that reads the owner's reply.
+`evaluateOwnerApproval` in `src/utils/androidBridgeEngine.ts` previously returned
+`APPROVE` for Hindi refusals — `कॉल मत उठाओ` ("don't answer the call"), `नहीं उठा`,
+`मत उठा`, `कॉल नहीं उठाना` — because the bare Devanagari verb stem `उठा` was
+listed as an approval keyword and Devanagari keywords matched with
+`token.startsWith(keyword)`. A refusal could therefore satisfy the Level-4 gate.
+
+The parser now: drops the ambiguous bare stem, requires whole-token equality for
+Devanagari keywords (no prefix fallback), and evaluates rejection keywords before
+approval keywords so a self-contradicting phrase resolves to `REJECT`. Pinned by
+`src/tests/androidMobileBridge.test.ts`, negative-validated.
+
+Anything that consumes an approval decision must treat `REJECT` and "no decision"
+as distinct from `APPROVE`, and must never default to consent on an unparsed reply.
+
 ---
 
 ## 2. Strict Financial Exclusions Guard

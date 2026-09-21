@@ -3,7 +3,29 @@
 All notable improvements, security updates, and feature additions are documented in this file.
 
 ---
-## [Unreleased] - 2026-09-21 21:54 IST (16:24 UTC) — Audit trail reports recorded events, not carried-over rows
+## [Unreleased] - 2026-09-21 22:06 IST (16:36 UTC) — Owner approval parser no longer reads a refusal as consent
+
+### Security / bug fix
+- `evaluateOwnerApproval` in `src/utils/androidBridgeEngine.ts` reported
+  `decision: 'APPROVE'` for Hindi *refusals* such as `कॉल मत उठाओ`
+  ("don't answer the call"), `नहीं उठा`, `मत उठा` and `कॉल नहीं उठाना`. Two causes:
+  the bare Devanagari verb stem `उठा` was listed as an approval keyword even
+  though it occurs inside negated phrases, and Devanagari keywords were matched
+  with `token.startsWith(keyword)`, which matched the stem inside longer words.
+- This is a Level-4 human authorization gate input. A phrase meaning "do not do
+  it" could therefore satisfy the gate that exists to prevent an unsanctioned
+  external action — a trust failure worse than a missing feature.
+- Fix: removed the ambiguous bare `उठा` stem (`उठा लो` replaces it), Devanagari
+  keywords now require whole-token equality with no prefix fallback, and rejection
+  keywords are evaluated before approval keywords so a self-contradicting phrase
+  resolves to `REJECT`.
+- Guard: new `describe('Owner approval parsing — negation must never grant
+  consent')` block in `src/tests/androidMobileBridge.test.ts` (18 assertions
+  across refusals, genuine approvals, genuine rejections, message negation, and
+  that a refused call stays `AWAITING_APPROVAL`). Negative-validated: restoring
+  `src/utils/androidBridgeEngine.ts` from `f3ebc8b^` fails **7** of these tests
+  (`expected 'APPROVE' to be 'REJECT'`); all 35 pass with the fix restored.
+  (Measured 2026-09-21 22:47 IST. An earlier figure of "2" was wrong.)
 
 ### Truthfulness / bug fix
 - `GET /api/actions/audit` exposed `totalLogs: memoryState.auditLogs.length` as its
