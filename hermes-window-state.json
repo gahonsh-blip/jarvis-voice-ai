@@ -1,37 +1,22 @@
 {
   "window_date": "2026-09-21",
   "window_started_at": "2026-09-21T16:06:00Z",
-  "last_slot_at": "2026-09-21T19:06:00Z",
-  "slots_completed": 10,
+  "last_slot_at": "2026-09-21T19:36:00Z",
+  "slots_completed": 11,
   "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools (Computer Operator panel slice)",
+  "current_item_title": "Zero-fake-success for all tools (Android Bridge app-launch slice)",
   "current_item_status": "PARTIAL",
-  "last_commit": "2a116fc",
+  "last_commit": "9a68892",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 2,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 8,
-      "reason": "Windows host required for the PowerShell capture leg"
-    },
-    {
-      "item": 50,
-      "reason": "physical Android device required"
-    },
-    {
-      "item": 55,
-      "reason": "physical device / Windows host required"
-    }
+    {"item": 1, "reason": "physical Android device required"},
+    {"item": 2, "reason": "physical Android device required"},
+    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
+    {"item": 50, "reason": "physical Android device required"},
+    {"item": 55, "reason": "physical device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "SLOT 10 (00:35 IST fire, reported 00:36 IST / 2026-09-21 19:06 UTC) - WORK SLOT. Item 13 (zero-fake-success sweep) extended to the Computer Operator / Screen Researcher panel. ComputerOperatorModal.tsx rendered three unmeasured live-screen claims even when the host was unobservable (probeHostState() returns observed:false on this headless container, and describeHostScreen() correctly sets isAmbiguous:true): (1) a green dot with the literal 'STANDBY: SCREEN SYNCHRONIZED', drawn from the mere absence of a running task; (2) the resolution badge printed screenResolution.width x height, which is 0x0 for an unobservable host; (3) a field labelled 'Resolution:' whose value was currentObservation.platform || 'linux-arm64' - a platform name presented as a measured dimension. New src/utils/computerOperator/observationTruth.ts derives all three from the real observation: screenSyncState()/screenSyncLabel() hold at ILLUSTRATIVE (preview) or UNOBSERVED (absent/ambiguous) and only report 'SCREEN OBSERVED FROM HOST' for a real observation; observationResolutionLabel() returns UNKNOWN instead of 0x0; observationPlatformLabel() labels the platform as a platform; observationAmbiguityNotice() surfaces the host ambiguityReason. State dot now red for UNOBSERVED / grey for ILLUSTRATIVE, never green. Guard: src/tests/observationTruth.test.ts (19 tests) - observed passing. Negative-validated: reintroducing 'STANDBY: SCREEN SYNCHRONIZED' fails exactly the source guard (observed 1 failed | 18 passed); restored, re-observed 19/19. Observed gates: npm run lint (tsc --noEmit) exit 0; npx vitest run 64 files / 922 tests passed; npm run build exit 0 (dist/server.cjs 843115 bytes / 823.4 kb). Commits 61ad02e (fix), 8e874a4 (docs), 2a116fc (window log) pushed to origin/feature/hermes-full-completion. Item 13 stays PARTIAL - pattern-driven sweep, not proof no unmeasured claim survives. Next slot: continue the item 13 sweep on the remaining Computer Operator surfaces (command-stream telemetry, task HUD), then communication items 30-34."
+  "notes": "SLOT 11 (01:05 IST fire / 2026-09-21 19:36 UTC) - WORK SLOT. Item 13 (zero-fake-success sweep) extended to the Android Bridge app-launch path. AndroidBridgeManager.openApplication() in src/utils/androidBridgeEngine.ts recorded an APP_OPENED audit event with result UNSUPPORTED but ran no gates at all, and SimulatedAndroidAdapter.openApp() in src/utils/androidBridgeAdapter.ts returned a hardcoded success:true reading '[SIMULATION_ONLY] Launch intent triggered'; App.tsx handleOpenMobileApp discarded the return value. A launch could be presented as done on a disconnected bridge, under the Global Kill Switch, or on a device not reporting launch capability. Fix: openApplication() now checks four real gates in order (bridge connected + capability handshake, emergency stop, device canOpenApp, app privacy rule), returns success:false with a blockedReason on every path, and audits each refusal with the matching result (privacy-denied now records ACTION_DENIED instead of APP_OPENED). The simulated adapter delegates to the engine; App.tsx speaks the real message. Guard: src/tests/androidMobileBridge.test.ts Scenarios 17-18 (37 tests in file) - observed 37/37 passing. Negative-validated: replacing the connection gate with if(false) fails Scenario 17 with TypeError Cannot read properties of null (reading 'canOpenApp') (observed 1 failed | 36 skipped); restored, re-observed 37/37. Observed gates: npm run lint (tsc --noEmit) exit 0; npx vitest run 64 files / 924 tests passed; npm run build exit 0 (dist/server.cjs 825.6 kb). Commits ffc5949 (fix), 9a68892 (docs) pushed to origin/feature/hermes-full-completion. Item 13 stays PARTIAL - pattern-driven sweep, not proof no unmeasured claim survives. Next slot: continue item 13 into the communication path or the Autonomous Tools HUD, then communication items 30-34."
 }
