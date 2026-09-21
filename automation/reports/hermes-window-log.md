@@ -2340,3 +2340,90 @@ clean tip `0a829e0` (a docs-only commit on top of `bd79593`) and observed again:
 `npm run build` exit 0, `dist/server.cjs` **852453 bytes** (832.5 kb). No files
 changed by the gates — `git status --short` clean; `dist/` and `.env` are
 git-ignored.
+
+
+## Slot 15 — 2026-09-22 02:35 IST (WORK)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:35 (fire) / 03:05 (report)
+Window date: 2026-09-22   Window slots completed so far: 15
+
+Completed:
+- #51 Complete security audit (Level-4 finance exclusion gate) — PARTIAL.
+  Evidence:
+  * `src/utils/computerOperator/actionExecutorHost.ts` — `HostActionExecutor.execute()`
+    previously resolved the workspace path and shelled out with **no** `PermissionGuard`
+    call, so a financial TERMINAL_COMMAND ("transfer money to the client") reached the real
+    shell. It also let `approved: true` lift the Level-4 approval gate for *every* category.
+  * Fix: `PermissionGuard.permanentBlock()` in `src/utils/computerOperator/permissionGuard.ts`
+    is now the single owner of the never-permissible categories; `evaluateHostSafety()` and the
+    browser-side `ActionExecutor.forwardToHost()` both call it; the duplicated section-4 block was
+    removed from `evaluateAction()`. `HostActionExecutor.safetyRefusal()` gates every dispatch
+    (held destructive → `PERMISSION_REQUIRED`, permanent → `BLOCKED`); `approved: true` still
+    satisfies the ordinary Level-4 human gate but cannot lift the finance exclusion.
+    `server.ts` `emergencyActive()` now delegates to shared `isEmergencyStopActive()`.
+  * Test: new block "HostActionExecutor - Level-4 safety gate (item 51)" in
+    `src/tests/hostActionExecutor.test.ts` (6 cases); `src/tests/financeGuard.test.ts`.
+- Gate re-confirmation this slot, observed on the frozen tip `0a829e0`: lint exit 0,
+  66 files / 954 tests passed (19.61s), build exit 0, `dist/server.cjs` 852453 bytes.
+
+In Progress:
+- #51 remains PARTIAL — pattern scan plus targeted gates only. No independent external
+  penetration test was performed (NOT RUN — no such tooling/credential in this sandbox).
+
+Remaining:
+- #1 / #2 / #50 / #55 — Android Bridge / Real Android E2E / Real Screenshot / device legs:
+  BLOCKED, physical Android device required.
+- #8 — Windows host leg: BLOCKED, Windows host required.
+- Voice, Wake Word, Production Hardening: not yet started / UNVERIFIED in this window.
+
+Bugs Found:
+- Level-4 finance exclusion was not consulted at all by the OS-command dispatch path
+  (`HostActionExecutor.execute()`), and a bare `approved: true` could carry a
+  never-permissible category through. Found by reading the dispatch path rather than by
+  keyword scanning.
+- Hindi refusal parser could approve on a bare Devanagari `उठा` prefix; fixed to whole-token
+  equality for Devanagari with rejections evaluated before approvals.
+
+Bugs Fixed:
+- The dispatch-path finance exclusion, fixed by the shared `permanentBlock()` ownership
+  described above. Negative validation: with `safetyRefusal()` disabled, 5 failed | 39 passed
+  of 44 in `hostActionExecutor.test.ts`; restored, 44 passed of 44.
+
+Tests:    66 files / 954 tests passed (`npx vitest run`, exit 0) — observed this run
+Lint:     exit 0 (`npm run lint` → `tsc --noEmit`) — observed this run
+Build:    exit 0; `dist/server.cjs` 852453 bytes (832.5 kb) — observed this run
+E2E:      NOT RUN — no physical Android device; no deployment target
+Security: `.env` git-ignored (`git check-ignore -v .env` → `.gitignore:4`), `dist/` ignored,
+          `git status --short` clean, no token/key in the diff. Independent external
+          audit: NOT RUN (not available in this sandbox).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, docs/SECURITY.md,
+               automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  73de1a4 (code fix bd79593, docs 3c9a8e7, report 0a829e0, gate re-confirmation 73de1a4)
+Push:    succeeded — feature/hermes-full-completion (0a829e0..73de1a4);
+         automation/hermes-state (e5ac356..b3d6d11, slots_completed=15)
+
+PR:          #4 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+             open, non-draft, mergeable_state=clean, body refreshed with the Slot 15 section
+Main merge:  NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:      NOT_CONFIGURED — no DEPLOY_URL or hosting integration present in this sandbox;
+             the verified artifact (dist/server.cjs, 852453 bytes) is the deployment unit available
+
+Blocked:
+- #1/#2/#50/#55 — requires a physical Android device
+- #8 — requires a Windows host
+- #51 independent external pen-test — requires security tooling/credential not present here
+
+Human Approval Required:
+- Review and merge PR #4. The automation will not merge to `main` under any circumstances.
+
+Next Slot:
+- 04:35 IST FINALIZATION: freeze the tip, run `npm run lint && npx vitest run && npm run build`,
+  run the repository security checks (`git check-ignore -v .env`, `git status --short`,
+  `git diff --stat origin/main`), keep PR #4 one-click mergeable, write
+  `finalized: true` state, and produce the final window report. No new development.
+
+हिंदी सारांश (एक पंक्ति):
+- Level-4 फ़ाइनेंस एक्सक्लूज़न गेट अब हर dispatch पथ पर लागू है (पहले OS-command पथ पर कतई लागू नहीं था); lint 0, 66 फ़ाइलें/954 टेस्ट पास, build 0 — आइटम #51 अभी भी PARTIAL है, PR #4 इंसानी मंज़ूरी का इंतज़ार कर रहा है।
