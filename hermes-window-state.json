@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-21",
   "window_started_at": "2026-09-21T16:06:00Z",
-  "last_slot_at": "2026-09-21T18:30:00Z",
-  "slots_completed": 8,
-  "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools",
+  "last_slot_at": "2026-09-21T18:47:00Z",
+  "slots_completed": 9,
+  "current_item": 25,
+  "current_item_title": "Social account authentication / Real platform API integration",
   "current_item_status": "PARTIAL",
-  "last_commit": "eae4e78",
+  "last_commit": "82a80d1",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -18,5 +18,5 @@
     {"item": 55, "reason": "physical device / Windows host required"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "SLOT 8 (23:35 IST fire, reported 23:35 IST / 18:05 UTC) - WORK SLOT. Item 13 (zero-fake-success sweep) extended to the SOCIAL PUBLISHING UI, which had been fixed server-side (items 27-29) but still overstated on screen. Four defects in src/components/SocialMediaModal.tsx: (1) any platform whose credentials merely exist was labelled CONNECTED and drew a green badge - token presence is not a live connection; (2) handleTestConnection trusted success:true alone and spoke '<platform> connection verified live' without reading the provider's own status field or account name; (3) the header printed 'Level 4 Approval Active' without ever fetching /api/security, and the YouTube studio repeated a literal Level-4 claim; (4) the YouTube approve path claimed a verified upload from success:true even with no provider video ID. Fix: new src/utils/socialPublishHonesty.ts - classifyProviderTestResponse returns OK only for success:true + status:'VERIFIED' + a non-empty accountName, mapping every other shape to NOT_CONFIGURED / RECONNECT / FAILED / UNCONFIRMED; connectionStatusLabel describes a present credential as 'Credentials present - live connection not yet verified'; socialApprovalPostureLabel renders the fetched permission level or says the posture is unknown. The modal derives badges, the probe card and the spoken confirmation from that verdict and requires a provider video ID before claiming a verified YouTube upload. Guard: src/tests/socialPublishHonesty.test.ts 13 tests. Negative-validated: reverting the VERIFIED/account guard fails exactly 2 of 13 (observed 'Expected UNCONFIRMED Received OK'), restored 13/13. Observed gates: npm run lint (tsc --noEmit) exit 0; npx vitest run 63 files / 899 tests passed; npm run build exit 0 (dist/server.cjs 842396 bytes / 822.7 kb). Commits b0e018c (fix) and eae4e78 (docs + window log), both pushed to origin/feature/hermes-full-completion. Item 13 stays PARTIAL - still a pattern-driven sweep; item 28's UI claim now matches its server-side proof. Next slot: continue the sweep on the computer-operator / screen-research surface."
+  "notes": "SLOT 9 (00:05 IST fire, reported 00:17 IST / 2026-09-21 18:47 UTC) - WORK SLOT. Items 25/26 (social account authentication / real platform API integration) advanced: the SERVER side of the social surface still overstated after slot 8 fixed the UI. getPlatformIntegrationsStatus in server.ts labelled a platform CONNECTED - and YouTube API_VERIFIED with canPublish:true - from the mere PRESENCE of credentials, although the endpoint performs no provider call and cannot certify a live account; the Social Hub then drew a connected badge and member/channel banner from it. Now a credential-bearing platform is CONFIGURED with an explicit 'Credentials present but not verified. Run Test connection...' message, and YouTube canPublish is false until a probe confirms the channel. The same defect existed in /api/auth/youtube/status, whose static YOUTUBE_ACCESS_TOKEN branch returned connected:true / status API_VERIFIED / canPublish:true without any Google probe; it now returns connected:false / CONFIGURED / canPublish:false. Guard: 4 new cases in src/tests/toolSurfaceTruthfulness.test.ts. Negative-validated: reintroducing the CONNECTED literal fails the guard (observed 1 failed | 27 passed), restored 28/28. Observed gates: npm run lint (tsc --noEmit) exit 0; npx vitest run 63 files / 903 tests passed; npm run build exit 0 (dist/server.cjs 843115 bytes / 823.4 kb). Commits d6fa2a5 (fix) and 82a80d1 (docs + window log), both pushed to origin/feature/hermes-full-completion. Items 25/26 stay PARTIAL - live OAuth against real production accounts is NOT_AVAILABLE in this environment. Next slot: continue the item 13 sweep on the computer-operator / screen-research surface, then communication items 30-34."
 }
