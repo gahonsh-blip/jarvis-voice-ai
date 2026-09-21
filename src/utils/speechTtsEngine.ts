@@ -312,10 +312,12 @@ export function buildSpeechDiagnostics(
       statusMessage = 'Hindi TTS voice unavailable on this device/browser.';
     }
   } else if (!isSynthesisSupported) {
+    // Nothing can play when the platform has no synthesis API. Saying a voice
+    // is "Active" here would report a pipeline that cannot run.
     statusMessage = 'SpeechSynthesis API not supported on this browser platform.';
   } else {
     statusMessage = resolution.selectedVoice
-      ? `TTS Active: ${resolution.selectedVoice.name} (${resolution.selectedVoice.lang})`
+      ? `Voice selected (not yet confirmed by playback): ${resolution.selectedVoice.name} (${resolution.selectedVoice.lang})`
       : 'Default System Voice';
   }
 
@@ -328,6 +330,26 @@ export function buildSpeechDiagnostics(
     speechSynthesisAvailable: isSynthesisSupported,
     ttsErrorState,
     statusMessage,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Applies a confirmed runtime speech error to an existing diagnostics snapshot.
+ *
+ * The `onerror` handler previously flipped only `ttsErrorState`, leaving the
+ * status text reading "TTS Active ..." — a claim the failed utterance had just
+ * disproved. Keep the two fields consistent so the HUD always shows the error.
+ */
+export function applySpeechErrorToDiagnostics(
+  diagnostics: SpeechDiagnostics | null,
+  errorState: string
+): SpeechDiagnostics | null {
+  if (!diagnostics) return null;
+  return {
+    ...diagnostics,
+    ttsErrorState: errorState,
+    statusMessage: `Speech error: ${errorState}`,
     timestamp: new Date().toISOString(),
   };
 }

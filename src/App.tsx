@@ -85,6 +85,7 @@ import {
   determineTtsLocale,
   findBestVoiceForLocale,
   buildSpeechDiagnostics,
+  applySpeechErrorToDiagnostics,
   SpeechDiagnostics,
 } from './utils/speechTtsEngine';
 import { isSpeechInterruptionCommand } from './utils/languages';
@@ -476,7 +477,7 @@ export default function App() {
           setIsSpeaking(false);
           const errType = event.error || 'unknown_error';
           console.warn('[HERMES JARVIS TTS] Speech error event:', errType);
-          setSpeechDiagnostics((prev) => (prev ? { ...prev, ttsErrorState: String(errType) } : null));
+          setSpeechDiagnostics((prev) => applySpeechErrorToDiagnostics(prev, String(errType)));
           setStatusText('SYSTEM READY');
         };
 
@@ -489,7 +490,7 @@ export default function App() {
         activeUtteranceRef.current = null;
         setIsSpeaking(false);
         setSpeechDiagnostics((prev) =>
-          prev ? { ...prev, ttsErrorState: err?.message || 'exception' } : null
+          applySpeechErrorToDiagnostics(prev, err?.message || 'exception')
         );
       }
     },
