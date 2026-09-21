@@ -1,22 +1,37 @@
 {
   "window_date": "2026-09-21",
   "window_started_at": "2026-09-21T16:06:00Z",
-  "last_slot_at": "2026-09-21T18:47:00Z",
-  "slots_completed": 9,
-  "current_item": 25,
-  "current_item_title": "Social account authentication / Real platform API integration",
+  "last_slot_at": "2026-09-21T19:06:00Z",
+  "slots_completed": 10,
+  "current_item": 13,
+  "current_item_title": "Zero-fake-success for all tools (Computer Operator panel slice)",
   "current_item_status": "PARTIAL",
-  "last_commit": "82a80d1",
+  "last_commit": "2a116fc",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {"item": 1, "reason": "physical Android device required"},
-    {"item": 2, "reason": "physical Android device required"},
-    {"item": 8, "reason": "Windows host required for the PowerShell capture leg"},
-    {"item": 50, "reason": "physical Android device required"},
-    {"item": 55, "reason": "physical device / Windows host required"}
+    {
+      "item": 1,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 2,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 8,
+      "reason": "Windows host required for the PowerShell capture leg"
+    },
+    {
+      "item": 50,
+      "reason": "physical Android device required"
+    },
+    {
+      "item": 55,
+      "reason": "physical device / Windows host required"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "SLOT 9 (00:05 IST fire, reported 00:17 IST / 2026-09-21 18:47 UTC) - WORK SLOT. Items 25/26 (social account authentication / real platform API integration) advanced: the SERVER side of the social surface still overstated after slot 8 fixed the UI. getPlatformIntegrationsStatus in server.ts labelled a platform CONNECTED - and YouTube API_VERIFIED with canPublish:true - from the mere PRESENCE of credentials, although the endpoint performs no provider call and cannot certify a live account; the Social Hub then drew a connected badge and member/channel banner from it. Now a credential-bearing platform is CONFIGURED with an explicit 'Credentials present but not verified. Run Test connection...' message, and YouTube canPublish is false until a probe confirms the channel. The same defect existed in /api/auth/youtube/status, whose static YOUTUBE_ACCESS_TOKEN branch returned connected:true / status API_VERIFIED / canPublish:true without any Google probe; it now returns connected:false / CONFIGURED / canPublish:false. Guard: 4 new cases in src/tests/toolSurfaceTruthfulness.test.ts. Negative-validated: reintroducing the CONNECTED literal fails the guard (observed 1 failed | 27 passed), restored 28/28. Observed gates: npm run lint (tsc --noEmit) exit 0; npx vitest run 63 files / 903 tests passed; npm run build exit 0 (dist/server.cjs 843115 bytes / 823.4 kb). Commits d6fa2a5 (fix) and 82a80d1 (docs + window log), both pushed to origin/feature/hermes-full-completion. Items 25/26 stay PARTIAL - live OAuth against real production accounts is NOT_AVAILABLE in this environment. Next slot: continue the item 13 sweep on the computer-operator / screen-research surface, then communication items 30-34."
+  "notes": "SLOT 10 (00:35 IST fire, reported 00:36 IST / 2026-09-21 19:06 UTC) - WORK SLOT. Item 13 (zero-fake-success sweep) extended to the Computer Operator / Screen Researcher panel. ComputerOperatorModal.tsx rendered three unmeasured live-screen claims even when the host was unobservable (probeHostState() returns observed:false on this headless container, and describeHostScreen() correctly sets isAmbiguous:true): (1) a green dot with the literal 'STANDBY: SCREEN SYNCHRONIZED', drawn from the mere absence of a running task; (2) the resolution badge printed screenResolution.width x height, which is 0x0 for an unobservable host; (3) a field labelled 'Resolution:' whose value was currentObservation.platform || 'linux-arm64' - a platform name presented as a measured dimension. New src/utils/computerOperator/observationTruth.ts derives all three from the real observation: screenSyncState()/screenSyncLabel() hold at ILLUSTRATIVE (preview) or UNOBSERVED (absent/ambiguous) and only report 'SCREEN OBSERVED FROM HOST' for a real observation; observationResolutionLabel() returns UNKNOWN instead of 0x0; observationPlatformLabel() labels the platform as a platform; observationAmbiguityNotice() surfaces the host ambiguityReason. State dot now red for UNOBSERVED / grey for ILLUSTRATIVE, never green. Guard: src/tests/observationTruth.test.ts (19 tests) - observed passing. Negative-validated: reintroducing 'STANDBY: SCREEN SYNCHRONIZED' fails exactly the source guard (observed 1 failed | 18 passed); restored, re-observed 19/19. Observed gates: npm run lint (tsc --noEmit) exit 0; npx vitest run 64 files / 922 tests passed; npm run build exit 0 (dist/server.cjs 843115 bytes / 823.4 kb). Commits 61ad02e (fix), 8e874a4 (docs), 2a116fc (window log) pushed to origin/feature/hermes-full-completion. Item 13 stays PARTIAL - pattern-driven sweep, not proof no unmeasured claim survives. Next slot: continue the item 13 sweep on the remaining Computer Operator surfaces (command-stream telemetry, task HUD), then communication items 30-34."
 }
