@@ -47,7 +47,13 @@ import {
   getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
-import { telephonyEndpointLabel, telephonyBrainLabel } from '../utils/telephonyEndpointTruth';
+import {
+  telephonyEndpointLabel,
+  telephonyBrainLabel,
+  telephonyReadiness,
+  voiceAgentLabel,
+  receptionistLabel,
+} from '../utils/telephonyEndpointTruth';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
 import {
   downloadCallHistoryCsv,
@@ -289,6 +295,20 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     dlAnchorElem.click();
   };
 
+  const readiness = telephonyReadiness(providerStatus);
+  const readinessBadgeClass =
+    readiness === 'CONFIGURED'
+      ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
+      : readiness === 'NOT_CONFIGURED'
+      ? 'bg-amber-950/80 border-amber-500/40 text-amber-300'
+      : 'bg-slate-900 border-slate-600/60 text-slate-300';
+  const readinessDotClass =
+    readiness === 'CONFIGURED'
+      ? 'bg-emerald-400'
+      : readiness === 'NOT_CONFIGURED'
+      ? 'bg-amber-400'
+      : 'bg-slate-400';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
       <div className="relative flex flex-col h-[90vh] max-h-[820px] w-full max-w-5xl rounded-2xl border border-cyan-500/30 bg-slate-950 shadow-2xl shadow-cyan-950/40 overflow-hidden">
@@ -301,9 +321,9 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold tracking-wide text-white">HERMES JARVIS • Telephony & Call Hub</h2>
-                <span className="flex items-center gap-1 rounded-full bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-mono text-emerald-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  VOICE AGENT ACTIVE
+                <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-mono ${readinessBadgeClass}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${readinessDotClass}${readiness === 'CONFIGURED' ? ' animate-pulse' : ''}`} />
+                  {voiceAgentLabel(providerStatus)}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -601,8 +621,14 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                       <Bot className="h-5 w-5 text-cyan-400" />
                       <h3 className="text-sm font-bold text-white">AI Autonomous Receptionist</h3>
                     </div>
-                    <span className="rounded bg-emerald-950 px-2 py-0.5 text-[10px] font-mono text-emerald-300 border border-emerald-800">
-                      READY TO ANSWER
+                    <span className={`rounded px-2 py-0.5 text-[10px] font-mono border ${
+                      readiness === 'CONFIGURED'
+                        ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                        : readiness === 'NOT_CONFIGURED'
+                        ? 'bg-amber-950 text-amber-300 border-amber-800'
+                        : 'bg-slate-900 text-slate-300 border-slate-700'
+                    }`}>
+                      {receptionistLabel(providerStatus)}
                     </span>
                   </div>
 
@@ -1259,20 +1285,22 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                   )}
 
                   {/* Webhook Endpoints — inventory and every badge are derived
-                      from routes actually registered in server.ts, not asserted. */}
+                      from routes actually registered in server.ts, not asserted.
+                      The readiness flag is the measured status, so an
+                      unanswered /api/telephony/status holds the badge at UNKNOWN. */}
                   <div className="rounded-xl bg-slate-950 border border-slate-800 p-3">
                     <div className="text-[11px] font-mono text-cyan-400 uppercase mb-2">Live Webhook Endpoints</div>
                     <div className="space-y-1 text-xs font-mono text-slate-300">
                       <div className="flex items-center justify-between">
                         <span>POST /api/telephony/incoming</span>
-                        <span className="text-emerald-400 text-[10px]">
-                          {telephonyEndpointLabel('/api/telephony/incoming', true)}
+                        <span className={`text-[10px] ${readiness !== 'UNKNOWN' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {telephonyEndpointLabel('/api/telephony/incoming', readiness !== 'UNKNOWN')}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span>POST /api/telephony/twiml/turn</span>
-                        <span className="text-emerald-400 text-[10px]">
-                          {telephonyEndpointLabel('/api/telephony/twiml/turn', true)}
+                        <span className={`text-[10px] ${readiness !== 'UNKNOWN' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {telephonyEndpointLabel('/api/telephony/twiml/turn', readiness !== 'UNKNOWN')}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">

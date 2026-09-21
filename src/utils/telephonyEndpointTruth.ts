@@ -53,3 +53,45 @@ export function telephonyBrainLabel(gatewayConfigured: boolean | undefined, gemi
   if (!geminiConfigured) return 'OFFLINE ENGINE (no API key)';
   return gatewayConfigured ? 'GEMINI BRAIN CONFIGURED' : 'GATEWAY NOT CONFIGURED';
 }
+
+/** The telephony status body as `/api/telephony/status` returns it. */
+export interface TelephonyStatusSnapshot {
+  isConfigured?: boolean;
+}
+
+/**
+ * Tri-state readiness for the telephony surfaces. `UNKNOWN` until the status
+ * request actually answers with a boolean — a `null`/absent snapshot is not
+ * evidence that the gateway is up, and not evidence that it is down either.
+ */
+export type TelephonyReadiness = 'UNKNOWN' | 'NOT_CONFIGURED' | 'CONFIGURED';
+
+export function telephonyReadiness(
+  status: TelephonyStatusSnapshot | null | undefined,
+): TelephonyReadiness {
+  if (!status || typeof status.isConfigured !== 'boolean') return 'UNKNOWN';
+  return status.isConfigured ? 'CONFIGURED' : 'NOT_CONFIGURED';
+}
+
+/**
+ * Header badge for the voice-agent surface. The panel used to print a green
+ * pulsing `VOICE AGENT ACTIVE` unconditionally, before (or without) any status
+ * measurement. "Configured" is the most this process can observe: a provider
+ * is configured, not that an agent is running.
+ */
+export function voiceAgentLabel(status: TelephonyStatusSnapshot | null | undefined): string {
+  const readiness = telephonyReadiness(status);
+  if (readiness === 'UNKNOWN') return 'VOICE AGENT UNKNOWN';
+  return readiness === 'CONFIGURED' ? 'VOICE GATEWAY CONFIGURED' : 'VOICE AGENT NOT CONFIGURED';
+}
+
+/**
+ * Badge for the AI Receptionist panel. `READY TO ANSWER` was hardcoded green
+ * even with no telephony provider configured, so it asserted an answering
+ * capability nothing had established.
+ */
+export function receptionistLabel(status: TelephonyStatusSnapshot | null | undefined): string {
+  const readiness = telephonyReadiness(status);
+  if (readiness === 'UNKNOWN') return 'RECEPTIONIST UNKNOWN';
+  return readiness === 'CONFIGURED' ? 'RECEPTIONIST GATEWAY CONFIGURED' : 'RECEPTIONIST UNAVAILABLE';
+}

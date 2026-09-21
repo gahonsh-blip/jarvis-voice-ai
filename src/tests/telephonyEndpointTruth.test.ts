@@ -8,6 +8,9 @@ import {
   telephonyEndpointRegistered,
   telephonyEndpointLabel,
   telephonyBrainLabel,
+  telephonyReadiness,
+  voiceAgentLabel,
+  receptionistLabel,
 } from '../utils/telephonyEndpointTruth';
 
 // Regression guard for the Telephony Hub endpoint panel.
@@ -52,6 +55,39 @@ describe('telephony endpoint truth helpers', () => {
   });
 });
 
+describe('telephony liveness badges are measured, not asserted', () => {
+  it('holds readiness at UNKNOWN until the status request answers with a boolean', () => {
+    expect(telephonyReadiness(null)).toBe('UNKNOWN');
+    expect(telephonyReadiness(undefined)).toBe('UNKNOWN');
+    expect(telephonyReadiness({})).toBe('UNKNOWN');
+    // A non-boolean body must not be coerced into a positive reading.
+    expect(telephonyReadiness({ isConfigured: 'true' as unknown as boolean })).toBe('UNKNOWN');
+    expect(telephonyReadiness({ isConfigured: true })).toBe('CONFIGURED');
+    expect(telephonyReadiness({ isConfigured: false })).toBe('NOT_CONFIGURED');
+  });
+
+  it('never prints a green ACTIVE liveness badge without measured configuration', () => {
+    for (const snapshot of [null, undefined, {}] as const) {
+      const label = voiceAgentLabel(snapshot);
+      expect(label).toContain('UNKNOWN');
+      expect(label).not.toMatch(/ACTIVE|READY|LIVE|ONLINE/);
+    }
+    expect(voiceAgentLabel({ isConfigured: true })).toBe('VOICE GATEWAY CONFIGURED');
+    expect(voiceAgentLabel({ isConfigured: true })).not.toMatch(/ACTIVE/);
+    expect(voiceAgentLabel({ isConfigured: false })).toBe('VOICE AGENT NOT CONFIGURED');
+  });
+
+  it('never claims the receptionist is READY TO ANSWER without measured configuration', () => {
+    for (const snapshot of [null, undefined, {}] as const) {
+      const label = receptionistLabel(snapshot);
+      expect(label).toContain('UNKNOWN');
+      expect(label).not.toMatch(/READY|ACTIVE|LIVE|ONLINE/);
+    }
+    expect(receptionistLabel({ isConfigured: true })).not.toMatch(/READY TO ANSWER/);
+    expect(receptionistLabel({ isConfigured: false })).toBe('RECEPTIONIST UNAVAILABLE');
+  });
+});
+
 describe('the server registers every endpoint the UI advertises', () => {
   it('registers each advertised telephony route', () => {
     for (const endpoint of REGISTERED_TELEPHONY_ENDPOINTS) {
@@ -82,6 +118,18 @@ describe('the UI and adapters stop overstating telephony status', () => {
     expect(src).not.toContain('GEMINI BRAIN READY');
     expect(src).toContain('telephonyEndpointLabel');
     expect(src).toContain('telephonyBrainLabel');
+  });
+
+  it('TelephonyHubModal stops asserting unconditional voice-agent and receptionist liveness', () => {
+    const src = readSrc('components/TelephonyHubModal.tsx');
+    expect(src).not.toContain('VOICE AGENT ACTIVE');
+    expect(src).not.toContain('READY TO ANSWER');
+    expect(src).toContain('voiceAgentLabel');
+    expect(src).toContain('receptionistLabel');
+    // Endpoint readiness must be the measured value, never a literal `true`.
+    expect(src).not.toContain("telephonyEndpointLabel('/api/telephony/incoming', true)");
+    expect(src).not.toContain("telephonyEndpointLabel('/api/telephony/twiml/turn', true)");
+    expect(src).toContain('readiness !==');
   });
 
   it('the Twilio adapter points its callback at a registered route', () => {
