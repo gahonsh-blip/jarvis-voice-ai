@@ -1664,3 +1664,76 @@ credentials.
 
 No source file changed in this fire; the verification at d1f03cc carries over
 (61 files / 862 tests, lint clean, build exit 0).
+
+## 2026-09-21 22:25 IST — WORK SLOT 4
+
+```
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:25
+Window date: 2026-09-21   Window slots completed so far: 4
+
+Completed:
+- #48 Voice action confirmation — corrected from VERIFIED to PARTIAL; real
+  safety bug fixed. interpretConfirmation in src/utils/voice/voiceSession.ts
+  returned CONFIRMED for prohibitions मत करो, mat karo, करो मत,
+  do not do it, don't do it (measured before the fix). Evidence:
+  src/tests/voiceSession.test.ts (25 tests, 4 new prohibition/affirmative cases);
+  negative-validated — reverting voiceSession.ts fails exactly 2 tests
+  (2 failed | 23 passed), all 25 pass with the fix.
+
+In Progress:
+- #48 remains PARTIAL (not VERIFIED): negation sets are hand-maintained
+  English/Hindi lists, so audited prohibitions are handled but not every
+  phrasing in either language; no real microphone/recogniser output here.
+
+Remaining:
+- Android Bridge (#2/#34) and Real Android E2E (#50) are the mandated priority
+  but #50 needs a physical device; #34 approval parser was already fixed in
+  slot 3 and remains PARTIAL pending real-device delivery.
+
+Bugs Found:
+- Voice confirmation gate read a refusal as consent. Root cause: per-phrase
+  substring RegExp matching, so the affirmative token करो matched inside
+  मत करो; normalise() also left don't intact, matching the carried-over
+  negative entry. Found by probing the shared safety parser after the
+  same defect class was fixed in the Android bridge.
+
+Bugs Fixed:
+- src/utils/voice/voiceSession.ts: whole-token matching (containsPhrase) +
+  negation voiding (NEGATIVE_PARTICLES before; narrow POST_NEGATIVE_PARTICLES
+  [mat, मत] after, ना excluded so करो ना still confirms); normalise()
+  rewrites don't/dont to not; not/never added to NEGATIVE_PHRASES.
+  Proof: see Tests below and the negative validation above.
+
+Tests:    61 files / 866 tests passed (vitest, 18.49s) on bddce98
+Lint:     npm run lint (tsc --noEmit) exit 0
+Build:    npm run build exit 0; dist/server.cjs 842293 bytes / 822.6 kb
+E2E:      NOT RUN — no browser/speech APIs under Node; no Android device
+Security: no .env staged (git check-ignore matched .gitignore:4:.env), git
+          status --short empty, no node_modules/dist/.env tracked
+
+Documentation: docs/COMPLETION_STATUS.md (item 48 demoted + Last cycle),
+               docs/CHANGELOG.md (voice consent fix entry)
+Branch:  feature/hermes-full-completion
+Commit:  be991b2 (code fix bddce98)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #4 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target/hosting integration present
+
+Blocked:
+- #50 Hands-free Android control — requires a physical Android device.
+
+Human Approval Required:
+- PR #4 review/merge decision (human only).
+
+Next Slot:
+- #13 Production hardening: continue the pattern-driven truthfulness sweep to a
+  surface not yet audited; the negation-parser class was just closed in both
+  safety gates, so a different surface is the higher-value next pick.
+
+हिंदी सारांश (एक पंक्ति):
+- वॉइस पुष्टि गेट में असली सुरक्षा बग पकड़ा और ठीक किया: "मत करो" जैसी मनाही को
+  CONFIRMED पढ़ा जा रहा था; आइटम 48 को VERIFIED से PARTIAL किया गया।
+```
