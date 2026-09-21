@@ -1651,3 +1651,16 @@ credentials.
 - GitHub टोकन का सही नाम `$github_token` था, जिससे PR #4 मिला और उसका विवरण
   अद्यतन किया गया; स्लॉट 3 की state भी प्रकाशित की गई।
 
+
+### Corrections applied in this fire (label accuracy)
+
+- The section above was first committed mislabelled "Slot 4 - 22:35 IST". The
+  sandbox clock reads 22:06-22:22 IST, so this fire is the 22:05 slot, i.e.
+  slot 3. Label corrected to "Slot 3 - 22:05 IST".
+- hermes-window-state.json briefly landed on the code branch by accident (it
+  belongs only on automation/hermes-state). Removed in cbc4824; the code branch
+  now carries no window-state artefact.
+- Verified PR #4 is open, non-draft, mergeable_state: clean, head cbc4824.
+
+No source file changed in this fire; the verification at d1f03cc carries over
+(61 files / 862 tests, lint clean, build exit 0).
