@@ -1,23 +1,15 @@
 {
   "window_date": "2026-09-23",
   "window_started_at": "2026-09-22T15:36:00Z",
-  "last_slot_at": "2026-09-22T16:14:00Z",
-  "slots_completed": 2,
+  "last_slot_at": "2026-09-22T16:36:00Z",
+  "slots_completed": 3,
   "current_item": 54,
   "current_item_title": "Secret/token protection audit",
   "current_item_status": "PARTIAL",
-  "last_commit": "e7a16fd",
+  "last_commit": "ef9deef",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [
-    { "item": 1, "reason": "physical Android device required" },
-    { "item": 2, "reason": "physical Android device required" },
-    { "item": 8, "reason": "Windows host required for the PowerShell capture leg" },
-    { "item": 50, "reason": "physical Android device required" },
-    { "item": 55, "reason": "physical device / Windows host required" }
-  ],
-  "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "WORK SLOT 2 (21:35 IST fire / 2026-09-22 16:05-16:14 UTC) of the 2026-09-23 window. Idempotency guard did not apply (finalized:false). Item 54 advanced: src/utils/androidBridgeEngine.ts maskPhoneNumber sliced the last four CHARACTERS without checking for digits, so a digit-free caller label leaked as a fragment of itself ('Unknown' -> '******nown'), on the live path maskPhoneNumber(payload.callerNumber || 'Unknown'). Real spaced numbers also mis-rendered ('+1 415 890 2134' -> '+1  ******2134', double space). Now digits are extracted first; digit-free -> 'Unknown Number'; '+91-9876543210' -> '+91 ******3210'. Guarded by androidMobileBridge.test.ts Scenarios 19-20 (39 tests in file, up from 37); negative-validated 2 failed | 37 passed with the pre-fix body. telephonyPermissions.ts checked and NOT affected (already 'Unknown / Private'). Observed: lint exit 0; vitest 68 files / 990 tests passed (20.47s); build exit 0, dist/server.cjs 852583 bytes (dist removed). Security clean: .env ignored, status clean. Commits 7ae39bb, d2f5367, aece58e pushed. Item 54 stays PARTIAL. E2E / device / provider calls NOT RUN. Deploy NOT_CONFIGURED. NEVER merge to main.",
-  "counter_note": "slots_completed 1 -> 2. window_date unchanged (2026-09-23); the same window continues."
+  "blocked_items": [{"item": 1, "title": "Real Android Mobile Bridge", "reason": "physical Android device required"}],
+  "last_report_path": "/tmp/hermes-window-report.md"
 }
