@@ -68,6 +68,22 @@ as distinct from `APPROVE`, and must never default to consent on an unparsed rep
   fails 5 of 6 new cases).
 
 ---
+- **The guard badge now reports what the engines actually refused.** On
+  2026-09-22 18:55 UTC (00:25 IST 2026-09-23) the Finance Guard tab in
+  `AutonomousToolsModal.tsx` was still printing a constant
+  `FINANCE SAFETY LOCK ACTIVE` / `100% EXCLUDED` badge. The policy is enforced
+  in two engines but nothing had exercised them before the badge rendered, so
+  the panel asserted an unobserved pass. The badge is now derived from
+  `runFinanceGuardSelfCheck()` (`server_tools.ts`), which drives the shared
+  `FINANCE_GUARD_PROBES` corpus through both `isFinanceBlocked()` and
+  `PermissionGuard.permanentBlock()`, exposed at `GET /api/security/finance-guard`.
+  The tri-state (`ENFORCED` / `GAP_DETECTED` / `UNKNOWN`) means an empty or
+  failed observation is `UNKNOWN` — never `ENFORCED`. Covered by
+  `src/tests/financeGuardTruth.test.ts` (6 tests); negative-validated (dropping
+  a `FINANCE_KEYWORDS` entry fails 2 of 6).
+
+
+---
 
 ## 3. Global Kill Switch Protocol
 - Emergency stop triggers can be issued via voice (`"emergency stop"`, `"जार्विस तुरंत सब बंद करो"`), UI button, or Telegram command (`/stop`, `/emergency_stop`).

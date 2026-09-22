@@ -4,8 +4,45 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 18:43 UTC (00:13 IST 2026-09-23) — **WORK SLOT 7**, the
+Last cycle: 2026-09-22 18:55 UTC (00:25 IST 2026-09-23) — **WORK SLOT 7**, the
 00:05 IST fire of the 2026-09-23 window. Item 13
+(`Zero-fake-success for all tools`), extended to the Security Matrix claim
+`FINANCE SAFETY LOCK ACTIVE (100% EXCLUDED)`.
+
+**The Finance Guard panel printed a lock nobody measured.** The finance-guard
+tab in `AutonomousToolsModal.tsx` rendered a constant emerald badge with the
+literal text `FINANCE SAFETY LOCK ACTIVE` / `100% EXCLUDED`. The exclusion
+policy it described is real and enforced in two places — `isFinanceBlocked()`
+in `server_tools.ts` and `PermissionGuard.permanentBlock()`'s
+`FINANCE_RESTRICTION` category in
+`src/utils/computerOperator/permissionGuard.ts` — but nothing in the running
+process had ever exercised either engine before that badge was painted, so the
+panel asserted a pass it had not observed, and would have kept asserting it if
+a keyword were dropped from either filter.
+
+Fixed: `src/utils/financeGuardTruth.ts` holds a shared `FINANCE_GUARD_PROBES`
+corpus (English and Hindi phrasings, both surfaces) plus the pure
+`summariseFinanceGuard()` tri-state. An empty observation set is `UNKNOWN`
+("FINANCE SAFETY LOCK UNVERIFIED") and is never `ENFORCED`; `ENFORCED` requires
+a complete observed pass; a single allowed probe is `GAP_DETECTED` and the
+detail line names the probes that got through. `runFinanceGuardSelfCheck()` in
+`server_tools.ts` drives the real engines over that corpus,
+`GET /api/security/finance-guard` returns the computed report, and the modal
+seeds `null` and re-summarises only what the server actually returned, so an
+unanswered or malformed request can no longer render as "lock active".
+
+Guard by `src/tests/financeGuardTruth.test.ts` (6 tests: the summariser
+tri-state, the end-to-end self-check observing a block for every probe, and
+per-surface assertions against both engines). Negative-validated: renaming one
+entry in `PermissionGuard`'s `FINANCE_KEYWORDS` fails the operator-surface test
+— observed `2 failed | 4 passed` of 6, including
+`send funds via the payment link: expected null not to be null`; restored →
+6/6. Gates on `b119a31`: lint (`tsc --noEmit`) exit 0, vitest **75 files /
+1041 tests passed**, build exit 0 (`dist/server.cjs` 856683 bytes / 836.6 kb).
+Still `PARTIAL` — this converts one more hardcoded claim into an observation,
+but the sweep of tool surfaces remains pattern-driven.
+
+Previous cycle: 2026-09-22 18:43 UTC (00:13 IST 2026-09-23) — **WORK SLOT 7 (same 00:05 IST fire)**, Item 13
 (`Zero-fake-success for all tools`), extended to the Security Matrix claim
 `Zero Credential Leaks to LLM Memory — PROTECTED`.
 

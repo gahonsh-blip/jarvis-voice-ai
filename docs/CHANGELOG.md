@@ -4,6 +4,32 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 00:25 IST (2026-09-22 18:55 UTC) — the finance-guard badge asserted a lock it never measured
+
+### Security fix
+- `src/components/AutonomousToolsModal.tsx` — the Finance Guard tab rendered the
+  constant emerald badge `FINANCE SAFETY LOCK ACTIVE` / `100% EXCLUDED`. Both
+  underlying engines (`isFinanceBlocked()`, `PermissionGuard.permanentBlock()`)
+  are real, but nothing exercised them before the badge was painted, so the
+  panel claimed an unobserved pass. The badge now derives its label, colour and
+  detail line from the report the server actually returned.
+- `server_tools.ts` — new `runFinanceGuardSelfCheck()` drives the shared probe
+  corpus through both engines and returns per-probe observations.
+- `server.ts` — `GET /api/security/finance-guard` returns the computed self-check
+  report.
+- `src/utils/financeGuardTruth.ts` — shared `FINANCE_GUARD_PROBES` corpus and the
+  pure `summariseFinanceGuard()` tri-state: an empty or failed observation set is
+  `UNKNOWN`, never `ENFORCED`; a single allowed probe is `GAP_DETECTED` and the
+  detail names it.
+
+### Added
+- `src/tests/financeGuardTruth.test.ts` — 6 tests: the summariser tri-state, the
+  end-to-end self-check observing a block for every probe, and per-surface
+  assertions against both engines. Negative-validated: renaming a
+  `FINANCE_KEYWORDS` entry fails 2 of 6.
+
+---
+
 ## [Unreleased] - 2026-09-23 00:13 IST (2026-09-22 18:43 UTC) — credentials were shipped to the LLM in the memory context
 
 ### Security fix

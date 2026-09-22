@@ -2971,3 +2971,73 @@ Next Slot:
 - मोबाइल पर्सनल स्टेटस ब्रीफिंग कार्ड से दो झूठे दावे (TTS READY और "live
   telemetry reads") हटाए गए, असली speech diagnostics से जोड़ा गया; 7/7 नए टेस्ट
   पास, पूरी सूट 1028 टेस्ट पास, lint/build हरा।
+
+
+---
+
+## WORK SLOT 7 — 2026-09-23 00:05 IST fire (report ~00:30 IST)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:05 (fired), report ~00:30
+Window date: 2026-09-23   Window slots completed so far: 6 (before this slot)
+
+Completed:
+- #13 Zero-fake-success for all tools — Finance Guard panel claim replaced with a
+  live two-engine self-check.
+  Evidence: `src/utils/financeGuardTruth.ts` (probe corpus + tri-state summariser),
+  `server_tools.ts::runFinanceGuardSelfCheck()`,
+  `server.ts` `GET /api/security/finance-guard`,
+  `src/components/AutonomousToolsModal.tsx` (derived label/detail),
+  `src/tests/financeGuardTruth.test.ts` — 6/6 passed.
+
+In Progress:
+- #13 remains `PARTIAL` — one more hardcoded claim converted into an observation;
+  the sweep of tool surfaces is still pattern-driven.
+
+Bugs Found:
+- The Finance Guard tab printed a constant `FINANCE SAFETY LOCK ACTIVE` /
+  `100% EXCLUDED` badge. The policy is enforced, but nothing in the running
+  process had exercised either engine before the badge rendered, so the panel
+  asserted a pass it had not observed and would have kept asserting it if a
+  keyword were dropped from either filter.
+
+Bugs Fixed:
+- Badge now derives from `summariseFinanceGuard()` over the probe results the
+  server actually returned; empty/failed observation is `UNKNOWN`, never
+  `ENFORCED`. Negative-validated by renaming one `PermissionGuard`
+  `FINANCE_KEYWORDS` entry — observed `2 failed | 4 passed` of 6 including
+  `send funds via the payment link: expected null not to be null`; restored → 6/6.
+
+Tests:    75 files / 1041 tests passed (vitest run, observed 18:54:39 UTC)
+Lint:     PASS — `tsc --noEmit` exit 0
+Build:    PASS — exit 0, `dist/server.cjs` 856683 bytes (836.6 kb)
+E2E:      NOT RUN (no device/browser harness in sandbox)
+Security: NOT RUN this slot (no new audit invocation; prior slot's audit stands)
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, docs/SECURITY.md
+Branch:  feature/hermes-full-completion
+Commit:  b119a31
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         NONE opened this slot (finalization slot opens/refreshes it)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; `dist/server.cjs` is the verified artifact.
+
+Blocked:
+- #1 Android Bridge / #2 real screenshot / #3 computer-operator hardware / #55
+  real-device E2E — require a physical Android device (not available in sandbox).
+- #13 live speech-platform render path — requires a real browser with
+  speechSynthesis; unit assertions only here.
+
+Human Approval Required:
+- None this slot. (Standing: merge to main requires a human.)
+
+Next Slot:
+- #13 continued sweep — next candidates: remaining hardcoded status/readiness
+  strings in the AutonomousToolsModal result banners and the Security Matrix
+  rows, then widen to Voice surfaces.
+
+हिंदी सारांश (एक पंक्ति):
+- फाइनेंस गार्ड पैनल का झूठा "100% EXCLUDED" बैज हटाकर असली दोनों इंजनों से चलने
+  वाला सेल्फ-चेक जोड़ा; 6/6 नए टेस्ट पास, पूरी सूट 1041 टेस्ट पास, lint/build हरा।
