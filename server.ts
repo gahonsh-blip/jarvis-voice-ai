@@ -44,6 +44,7 @@ import {
   YouTubeSummaryResult,
   YouTubeVideoInfo,
   YouTubeTranscriptSegment,
+  runFinanceGuardSelfCheck,
 } from './server_tools';
 import {
   TelephonySessionManager,
@@ -5433,6 +5434,15 @@ app.get('/api/security/permission-matrix', (req: Request, res: Response) => {
     matrix: PERMISSION_MATRIX,
     unknownActionPolicy: UNKNOWN_ACTION_DECISION,
   });
+});
+
+/**
+ * Self-check of the finance-exclusion lock. Runs the real probe corpus through
+ * the two enforcement engines and reports what they actually did, so the
+ * Finance Guard panel never displays "100% EXCLUDED" from a constant.
+ */
+app.get('/api/security/finance-guard', (req: Request, res: Response) => {
+  res.json({ success: true, report: runFinanceGuardSelfCheck() });
 });
 
 /** Dry-run: classify an action and say whether it would be permitted. */

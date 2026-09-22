@@ -8,6 +8,13 @@ import {
   EMAIL_CAPABILITY_NOTE,
   type EmailConduitStatus,
 } from './src/utils/emailConduitTruth';
+import {
+  FINANCE_GUARD_PROBES,
+  summariseFinanceGuard,
+  type FinanceGuardProbeResult,
+  type FinanceGuardReport,
+} from './src/utils/financeGuardTruth';
+import { PermissionGuard } from './src/utils/computerOperator/permissionGuard';
 
 // ==============================================================================
 // 1. GLOBAL EMERGENCY STOP / PAUSE ENGINE
@@ -74,6 +81,32 @@ export function isFinanceBlocked(textOrAction: string): { blocked: boolean; reas
     }
   }
   return { blocked: false };
+}
+
+// ==============================================================================
+// 2b. FINANCE-GUARD SELF-CHECK — runs the shared probe corpus through both
+//     enforcement engines and returns what they actually did. Used by
+//     `/api/security/finance-guard` and by the guard tests, so the panel's
+//     status is derived from the same path the runtime uses.
+// ==============================================================================
+export function runFinanceGuardSelfCheck(): FinanceGuardReport {
+  const results: FinanceGuardProbeResult[] = FINANCE_GUARD_PROBES.map((probe) => {
+    if (probe.surface === 'intent') {
+      const outcome = isFinanceBlocked(probe.text);
+      return { ...probe, blocked: outcome.blocked, detail: outcome.reason };
+    }
+    const outcome = PermissionGuard.permanentBlock({
+      id: 'finance-self-check',
+      type: 'TERMINAL_COMMAND',
+      command: probe.text,
+      description: probe.text,
+      securityLevel: 1,
+      requiresHumanApproval: false,
+    });
+    return { ...probe, blocked: outcome !== null, detail: outcome?.blockReason };
+  });
+
+  return summariseFinanceGuard(results);
 }
 
 // ==============================================================================

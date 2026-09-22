@@ -41,6 +41,13 @@ import {
   emergencyStatusKnown,
   emergencyEngaged,
 } from '../utils/emergencyTruth';
+import {
+  summariseFinanceGuard,
+  financeGuardLabel,
+  financeGuardDetail,
+  type FinanceGuardReport,
+  type FinanceGuardProbeResult,
+} from '../utils/financeGuardTruth';
 
 interface AutonomousToolsModalProps {
   isOpen: boolean;
@@ -98,6 +105,10 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   const [ytCopied, setYtCopied] = useState<boolean>(false);
   const [ytSubTab, setYtSubTab] = useState<'summary' | 'takeaways' | 'transcript'>('summary');
 
+  // Finance-guard self-check. Null until /api/security/finance-guard answers,
+  // so an unanswered request can never render as "lock active".
+  const [financeGuardReport, setFinanceGuardReport] = useState<FinanceGuardReport | null>(null);
+
   // Integrations Audit State
   const [auditReport, setAuditReport] = useState<{
     summary: { total: number; connected: number; notConfigured: number; notAvailable: number };
@@ -114,6 +125,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       fetchGithubData();
       fetchEmailStatus();
       fetchIntegrationsAudit();
+      fetchFinanceGuard();
     }
   }, [isOpen]);
 
@@ -442,7 +454,32 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   };
 
+  // Finance-guard self-check. Only a well-formed report is stored; anything
+  // else leaves the state null and the UI reports the lock as unverified.
+  const fetchFinanceGuard = async () => {
+    try {
+      const res = await fetch('/api/security/finance-guard');
+      const data = await res.json();
+      setFinanceGuardReport(
+        data && data.success === true && data.report && Array.isArray(data.report.results)
+          ? (data.report as FinanceGuardReport)
+          : null,
+      );
+    } catch {
+      setFinanceGuardReport(null);
+    }
+  };
+
   if (!isOpen) return null;
+
+  // Derived finance-guard status. Re-summarised from the probe results the
+  // server actually returned; with no report this stays UNKNOWN, never
+  // "lock active".
+  const financeStatus = summariseFinanceGuard(
+    Array.isArray(financeGuardReport?.results)
+      ? (financeGuardReport!.results as FinanceGuardProbeResult[])
+      : [],
+  );
 
   // Derived kill-switch liveness. UNKNOWN until a real status boolean arrived.
   const liveness = emergencyLiveness(emergency);
@@ -1460,10 +1497,29 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                   </ul>
                 </div>
 
-                <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+                <div
+                  className={`p-3 rounded-xl border flex items-start gap-2 ${
+                    financeStatus.status === 'ENFORCED'
+                      ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300'
+                      : financeStatus.status === 'GAP_DETECTED'
+                        ? 'bg-rose-950/50 border-rose-500/40 text-rose-300'
+                        : 'bg-slate-900/60 border-slate-600/40 text-slate-300'
+                  }`}
+                >
+                  {financeStatus.status === 'ENFORCED' ? (
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+                  ) : financeStatus.status === 'GAP_DETECTED' ? (
+                    <ShieldAlert className="w-5 h-5 shrink-0 text-rose-400" />
+                  ) : (
+                    <AlertOctagon className="w-5 h-5 shrink-0 text-slate-400" />
+                  )}
                   <span>
-                    Security status: <strong>FINANCE SAFETY LOCK ACTIVE (100% EXCLUDED)</strong>. Any user request or autonomous intent referencing financial transactions is automatically intercepted and terminated.
+                    Security status: <strong>{financeGuardLabel(financeStatus.status)}</strong>.{' '}
+                    {financeGuardDetail(financeStatus)} Any user request or autonomous intent
+                    referencing financial transactions is intercepted and terminated by the
+                    finance filter in the intent classifier and the computer-operator permission
+                    guard; the count above is the number of enforced probes those two engines
+                    actually refused in this session.
                   </span>
                 </div>
               </div>
