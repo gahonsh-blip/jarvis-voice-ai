@@ -4,6 +4,30 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 02:42 IST (2026-09-22 21:12 UTC) — the YouTube Studio header printed scopes it never read
+
+### Honesty fix
+- `src/components/SocialMediaModal.tsx` — the YouTube Studio header
+  short-circuited on `status === 'API_VERIFIED'` and then printed the literal
+  `Scopes: youtube.upload, youtube.readonly`. Slot 11 had already made the
+  server report the true grant and set `canPublish: false` for a read-only
+  channel, so a `channels.list`-confirmed channel with no upload scope displayed
+  upload authorization anyway. The header now renders the scopes the server
+  actually returned and states "Video upload is NOT authorized" unless the
+  server confirmed `canPublish`.
+- `src/utils/socialPublishHonesty.ts` — new `describeGrantedScopes()` (renders
+  an unrecorded grant as `not recorded`, an empty one as `none granted`, never
+  the requested list) and `youtubeCanPublishMeasured()` (publish is authorized
+  only for an `API_VERIFIED` connection the server also marked `canPublish`).
+
+### Tests
+- `src/tests/socialPublishHonesty.test.ts` — 6 new tests (24 total) pinning
+  read-access ≠ upload-access, including the exact slot-11 case
+  (`API_VERIFIED` + `canPublish:false`). Negative-validated: removing the
+  `canPublish` check fails exactly 2 of 24, restored → 24/24.
+
+---
+
 ## [Unreleased] - 2026-09-23 02:17 IST (2026-09-22 20:47 UTC) — social connections claimed scopes they never had
 
 ### Honesty fix

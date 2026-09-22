@@ -3233,3 +3233,53 @@ Slot: WORK | window_date 2026-09-23 | slots_completed 10 → 11
 ### हिंदी सारांश (एक पंक्ति)
 - सोशल कनेक्शन अब वे scopes नहीं दिखाते जो कभी grant नहीं हुए; "Live" दावे की जगह
   असली URN/privacy बताया गया — 18 टेस्ट पास, पूरा सूट 1061 पास।
+
+
+---
+
+## Slot 12 — 2026-09-23 02:35 IST (WORK) — client-side fabricated YouTube scope grant
+
+### Item advanced
+- #13 `Zero-fake-success for all tools` (stays `PARTIAL` overall; one more
+  violation closed). #25/#26 client leg of the same defect.
+
+### Defect
+`src/components/SocialMediaModal.tsx` short-circuited the YouTube Studio header
+on `status === 'API_VERIFIED'` and then printed the literal
+`Scopes: youtube.upload, youtube.readonly`. Slot 11 had already fixed the
+*server* to report the real grant and to set `canPublish:false` for a read-only
+channel; the client ignored both, so a channel whose upload scope was never
+granted still displayed upload authorization on the banner.
+
+### Fix
+- `src/utils/socialPublishHonesty.ts` — `describeGrantedScopes()` (unrecorded →
+  `not recorded`, empty → `none granted`, never the requested list) and
+  `youtubeCanPublishMeasured()` (publish authorized only for an `API_VERIFIED`
+  connection the server also marked `canPublish`).
+- `src/components/SocialMediaModal.tsx` — header now renders the scopes the
+  server returned; states "Video upload is NOT authorized — granted scopes: …"
+  when `canPublish` is not confirmed.
+
+### Tests
+- `src/tests/socialPublishHonesty.test.ts` — 6 new tests (24 total), including
+  the exact slot-11 case (`API_VERIFIED` + `canPublish:false`).
+- Negative validation: removing the `canPublish` check → `2 failed | 22 passed`;
+  restored → `24/24`.
+
+### Gates (observed)
+- lint (`tsc --noEmit`): exit 0
+- `npx vitest run`: **76 files / 1067 tests passed**, exit 0
+- `npm run build`: exit 0 (`dist/server.cjs` 840.3kb, bundle 1,000.86 kB)
+
+### Commits / push
+- `1aa8153` fix(social): stop printing a hardcoded YouTube upload scope
+- Pushed `origin/feature/hermes-full-completion` → `4b6aa9e..1aa8153`.
+
+### Board
+- 13 `PARTIAL` (evidence appended), 25 `PARTIAL`, 26 `PARTIAL`.
+- Deploy: NOT_CONFIGURED — no deployment target in this environment.
+- Main merge: NOT MERGED — awaiting human approval.
+
+### हिंदी सारांश (एक पंक्ति)
+- YouTube Studio हेडर अब असली scopes पढ़ता है और बिना canPublish साबित हुए upload
+  की अनुमति नहीं दिखाता — 6 नए टेस्ट, पूरा सूट 1067 पास।
