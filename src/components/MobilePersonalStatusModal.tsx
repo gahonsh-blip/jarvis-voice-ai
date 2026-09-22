@@ -48,6 +48,13 @@ import {
   MOBILE_PERMISSION_DEFINITIONS,
 } from '../utils/mobileStatusEngine';
 import { AndroidPermissionCenter } from './AndroidPermissionCenter';
+import { SpeechDiagnostics } from '../utils/speechTtsEngine';
+import {
+  speechReadiness,
+  speechReadinessLabel,
+  briefingProvenance,
+  briefingProvenanceLabel,
+} from '../utils/spokenBriefingTruth';
 
 interface Props {
   isOpen: boolean;
@@ -55,6 +62,8 @@ interface Props {
   onSpeak: (text: string) => void;
   onOpenPermissionGateway?: () => void;
   userName?: string;
+  speechDiagnostics?: SpeechDiagnostics | null;
+  isSpeaking?: boolean;
 }
 
 export const MobilePersonalStatusModal: React.FC<Props> = ({
@@ -63,6 +72,8 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   onSpeak,
   onOpenPermissionGateway,
   userName = 'Sir',
+  speechDiagnostics = null,
+  isSpeaking = false,
 }) => {
   const [statusData, setStatusData] = useState<MobileStatusData | null>(null);
   const [briefing, setBriefing] = useState<MorningBriefingPayload | null>(null);
@@ -682,7 +693,7 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-widest">
-                      SPEECH SYNTHESIZER READY
+                      {speechReadinessLabel(speechReadiness(speechDiagnostics, isSpeaking))}
                     </span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
                       ~{briefing.speechDurationEstimateSeconds}s audio
@@ -734,7 +745,7 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                     JARVIS Spoken Script Output ({selectedLang === 'english' ? 'English Spoken Mode' : 'हिन्दी वक्तव्य'})
                   </span>
                   <span className="text-[10px] text-slate-500 font-mono">
-                    {statusData?.isSample ? 'Generated from sample fixtures' : 'Generated from live telemetry reads'}
+                    {briefingProvenanceLabel(briefingProvenance(statusData))}
                   </span>
                 </div>
 

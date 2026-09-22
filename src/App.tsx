@@ -1802,6 +1802,8 @@ export default function App() {
         onSpeak={speakText}
         onOpenPermissionGateway={() => setActiveApp('permission_gateway')}
         userName={memory.name || 'Sir'}
+        speechDiagnostics={speechDiagnostics}
+        isSpeaking={isSpeaking}
       />
 
       {/* Tool Modals */}
