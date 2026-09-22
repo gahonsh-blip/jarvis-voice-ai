@@ -634,14 +634,14 @@ export class AndroidBridgeManager {
         permissionState: this.permissions.call_detection,
         authorizationState: 'UNAUTHORIZED',
         result: 'PERMISSION_REQUIRED',
-        notes: `Call detection denied for masked number ${maskPhoneNumber(payload.callerNumber || 'Unknown')}`,
+        notes: `Call detection denied for masked number ${maskPhoneNumber(payload.callerNumber || '')}`,
       });
       return { announced: false, isSensitive: false, blockedReason: 'PERMISSION_REQUIRED' };
     }
 
     const contactsAllowed = this.permissions.contacts_lookup === 'GRANTED';
     const effectiveCallerName = contactsAllowed && payload.callerName ? payload.callerName : null;
-    const masked = maskPhoneNumber(payload.callerNumber || 'Unknown');
+    const masked = maskPhoneNumber(payload.callerNumber || '');
 
     // 2. Generate natural announcement
     const isHindi = language.startsWith('hi') || language === 'auto';
@@ -655,7 +655,15 @@ export class AndroidBridgeManager {
         ? `Sir, ${effectiveCallerName} ka call aaya hai. Kya main call utha doon?`
         : `Sir, incoming call from ${effectiveCallerName}. Shall I answer the call?`;
     } else {
-      const displayNum = masked !== 'Unknown' ? masked : 'अज्ञात नंबर';
+      // maskPhoneNumber reports 'Unknown Number' for unparseable caller IDs,
+      // so testing for digits (not the stale 'Unknown' sentinel) selects the
+      // honest localized fallback.
+      const hasNumber = /\d/.test(masked);
+      const displayNum = hasNumber
+        ? masked
+        : isHindi
+        ? 'अज्ञात नंबर'
+        : 'an unknown number';
       spokenText = isHindi
         ? `सर, ${displayNum} से कॉल आया है। क्या मैं कॉल उठा दूँ?`
         : isHinglish

@@ -455,6 +455,32 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     expect(activeRes.spokenText).toContain('Slack');
   });
 
+  it('Scenario 21: Call with a missing caller number produces a truthful unknown-caller announcement', () => {
+    engine.connectDevice({
+      deviceId: 'phone_unknown',
+      deviceName: 'Phone',
+      model: 'Phone',
+      osVersion: 'Android 14',
+      bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: true,
+      canAnswerCalls: true,
+      telecomRoleDialer: true,
+      answerCallsPermission: true,
+      canReadNotifications: true,
+      canInlineReply: true,
+      canOpenApp: true,
+      canLookupContacts: true,
+      isSimulation: false,
+    });
+
+    const event = engine.handleIncomingCall({});
+    expect(event.announced).toBe(true);
+    expect(event.senderNumber).toBe('Unknown Number');
+    expect(event.spokenAnnouncement).toBe('सर, अज्ञात नंबर से कॉल आया है। क्या मैं कॉल उठा दूँ?');
+    expect(event.spokenAnnouncement).not.toContain('******');
+    expect(event.spokenAnnouncement).not.toContain('nown');
+  });
+
   it('Scenario 16: Required Android permissions matrix (Notification, Call, Contacts, Reply) can be queried and updated', () => {
     // Check initial permissions retrieval
     const initialPerms = androidBridgeEngine.getPermissions();
