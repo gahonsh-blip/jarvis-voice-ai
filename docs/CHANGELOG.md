@@ -4,6 +4,31 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-22 22:36 IST (17:06 UTC) — the Autonomous Tools Hub rendered an unfetched kill-switch state as green
+
+### Bug fix
+- `src/components/AutonomousToolsModal.tsx` — seeded its emergency state as
+  `{ emergencyPaused: false }`, fetched `/api/emergency/status` inside a `try`
+  block that swallowed failures, and rendered a constant green `DAEMON ACTIVE`
+  badge for any state that was not paused. An unanswered status request thus
+  read as a confirmed-released kill switch, and the two Level-3 controls
+  (`Write File to Workspace`, `Queue for Human Approval`) were enabled on a value
+  nobody had fetched. Non-boolean response shapes fell through the same branch.
+  The same defect class was fixed on the Permission Gateway earlier this window.
+
+### Changed
+- The modal now seeds `null`, keeps a status only when `emergencyStatusKnown(data)`
+  is true, renders `STATUS UNKNOWN` through the shared `src/utils/emergencyTruth.ts`
+  tri-state, and derives `actionBlocked = loading || emergencyPaused || !statusKnown`
+  so both Level-3 controls stay disabled while the state is unknown. The emergency
+  toggle checks `res.ok` and the boolean shape, and on failure reports the error and
+  resets to `null` instead of leaving a stale green badge.
+
+### Tests
+- `src/tests/autonomousToolsEmergencyLiveness.test.ts` (5 tests). Negative-validated:
+  restoring the seed, the raw `disabled` reads and the constant badge fails exactly
+  3 of 5.
+
 ## [Unreleased] - 2026-09-22 22:06 IST (16:36 UTC) — the live HTTP bridge route used its own weaker caller-ID mask
 
 ### Bug fix

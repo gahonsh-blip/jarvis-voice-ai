@@ -76,6 +76,19 @@ as distinct from `APPROVE`, and must never default to consent on an unparsed rep
   - Active network broadcasts are terminated.
   - Subsystems enter a safe, read-only standby state until explicitly unpaused via Level 4 authorization (`/resume`).
 
+**Liveness is tri-state, never a default.** A kill-switch surface may not read
+"released" for a state it never observed. `src/utils/emergencyTruth.ts` is the
+single source of truth: `emergencyLiveness()` returns `ACTIVE` only for an
+observed `emergencyPaused: false`, `ENGAGED` when the pause or hard switch is
+set, and `UNKNOWN` for `null`, `undefined`, or a status lacking a real boolean.
+Both human-facing control surfaces seed `null` and fail closed while the status
+is unknown: `PermissionGateway.tsx` blocks approval, and
+`AutonomousToolsModal.tsx` disables its Level-3 workspace-write and
+issue-queue controls via `actionBlocked = loading || emergencyPaused ||
+!statusKnown`. Neither component reads the raw `emergencyPaused` flag on any
+render path. Guards: `src/tests/permissionGatewayEmergencyLiveness.test.ts` and
+`src/tests/autonomousToolsEmergencyLiveness.test.ts`.
+
 ---
 
 ## 4. Permission Matrix (implemented)
