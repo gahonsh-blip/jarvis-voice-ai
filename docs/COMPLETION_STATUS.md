@@ -33,8 +33,13 @@ validated: both guarded patterns are present at HEAD
 `TelephonyHubModal.tsx` matched `: selectedLog.callerNumber}`) and absent after
 the fix.
 
-Gates on `8b6787b`: lint (`tsc --noEmit`) exit 0, vitest **77 files / 1074
-tests passed**, build exit 0 (`dist/server.cjs` 860517 bytes). Item 13 stays
+Gates re-run and observed in this slot on `881f0c4`: `npm run lint`
+(`tsc --noEmit`) exit 0; `npx vitest run` **77 files / 1074 tests passed**
+(21.31s); `npm run build` exit 0, `dist/server.cjs` 860517 bytes. Negative-
+validation re-run this slot: reverting the two components to `8b6787b^` makes the
+guard report `2 failed | 5 passed`, restoring the fix returns 7/7. Security
+hygiene: `git check-ignore -v .env` → `.gitignore:4:.env`; working tree clean;
+`git diff --stat origin/main` → 173 files, +33575/-1650. Item 13 stays
 `PARTIAL` — this is one more real violation closed, not a proof the sweep is
 exhausted.
 
