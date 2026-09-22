@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-23",
   "window_started_at": "2026-09-22T15:35:00Z",
-  "last_slot_at": "2026-09-22T20:12:00Z",
-  "slots_completed": 10,
-  "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools",
+  "last_slot_at": "2026-09-22T20:49:20Z",
+  "slots_completed": 11,
+  "current_item": 25,
+  "current_item_title": "Social account authentication / Real platform API integration",
   "current_item_status": "PARTIAL",
-  "last_commit": "45023a8",
+  "last_commit": "9957290",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -15,7 +15,8 @@
     "2:real device screenshot",
     "3:computer operator hardware",
     "55:real-device E2E hardware",
-    "13:no real browser speech platform for LIVE render path"
+    "13:no real browser speech platform for LIVE render path",
+    "25/26:no live production social account authorised in this environment"
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
