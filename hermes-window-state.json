@@ -1,22 +1,19 @@
 {
   "window_date": "2026-09-23",
   "window_started_at": "2026-09-22T15:35:00Z",
-  "last_slot_at": "2026-09-22T21:47:00Z",
-  "slots_completed": 13,
+  "last_slot_at": "2026-09-22T22:14:00Z",
+  "slots_completed": 14,
   "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools (telephony privacy mask)",
+  "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "5eeeeef",
+  "last_commit": "02e2ac8",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    "1:physical Android device",
-    "2:real device screenshot",
-    "3:computer operator hardware",
-    "55:real-device E2E hardware",
-    "13:no real browser speech platform for LIVE render path",
-    "25/26:no live production social account authorised in this environment"
+    "Real Android device E2E — no physical handset in sandbox",
+    "Real screenshot / display capture — no display in sandbox",
+    "Live social/telephony provider dispatch — no provider credentials"
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
