@@ -14,6 +14,7 @@ import {
   describeAuditTrail,
 } from './src/utils/hardening/auditTrailTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
+import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -3089,7 +3090,7 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
 
   // 1. /start or Hello/Hi greeting
   if (clean === '/start' || lower === 'start' || lower === 'hi' || lower === 'hello' || lower === 'नमस्ते' || lower === 'kaisa hai' || lower === 'kaise ho') {
-    botReplyText = `🤖 *HERMES JARVIS ONLINE MOBILE CONTROLLER*\n\nGreetings, ${memoryState.name || 'Sir'}! Connected to your Oracle Always Free ARM VM (24/7 Daemon Active).\n\n*Quick Mobile Commands:*\n• \`JARVIS, project check करो\` — Codebase & Git Audit\n• \`JARVIS, आज की LinkedIn post बनाओ\` — Social Draft & Level 4 Approval\n• \`JARVIS, client lead quotation बनाओ\` — Freelance Proposal\n• \`JARVIS, server status बताओ\` — Cloud & Telemetry\n• \`JARVIS, कल सुबह 9 बजे report देना\` — Schedule Daily Briefing\n\n🛡️ *Security Matrix*: Level ${securityMatrixState.currentLevel} active. Level 4 actions strictly require your mobile confirmation.`;
+    botReplyText = `🤖 *HERMES JARVIS ONLINE MOBILE CONTROLLER*\n\nGreetings, ${memoryState.name || 'Sir'}! Connected to your Oracle Always Free ARM VM (24/7 Daemon Active).\n\n*Quick Mobile Commands:*\n• \`JARVIS, project check करो\` — Codebase & Git Audit\n• \`JARVIS, आज की LinkedIn post बनाओ\` — Social Draft & Level 4 Approval\n• \`JARVIS, client lead quotation बनाओ\` — Freelance Proposal\n• \`JARVIS, server status बताओ\` — Cloud & Telemetry\n• \`JARVIS, कल सुबह 9 बजे report देना\` — Schedule Daily Briefing\n\n🛡️ *Security Matrix*: ${securityMatrixPosture(securityMatrixState).levelLabel} active. Human approval: ${securityMatrixPosture(securityMatrixState).humanApproval}.`;
     inlineKeyboard = {
       inline_keyboard: [
         [
@@ -3209,7 +3210,8 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
     botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${describeRunState(oracleCloudState.status)} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${cpuLine} | *RAM*: ${ramLine}\n• *Metrics Source*: ${live ? 'live host telemetry' : 'unavailable'}\n• *Cost*: ₹0 / Always Free Guaranteed\n• *IP*: ${describePublicIp(oracleCloudState.publicIp)}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
     actionData = { type: 'telemetry', metrics: oracleCloudState.metrics };
   } else if (intentData.intent === 'security_audit') {
-    botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: Level ${securityMatrixState.currentLevel} (Create Mode with Human Approval)\n• *Human Approval*: Enforced for all external actions\n• *Credential Protection*: Passwords & API tokens strictly isolated\n• *Audit Trail*: ${describeAuditTrail(memoryState.auditLogs)} (${auditTrailCounts(memoryState.auditLogs).total} total)`;
+    const posture = securityMatrixPosture(securityMatrixState);
+    botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: ${posture.levelLabel}\n• *Human Approval*: ${posture.humanApproval}\n• *Secret Masking*: ${posture.secretMasking}\n• *Credential Leak Protection*: ${posture.credentialLeakProtection}\n• *Audit Trail*: ${describeAuditTrail(memoryState.auditLogs)} (${auditTrailCounts(memoryState.auditLogs).total} total)`;
     actionData = { type: 'security_audit', level: securityMatrixState.currentLevel };
   } else if (intentData.intent === 'set_name') {
     const detectedName = intentData.actionPayload?.name || clean.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
