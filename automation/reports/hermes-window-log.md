@@ -2601,3 +2601,63 @@ Item advanced: **#13 Zero-fake-success for all tools** — remains `PARTIAL`.
 
 हिंदी सारांश: पहली बार खुलने वाली चैट अब झूठा क्लाउड-सिंक नहीं दिखाती; #13 अभी भी PARTIAL है।
 
+
+---
+
+## WORK SLOT 2 — 2026-09-23 window — 21:35 IST (2026-09-22 16:05–16:14 UTC)
+
+Window date: 2026-09-23 · slots completed: 2 · idempotency guard did not apply (finalized:false)
+
+### Item advanced
+- **#54 Secret/token protection audit — PARTIAL.** Real defect found and fixed in the
+  Android bridge caller-ID mask.
+
+### Bug found and fixed
+`maskPhoneNumber(numberStr)` in `src/utils/androidBridgeEngine.ts` sliced the last four
+*characters* with no digit check, so a digit-free caller label leaked as a fragment of
+itself on the live path (`maskPhoneNumber(payload.callerNumber || 'Unknown')`):
+- `'Unknown'` → `'******nown'`
+- `'private'` → `'******vate'`
+
+Real spaced numbers were also mis-rendered: `'+1 415 890 2134'` → `'+1  ******2134'`
+(double space, mangled tail).
+
+Fix: extract digits first. Digit-free input → `'Unknown Number'`; `'+91-9876543210'` →
+`'+91 ******3210'`; country-prefix and last-4 preserved for real numbers.
+`src/utils/telephonyPermissions.ts` was checked and is **not** affected — its sibling
+`maskPhoneNumber` already returns `'Unknown / Private'` for digit-free input.
+
+### Evidence
+- `src/tests/androidMobileBridge.test.ts` Scenarios 19–20 (file 39 tests, up from 37).
+- Negative validation: pre-fix body restored → `2 failed | 37 passed` of 39
+  (`expected '******nown' to be 'Unknown Number'`; `expected '+1  ******2134' to be
+  '+1 ******2134'`). Fix restored → 39/39 pass.
+
+### Observed gates
+- Lint: PASS — `npm run lint` (tsc --noEmit) exit 0.
+- Tests: PASS — 68 files / 990 tests passed (vitest 4.1.11, 20.47 s).
+- Build: PASS — exit 0, `dist/server.cjs` 852583 bytes (`dist` removed after).
+- Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short` clean;
+  no secret in the diff.
+- E2E: NOT RUN (no device leg possible; falls inside the 990-test suite).
+
+### Commits / push
+- `7ae39bb` fix(android-bridge): report non-numeric caller IDs honestly in maskPhoneNumber
+- `d2f5367` docs(hermes): record the caller-ID masking fix on the android bridge helper
+- `aece58e` docs(hermes): changelog and security notes for the caller-ID masking fix
+- Pushed `7ae39bb..aece58e` to `feature/hermes-full-completion`.
+
+### State / PR / deploy
+- State branch `automation/hermes-state` updated: slots_completed 1 → 2, item 54 PARTIAL.
+- PR #4 open — not refreshed this slot (work slot).
+- Main merge: NOT MERGED — awaiting human approval.
+- Deploy: NOT_CONFIGURED — no deployment target present in this sandbox.
+
+### Blocked
+- #1, #2, #50 (physical Android device) · #8, #55 (Windows host).
+
+### Next slot
+- #13 Zero-fake-success for all tools — next unaudited tool surface, or the exhaustive
+  per-tool inventory the item's notes call for.
+
+हिंदी सारांश: Android bridge के caller-ID masking में असली बग मिला और ठीक किया; 990 टेस्ट, lint, build पास।
