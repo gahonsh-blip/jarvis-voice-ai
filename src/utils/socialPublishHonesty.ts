@@ -126,6 +126,54 @@ export function isUsableCredential(status: string | null | undefined, measured: 
 }
 
 /**
+ * The upload/publish scope a provider requires, keyed by the platform ids the
+ * Social Hub uses. A token that was granted without the scope authenticates
+ * fine yet cannot publish, so "connected" and "can publish" are different
+ * facts.
+ */
+export const PLATFORM_PUBLISH_SCOPES: Record<SocialPlatformKey, string> = {
+  linkedin: 'w_member_social',
+  facebook: 'pages_manage_posts',
+  instagram: 'instagram_content_publish',
+  youtube: 'https://www.googleapis.com/auth/youtube.upload',
+  twitter: 'tweet.write',
+};
+
+/**
+ * Reads the scopes the provider actually granted from an OAuth token response.
+ *
+ * Returns `null` when the response carried no scope field. That is a real
+ * observation — the provider was silent — and must not be read as "all scopes
+ * granted". A non-empty list is returned as-is, including an empty array.
+ */
+export function grantedScopesFromTokenResponse(tokenData: unknown): string[] | null {
+  if (!tokenData || typeof tokenData !== 'object') return null;
+  const raw = (tokenData as Record<string, unknown>).scope;
+  if (typeof raw === 'string') return raw.split(/\s+/).filter((s) => s.length > 0);
+  if (Array.isArray(raw)) return raw.filter((s): s is string => typeof s === 'string');
+  return null;
+}
+
+/** True only when the granted scope list is known and contains the scope. */
+export function scopeGranted(grantedScopes: string[] | null, required: string): boolean {
+  return Array.isArray(grantedScopes) && grantedScopes.includes(required);
+}
+
+/**
+ * Whether the stored credential has a granted publish scope.
+ *
+ * `undefined` means the scope list was never recorded (older connections) and
+ * is reported as UNKNOWN rather than being assumed to include the scope.
+ */
+export function publishScopeGranted(
+  platform: SocialPlatformKey,
+  grantedScopes: string[] | undefined
+): boolean | undefined {
+  if (!Array.isArray(grantedScopes)) return undefined;
+  return grantedScopes.includes(PLATFORM_PUBLISH_SCOPES[platform]);
+}
+
+/**
  * The provider each platform id publishes through, as the server actually
  * addresses it. Rendered so the operator can see the claimed destination.
  */

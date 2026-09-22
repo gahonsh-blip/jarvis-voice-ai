@@ -7,6 +7,10 @@ import {
   isUsableCredential,
   socialApprovalPostureLabel,
   PLATFORM_PROVIDER_HOSTS,
+  PLATFORM_PUBLISH_SCOPES,
+  grantedScopesFromTokenResponse,
+  scopeGranted,
+  publishScopeGranted,
 } from '../utils/socialPublishHonesty';
 
 describe('social publish honesty — the Hub must not claim an unmeasured connection', () => {
@@ -101,5 +105,39 @@ describe('social publish honesty — the Hub must not claim an unmeasured connec
     expect(PLATFORM_PROVIDER_HOSTS.instagram).toBe('graph.facebook.com');
     expect(PLATFORM_PROVIDER_HOSTS.youtube).toBe('www.googleapis.com/youtube/v3');
     expect(PLATFORM_PROVIDER_HOSTS.twitter).toBe('api.twitter.com');
+  });
+});
+
+describe('social publish honesty — a grant must not be invented', () => {
+  it('reads the granted scopes from a space-delimited token response', () => {
+    expect(grantedScopesFromTokenResponse({ scope: 'openid w_member_social profile' })).toEqual([
+      'openid',
+      'w_member_social',
+      'profile',
+    ]);
+  });
+
+  it('returns null when the provider never reported a scope field', () => {
+    expect(grantedScopesFromTokenResponse({ access_token: 'x', expires_in: 3600 })).toBeNull();
+    expect(grantedScopesFromTokenResponse(null)).toBeNull();
+  });
+
+  it('reports an empty grant as empty rather than as the requested scopes', () => {
+    expect(grantedScopesFromTokenResponse({ scope: '' })).toEqual([]);
+  });
+
+  it('only treats a scope as granted when the recorded list actually contains it', () => {
+    const youtubeUpload = PLATFORM_PUBLISH_SCOPES.youtube;
+    expect(scopeGranted([youtubeUpload], youtubeUpload)).toBe(true);
+    expect(scopeGranted(['https://www.googleapis.com/auth/youtube.readonly'], youtubeUpload)).toBe(false);
+    expect(scopeGranted([], youtubeUpload)).toBe(false);
+    expect(scopeGranted(null, youtubeUpload)).toBe(false);
+  });
+
+  it('distinguishes an unrecorded grant (undefined) from a recorded missing scope', () => {
+    expect(publishScopeGranted('youtube', undefined)).toBeUndefined();
+    expect(publishScopeGranted('youtube', [])).toBe(false);
+    expect(publishScopeGranted('youtube', [PLATFORM_PUBLISH_SCOPES.youtube])).toBe(true);
+    expect(publishScopeGranted('linkedin', ['w_member_social'])).toBe(true);
   });
 });

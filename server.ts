@@ -96,6 +96,12 @@ import {
   UNKNOWN_ACTION_DECISION,
 } from './src/utils/hardening/permissionMatrix';
 import {
+  grantedScopesFromTokenResponse,
+  scopeGranted,
+  publishScopeGranted,
+  PLATFORM_PUBLISH_SCOPES,
+} from './src/utils/socialPublishHonesty';
+import {
   createBackup,
   restoreBackup,
   verifyBackup,
@@ -1827,13 +1833,16 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
     });
 
     if (publishOutcome.published) {
+      // LinkedIn answers 201 with the post URN — proof the post exists — but it
+      // does not report the post's visibility back, so the confirmation states
+      // what was requested (PUBLIC) rather than asserting a confirmed audience.
       return {
         success: true,
         executionStatus: 'SUCCESS',
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: publishOutcome.providerId,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on LinkedIn personal member profile! Post URN: ${publishOutcome.providerId}`,
+        userMessage: `✅ VERIFIED UPLOAD: LinkedIn accepted the post with URN ${publishOutcome.providerId} (requested visibility PUBLIC). LinkedIn does not echo per-post visibility, so the audience is taken as requested, not independently measured.`,
       };
     }
 
@@ -1940,7 +1949,7 @@ async function verifyAndPublishToFacebook(post: ServerSocialPost): Promise<{
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: resData.id,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on Facebook Page! Post ID: ${resData.id}`,
+        userMessage: `✅ VERIFIED UPLOAD: Published to the Facebook Page feed — Graph API returned post ID ${resData.id}. This confirms feed creation, not the post's reach or impressions.`,
       };
     } else {
       const errDetail = resData?.error?.message || `HTTP status ${res.status}`;
@@ -2039,7 +2048,7 @@ async function verifyAndPublishToInstagram(post: ServerSocialPost): Promise<{
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: publishData.id,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on Instagram! Media ID: ${publishData.id}`,
+        userMessage: `✅ VERIFIED UPLOAD: Instagram media container published — Graph API returned media ID ${publishData.id}. This confirms the media object exists, not its engagement.`,
       };
     } else {
       const errDetail = publishData?.error?.message || `HTTP status ${publishRes.status}`;
@@ -2132,6 +2141,25 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
     };
   }
   const bearerToken = tokenCheck.token;
+
+  // 2b. Pre-flight scope check. A token can authenticate and still be missing
+  // youtube.upload — the OAuth grant may have skipped the scope. The stored
+  // scope list is authoritative; when it was never recorded we proceed and let
+  // the provider decide, but we never assert the scope is present.
+  const grantedScopes = memoryState.youTubeConnection?.scopes;
+  if (Array.isArray(grantedScopes)) {
+    const requiredScope = PLATFORM_PUBLISH_SCOPES.youtube;
+    if (!scopeGranted(grantedScopes, requiredScope)) {
+      return {
+        success: false,
+        executionStatus: 'NOT_PUBLISHED',
+        verificationStatus: 'MISSING_CREDENTIALS',
+        finalTruthState: 'DRAFT',
+        errorReason: `The stored YouTube credential was granted without the upload scope (${requiredScope}). Granted scopes: ${grantedScopes.length > 0 ? grantedScopes.join(' ') : 'none recorded'}.`,
+        userMessage: `⚠️ NOT PUBLISHED: This YouTube connection was authorized without the upload scope (${requiredScope}). Reconnect with "1-Click YouTube OAuth" and approve upload access. Post held in DRAFT.`,
+      };
+    }
+  }
 
   // 3. Verify Channel Status
   let channelTitle = memoryState.youTubeConnection?.channelTitle || 'YouTube Channel';
@@ -2270,13 +2298,20 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
       post.privacyStatus = finalPrivacy;
       post.targetChannel = uploadedChannel;
 
+      // A 2xx with an id proves the upload was accepted, but not that the video
+      // is publicly watchable: a PRIVATE or UNLISTED upload is not visible to
+      // anyone but the owner. The message must state the privacy actually
+      // applied rather than a blanket "Live".
+      const isPubliclyVisible = finalPrivacy === 'public';
       return {
         success: true,
         executionStatus: 'SUCCESS',
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: videoId,
-        userMessage: `✅ VERIFIED & BROADCASTED: Live on YouTube Channel "${uploadedChannel}"!\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}\n• Privacy Mode: ${finalPrivacy.toUpperCase()}`,
+        userMessage: isPubliclyVisible
+          ? `✅ VERIFIED & PUBLIC: Live on YouTube Channel "${uploadedChannel}"!\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}\n• Privacy Mode: ${finalPrivacy.toUpperCase()} — publicly watchable`
+          : `✅ VERIFIED UPLOAD: Accepted by YouTube Data API on channel "${uploadedChannel}" as ${finalPrivacy.toUpperCase()} — ${finalPrivacy === 'private' ? 'visible only to the channel owner' : 'visible only with the direct link, not publicly listed'}.\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}`,
       };
     } else {
       const errDetail = uploadData?.error?.message || `HTTP ${uploadRes.status}: ${uploadRes.statusText}`;
@@ -2348,7 +2383,7 @@ async function verifyAndPublishToTwitter(post: ServerSocialPost): Promise<{
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: data.data.id,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on X/Twitter! Tweet ID: ${data.data.id}`,
+        userMessage: `✅ VERIFIED UPLOAD: X/Twitter accepted the tweet — API v2 returned tweet ID ${data.data.id}. This confirms creation, not delivery to any follower's timeline.`,
       };
     } else {
       const errDetail = data?.detail || data?.title || `HTTP status ${res.status}`;
@@ -4522,7 +4557,9 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
         picture: conn?.picture,
         connectedAt: conn?.connectedAt,
         expiresAt: conn?.expiresAt,
-        scopes: conn?.scopes || ['w_member_social', 'openid', 'profile', 'email'],
+        // A scope list the server never recorded is reported as empty, not as
+        // the scopes the app intended to request — those are a request, not a grant.
+        scopes: conn?.scopes ?? [],
         hasClientId: Boolean(linkedInClientId),
         hasClientSecret: Boolean(linkedInClientSecret),
         redirectUri: linkedInRedirectUri,
@@ -4606,7 +4643,8 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
         avatarUrl: ytConn?.avatarUrl || undefined,
         connectedAt: ytConn?.connectedAt || undefined,
         expiresAt: ytConn?.expiresAt || undefined,
-        scopes: ytConn?.scopes || ['https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.upload'],
+        // See LinkedIn: an unrecorded grant is unknown, so report no scopes.
+        scopes: ytConn?.scopes ?? [],
         hasClientId: Boolean(ytClientId),
         hasClientSecret: Boolean(ytClientSecret),
         hasApiKey: Boolean(ytKey),
@@ -4788,7 +4826,9 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
 
     const accessToken = tokenData.access_token;
     const expiresIn = tokenData.expires_in || 5184000;
-    const grantedScopes = tokenData.scope ? (typeof tokenData.scope === 'string' ? tokenData.scope.split(' ') : tokenData.scope) : ['w_member_social', 'openid', 'profile', 'email'];
+    // A token response without a scope field means the grant is unmeasured; an
+    // empty list is the honest record, not the scopes the app asked for.
+    const grantedScopes = grantedScopesFromTokenResponse(tokenData) ?? [];
 
     // Fetch authenticated member personal profile
     const userinfoRes = await fetch('https://api.linkedin.com/v2/userinfo', {
@@ -4921,7 +4961,7 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
       picture: conn.picture,
       connectedAt: conn.connectedAt,
       expiresAt: conn.expiresAt,
-      scopes: conn.scopes || ['w_member_social', 'openid', 'profile', 'email'],
+      scopes: conn.scopes ?? [],
       hasClientId: Boolean(clientId),
       hasClientSecret: Boolean(clientSecret),
       redirectUri,
@@ -5106,7 +5146,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     const accessToken = tokenData.access_token;
     const refreshToken = tokenData.refresh_token || (memoryState.youTubeConnection?.refreshToken);
     const expiresIn = tokenData.expires_in || 3600;
-    const grantedScopes = typeof tokenData.scope === 'string' ? tokenData.scope.split(' ') : [];
+    const grantedScopes = grantedScopesFromTokenResponse(tokenData) ?? [];
 
     // Query Channel Info from YouTube Data API v3
     let channelId = '';
@@ -5265,10 +5305,14 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
         }
 
         const conn = memoryState.youTubeConnection;
+        // channels.list proves read access to the channel, not the upload scope.
+        // canPublish therefore follows the recorded grant: true only when the
+        // upload scope is on record, false when it is absent or unrecorded.
+        const uploadScopeGranted = publishScopeGranted('youtube', conn?.scopes) === true;
         return res.json({
           connected: true,
           status: 'API_VERIFIED',
-          canPublish: true,
+          canPublish: uploadScopeGranted,
           authType: 'OAUTH_2_0',
           channelTitle: title,
           channelId: chId,
@@ -5276,11 +5320,14 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
           avatarUrl,
           connectedAt: conn?.connectedAt || new Date().toISOString(),
           expiresAt: conn?.expiresAt,
-          scopes: conn?.scopes || ['https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.upload'],
+          scopes: conn?.scopes ?? [],
           hasClientId: Boolean(clientId),
           hasClientSecret: Boolean(clientSecret),
           hasApiKey: Boolean(apiKey),
           redirectUri,
+          message: uploadScopeGranted
+            ? undefined
+            : `Channel confirmed read-only. The upload scope (${PLATFORM_PUBLISH_SCOPES.youtube}) is not on record for this connection, so publishing is not confirmed — reconnect to grant upload access.`,
         });
       } else {
         const is403 = probeRes.status === 403;
