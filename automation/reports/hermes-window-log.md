@@ -3079,7 +3079,7 @@ Next Slot:
 - Test: `src/tests/androidMobileBridge.test.ts` Scenario 21. File 40 tests (was 39).
 - Negative validation vs upstream-only engine: `1 failed | 39 passed` of 40 (Scenario 21
   alone); `40 passed` with the repair restored.
-- Tests: 75 files / 1047 passed (21.07 s).
+- Tests: 75 files / 1047 passed (19.49 s) — re-run and observed directly in this slot.
 - Lint: `tsc --noEmit` exit 0.
 - Build: exit 0, `dist/server.cjs` 836.7 kb (dist removed after measuring).
 - Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; working tree clean; no

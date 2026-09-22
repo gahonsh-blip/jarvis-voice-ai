@@ -26,7 +26,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ### Verification
 - lint (`tsc --noEmit`) exit 0; `npx vitest run` **75 files / 1047 tests
-  passed** (21.07 s).
+  passed** (19.49 s, re-run in slot 9).
 
 ---
 
