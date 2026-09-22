@@ -120,7 +120,35 @@ around by lowering the requested action's risk are not controls.
 ## 6. Secret handling
 
 `redactSecrets` in `credentialRedactor.ts` masks credentials in any text that
-leaves the system. Two patterns were found to be broken and were fixed:
+leaves the system.
+
+### Where redaction is applied
+
+Redaction only helps if it sits on the path the secret actually takes. The
+redactor was wired into the computer-operator output and the backup snapshot,
+but not into the path that ships memory to a third-party model.
+`assembleAiContext()` in `src/utils/memory/aiContext.ts` builds the Gemini system
+prompt from the assistant name, custom key/values, note titles and bodies, and
+the conversation history. Until 2026-09-22 18:43 UTC it inserted all of that
+verbatim, so a GitHub token stored in long-term memory, an API key saved as a
+custom fact, or a password typed in chat was sent to Google in the
+`generateContent` request body.
+
+Every outbound string in that path now passes through `auditSecrets()` before it
+is assembled, and the result reports `redactedSecretsCount` and
+`redactedCategories`. The `/api/chat` call site passes the observed
+`securityMatrixState.credentialLeakProtection` flag and logs a warning naming the
+categories whenever a redaction occurs, so a scrub leaves a trace instead of
+being silent. The opt-out (`redactCredentials: false`) exists for tests only and
+is never set by the server. Guarded by `src/tests/llmContextLeakProtection.test.ts`
+(7 tests); negative-validated — forcing the guard off fails 4 of 7.
+
+The Security Matrix modal previously rendered `Zero Credential Leaks to LLM
+Memory — PROTECTED` as a hardcoded literal while `credentialLeakProtection` had
+no reader anywhere. The badge is now derived from observed state
+(`PROTECTED` / `DISABLED` / `UNKNOWN`); see section 9 on liveness claims.
+
+Two patterns were found to be broken and were fixed:
 
 - The OpenAI pattern contained a stray `T3BlbkFJ` fragment inside a quantifier,
   so it matched no key of any kind. It also carried a bare `[a-zA-Z0-9]{48,}`

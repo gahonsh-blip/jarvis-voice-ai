@@ -4,6 +4,33 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 00:13 IST (2026-09-22 18:43 UTC) — credentials were shipped to the LLM in the memory context
+
+### Security fix
+- `src/utils/memory/aiContext.ts` — `assembleAiContext()` built the Gemini system
+  prompt from `memoryState.name`, `memoryState.customKeyValues`, note titles and
+  bodies, and the conversation history with **no redaction**. A token, API key or
+  password stored in long-term memory, saved as a custom key/value, or typed in
+  chat left for the model verbatim, in the outbound `generateContent` request.
+  Every outbound string now passes through the existing `auditSecrets()` redactor
+  by default; the call reports `redactedSecretsCount` and `redactedCategories`.
+  Opt-out requires an explicit `redactCredentials: false`.
+- `server.ts` — the memory-context call site now passes the real
+  `securityMatrixState.credentialLeakProtection` flag and logs a warning naming
+  the redacted categories when memory is scrubbed before an external call.
+- `src/components/SecurityMatrixModal.tsx` — the row read the hardcoded literal
+  `Zero Credential Leaks to LLM Memory — PROTECTED`; `credentialLeakProtection`
+  had no reader anywhere in the codebase. The badge now renders `PROTECTED` /
+  `DISABLED` / `UNKNOWN` from the observed state.
+
+### Added
+- `src/tests/llmContextLeakProtection.test.ts` — 7 tests covering note bodies,
+  custom key/values, history, clean text that must pass through unchanged, the
+  explicit opt-out, and a source guard that the badge is no longer a constant.
+  Negative-validated: forcing redaction off fails 4 of 7.
+
+---
+
 ## [Unreleased] - 2026-09-23 23:42 IST (18:12 UTC) — the Mobile Personal Status briefing card claimed TTS readiness and live telemetry it never observed
 
 ### Bug fix
