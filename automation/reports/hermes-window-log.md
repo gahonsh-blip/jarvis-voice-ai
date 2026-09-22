@@ -3051,3 +3051,49 @@ Next Slot:
 - Negative validation: restoring ACTIVE POSITION FIX -> 1 failed | 11 passed of 12.
 - Commit: 4701be6. Branch: feature/hermes-full-completion. Push: succeeded.
 - Main merge: NOT MERGED - awaiting human approval. Deploy: NOT_CONFIGURED.
+
+---
+
+## SLOT 9 — WORK SLOT — 2026-09-23 01:06 IST (2026-09-22 19:36 UTC)
+
+- Window date: 2026-09-23. Slots completed after this slot: 9.
+- Item: #54 Secret/token protection audit (Android-bridge caller-ID privacy). Status PARTIAL.
+
+### Found
+- `handleIncomingCall` in `src/utils/androidBridgeEngine.ts` selected the localized
+  unknown-caller fallback with `masked !== 'Unknown'`. Slot 8 repaired
+  `maskPhoneNumber` so it returns `'Unknown Number'` for digit-free input, which made
+  that comparison permanently true-ish (the `अज्ञात नंबर` branch unreachable). A call
+  with no resolvable number would splice the literal `Unknown Number` into the Hindi
+  sentence, and Hinglish/English had no honest fallback at all.
+- Rebase of this slot's first draft onto `4b8a91d` conflicted with slot 8's repair.
+  Resolution kept upstream's more thorough `maskPhoneNumber`; this slot's duplicate
+  rewrite was dropped.
+
+### Fixed
+- `src/utils/androidBridgeEngine.ts` — branch now selects on `/\d/.test(masked)` and
+  gives each language its own honest fallback (`अज्ञात नंबर` / `an unknown number`).
+- Both `maskPhoneNumber` call sites stopped passing the `|| 'Unknown'` sentinel.
+
+### Evidence
+- Test: `src/tests/androidMobileBridge.test.ts` Scenario 21. File 40 tests (was 39).
+- Negative validation vs upstream-only engine: `1 failed | 39 passed` of 40 (Scenario 21
+  alone); `40 passed` with the repair restored.
+- Tests: 75 files / 1047 passed (21.07 s).
+- Lint: `tsc --noEmit` exit 0.
+- Build: exit 0, `dist/server.cjs` 836.7 kb (dist removed after measuring).
+- Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; working tree clean; no
+  secrets in diff.
+- Commits: 93562fd (fix + test), 01cee84 (docs). Push: succeeded.
+- Commit-message correction: `93562fd`'s message claims it changed `maskPhoneNumber`,
+  but the rebase kept upstream's body, so that diff is empty. Message left uncorrected
+  because force-push is forbidden; the backlog note records the correction.
+
+- E2E: NOT RUN (no physical Android device).
+- PR: #4 (existing, open). Main merge: NOT MERGED — awaiting human approval.
+- Deploy: NOT_CONFIGURED — no deployment target in this environment.
+
+### Next slot
+- Item 54, another caller-ID / telephony-adjacent privacy surface not yet swept. No
+  backlog item is newly unblocked; hardware items (#1/#2/#3/#55) remain blocked.
+
