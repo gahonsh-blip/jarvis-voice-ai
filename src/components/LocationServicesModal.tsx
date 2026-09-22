@@ -20,6 +20,7 @@ import {
   ArrowUpRight,
   Maximize2,
   Minimize2,
+  WifiOff,
 } from 'lucide-react';
 import {
   GeoCoordinates,
@@ -34,6 +35,10 @@ import {
   reverseGeocodeCoordinates,
   saveCachedLocation,
   loadCachedLocation,
+  locationSourceLabel,
+  accuracyDisplay,
+  locationBriefing,
+  type CoordsSource,
 } from '../utils/locationService';
 
 interface LocationServicesModalProps {
@@ -53,6 +58,12 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
   const [coords, setCoords] = useState<GeoCoordinates | null>(() => {
     const cached = loadCachedLocation();
     return cached?.coords || null;
+  });
+  // Provenance of `coords`. Only 'live' is a hardware GPS fix — every other
+  // value must be labelled so the HUD never presents a preset/cached/manual
+  // point as a device position fix.
+  const [coordsSource, setCoordsSource] = useState<CoordsSource | null>(() => {
+    return loadCachedLocation()?.coords ? 'cache' : null;
   });
   const [address, setAddress] = useState<LocationAddress | null>(() => {
     const cached = loadCachedLocation();
@@ -98,9 +109,8 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           };
 
           setCoords(newCoords);
+          setCoordsSource('live');
           setIsLoading(false);
-
-          // Reverse geocode
           const addr = await reverseGeocodeCoordinates(newCoords.latitude, newCoords.longitude);
           setAddress(addr);
           saveCachedLocation(newCoords, addr);
@@ -118,21 +128,10 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           }
           setPermissionError(msg);
 
-          // If no coords exist, seed with default HQ preset
-          if (!coords) {
-            const fallbackPreset = TACTICAL_PRESETS[0];
-            const fallbackCoords: GeoCoordinates = {
-              latitude: fallbackPreset.latitude,
-              longitude: fallbackPreset.longitude,
-              accuracy: 25,
-              timestamp: Date.now(),
-            };
-            setCoords(fallbackCoords);
-            reverseGeocodeCoordinates(fallbackCoords.latitude, fallbackCoords.longitude).then((addr) => {
-              setAddress(addr);
-              saveCachedLocation(fallbackCoords, addr);
-            });
-          }
+          // No GPS hardware fix. Do NOT seed a tactical preset as if it were the
+          // device position — that fabricated a "live" fix and persisted it. Leave
+          // the HUD empty and let the operator pick a preset or manual coords,
+          // which are labelled as simulated.
         },
         {
           enableHighAccuracy: highAcc,
@@ -171,6 +170,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
             timestamp: pos.timestamp,
           };
           setCoords(updated);
+          setCoordsSource('live');
           saveCachedLocation(updated, address);
           onCoordinatesUpdated?.(updated, address);
         },
@@ -218,8 +218,14 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
     if (!coords) return;
     const dms = formatDMS(coords.latitude, coords.longitude);
     const locName = address?.city ? `${address.city}, ${address.country || ''}` : 'current coordinates';
-    const speech = `Sir, your current geospatial fix is located at ${locName}. Latitude ${coords.latitude.toFixed(4)} degrees, Longitude ${coords.longitude.toFixed(4)} degrees, with a GPS precision of plus or minus ${Math.round(coords.accuracy)} meters.`;
-    onSpeak?.(speech);
+    onSpeak?.(
+      locationBriefing(coordsSource, {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        placeLabel: locName,
+      }),
+    );
   };
 
   // Apply a preset
@@ -231,14 +237,15 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
       timestamp: Date.now(),
     };
     setCoords(newCoords);
+    setCoordsSource('preset');
     setSelectedWaypoint(preset);
     setPermissionError(null);
     setIsLoading(true);
     const addr = await reverseGeocodeCoordinates(preset.latitude, preset.longitude);
     setAddress(addr);
     setIsLoading(false);
-    saveCachedLocation(newCoords, addr);
-    onCoordinatesUpdated?.(newCoords, addr);
+    // Deliberately not persisted: a preset is a simulated position, and caching
+    // it would resurrect it as if it were a real fix on the next load.
   };
 
   // Apply manual coordinates
@@ -257,6 +264,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
       timestamp: Date.now(),
     };
     setCoords(customCoords);
+    setCoordsSource('manual');
     setPermissionError(null);
     setIsLoading(true);
     const addr = await reverseGeocodeCoordinates(lat, lon);
@@ -298,11 +306,23 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-400/40 text-cyan-400">
-                <Navigation className="w-6 h-6 animate-pulse" />
+                <Navigation className="w-6 h-6" />
               </div>
+              {/* Lock indicator reflects real fix state only — it must not blink
+                  as if satellites are locked when there is no GPS position. */}
               <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                {coordsSource === 'live' ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </>
+                ) : (
+                  <span
+                    className={`relative inline-flex rounded-full h-3 w-3 ${
+                      coords ? 'bg-amber-500' : 'bg-slate-600'
+                    }`}
+                  />
+                )}
               </span>
             </div>
             <div>
@@ -368,6 +388,27 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                   <span className="text-xs font-mono font-bold tracking-wider text-slate-300 uppercase">
                     Active Orbital Fix
                   </span>
+                  {coords && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${
+                        coordsSource === 'live'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                      }`}
+                    >
+                      {coordsSource === 'live' ? (
+                        <>
+                          <Navigation className="w-2.5 h-2.5" />
+                          LIVE GPS
+                        </>
+                      ) : (
+                        <>
+                          <WifiOff className="w-2.5 h-2.5" />
+                          {locationSourceLabel(coordsSource)}
+                        </>
+                      )}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {isWatching && (
@@ -431,7 +472,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                     <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/80">
                       <div className="text-[9px] font-mono text-slate-500 uppercase">ACCURACY</div>
                       <div className="text-xs font-mono font-bold text-emerald-400">
-                        ±{Math.round(coords.accuracy)}m
+                        {accuracyDisplay(coordsSource, coords.accuracy)}
                       </div>
                     </div>
                     <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/80">
@@ -464,6 +505,10 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                 <div className="py-8 text-center space-y-3">
                   <Radio className="w-10 h-10 text-cyan-400 animate-pulse mx-auto opacity-60" />
                   <p className="text-sm font-mono text-slate-300">Awaiting Geolocation Hardware Lock...</p>
+                  <p className="text-xs font-mono text-slate-500 max-w-md mx-auto">
+                    No device GPS fix has been received. Selecting a tactical preset or entering
+                    coordinates below is simulated and will be labelled as such.
+                  </p>
                   <button
                     onClick={() => fetchCurrentLocation(highAccuracy)}
                     className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs font-bold transition-colors"
@@ -654,7 +699,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                         </span>
                         <div className="mt-2 px-2.5 py-1 rounded-md bg-slate-950/90 border border-cyan-500/60 backdrop-blur-md text-center shadow-lg">
                           <div className="text-[10px] font-mono font-bold text-cyan-300">
-                            {address?.city || 'GPS Lock Point'}
+                            {address?.city || (coordsSource === 'live' ? 'GPS Lock Point' : 'Simulated Point')}
                           </div>
                           <div className="text-[9px] font-mono text-slate-400">
                             {coords.latitude.toFixed(4)}°, {coords.longitude.toFixed(4)}°

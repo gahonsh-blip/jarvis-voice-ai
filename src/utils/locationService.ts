@@ -180,6 +180,58 @@ export function saveCachedLocation(coords: GeoCoordinates, address: LocationAddr
 }
 
 /**
+ * Provenance of the coordinates currently shown by a location surface. Only
+ * `live` means the reading came from the device GPS radio in this session.
+ */
+export type CoordsSource = 'live' | 'cache' | 'preset' | 'manual';
+
+const SOURCE_LABELS: Record<CoordsSource, string> = {
+  live: 'LIVE GPS',
+  cache: 'LAST KNOWN (CACHED)',
+  preset: 'SIMULATED PRESET',
+  manual: 'MANUAL ENTRY',
+};
+
+/** A null source means no position is held at all — never render it as a fix. */
+const NO_FIX_LABEL = 'NO FIX';
+
+export function locationSourceLabel(source: CoordsSource | null): string {
+  return source ? SOURCE_LABELS[source] ?? SOURCE_LABELS.cache : NO_FIX_LABEL;
+}
+
+/**
+ * Accuracy figure to display. A preset, manual, or cached coordinate has no
+ * measured GPS precision, so it must never render a fabricated ±Nm value.
+ */
+export function accuracyDisplay(source: CoordsSource | null, accuracy: number): string {
+  return source === 'live' ? `±${Math.round(accuracy)}m` : 'N/A — no GPS fix';
+}
+
+/**
+ * Spoken location briefing. When there is no live GPS fix it must say so and
+ * name the real provenance instead of reading the position as a device fix.
+ */
+export function locationBriefing(
+  source: CoordsSource | null,
+  options: { latitude: number; longitude: number; accuracy: number; placeLabel: string },
+): string {
+  const { latitude, longitude, accuracy, placeLabel } = options;
+  const position = `Latitude ${latitude.toFixed(4)} degrees, Longitude ${longitude.toFixed(4)} degrees`;
+  if (source === 'live') {
+    return `Sir, your current geospatial fix is located at ${placeLabel}. ${position}, with a GPS precision of plus or minus ${Math.round(accuracy)} meters.`;
+  }
+  const qualifier =
+    source === 'preset'
+      ? 'a simulated tactical preset'
+      : source === 'manual'
+        ? 'manually entered coordinates'
+        : source === 'cache'
+          ? 'the last known cached position'
+          : 'an unverified position of unknown origin';
+  return `Sir, there is no live GPS fix. I am showing ${placeLabel} at ${position} from ${qualifier}, which is not a device location reading.`;
+}
+
+/**
  * Load cached location from local storage
  */
 export function loadCachedLocation(): { coords: GeoCoordinates; address: LocationAddress | null } | null {
