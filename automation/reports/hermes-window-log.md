@@ -2661,3 +2661,70 @@ Fix: extract digits first. Digit-free input → `'Unknown Number'`; `'+91-987654
   per-tool inventory the item's notes call for.
 
 हिंदी सारांश: Android bridge के caller-ID masking में असली बग मिला और ठीक किया; 990 टेस्ट, lint, build पास।
+
+---
+
+## Slot 3 — WORK — 2026-09-22 22:06 IST (16:36 UTC)
+
+Window date 2026-09-23 · slots completed so far: 3 · item 54 (`Secret/token
+protection audit`, remains PARTIAL)
+
+### What was done
+Slot 2 (`21:35 IST`) repaired the canonical `maskPhoneNumber`. It left the
+*route* — the code path that actually handles device events — on its own inline
+mask. This slot closed that gap.
+
+`POST /api/mobile/bridge/event` in `server.ts` used:
+
+```ts
+String(payload.callerNumber).replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2')
+```
+
+Two real defects, both observed by running the regex:
+- anchored to *contiguous* digits, so `'+1 415 890 2134'` never matched and was
+  written to the audit trail **completely unmasked**;
+- when it did match, `'+91 9876543210'` → `'+91 987******210'`, exposing the
+  leading digits and four more subscriber digits.
+
+Fix: new `src/utils/androidBridgePrivacy.ts` exporting
+`maskAndroidCallerNumber` (wrapper over the canonical `maskPhoneNumber`,
+returns `undefined` when no identifier was reported). Route now calls it.
+Observed: `'+1 415 890 2134'` → `'+1 ******2134'`, `'+91 9876543210'` →
+`'+91 ******3210'`, `'Unknown'` → `'Unknown Number'`.
+
+`/api/mobile/bridge/simulate` was inspected: it stores no state and echoes only
+the caller's own request body (`SIMULATION_ONLY`). No change needed, recorded so
+a later slot does not re-open it.
+
+### Evidence
+- `src/tests/androidBridgeHttpPrivacy.test.ts` — 7 tests, all pass. Five pin the
+  helper on the old regex's bad inputs; two are a source guard that the inline
+  contiguous-digit regex has not returned and that the route masks via the
+  shared helper.
+- Negative validation: restoring the inline regex → observed `2 failed | 5
+  passed` of 7. The fix is what makes them pass.
+- Gates on `ab5bb6e`: lint (`tsc --noEmit`) exit 0 · `npx vitest run` **69 files
+  / 997 tests passed** (20.09 s) · `npm run build` exit 0, `dist/server.cjs`
+  852719 bytes (`dist/` removed after measuring, never committed).
+- Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status
+  --short` clean before the commit; no token/key in the diff.
+
+### Bugs found
+- The unmasked/over-exposed caller-ID path above.
+
+### Bugs fixed
+- Same, verified by the negative validation and the suite.
+
+### Status honesty
+Item 54 stays `PARTIAL` — this is a third found-and-fixed leak in the sweep, not
+evidence the sweep is complete. Item 1 (`Real Android Mobile Bridge`) stays
+`BLOCKED — physical Android device required`.
+
+### Commit
+`ab5bb6e` (code) → `ef9deef` (docs) on `feature/hermes-full-completion`, pushed.
+
+### Next slot
+- #54 secret/token protection audit (continue the sweep, unaudited surface), or
+  #13 zero-fake-success for the next unaudited tool surface.
+
+हिंदी सारांश: HTTP bridge के caller-ID mask का असली बग पकड़ा और ठीक किया; 997 टेस्ट, lint, build पास, दोनों branch push हो गए।
