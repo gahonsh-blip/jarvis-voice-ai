@@ -4,6 +4,7 @@ import {
   AndroidNotificationPayload,
   AndroidPendingEvent,
   AndroidBridgeStatus,
+  MobilePermissionMatrix,
 } from '../types/mobileBridge';
 import { androidBridgeEngine } from './androidBridgeEngine';
 
@@ -14,7 +15,11 @@ export interface AndroidBridgeAdapter {
   getStatus(): AndroidBridgeStatus;
   getCapabilities(): AndroidDeviceCapabilities | null;
   answerCall(callId: string): Promise<{ success: boolean; status: string; message: string }>;
-  sendReply(notificationId: string, replyText: string): Promise<{ success: boolean; status: string; message: string }>;
+  sendReply(
+    notificationId: string,
+    replyText: string,
+    approved?: boolean
+  ): Promise<{ success: boolean; status: string; message: string }>;
   openApp(packageName: string): Promise<{ success: boolean; message: string }>;
 }
 
@@ -26,11 +31,26 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
   public readonly isSimulation = false;
   private endpoint = '/api/mobile/bridge';
   private authToken: string | null = null;
+  private reportedCapabilities: AndroidDeviceCapabilities | null = null;
+  private reportedPermissions: Partial<MobilePermissionMatrix> | null = null;
 
   constructor(authToken?: string) {
     if (authToken) {
       this.authToken = authToken;
     }
+  }
+
+  /**
+   * Register the capabilities that the out-of-process Android bridge daemon
+   * reports for this device. The server requires this payload at connect time,
+   * so a real connection cannot be established without it.
+   */
+  public setReportedCapabilities(caps: AndroidDeviceCapabilities): void {
+    this.reportedCapabilities = caps;
+  }
+
+  public setReportedPermissions(permissions: Partial<MobilePermissionMatrix>): void {
+    this.reportedPermissions = permissions;
   }
 
   public async connect(authToken?: string): Promise<{ success: boolean; status: AndroidBridgeStatus; message: string }> {
@@ -43,27 +63,40 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
           'Content-Type': 'application/json',
           ...(this.authToken ? { 'X-JARVIS-AUTH-TOKEN': this.authToken } : {}),
         },
+        body: JSON.stringify({
+          device: this.reportedCapabilities ?? undefined,
+          permissions: this.reportedPermissions ?? undefined,
+        }),
       });
 
       if (!res.ok) {
+        let detail = `Bridge returned status ${res.status}`;
+        try {
+          const errBody = await res.json();
+          if (errBody?.error) detail = errBody.error;
+        } catch {}
         return {
           success: false,
           status: 'ERROR',
-          message: `Bridge returned status ${res.status}`,
+          message: detail,
         };
       }
 
       const data = await res.json();
-      if (data.capabilities) {
-        androidBridgeEngine.connectDevice({
-          ...data.capabilities,
-          isSimulation: false,
-        });
+      const capabilities = data.device ?? data.capabilities;
+      if (capabilities) {
+        androidBridgeEngine.connectDevice(
+          {
+            ...capabilities,
+            isSimulation: Boolean(capabilities.isSimulation),
+          },
+          this.reportedPermissions ?? undefined
+        );
       }
 
       return {
         success: true,
-        status: androidBridgeEngine.getStatus(),
+        status: data.status || androidBridgeEngine.getStatus(),
         message: 'Real Android Bridge connected successfully.',
       };
     } catch (err: any) {
@@ -123,7 +156,8 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
 
   public async sendReply(
     notificationId: string,
-    replyText: string
+    replyText: string,
+    approved: boolean = false
   ): Promise<{ success: boolean; status: string; message: string }> {
     try {
       const res = await fetch(`${this.endpoint}/message/reply`, {
@@ -132,7 +166,7 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
           'Content-Type': 'application/json',
           ...(this.authToken ? { 'X-JARVIS-AUTH-TOKEN': this.authToken } : {}),
         },
-        body: JSON.stringify({ notificationId, replyText }),
+        body: JSON.stringify({ notificationId, replyText, approved }),
       });
       const data = await res.json();
       return {
@@ -230,8 +264,16 @@ export class SimulatedAndroidBridgeAdapter implements AndroidBridgeAdapter {
 
   public async sendReply(
     notificationId: string,
-    replyText: string
+    replyText: string,
+    approved: boolean = false
   ): Promise<{ success: boolean; status: string; message: string }> {
+    if (!approved) {
+      return {
+        success: false,
+        status: 'AUTHORIZATION_REQUIRED',
+        message: 'Explicit human approval required to send message reply.',
+      };
+    }
     const res = androidBridgeEngine.executeMessageReply(replyText);
     return {
       success: res.success,
