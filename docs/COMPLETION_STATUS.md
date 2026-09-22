@@ -4,6 +4,43 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-09-22 21:06 IST (15:36 UTC) — **WORK SLOT**, the 21:05 IST
+fire of the 2026-09-23 window (state counter reset to 1; the prior window's
+`window_date` 2026-09-22 was finalized, and 2026-09-22 21:06 IST begins a *new*
+window). Item 13 (`Zero-fake-success for all tools`).
+
+**The first-launch chat transcript asserted a cloud sync nobody had run.**
+`defaultInitialMessages` in `src/utils/offlineStorage.ts` is the seed that
+`App.tsx` renders as the chat history whenever `localStorage` holds no
+transcript — i.e. on a fresh install, the first thing the operator sees. Its
+system message read `HERMES JARVIS PROTOCOL ACTIVE. Local offline storage
+initialized & synced with Oracle Cloud Always Free ARM node.` No sync route
+exists in this build, the `PendingSyncItem` queue is never drained to a remote,
+and this file's own known-limitations section records that the process runs in
+this container rather than on the Oracle ARM VM. The same file's
+`defaultInitialMemory` note also hardcoded a deployment and a persistence mode
+(`Oracle Always Free ARM64 + Local Hybrid Engine`, `Offline-First LocalStorage &
+Backend Sync`) as though they were measured, and the initial JARVIS greeting
+claimed "Local neural memory banks are active". The system message now states
+that cloud sync is NOT configured in this build and the cloud-node/sync strings
+were dropped from the seed memory note, so the transcript no longer narrates an
+unperformed sync as a completed one.
+
+Guarded by three new cases in `src/tests/offlineStorage.test.ts` (7 tests in
+file, up from 4): the seed message says cloud sync is not configured, no seed
+message matches `synced with` / `Oracle Cloud` / `ARM node`, and a source guard
+pins the absence of the fabricated string in `offlineStorage.ts`.
+Negative-validated: restoring the original `& synced with Oracle Cloud Always
+Free ARM node` line fails exactly those three — observed `3 failed | 4 passed`
+of 7 — and all 7 pass once the fix is restored. Gates on `2858e11`: lint
+(`tsc --noEmit`) exit 0; `npx vitest run` **68 files / 987 tests passed** (19.41
+s); `npm run build` exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb, `dist/`
+removed after measuring and never committed). Item 13 remains `PARTIAL` — the
+sweep is still pattern-driven; closing it needs the exhaustive per-tool surface
+inventory named in "Known limitations".
+
+The previous window (2026-09-22) covered the following, still in force:
+
 **Finalization — 2026-09-22 04:35 IST (2026-09-21 23:07 UTC), FINALIZATION slot.**
 No new development was started. The frozen tip `499045e` was re-verified end to
 end and the results observed this slot are: `npm run lint` (`tsc --noEmit`)
@@ -1206,6 +1243,12 @@ fix.
 ---
 
 ## Known limitations
+
+- Item 13's first-launch chat seed (2026-09-22 21:06 IST): `defaultInitialMessages`
+  in `src/utils/offlineStorage.ts` no longer claims "synced with Oracle Cloud
+  Always Free ARM node". This is a truthfulness fix for one rendered surface, not
+  evidence that a cloud sync exists — no sync route is shipped, and the
+  `PendingSyncItem` queue is never drained to a remote. Item 13 stays `PARTIAL`.
 
 - No physical Android device has been used in this environment. Items 1 and 2
   remain `PARTIAL` until the on-device checklist in `docs/ANDROID_BRIDGE.md` is

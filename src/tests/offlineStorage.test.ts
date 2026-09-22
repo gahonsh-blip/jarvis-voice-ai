@@ -97,4 +97,12 @@ describe('first-launch chat seed makes no unobserved cloud claim', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'utils', 'offlineStorage.ts'), 'utf8');
     expect(source).not.toContain('synced with Oracle Cloud Always Free ARM node');
   });
+
+  it('seed memory does not hardcode an unverified deployment or backend sync', async () => {
+    const { defaultInitialMemory } = await loadModule();
+    const values = JSON.stringify(defaultInitialMemory.customKeyValues);
+    expect(values).not.toMatch(/Oracle/i);
+    expect(values).not.toMatch(/ARM64/i);
+    expect(values).not.toMatch(/Backend Sync/i);
+  });
 });

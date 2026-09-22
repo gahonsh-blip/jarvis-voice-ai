@@ -38,9 +38,9 @@ export const defaultInitialMemory: MemoryStore = {
     },
   ],
   customKeyValues: {
-    system_engine: 'Oracle Always Free ARM64 + Local Hybrid Engine',
+    system_engine: 'Local Hybrid Engine (deployment target NOT configured)',
     voice_status: 'SpeechSynthesis + Web Audio API',
-    persistence_mode: 'Offline-First LocalStorage & Backend Sync',
+    persistence_mode: 'Offline-First LocalStorage (remote sync NOT configured)',
   },
   stats: {
     totalCommands: 0,

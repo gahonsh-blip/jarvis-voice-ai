@@ -4,6 +4,30 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-22 21:06 IST (15:36 UTC) — The first-launch chat transcript no longer claims a cloud sync
+
+### Bug fix
+- `src/utils/offlineStorage.ts` `defaultInitialMessages` — the seed chat history
+  that `App.tsx` renders when `localStorage` holds no transcript opened with
+  `HERMES JARVIS PROTOCOL ACTIVE. Local offline storage initialized & synced with
+  Oracle Cloud Always Free ARM node.` No sync route exists in this build, the
+  `PendingSyncItem` queue is never drained to a remote, and the process runs in
+  this container, not the Oracle ARM VM. The system message now reads that cloud
+  sync is NOT configured, and the same file's seed memory note no longer hardcodes
+  an `Oracle Always Free ARM64` deployment or a `Backend Sync` persistence mode.
+
+### Tests
+- `src/tests/offlineStorage.test.ts` — three new cases (7 in file, up from 4):
+  the seed message says cloud sync is not configured, no seed message matches
+  `synced with` / `Oracle Cloud` / `ARM node`, and a source guard pins the absence
+  of the fabricated string. Negative-validated: restoring the original line fails
+  exactly those three (`3 failed | 4 passed` of 7); all 7 pass with the fix.
+
+### Verification
+- `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run` 68 files / 987 tests
+  passed (19.41 s); `npm run build` exit 0 (`dist/server.cjs` 852453 bytes /
+  832.5 kb, `dist/` removed after measuring). Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-09-22 04:35 IST (2026-09-21 23:07 UTC) — Window finalization (no code change)
 
 ### Verification
