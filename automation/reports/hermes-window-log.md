@@ -3411,3 +3411,36 @@ validated — reverting the read guard and the bar width expression fails
 `6 failed | 3 passed`, restored -> 9/9.
 Gates: lint exit 0; vitest 78 files / 1083 tests passed; build exit 0.
 Commit `a425c88`. Item 13 stays `PARTIAL`.
+
+## Slot 15 — WORK — 2026-09-23 04:05 IST (2026-09-22 22:36 UTC)
+
+Item 13 (`Zero-fake-success for all tools`) — the live HTTP weather path. The
+offline intent engine was fixed in `4a98514`, but `server.ts` `weather_inquiry`
+in `POST /api/chat` and `GET /api/mobile/telemetry` still returned a constant
+27C / 48% / "New Delhi" snapshot presented as current conditions, though no
+weather provider is wired into this process. Both now report the absence:
+`actionExecuted: false` with an explicit "no weather source connected" message
+(EN + HI) and `weatherSnapshot.available: false`.
+
+Evidence: `src/tests/liveWeatherHonesty.test.ts` (4 tests; observed
+`1 passed (1), Tests 4 passed (4)` this slot).
+Gates (observed this slot): lint exit 0 (`tsc --noEmit`); vitest
+`80 passed (80) files / 1093 passed (1093)` tests; build exit 0,
+`dist/server.cjs` 860748 bytes.
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; working tree clean;
+`git diff --stat origin/main` -> 177 files, +34255/-1674, no token/key in diff.
+Commit `446fdc4` (fix in `e209bf8`), pushed `e209bf8..446fdc4`.
+State branch pushed (`fb43ff8..8769903`, slots_completed=15). Item 13 stays
+`PARTIAL` — the zero-fake-success sweep is not complete across all surfaces.
+
+Bugs Found: the live weather fabrication above.
+Bugs Fixed: replaced with an honest "no source" response; pinned by test.
+PR: #4 open, non-draft. Main merge: NOT MERGED — awaiting human approval.
+Deploy: NOT_CONFIGURED — no deployment target present in this environment.
+
+Next Slot:
+- #16 FINALIZATION at 04:35 IST — full verification, real artifact, PR refresh.
+  Start no new development.
+
+हिंदी सारांश:
+- स्लॉट 15: लाइव मौसम पथ की झूठी रीडिंग हटाई गई और टेस्ट से पिन की गई; पूरा सूट 1093 पास, लिंट व बिल्ड क्लीन।
