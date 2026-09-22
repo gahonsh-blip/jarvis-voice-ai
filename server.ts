@@ -2888,6 +2888,7 @@ const initialAdminChatId = getCleanAdminChatId();
 let telegramConfig = {
   botName: 'Hermes JARVIS Mobile Controller',
   botUsername: '@HermesJarvisAssistantBot',
+  botUsernameReported: false,
   botTokenMasked: initialTelegramToken
     ? `${initialTelegramToken.substring(0, Math.min(6, initialTelegramToken.length))}...${initialTelegramToken.slice(-4)}`
     : 'Not Configured (Add TELEGRAM_BOT_TOKEN)',
@@ -2900,7 +2901,9 @@ let telegramConfig = {
   humanApprovalRequired: true,
   notificationsEnabled: true,
   adminChatIdConfigured: Boolean(initialAdminChatId),
-  totalMessagesReceived: 3,
+  // Counts this process has actually handled, never a plausible seed. The old
+  // literal 3 was a fabricated baseline.
+  totalMessagesReceived: 0,
   lastActivity: new Date().toISOString(),
   errorMessage: undefined as string | undefined,
 };
@@ -3403,6 +3406,7 @@ async function startTelegramPolling() {
     telegramConfig.isLiveConnected = true;
     telegramConfig.isLiveTokenConfigured = true;
     telegramConfig.botUsername = `@${botInfo.username}`;
+    telegramConfig.botUsernameReported = true;
     telegramConfig.botName = botInfo.first_name || 'Hermes JARVIS Mobile Controller';
     telegramConfig.telegramLink = `https://t.me/${botInfo.username}`;
     telegramConfig.mode = 'live_polling';

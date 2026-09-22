@@ -16,6 +16,14 @@ import {
   QrCode,
 } from 'lucide-react';
 import { TelegramMessage, TelegramBotConfig } from '../types';
+import {
+  telegramLiveness,
+  telegramLivenessLabel,
+  telegramStatusKnown,
+  telegramBotHandleLabel,
+  telegramTransportLabel,
+  telegramCloudSyncClaim,
+} from '../utils/telegramGatewayTruth';
 
 interface Props {
   isOpen: boolean;
@@ -41,6 +49,10 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
   const [inputText, setInputText] = useState<string>('');
   const [isSending, setIsSending] = useState<boolean>(false);
   const [isTestingLive, setIsTestingLive] = useState<boolean>(false);
+  // A boolean liveness is only stored once the status endpoint has actually
+  // answered with one; the seeded config carries `false` and must not be read
+  // as "observed not-live".
+  const [statusKnown, setStatusKnown] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'live_chat' | 'connect_guide'>('live_chat');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -63,9 +75,13 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
   const fetchMessages = async () => {
     try {
       const res = await fetch('/api/telegram/messages');
+      if (!res.ok) return;
       const data = await res.json();
       if (data.messages) setMessages(data.messages);
-      if (data.config) setConfig(data.config);
+      if (data.config && telegramStatusKnown(data.config)) {
+        setConfig(data.config);
+        setStatusKnown(true);
+      }
     } catch (err) {
       console.warn('Failed to fetch telegram messages:', err);
     }
@@ -132,6 +148,14 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
 
   if (!isOpen) return null;
 
+  // Every liveness claim below derives from one gated value: the server's
+  // boolean, kept only after it actually answered.
+  const observedConfig = statusKnown ? config : null;
+  const liveness = telegramLiveness(observedConfig);
+  const isLive = statusKnown && config.isLiveConnected === true;
+  const botHandleLabel = telegramBotHandleLabel(observedConfig);
+  const transportLabel = telegramTransportLabel(observedConfig);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-sans">
       <div className="bg-slate-900 border border-blue-800/50 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
@@ -144,15 +168,15 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-100">Live Telegram Mobile Controller</h2>
-                {config.isLiveConnected ? (
+                {isLive ? (
                   <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1.5">
                     <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
-                    LIVE ONLINE
+                    {telegramLivenessLabel(liveness)}
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-blue-950 text-blue-300 border border-blue-800 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                    Interactive Gateway
+                    {telegramLivenessLabel(liveness)}
                   </span>
                 )}
               </div>
@@ -195,12 +219,12 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
         <div className="px-6 py-2.5 bg-slate-950/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-300">
           <div className="flex items-center gap-4 flex-wrap">
             <span className="text-slate-400">
-              Bot Handle: <span className="text-blue-400 font-bold">{config.botUsername}</span>
+              Bot Handle: <span className="text-blue-400 font-bold">{botHandleLabel}</span>
             </span>
             <span className="text-slate-400">
               Mode:{' '}
-              <span className={config.isLiveConnected ? 'text-emerald-400 font-semibold' : 'text-amber-400'}>
-                {config.isLiveConnected ? 'Real Telegram API (Long Polling)' : 'Web Gateway Mode'}
+              <span className={isLive ? 'text-emerald-400 font-semibold' : 'text-amber-400'}>
+                {transportLabel}
               </span>
             </span>
           </div>
@@ -378,10 +402,10 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
               <div className="mt-auto p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300 leading-relaxed font-sans space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-blue-300">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>24/7 Mobile Command</span>
+                  <span>Gateway Status (not verified)</span>
                 </div>
                 <p className="text-slate-400">
-                  Messages you send from your phone on Telegram execute autonomously on your Oracle Cloud VM and sync live back to this matrix.
+                  {telegramCloudSyncClaim()}
                 </p>
               </div>
             </div>
