@@ -1,15 +1,15 @@
 {
-  "window_date": "2026-09-22",
-  "window_started_at": "2026-09-21T16:06:00Z",
-  "last_slot_at": "2026-09-21T23:07:00Z",
-  "slots_completed": 19,
-  "current_item": 31,
-  "current_item_title": "Real notification reply (mobile-bridge reply dispatch outcome honesty)",
+  "window_date": "2026-09-23",
+  "window_started_at": "2026-09-22T15:36:00Z",
+  "last_slot_at": "2026-09-22T15:43:00Z",
+  "slots_completed": 1,
+  "current_item": 13,
+  "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "46b4205",
+  "last_commit": "7582b29",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "FINALIZED. No new development started. Frozen code tip 499045e re-verified end to end this slot: npm run lint (tsc --noEmit) exit 0; npx vitest run 68 files / 984 tests passed (19.91s); npm run build exit 0, dist/server.cjs 852453 bytes (dist removed after measuring, never committed). Security/hygiene: git check-ignore -v .env -> .gitignore:4 (.env untracked); git status --short clean; ignored set only dist/ + node_modules/; secret-pattern scan of git diff origin/main = 7 hits, all previously-documented synthetic fixtures/tests, no real credential. npm audit NOT RUN (no audit script in package.json). E2E NOT RUN (no real-device harness; needs a physical Android handset). Docs commit 46b4205 pushed to feature/hermes-full-completion. PR #4 updated to a finalization body; open, non-draft, mergeable_state clean. Main NOT merged - awaiting human approval. DEPLOYMENT NOT_CONFIGURED - no deployment target in this environment; the verified dist/server.cjs is the deployment unit.",
+  "finalized": false,
+  "finalization_result": null,
   "blocked_items": [
     { "item": 1, "reason": "physical Android device required" },
     { "item": 2, "reason": "physical Android device required" },
@@ -18,6 +18,6 @@
     { "item": 55, "reason": "physical device / Windows host required" }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "FINALIZATION slot (04:35 IST fire / 2026-09-21 23:07 UTC) of the 2026-09-22 window. No new development. Re-verified the frozen tip and refreshed docs: automation/reports/hermes-window-log.md (finalization section appended), docs/COMPLETION_STATUS.md (finalization note), docs/CHANGELOG.md (verification entry). Observed this slot: lint exit 0; vitest 68 files / 984 tests passed; build exit 0 (dist/server.cjs 852453 bytes). Security clean. Item 31 stays PARTIAL (needs a physical handset to confirm a reply); #51 PARTIAL; blocked set unchanged. PR #4 open, non-draft, mergeable. NEVER merge to main.",
-  "counter_note": "slots_completed 18 -> 19 on finalization; the counter also incremented on manual dispatches, so it is a progress counter, not a slot index (the schedule has 16 fires)."
+  "notes": "WORK SLOT 1 (21:05 IST fire / 2026-09-22 15:36 UTC) of a NEW window. The prior state carried window_date 2026-09-22 with finalized:true and slots_completed:19; that window closed at 05:00 IST, so 2026-09-22 21:06 IST begins a fresh window and the counter reset to 1. Idempotency guard did not apply. Item 13 advanced: the fresh-install chat seed in src/utils/offlineStorage.ts no longer claims 'synced with Oracle Cloud Always Free ARM node' and no longer hardcodes an Oracle ARM64 deployment / Backend Sync in seed memory. Guarded by 8 tests in src/tests/offlineStorage.test.ts (was 4), both negative-validated (3 failed of 7; 1 failed of 8). Observed: lint exit 0; vitest 68 files / 988 tests passed (19.06s); build exit 0, dist/server.cjs 852453 bytes (dist removed). Security clean: .env ignored, status clean, no real secret in diff. Commits 2858e11, ab06e5b, 7582b29 pushed. Item 13 stays PARTIAL - the sweep needs the exhaustive per-tool surface inventory. E2E / device / provider calls NOT RUN. Deploy NOT_CONFIGURED. NEVER merge to main.",
+  "counter_note": "slots_completed reset to 1 for the new window (was 19 at the end of the 2026-09-22 window)."
 }
