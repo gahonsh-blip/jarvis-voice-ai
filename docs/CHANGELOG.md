@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 04:36 IST (2026-09-22 23:07 UTC) — finalization: window verified, no new development
+
+### Verification only (no code change)
+- Window finalization slot. Frozen tip `89e60cb` re-verified end to end; no new
+  development was started.
+- `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run`
+  **80 files / 1093 tests passed** (21.50 s); `npm run build` exit 0,
+  `dist/server.cjs` 860748 bytes.
+- Security: `.env` git-ignored and untracked, working tree clean, no real
+  credential in `git diff origin/main` (matches are synthetic test fixtures).
+- E2E: NOT RUN — no real-device harness and no physical Android handset.
+- Deploy: NOT_CONFIGURED — no deployment target present in this environment.
+- PR #4 open, non-draft, `mergeable_state: clean`; `main` NOT merged (human gate).
+
+---
+
 ## [Unreleased] - 2026-09-23 04:18 IST (2026-09-22 22:48 UTC) — the live weather path invented a reading
 
 ### Truthfulness fix
