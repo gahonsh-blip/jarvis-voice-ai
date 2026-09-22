@@ -4,6 +4,23 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 04:18 IST (2026-09-22 22:48 UTC) — the live weather path invented a reading
+
+### Truthfulness fix
+- `server.ts` — `case 'weather_inquiry'` in `POST /api/chat` and
+  `GET /api/mobile/telemetry` returned a constant 27°C / 48% / 'New Delhi'
+  snapshot as current conditions. The offline intent engine was fixed in
+  `4a98514`, but the live HTTP path was missed and no weather provider is wired
+  into this process. Both now report the absence: `actionExecuted: false` with an
+  explicit EN + HI "no weather source connected" message, and
+  `weatherSnapshot: { available: false, reason: … }`.
+
+### Tests
+- `src/tests/liveWeatherHonesty.test.ts` (new, 4 tests) — source guards pinning
+  the absence of the fabricated weather literal on both routes.
+
+---
+
 ## [Unreleased] - 2026-09-23 03:42 IST (2026-09-22 22:12 UTC) — the blueprint bar rendered an unmeasured 0%
 
 ### Truthfulness fix
