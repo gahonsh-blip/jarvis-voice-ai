@@ -4,6 +4,40 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-22 22:06 IST (16:36 UTC) — the live HTTP bridge route used its own weaker caller-ID mask
+
+### Bug fix
+- `server.ts` `/api/mobile/bridge/event` — carried an inline caller-number mask
+  instead of the canonical engine helper:
+  `String(payload.callerNumber).replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2')`.
+  The pattern requires *contiguous* digits, so a number the device reports with
+  spaces never matched and was echoed back to the audit trail completely
+  unmasked — observed `'+1 415 890 2134'` unchanged. When it did match it was
+  also too weak: `'+91 9876543210'` → `'+91 987******210'`, exposing the leading
+  digits and four more of the subscriber number. Slot 2 repaired the canonical
+  `maskPhoneNumber` but not this route, which is the one that actually handles
+  device events.
+
+### Added
+- `src/utils/androidBridgePrivacy.ts` — `maskAndroidCallerNumber`, a thin
+  wrapper over the canonical `maskPhoneNumber` that returns `undefined` when no
+  identifier was reported. The route now uses it: observed
+  `'+1 415 890 2134'` → `'+1 ******2134'`, `'+91 9876543210'` →
+  `'+91 ******3210'`, `'Unknown'` → `'Unknown Number'`.
+
+### Tests
+- `src/tests/androidBridgeHttpPrivacy.test.ts` (7 tests) — pins the helper's
+  output on the inputs the old regex mishandled, and guards against the inline
+  contiguous-digit regex returning. Negative-validated: restoring the inline
+  regex fails 2 of 7.
+
+### Verified
+- lint (`tsc --noEmit`) exit 0 · `npx vitest run` 69 files / 997 tests passed ·
+  `npm run build` exit 0 (`dist/server.cjs` 852719 bytes; `dist/` removed after
+  measuring, never committed).
+
+---
+
 ## [Unreleased] - 2026-09-22 21:35 IST (16:05 UTC) — the Android bridge no longer fabricates a masked number from a caller label
 
 ### Bug fix
