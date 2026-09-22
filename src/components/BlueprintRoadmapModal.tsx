@@ -20,6 +20,14 @@ import {
   Zap,
 } from 'lucide-react';
 import { BlueprintPhase } from '../types';
+import {
+  blueprintProgress,
+  blueprintBarWidth,
+  blueprintPercentageLabel,
+  blueprintProgressLabel,
+  blueprintFooterLabel,
+  blueprintPhaseCountLabel,
+} from '../utils/blueprintTruth';
 
 interface Props {
   isOpen: boolean;
@@ -60,6 +68,9 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
   const [showFullReport, setShowFullReport] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
+  // False until /api/blueprint actually answered with phases. A failed request
+  // must not leave the progress figures rendering as measured zeros.
+  const [blueprintRead, setBlueprintRead] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -69,12 +80,18 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
 
   const fetchBlueprint = async () => {
     setLoading(true);
+    setBlueprintRead(false);
     try {
       const res = await fetch('/api/blueprint');
+      if (!res.ok) {
+        console.warn(`Blueprint fetch rejected with HTTP ${res.status}`);
+        return;
+      }
       const data = await res.json();
       if (data.phases) {
         setPhases(data.phases);
         setStats(data.stats);
+        setBlueprintRead(true);
       }
     } catch (err) {
       console.warn('Failed to fetch blueprint:', err);
@@ -120,6 +137,7 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
 
   if (!isOpen) return null;
 
+  const progress = blueprintProgress(blueprintRead, stats.completionPercentage);
   const currentPhase = phases.find((p) => p.id === selectedPhase) || phases[0];
 
   return (
@@ -166,7 +184,9 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
           <div className="flex items-center gap-4">
             <div>
               <span className="text-slate-500">TOTAL PHASES:</span>{' '}
-              <span className="text-cyan-400 font-bold">10 (Phase 0 to 9)</span>
+              <span className="text-cyan-400 font-bold">
+                {blueprintPhaseCountLabel(blueprintRead, stats.totalPhases)}
+              </span>
             </div>
             <div>
               <span className="text-slate-500">INFRASTRUCTURE:</span>{' '}
@@ -178,14 +198,14 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-slate-400">Readiness Progress:</span>
+            <span className="text-slate-400">{blueprintProgressLabel(progress)}:</span>
             <div className="w-32 h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
               <div
                 className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-500"
-                style={{ width: `${stats.completionPercentage}%` }}
+                style={{ width: blueprintBarWidth(progress) }}
               />
             </div>
-            <span className="text-emerald-400 font-bold">{stats.completionPercentage}%</span>
+            <span className="text-emerald-400 font-bold">{blueprintPercentageLabel(progress)}</span>
           </div>
         </div>
 
@@ -337,7 +357,7 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
 
         {/* Modal Footer */}
         <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
-          <span>HERMES JARVIS • Archived design blueprint ({stats.completionPercentage}% checklist items ticked)</span>
+          <span>{blueprintFooterLabel(progress)}</span>
           <div className="flex items-center gap-4">
             {/* This modal never queries the security posture, so it must not
                 assert one. Live state is shown by the Security Matrix panel. */}
