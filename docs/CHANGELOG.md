@@ -4,6 +4,40 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 23:42 IST (18:12 UTC) — the Mobile Personal Status briefing card claimed TTS readiness and live telemetry it never observed
+
+### Bug fix
+- `src/components/MobilePersonalStatusModal.tsx` — the briefing hero card printed
+  the constant string `SPEECH SYNTHESIZER READY` before the Web Speech API had
+  been queried, and kept claiming readiness on platforms where
+  `window.speechSynthesis` is unavailable. The spoken-script provenance line read
+  `Generated from live telemetry reads` for every snapshot not flagged `isSample`,
+  including the `null` snapshot left behind by a failed fetch where no read had
+  completed.
+- `src/App.tsx` — the real `speechDiagnostics` state and `isSpeaking` flag were
+  never passed to `MobilePersonalStatusModal`; the card had no observed speech
+  state to render. Both are now passed down.
+
+### Added
+- `src/utils/spokenBriefingTruth.ts` — pure helpers `speechReadiness` /
+  `speechReadinessLabel` (tri-state: `UNKNOWN` until a diagnostics snapshot
+  exists, then `READY` / `UNAVAILABLE` from the observed
+  `speechSynthesisAvailable` boolean, and `READY` while an utterance is playing)
+  and `briefingProvenance` / `briefingProvenanceLabel` (`UNKNOWN` for a `null`
+  snapshot, `SAMPLE` for a fixture, `LIVE` only for a real read).
+- `src/tests/spokenBriefingTruth.test.ts` — 7 tests, including source guards that
+  pin the removed constant and the `live telemetry reads` literal.
+
+### Verification
+- Negative-validated: restoring both fabrications fails exactly 2 of 7
+  (`2 failed | 5 passed`); restored → 7/7.
+- Gates on `5f2a73f`: lint exit 0, vitest 73 files / 1028 tests passed, build
+  exit 0 (`dist/server.cjs` 832.9 kb).
+- Still `PARTIAL`: the sweep is pattern-driven and the speaking branch is
+  unit-asserted, not exercised on a real speech platform in this sandbox.
+
+---
+
 ## [Unreleased] - 2026-09-23 23:06 IST (17:36 UTC) — the Telegram Gateway panel asserted liveness and a cloud sync it never measured
 
 ### Bug fix

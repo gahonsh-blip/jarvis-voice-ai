@@ -2889,3 +2889,85 @@ Next Slot:
 हिंदी सारांश: Telegram Gateway पैनल झूठा bot handle, झूठा long-polling कनेक्शन और
 झूठा Oracle Cloud sync दिखा रहा था, और server 3 नकली messages का seed डाल रहा था —
 यह सब ठीक किया, 12 नए टेस्ट जोड़े, 1014 टेस्ट/lint/build पास, branch push हो गई।
+
+
+---
+
+## WORK SLOT 6 — 2026-09-23 23:35 IST fire (report ~23:45 IST)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:35 (fired), report written ~23:45
+Window date: 2026-09-23   Window slots completed so far: 6
+
+Completed:
+- #13 Zero-fake-success for all tools — one coherent slice: the Mobile Personal
+  Status briefing card. Removed the hardcoded SPEECH SYNTHESIZER READY badge and
+  the "Generated from live telemetry reads" provenance line from
+  src/components/MobilePersonalStatusModal.tsx; passed the real SpeechDiagnostics
+  and isSpeaking down from src/App.tsx; added src/utils/spokenBriefingTruth.ts
+  (tri-state speech readiness; provenance UNKNOWN/SAMPLE/LIVE). Guarded by
+  src/tests/spokenBriefingTruth.test.ts (7 tests, observed 7 passed).
+  Still PARTIAL overall.
+
+In Progress:
+- #13 Zero-fake-success for all tools — pattern-driven sweep; no per-tool
+  inventory yet, so items are found by inspection rather than enumerated.
+
+Remaining:
+- #13 continued sweep of UI surfaces; then items 14+ per the mandated order
+  (Autonomous Tasks -> Voice -> Wake Word -> Production Hardening).
+  Items 1/2/3/55 need physical hardware.
+
+Bugs Found:
+- MobilePersonalStatusModal.tsx claimed SPEECH SYNTHESIZER READY on mount and on
+  platforms without window.speechSynthesis; the component never received the
+  already-computed SpeechDiagnostics from speechTtsEngine.ts.
+- The same card's provenance line read "Generated from live telemetry reads" for
+  the null status snapshot left by a failed fetch — no telemetry read had
+  completed.
+
+Bugs Fixed:
+- Both of the above. Verification: src/tests/spokenBriefingTruth.test.ts 7/7
+  passes with the fix; negative-validated by restoring both fabrications, which
+  fails exactly 2 of 7 (2 failed | 5 passed); restored -> 7/7.
+
+Tests:    73 files / 1028 tests passed (npx vitest run, exit 0). Targeted file: 7/7.
+Lint:     exit 0 (npm run lint -> tsc --noEmit, no output)
+Build:    exit 0 (npm run build; dist/server.cjs 832.9 kb)
+E2E:      NOT RUN — no device or browser automation target in this sandbox.
+Security: NOT RUN — no audit command executed this slot. No secrets touched;
+          change is client-side string rendering only. No .env or key in diff.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row),
+               docs/CHANGELOG.md (Unreleased entry),
+               automation/reports/hermes-window-log.md (this report)
+Branch:  feature/hermes-full-completion
+Commit:  42a66cb (fix), rebased onto origin 316f9ee -> tip 5f2a73f; docs commit after
+Push:    succeeded (origin/feature/hermes-full-completion). NOTE: first push was
+         rejected — remote had advanced to 316f9ee from a sibling slot; a plain
+         git fetch origin did not update the remote-tracking ref, so a forced
+         refspec fetch + rebase was needed. No force-push, no history rewrite.
+
+PR:         NONE observed/created this slot (not the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified artifact is dist/server.cjs.
+
+Blocked:
+- #1 Android Bridge / #2 real screenshot / #3 computer-operator hardware / #55
+  real-device E2E — require a physical Android device (not available in sandbox).
+- #13 live speech-platform render path — requires a real browser with
+  speechSynthesis; unit assertions only here.
+
+Human Approval Required:
+- None this slot. (Standing: merge to main requires a human.)
+
+Next Slot:
+- #13 continued sweep — next candidate identified this slot: audit remaining
+  hardcoded status/readiness strings in the mobile-status tab bar and the
+  AutonomousToolsModal result banners, then widen to Voice surfaces.
+
+हिंदी सारांश (एक पंक्ति):
+- मोबाइल पर्सनल स्टेटस ब्रीफिंग कार्ड से दो झूठे दावे (TTS READY और "live
+  telemetry reads") हटाए गए, असली speech diagnostics से जोड़ा गया; 7/7 नए टेस्ट
+  पास, पूरी सूट 1028 टेस्ट पास, lint/build हरा।
