@@ -35,6 +35,12 @@ import {
 } from 'lucide-react';
 import { PermissionActionRequest, IntegrationAuditItem, EmergencyControlState } from '../types';
 import { PermissionGateway } from './PermissionGateway';
+import {
+  emergencyLiveness,
+  emergencyLivenessLabel,
+  emergencyStatusKnown,
+  emergencyEngaged,
+} from '../utils/emergencyTruth';
 
 interface AutonomousToolsModalProps {
   isOpen: boolean;
@@ -48,8 +54,9 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   const [loading, setLoading] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Emergency Control State
-  const [emergency, setEmergency] = useState<EmergencyControlState>({ emergencyPaused: false });
+  // Emergency Control State. Null until /api/emergency/status answers, so a
+  // failed or unstarted fetch can never read as "not paused".
+  const [emergency, setEmergency] = useState<EmergencyControlState | null>(null);
 
   // Approvals State
   const [pendingApprovals, setPendingApprovals] = useState<PermissionActionRequest[]>([]);
@@ -120,9 +127,11 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     try {
       const res = await fetch('/api/emergency/status');
       const data = await res.json();
-      setEmergency(data);
+      // Store only a real status. A non-OK or malformed response leaves the
+      // state null, which renders as STATUS UNKNOWN rather than green.
+      setEmergency(emergencyStatusKnown(data) ? data : null);
     } catch {
-      // safe fallback
+      setEmergency(null);
     }
   };
 
@@ -134,17 +143,24 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestedBy: 'HUMAN_WEB_OPERATOR', reason: 'Operator manual toggle' }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (!emergencyStatusKnown(data)) throw new Error('Emergency endpoint returned no boolean state');
+      const engaged = emergencyEngaged(data);
       setEmergency(data);
       showFeedback(
-        data.emergencyPaused
+        engaged
           ? '🚨 EMERGENCY STOP ACTIVATED: All autonomous actions paused.'
           : '🟢 EMERGENCY STOP DEACTIVATED: Normal operations resumed.',
-        data.emergencyPaused ? 'error' : 'success'
+        engaged ? 'error' : 'success'
       );
       fetchApprovals();
     } catch (err: any) {
-      showFeedback('Failed to toggle emergency state: ' + err.message, 'error');
+      showFeedback(
+        'Failed to toggle emergency state: ' + err.message + ' — state unchanged and still UNKNOWN.',
+        'error'
+      );
+      setEmergency(null);
     } finally {
       setLoading(false);
     }
@@ -428,6 +444,15 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
 
   if (!isOpen) return null;
 
+  // Derived kill-switch liveness. UNKNOWN until a real status boolean arrived.
+  const liveness = emergencyLiveness(emergency);
+  const statusKnown = emergencyStatusKnown(emergency);
+  const emergencyPaused = liveness === 'ENGAGED';
+  // Level-3 actions (workspace file writes, queued external issues) are blocked
+  // unless the kill switch is confirmed released. An unobserved state is not a
+  // released state.
+  const actionBlocked = loading || emergencyPaused || !statusKnown;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md">
       <div className="w-full max-w-6xl max-h-[92vh] bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -443,13 +468,20 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                 <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-mono font-bold">
                   LEVEL 1-4 GATED
                 </span>
-                {emergency.emergencyPaused ? (
+                {liveness === 'ENGAGED' ? (
                   <span className="text-[10px] px-2 py-0.5 rounded bg-rose-950 border border-rose-500 text-rose-300 font-mono font-bold animate-pulse">
-                    🚨 EMERGENCY STOP ACTIVE
+                    🚨 {emergencyLivenessLabel(liveness)}
+                  </span>
+                ) : liveness === 'ACTIVE' ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
+                    🟢 {emergencyLivenessLabel(liveness)}
                   </span>
                 ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
-                    🟢 DAEMON ACTIVE
+                  <span
+                    id="autonomous-tools-liveness-unknown"
+                    className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 font-mono font-bold"
+                  >
+                    ⚠️ {emergencyLivenessLabel(liveness)}
                   </span>
                 )}
               </div>
@@ -460,18 +492,31 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Emergency Toggle Button */}
+            {/* Emergency Toggle Button. Labelled by the observed state, never
+                by a "not paused" default. */}
             <button
               onClick={handleToggleEmergency}
               className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow-md ${
-                emergency.emergencyPaused
+                liveness === 'ENGAGED'
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                   : 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
               }`}
-              title={emergency.emergencyPaused ? 'Click to Resume System' : 'Click to Emergency Stop All Actions'}
+              title={
+                liveness === 'ENGAGED'
+                  ? 'Click to Resume System'
+                  : liveness === 'ACTIVE'
+                    ? 'Click to Emergency Stop All Actions'
+                    : 'Emergency status UNKNOWN — click to fetch and report the real state'
+              }
             >
               <AlertOctagon className="w-4 h-4" />
-              <span>{emergency.emergencyPaused ? 'RESUME SYSTEM' : 'EMERGENCY STOP'}</span>
+              <span>
+                {liveness === 'ENGAGED'
+                  ? 'RESUME SYSTEM'
+                  : liveness === 'ACTIVE'
+                    ? 'EMERGENCY STOP'
+                    : 'STATUS UNKNOWN'}
+              </span>
             </button>
 
             <button
@@ -1076,7 +1121,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                   />
                   <button
                     onClick={handleCreateOrSaveFile}
-                    disabled={loading || emergency.emergencyPaused}
+                    disabled={actionBlocked}
                     className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
                   >
                     <Check className="w-4 h-4" />
@@ -1210,7 +1255,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                 />
                 <button
                   onClick={handleQueueGithubIssue}
-                  disabled={loading || emergency.emergencyPaused}
+                  disabled={actionBlocked}
                   className="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5" />
