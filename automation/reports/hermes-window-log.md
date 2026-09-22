@@ -3390,3 +3390,24 @@ Next Slot:
 
 हिंदी सारांश:
 - स्लॉट 13 का टेलीफोनी प्राइवेसी-मास्क फिक्स इस स्लॉट में दोबारा सत्यापित किया गया; कोई नया बग नहीं मिला।
+
+## Slot 14 — WORK — 2026-09-23 03:35 IST (2026-09-22 22:12 UTC)
+
+Item 13 (`Zero-fake-success for all tools`) — the blueprint progress-provenance
+surface. `BlueprintRoadmapModal.tsx` seeded `completionPercentage: 0`, fetched
+`/api/blueprint` without checking `res.ok`, and on any failure kept the seed, so
+the readiness bar, the percentage readout and the footer rendered a measured
+"0% complete" for a blueprint nobody read; the header also printed a hardcoded
+`TOTAL PHASES: 10 (Phase 0 to 9)`.
+
+Fixed via new `src/utils/blueprintTruth.ts` (`blueprintProgress` -> UNMEASURED/
+MEASURED, `null` never a coerced `0`; `blueprintPercentageLabel`,
+`blueprintProgressLabel`, `blueprintFooterLabel`, `blueprintPhaseCountLabel`
+render `UNKNOWN` for an unmeasured figure). The component now sets a
+`blueprintRead` flag only after a `res.ok` response carrying `phases`.
+
+Evidence: `src/tests/blueprintProgressTruth.test.ts` (9 tests); negative-
+validated — reverting the read guard and the bar width expression fails
+`6 failed | 3 passed`, restored -> 9/9.
+Gates: lint exit 0; vitest 78 files / 1083 tests passed; build exit 0.
+Commit `a425c88`. Item 13 stays `PARTIAL`.

@@ -4,6 +4,27 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 03:42 IST (2026-09-22 22:12 UTC) — the blueprint bar rendered an unmeasured 0%
+
+### Truthfulness fix
+- `src/utils/blueprintTruth.ts` (new) — `blueprintProgress()` returns
+  `UNMEASURED`/`MEASURED` and a `null` — never a coerced `0` — for an unread flag
+  or an out-of-range/non-numeric value, plus `blueprintPercentageLabel()`,
+  `blueprintProgressLabel()`, `blueprintFooterLabel()` and
+  `blueprintPhaseCountLabel()`, which render `UNKNOWN` for an unmeasured figure.
+- `src/components/BlueprintRoadmapModal.tsx` — the modal seeds
+  `completionPercentage: 0` and previously kept it whenever `/api/blueprint`
+  failed (no `res.ok` check), so its "Readiness Progress" bar, percentage readout
+  and footer rendered a measured "0% complete" that nothing measured; the header
+  also printed a hardcoded `TOTAL PHASES: 10 (Phase 0 to 9)`. It now tracks a
+  `blueprintRead` flag set only after a `res.ok` response carrying `phases` and
+  renders every figure through the helpers.
+
+### Tests
+- `src/tests/blueprintProgressTruth.test.ts` (new, 9 tests).
+
+---
+
 ## [Unreleased] - 2026-09-23 03:13 IST (2026-09-22 21:43 UTC) — the call UI leaked the number it masked
 
 ### Privacy / honesty fix
