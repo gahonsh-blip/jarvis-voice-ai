@@ -11,6 +11,8 @@ import {
   grantedScopesFromTokenResponse,
   scopeGranted,
   publishScopeGranted,
+  describeGrantedScopes,
+  youtubeCanPublishMeasured,
 } from '../utils/socialPublishHonesty';
 
 describe('social publish honesty — the Hub must not claim an unmeasured connection', () => {
@@ -139,5 +141,48 @@ describe('social publish honesty — a grant must not be invented', () => {
     expect(publishScopeGranted('youtube', [])).toBe(false);
     expect(publishScopeGranted('youtube', [PLATFORM_PUBLISH_SCOPES.youtube])).toBe(true);
     expect(publishScopeGranted('linkedin', ['w_member_social'])).toBe(true);
+  });
+});
+
+describe('social publish honesty — YouTube read access is not upload access', () => {
+  const UPLOAD_SCOPE = PLATFORM_PUBLISH_SCOPES.youtube;
+
+  it('never renders an unrecorded grant as a scope list', () => {
+    expect(describeGrantedScopes(undefined)).toBe('not recorded');
+  });
+
+  it('reports an empty grant as none granted, not as the requested scopes', () => {
+    expect(describeGrantedScopes([])).toBe('none granted');
+  });
+
+  it('reports only the scopes the provider actually granted', () => {
+    expect(describeGrantedScopes([UPLOAD_SCOPE, 'youtube.readonly'])).toBe(
+      'https://www.googleapis.com/auth/youtube.upload, youtube.readonly'
+    );
+  });
+
+  it('does NOT treat a live channel probe (API_VERIFIED) as upload authorization', () => {
+    // The server confirms the channel via channels.list but reports
+    // canPublish:false when the upload scope is absent. Read must not become publish.
+    expect(
+      youtubeCanPublishMeasured({
+        status: 'API_VERIFIED',
+        canPublish: false,
+        scopes: ['https://www.googleapis.com/auth/youtube.readonly'],
+      })
+    ).toBe(false);
+  });
+
+  it('does NOT treat a missing canPublish field as authorization', () => {
+    expect(youtubeCanPublishMeasured({ status: 'API_VERIFIED' })).toBe(false);
+    expect(youtubeCanPublishMeasured({ status: 'API_VERIFIED', canPublish: undefined })).toBe(false);
+  });
+
+  it('only authorizes publishing for a verified connection the server confirmed', () => {
+    expect(
+      youtubeCanPublishMeasured({ status: 'API_VERIFIED', canPublish: true, scopes: [UPLOAD_SCOPE] })
+    ).toBe(true);
+    expect(youtubeCanPublishMeasured({ status: 'CONNECTED', canPublish: true })).toBe(false);
+    expect(youtubeCanPublishMeasured(null)).toBe(false);
   });
 });

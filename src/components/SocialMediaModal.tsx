@@ -48,6 +48,8 @@ import {
   connectionStatusLabel,
   isUsableCredential,
   socialApprovalPostureLabel,
+  describeGrantedScopes,
+  youtubeCanPublishMeasured,
 } from '../utils/socialPublishHonesty';
 
 interface Props {
@@ -1250,7 +1252,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                   </div>
                   <p className="text-xs text-slate-400 font-mono">
                     {ytOauth?.status === 'API_VERIFIED' || (ytOauth?.connected && ytOauth?.canPublish)
-                      ? `Channel: ${ytOauth.channelTitle || 'Google Account Authenticated'} | Scopes: youtube.upload, youtube.readonly`
+                      ? youtubeCanPublishMeasured(ytOauth)
+                        ? `Channel: ${ytOauth?.channelTitle || 'Unnamed channel'} | Grant confirmed by the provider — scopes: ${describeGrantedScopes(ytOauth?.scopes)}`
+                        : `Channel confirmed read-only: ${ytOauth?.channelTitle || 'unnamed channel'} | Video upload is NOT authorized — granted scopes: ${describeGrantedScopes(ytOauth?.scopes)}`
                       : ytOauth?.status === 'CONFIGURED'
                       ? `Status: Configured (${ytOauth.authType || 'OAuth 2.0'}) — 1-Click OAuth Connect Required for Uploads`
                       : ytOauth?.status === 'TOKEN_INVALID' || ytOauth?.status === 'ERROR'

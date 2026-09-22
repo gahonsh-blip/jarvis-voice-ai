@@ -185,6 +185,34 @@ export const PLATFORM_PROVIDER_HOSTS: Record<SocialPlatformKey, string> = {
   twitter: 'api.twitter.com',
 };
 
+/**
+ * Human-readable list of the scopes the provider actually granted.
+ *
+ * `/api/auth/youtube/status` reports the recorded grant in `scopes` and leaves
+ * it `undefined` when nothing was ever recorded. An absent list is the absence
+ * of an observation, so it reads as `not recorded`, never as a scope list.
+ */
+export function describeGrantedScopes(scopes: string[] | undefined): string {
+  if (!Array.isArray(scopes)) return 'not recorded';
+  return scopes.length > 0 ? scopes.join(', ') : 'none granted';
+}
+
+/**
+ * Whether a connection that the server measured can publish with that grant.
+ *
+ * Read access and upload access are different facts: a channel probe proves
+ * the former. This returns true only for a live-verified connection that the
+ * server also reports as able to publish.
+ */
+export function youtubeCanPublishMeasured(status: {
+  status?: string;
+  scopes?: string[];
+  canPublish?: boolean;
+} | null | undefined): boolean {
+  if (!status) return false;
+  return status.status === 'API_VERIFIED' && status.canPublish === true;
+}
+
 /** Honest header label for the approval posture, derived from `/api/security`. */
 export function socialApprovalPostureLabel(
   level: number | null | undefined,
