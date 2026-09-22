@@ -4,6 +4,36 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 03:13 IST (2026-09-22 21:43 UTC) — the call UI leaked the number it masked
+
+### Privacy / honesty fix
+- `src/utils/telephonyPrivacyDisplay.ts` (new) — `shouldMaskParty()` and
+  `resolveDisplayNumber()`. Both the "is this party masked" badge and the printed
+  number now derive from one predicate (masking enabled && caller is not a saved
+  contact), so the badge and the number can no longer disagree.
+- `src/components/ActiveCallHUD.tsx` — the live call HUD rendered a `MASKED`
+  badge for `isMaskActive && isUnknownInbound` while printing
+  `{activeCall.callerNumber}` — the raw carrier number — directly beneath it. The
+  number now goes through `resolveDisplayNumber`, and the badge is keyed to
+  `counterpartIsMasked` (the party actually shown), so a saved contact shows the
+  real number with no badge and an unknown caller shows the masked number with
+  one.
+- `src/components/TelephonyHubModal.tsx` — the call-history panel printed
+  `selectedLog.callerNumber` raw under a `PRIVACY MASKED` label; it now renders
+  the resolved number.
+
+### Tests
+- `src/tests/telephonyPrivacyDisplay.test.ts` (7 tests) — the masked form equals
+  `maskPhoneNumber(...)` and never contains the raw trailing digits; a saved
+  contact is never masked; source guards assert neither component interpolates
+  the raw field. Negative-validated: both guarded patterns are present at HEAD
+  and absent after the fix.
+
+Gates on `8b6787b`: lint (`tsc --noEmit`) exit 0, vitest **77 files / 1074 tests
+passed**, build exit 0 (`dist/server.cjs` 860517 bytes).
+
+---
+
 ## [Unreleased] - 2026-09-23 02:42 IST (2026-09-22 21:12 UTC) — the YouTube Studio header printed scopes it never read
 
 ### Honesty fix

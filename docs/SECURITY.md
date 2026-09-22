@@ -242,6 +242,22 @@ spacing normalised (`'+91-9876543210'` → `'+91 ******3210'`). Guarded by
 (`2 failed | 37 passed` with the pre-fix body restored). `telephonyPermissions.ts`
 never shared the digit-free defect — it already returns `'Unknown / Private'`.
 
+**Update 2026-09-23 03:13 IST — a correct mask that the UI did not use.** The
+helper was sound by this point, but a component could still render the raw field
+next to a badge asserting the opposite. `ActiveCallHUD.tsx` drew a `MASKED` badge
+for `isMaskActive && isUnknownInbound` while printing `{activeCall.callerNumber}`
+beneath it, and `TelephonyHubModal.tsx` printed `selectedLog.callerNumber` raw
+under a `PRIVACY MASKED` label. In both cases the caller's name read "Unknown
+Caller" and their full number was shown anyway — the badge and the leak were in
+the same view, and the badge's predicate was independent of the number actually
+rendered. Masking is only a privacy control if the rendered value goes through it.
+`src/utils/telephonyPrivacyDisplay.ts` now supplies one predicate for both: the
+printed number and the badge both come from `shouldMaskParty` /
+`resolveDisplayNumber`, so they cannot disagree. Guarded by
+`src/tests/telephonyPrivacyDisplay.test.ts` (7 tests, including source guards that
+pin the absence of the raw interpolation in both components); negative-validated
+against HEAD, where both patterns were present.
+
 ## 7. Secret audit
 
 `GET /api/security/audit-secrets` scans tracked text files. It deliberately flags

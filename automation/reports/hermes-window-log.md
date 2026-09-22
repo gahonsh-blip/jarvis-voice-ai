@@ -3290,3 +3290,35 @@ granted still displayed upload authorization on the banner.
   `node_modules`, no `dist` in the diff.
 - PR #4 is `open`, `draft=False` —
   https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+
+---
+
+## Slot 13 — WORK — 2026-09-23 03:06 IST (window 2026-09-23)
+
+Item 13 `Zero-fake-success for all tools` — telephony privacy surface.
+
+**Violation closed: the call UI printed the raw number of the caller it claimed
+to mask.** `ActiveCallHUD.tsx` rendered a `MASKED` badge keyed to
+`isMaskActive && isUnknownInbound` while printing `{activeCall.callerNumber}` —
+the raw carrier value — directly beneath it. `TelephonyHubModal.tsx` printed
+`selectedLog.callerNumber` raw under a `PRIVACY MASKED` panel label. The name was
+reduced to "Unknown Caller" and the full number shown anyway.
+
+Fixed: new `src/utils/telephonyPrivacyDisplay.ts` (`shouldMaskParty`,
+`resolveDisplayNumber`) derives the printed number from the same predicate the
+badge uses; the HUD badge is now keyed to `counterpartIsMasked`.
+
+Evidence: `src/tests/telephonyPrivacyDisplay.test.ts` (7 tests, pass). Negative-
+validated: `git show HEAD:src/components/ActiveCallHUD.tsx | grep -c
+'{activeCall.callerNumber}'` = 1 and the same check on `TelephonyHubModal.tsx` = 1
+before the fix, 0 after.
+
+Gates observed on `8b6787b`:
+- lint (`tsc --noEmit`): exit 0
+- `npx vitest run`: **77 files / 1074 tests passed** (21.97s)
+- `npm run build`: exit 0, `dist/server.cjs` 860517 bytes
+
+Item 13 remains `PARTIAL` — pattern-driven sweep; one more real violation closed.
+Branch `feature/hermes-full-completion`, commit `8b6787b`, pushed.
+Main merge: NOT MERGED — awaiting human approval. PR #4.
+Deploy: NOT_CONFIGURED.
