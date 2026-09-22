@@ -4,6 +4,33 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 01:39 IST (2026-09-22 20:09 UTC) — the Telegram security posture was hardcoded
+
+### Honesty fix
+- `server.ts` — the Telegram `security_audit` reply and the `/start` welcome
+  printed fixed text (`Human Approval: Enforced for all external actions`,
+  `Passwords & API tokens strictly isolated`, `Level 4 actions strictly require
+  your mobile confirmation`) without reading the Security Matrix. Both flags are
+  operator-flippable via `POST /api/security/matrix`, so a gate turned off was
+  still reported as enforced.
+- `src/utils/hardening/securityMatrixTruth.ts` — new `securityMatrixPosture()`
+  and `triState()` derive the posture from the observed
+  `humanApprovalForExternal` / `maskSensitiveData` / `credentialLeakProtection`
+  flags and hold `UNKNOWN — not observed` for any value never read.
+
+### Tests
+- `src/tests/hardening/securityMatrixTruth.test.ts` — 9 new tests: the
+  tri-state, the posture for false/true/missing flags, and source guards pinning
+  the removal of both literals and the derived call form. Negative-validated:
+  restoring `Enforced for all external actions` fails exactly 2 of 9
+  (`2 failed | 7 passed`); `9 passed` with the fix.
+
+### Verification
+- lint (`tsc --noEmit`) exit 0; `npx vitest run` **76 files / 1056 tests
+  passed**; `npm run build` exit 0 (`dist/server.cjs` 837.7 kb).
+
+---
+
 ## [Unreleased] - 2026-09-23 01:06 IST (2026-09-22 19:36 UTC) — the unknown-caller announcement was dead code
 
 ### Privacy fix

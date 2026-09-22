@@ -3097,3 +3097,82 @@ Next Slot:
 - Item 54, another caller-ID / telephony-adjacent privacy surface not yet swept. No
   backlog item is newly unblocked; hardware items (#1/#2/#3/#55) remain blocked.
 
+
+---
+
+## WORK SLOT 10 — 2026-09-23 01:35 IST (2026-09-22 20:09 UTC)
+
+Slot: WORK | IST time: 01:35 | Window date: 2026-09-23 | Slots completed so far: 10
+
+### Completed
+- #13 `Zero-fake-success for all tools` — extended to the Telegram security
+  posture. `server.ts`'s `security_audit` reply and `/start` welcome printed
+  fixed approval/credential claims that were never read. New
+  `src/utils/hardening/securityMatrixTruth.ts` (`securityMatrixPosture()`,
+  `triState()`); guard `src/tests/hardening/securityMatrixTruth.test.ts`
+  (9 tests, observed 9/9 pass).
+
+### In Progress
+- #13 — still `PARTIAL`; the sweep of tool surfaces remains pattern-driven.
+
+### Remaining
+- #13 sweep continues; #1/#2/#3/#55 blocked on hardware; backlog otherwise per
+  `docs/COMPLETION_STATUS.md`.
+
+### Bugs Found
+- The Telegram `security_audit` reply asserted `Human Approval: Enforced for all
+  external actions` and `Passwords & API tokens strictly isolated` as constants,
+  although `humanApprovalForExternal` / `maskSensitiveData` are flippable via
+  `POST /api/security/matrix`. `/start` made the same class of claim.
+
+### Bugs Fixed
+- Both surfaces now derive the line from `securityMatrixPosture()` and hold
+  `UNKNOWN — not observed` for unread values. Negative-validated: restoring the
+  literal fails exactly 2 of 9 (`2 failed | 7 passed`); restored -> 9/9.
+
+### Tests
+- `npx vitest run` — 76 files / 1056 tests passed.
+- Targeted: `securityMatrixTruth.test.ts` 9 passed; negative-validated 2 failed | 7 passed of 9.
+
+### Lint
+- `npm run lint` (`tsc --noEmit`) exit 0.
+
+### Build
+- `npm run build` exit 0 (`dist/server.cjs` 837.7 kb).
+
+### E2E
+- NOT RUN — no device/emulator in this environment.
+
+### Security
+- NOT RUN as a separate audit this slot; change hardens an existing security-status
+  surface and does not weaken the permission gateway.
+
+### Documentation
+- `docs/COMPLETION_STATUS.md` (Last cycle + item 13 row), `docs/CHANGELOG.md`.
+
+### Branch / Commit / Push
+- Branch: `feature/hermes-full-completion`; Commit: `2b1558e`;
+  Push: succeeded — `git ls-remote` confirms remote head `2b1558e`.
+
+### PR
+- #4 (open; refreshed by the finalization slot) — this slot did not re-open it.
+
+### Main merge
+- NOT MERGED — awaiting human approval.
+
+### Deploy
+- NOT_CONFIGURED — no deployment target present in this environment.
+
+### Blocked
+- #1/#2/#3/#55 — require real Android hardware / device credentials.
+
+### Human Approval Required
+- None new this slot.
+
+### Next Slot
+- #13, next unswept fabricated-status surface (any remaining hardcoded badge in a
+  tool modal not yet covered by a truth helper).
+
+### हिंदी सारांश (एक पंक्ति)
+- Telegram सुरक्षा रिपोर्ट अब असली Security Matrix स्थिति से बनती है, न कि
+  हार्डकोड किए गए दावे से; 9 नए टेस्ट, पूरा सूट 1056 टेस्ट पास।
