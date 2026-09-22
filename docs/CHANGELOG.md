@@ -4,6 +4,45 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 02:17 IST (2026-09-22 20:47 UTC) — social connections claimed scopes they never had
+
+### Honesty fix
+- `src/utils/socialPublishHonesty.ts` — new `PLATFORM_PUBLISH_SCOPES` (the
+  upload/publish scope each platform id needs), `grantedScopesFromTokenResponse`
+  (reads the real `scope` field; `null` when the provider was silent),
+  `scopeGranted`, and `publishScopeGranted` (tri-state — an unrecorded grant is
+  UNKNOWN, never granted).
+- `server.ts` — `getPlatformIntegrationsStatus`, `/api/auth/linkedin/status` and
+  `/api/auth/youtube/status` reported `conn?.scopes || ['w_member_social',
+  'openid', 'profile', 'email']` (and the YouTube equivalent) when nothing had
+  been recorded, and the LinkedIn callback stored that same invented list when
+  the token response carried no `scope`. All four sites now report only the
+  observed grant, `[]` when unrecorded.
+- `server.ts` — `/api/auth/youtube/status` `canPublish` follows the recorded
+  upload scope instead of being unconditionally `true`; `channels.list` proves
+  read access only. A `message` explains a missing upload scope.
+- `server.ts` — `verifyAndPublishToYouTube` refuses pre-flight with
+  `NOT_PUBLISHED` / `MISSING_CREDENTIALS` / `DRAFT` when the stored grant lacks
+  `youtube.upload`, rather than discovering it as a provider 403.
+- `server.ts` — publish confirmations no longer read `Live on …`. A provider id
+  proves creation, not reach: LinkedIn/Facebook/Instagram/X now say
+  `VERIFIED UPLOAD` with the returned id, and YouTube states the privacy
+  actually applied — only a `public` upload reads `VERIFIED & PUBLIC`, while
+  `private`/`unlisted` state who can see it.
+
+### Tests
+- `src/tests/socialPublishHonesty.test.ts` — 18 tests (5 new) covering the scope
+  map, silent-provider handling, and the tri-state grant check.
+  Negative-validated: weakening `publishScopeGranted` so an unrecorded list
+  reads as granted fails exactly 1 of 18 (`1 failed | 17 passed`); restored →
+  18/18.
+
+### Gates
+- lint (`tsc --noEmit`) exit 0; vitest **76 files / 1061 tests passed**; build
+  exit 0 (`dist/server.cjs` 840.3 kb). Commit `ef2dba7`.
+
+---
+
 ## [Unreleased] - 2026-09-23 01:39 IST (2026-09-22 20:09 UTC) — the Telegram security posture was hardcoded
 
 ### Honesty fix

@@ -4,7 +4,40 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 20:09 UTC (01:39 IST 2026-09-23) — **WORK SLOT 10**, the
+Last cycle: 2026-09-22 20:47 UTC (02:17 IST 2026-09-23) — **WORK SLOT 11**, the
+02:05 IST fire of the 2026-09-23 window. Items 25/26 (`Social account
+authentication` / `Real platform API integration`), the granted-scope claim.
+
+**A social connection reported publish scopes the provider never granted.**
+`PLATFORM_PUBLISH_SCOPES` did not exist, so the social surfaces had nothing to
+compare a grant against: the LinkedIn connection object reported
+`conn?.scopes || ['w_member_social','openid','profile','email']` — an invented
+list — and a token response that carried no `scope` field at all was read as a
+full grant. The Social Hub then showed upload scopes on the connection banner
+for a token whose actual grants nobody had read, which is the same
+connected-equals-can-publish overstatement this item has been correcting since
+slot 5, one layer deeper.
+
+Fixed: `src/utils/socialPublishHonesty.ts` now exports `PLATFORM_PUBLISH_SCOPES`
+(the upload/publish scope each platform id needs), `grantedScopesFromTokenResponse`
+(reads the real `scope` field; returns `null` when the provider was silent),
+`scopeGranted`, and `publishScopeGranted` (tri-state: `undefined` = never
+recorded, reported as UNKNOWN, never as granted). `server.ts` records only an
+observed scope list and reports `[]` rather than an invented one; the YouTube
+status `canPublish` follows the recorded upload scope, and the YouTube publish
+path refuses pre-flight with `NOT_PUBLISHED` / `MISSING_CREDENTIALS` when the
+stored grant lacks it. Honest limit: `channels.list` proves watch access, not
+upload, so it can no longer be read as publish readiness.
+
+Guard by `src/tests/socialPublishHonesty.test.ts` (18 tests, 5 new). Negative-
+validated: weakening `publishScopeGranted` so an unrecorded list reads as
+granted fails exactly 1 of 18 (observed `1 failed | 17 passed`); restored →
+18/18. Gates on `ef2dba7`: lint (`tsc --noEmit`) exit 0, vitest **76 files /
+1061 tests passed**, build exit 0 (`dist/server.cjs` 840.3 kb). Items 25/26
+stay `PARTIAL` — the scope record is now honest, but no live production account
+was authorised here, so end-to-end auth remains unverified.
+
+Previous cycle: 2026-09-22 20:09 UTC (01:39 IST 2026-09-23) — **WORK SLOT 10**, the
 01:35 IST fire of the 2026-09-23 window. Item 13 (`Zero-fake-success for all
 tools`), extended to the Telegram security-posture claim.
 
@@ -1220,8 +1253,8 @@ native helper); until then they are honestly `NOT_AVAILABLE`.
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 25 | Social account authentication | `PARTIAL` | LinkedIn OAuth connect/callback and token storage exist and are exercised against the API. YouTube/Instagram/Facebook credential checks report `MISSING_CREDENTIALS` when unset. No live production accounts were authorised in this environment, so end-to-end auth against real accounts is unverified. **2026-09-22 00:17 IST** — `/api/social/platforms` had labelled any platform whose credentials merely *exist* as `CONNECTED` (and YouTube `API_VERIFIED` with `canPublish: true`) although the endpoint makes no provider call; the Social Hub then rendered a member/channel banner from it. A present credential is now `CONFIGURED` with an explicit not-verified message, and YouTube `canPublish` is `false` until a probe confirms the channel. Same defect in `/api/auth/youtube/status`, where an unprobed static env token returned `connected: true` / `API_VERIFIED` / `canPublish: true`. Pinned by `src/tests/toolSurfaceTruthfulness.test.ts` (4 new guards), negative-validated. |
-| 26 | Real platform API integration | `PARTIAL` | LinkedIn publishes through the official REST Posts API (`/rest/posts`). A 2xx is only accepted as a post when the platform returns an identifier (`x-restli-id`/`location`). YouTube/Instagram/Facebook paths exist but have no live credentials here. |
+| 25 | Social account authentication | `PARTIAL` | LinkedIn OAuth connect/callback and token storage exist and are exercised against the API. YouTube/Instagram/Facebook credential checks report `MISSING_CREDENTIALS` when unset. No live production accounts were authorised in this environment, so end-to-end auth against real accounts is unverified. **2026-09-22 00:17 IST** — `/api/social/platforms` had labelled any platform whose credentials merely *exist* as `CONNECTED` (and YouTube `API_VERIFIED` with `canPublish: true`) although the endpoint makes no provider call; the Social Hub then rendered a member/channel banner from it. A present credential is now `CONFIGURED` with an explicit not-verified message, and YouTube `canPublish` is `false` until a probe confirms the channel. Same defect in `/api/auth/youtube/status`, where an unprobed static env token returned `connected: true` / `API_VERIFIED` / `canPublish: true`. Pinned by `src/tests/toolSurfaceTruthfulness.test.ts` (4 new guards), negative-validated. **2026-09-22 20:47 UTC (02:17 IST 2026-09-23)** — the **granted scopes** were themselves invented. `getPlatformIntegrationsStatus`, `/api/auth/linkedin/status` and `/api/auth/youtube/status` reported `conn?.scopes \|\| ['w_member_social','openid','profile','email']` (and the YouTube equivalent) when no scope list had been recorded, and the LinkedIn callback stored the same list when the token response carried no `scope` field — a request mistaken for a grant. A connection therefore displayed upload scopes nobody had observed. Now the unrecorded case reports `[]` and `grantedScopesFromTokenResponse()` returns `null` for a silent provider; the YouTube status `canPublish` is `true` only when the recorded grant contains `youtube.upload` (`publishScopeGranted`, tri-state — unrecorded is UNKNOWN, not granted) and carries an explanatory `message` otherwise. Guarded by `src/tests/socialPublishHonesty.test.ts` (18 tests; negative-validated, weakening `publishScopeGranted` fails exactly 1 of 18). |
+| 26 | Real platform API integration | `PARTIAL` | LinkedIn publishes through the official REST Posts API (`/rest/posts`). A 2xx is only accepted as a post when the platform returns an identifier (`x-restli-id`/`location`). YouTube/Instagram/Facebook paths exist but have no live credentials here. **2026-09-22 20:47 UTC (02:17 IST 2026-09-23)** — the publish confirmations named a reach the provider never reported: every success message read `Live on …` (`Live on LinkedIn personal member profile!`, `Live on Facebook Page!`, `Live on X/Twitter!`, `VERIFIED & BROADCASTED: Live on YouTube Channel`). A provider id proves the object was created, not that anyone can see it — a YouTube upload is `private`/`unlisted` unless public is applied, and no platform echoes per-post reach here. Messages now state the confirmed fact (`VERIFIED UPLOAD`, with the URN/id and, for YouTube, the privacy actually applied and who can see it), and only a `public` YouTube upload reads `VERIFIED & PUBLIC`. The YouTube publish path also refuses pre-flight with `NOT_PUBLISHED` / `MISSING_CREDENTIALS` / `DRAFT` when the stored grant lacks the upload scope, instead of discovering it as a provider 403. Guarded by `src/tests/socialPublishHonesty.test.ts`. |
 | 27 | Draft → approval → publish workflow | `VERIFIED` | `src/utils/social/publishRetry.ts` models the state machine and rejects illegal jumps. `DRAFT → PUBLISHED` is refused, `APPROVED` requires a named approver, and `PUBLISHED` requires a provider identifier. 14 workflow unit tests. |
 | 28 | Published-post verification | `VERIFIED` | The provider's own identifier is the only accepted proof. The **UI** now matches the server: `SocialMediaModal.tsx` reports a YouTube upload as verified only when the response carries a provider video ID, otherwise `UNCONFIRMED` (`src/utils/socialPublishHonesty.ts`, 13 tests). A 2xx with no identifier yields `UNVERIFIED`, never `VERIFIED`. Proven end-to-end by `socialPublish.e2e.test.ts`, which starts the real server against a mock LinkedIn. |
 | 29 | Failure / retry handling | `VERIFIED` | `publishWithRetry` retries only failures it can show happened before the request was sent (5xx, rate limit, refused connection). Ambiguous and unrecognised failures — a dropped connection, a generic `fetch failed`, anything unclassified — are not retried, because the post may already exist; they report `UNVERIFIED`. 15 retry unit tests plus 7 E2E tests. |
@@ -1692,8 +1725,14 @@ fix.
   GitHub API. It never merges into the default branch, and automated code repair
   requires a `materialize` strategy that is not shipped — plan steps without one
   report `NOT_CONFIGURED` by design.
-- Social publishing (items 25-29) is honest about what it can confirm. LinkedIn
-  posts are only `VERIFIED` when the platform returns a post URN; a 2xx without
+- Social publishing (items 25-29) is honest about what it can confirm. A
+  connection's granted scopes are reported only as recorded — an unrecorded
+  grant is `[]`/UNKNOWN, never the scopes the app intended to request — and
+  `canPublish` is `true` only when the upload scope is on record. Publish
+  confirmations state the provider fact (an id/URN was returned) rather than a
+  reach nobody measured; only a `public` YouTube upload reads `VERIFIED &
+  PUBLIC`. LinkedIn posts are only `VERIFIED` when the platform returns a post
+  URN; a 2xx without
   one is `UNVERIFIED`. Only the LinkedIn path has live API wiring — YouTube,
   Instagram and Facebook report `MISSING_CREDENTIALS` here, and no production
   social account was used, so items 25 and 26 stay `PARTIAL`.
