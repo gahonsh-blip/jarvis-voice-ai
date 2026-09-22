@@ -70,6 +70,7 @@ import {
   TaskTracker,
 } from './src/utils/computerOperator';
 import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/androidBridgeGateway';
+import { maskAndroidCallerNumber } from './src/utils/androidBridgePrivacy';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
 import { classifyApprovalOutcome } from './src/utils/hardening/approvalResolution';
 import {
@@ -7476,9 +7477,10 @@ app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
     });
   }
 
-  const maskedNumber = payload.callerNumber
-    ? String(payload.callerNumber).replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2')
-    : undefined;
+  // Canonical mask (src/utils/androidBridgeEngine.maskPhoneNumber). The previous
+  // inline regex left *spaced* numbers completely unmasked (+1 415 890 2134 ->
+  // unchanged) and leaked four subscriber digits when it did match.
+  const maskedNumber = maskAndroidCallerNumber(payload.callerNumber);
 
   if (eventType === 'INCOMING_CALL') {
     bridgeGateway.recordAudit(
