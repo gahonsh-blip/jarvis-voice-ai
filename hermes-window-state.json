@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-23",
   "window_started_at": "2026-09-22T15:36:00Z",
-  "last_slot_at": "2026-09-22T15:43:00Z",
-  "slots_completed": 1,
-  "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools",
+  "last_slot_at": "2026-09-22T16:14:00Z",
+  "slots_completed": 2,
+  "current_item": 54,
+  "current_item_title": "Secret/token protection audit",
   "current_item_status": "PARTIAL",
-  "last_commit": "7582b29",
+  "last_commit": "aece58e",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -18,6 +18,6 @@
     { "item": 55, "reason": "physical device / Windows host required" }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "WORK SLOT 1 (21:05 IST fire / 2026-09-22 15:36 UTC) of a NEW window. The prior state carried window_date 2026-09-22 with finalized:true and slots_completed:19; that window closed at 05:00 IST, so 2026-09-22 21:06 IST begins a fresh window and the counter reset to 1. Idempotency guard did not apply. Item 13 advanced: the fresh-install chat seed in src/utils/offlineStorage.ts no longer claims 'synced with Oracle Cloud Always Free ARM node' and no longer hardcodes an Oracle ARM64 deployment / Backend Sync in seed memory. Guarded by 8 tests in src/tests/offlineStorage.test.ts (was 4), both negative-validated (3 failed of 7; 1 failed of 8). Observed: lint exit 0; vitest 68 files / 988 tests passed (19.06s); build exit 0, dist/server.cjs 852453 bytes (dist removed). Security clean: .env ignored, status clean, no real secret in diff. Commits 2858e11, ab06e5b, 7582b29 pushed. Item 13 stays PARTIAL - the sweep needs the exhaustive per-tool surface inventory. E2E / device / provider calls NOT RUN. Deploy NOT_CONFIGURED. NEVER merge to main.",
-  "counter_note": "slots_completed reset to 1 for the new window (was 19 at the end of the 2026-09-22 window)."
+  "notes": "WORK SLOT 2 (21:35 IST fire / 2026-09-22 16:05-16:14 UTC) of the 2026-09-23 window. Idempotency guard did not apply (finalized:false). Item 54 advanced: src/utils/androidBridgeEngine.ts maskPhoneNumber sliced the last four CHARACTERS without checking for digits, so a digit-free caller label leaked as a fragment of itself ('Unknown' -> '******nown'), on the live path maskPhoneNumber(payload.callerNumber || 'Unknown'). Real spaced numbers also mis-rendered ('+1 415 890 2134' -> '+1  ******2134', double space). Now digits are extracted first; digit-free -> 'Unknown Number'; '+91-9876543210' -> '+91 ******3210'. Guarded by androidMobileBridge.test.ts Scenarios 19-20 (39 tests in file, up from 37); negative-validated 2 failed | 37 passed with the pre-fix body. telephonyPermissions.ts checked and NOT affected (already 'Unknown / Private'). Observed: lint exit 0; vitest 68 files / 990 tests passed (20.47s); build exit 0, dist/server.cjs 852583 bytes (dist removed). Security clean: .env ignored, status clean. Commits 7ae39bb, d2f5367, aece58e pushed. Item 54 stays PARTIAL. E2E / device / provider calls NOT RUN. Deploy NOT_CONFIGURED. NEVER merge to main.",
+  "counter_note": "slots_completed 1 -> 2. window_date unchanged (2026-09-23); the same window continues."
 }
