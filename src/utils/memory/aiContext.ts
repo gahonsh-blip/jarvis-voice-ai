@@ -7,6 +7,8 @@
 // reports what it dropped instead of silently truncating.
 // ==============================================================================
 
+import { auditSecrets } from '../computerOperator/credentialRedactor';
+
 export interface ContextNote {
   id: string;
   title: string;
@@ -27,6 +29,15 @@ export interface AiContextInput {
   charBudget?: number;
   /** How many recent turns to consider before the budget is applied. */
   maxTurns?: number;
+  /**
+   * Credential-leak protection. When not explicitly set to `false`, every
+   * string that would reach the model (name, key/value facts, note titles and
+   * bodies, and conversation turns) is run through the shared secret redactor
+   * before it is assembled, and the number of redactions is reported back.
+   * This is the one place memory becomes an outbound model request, so the
+   * default must be protection-on; an explicit `false` is the only opt-out.
+   */
+  redactCredentials?: boolean;
 }
 
 export interface AssembledContext {
@@ -39,6 +50,10 @@ export interface AssembledContext {
   droppedTurns: number;
   charCount: number;
   withinBudget: boolean;
+  /** Secrets found and replaced before the context was assembled. */
+  redactedSecretsCount: number;
+  /** Redactor categories that matched (e.g. `GitHub Token`). */
+  redactedCategories: string[];
 }
 
 const DEFAULT_CHAR_BUDGET = 6000;
@@ -55,6 +70,23 @@ const DEFAULT_MAX_TURNS = 6;
 export function assembleAiContext(input: AiContextInput): AssembledContext {
   const budget = Math.max(500, input.charBudget ?? DEFAULT_CHAR_BUDGET);
   const maxTurns = Math.max(0, input.maxTurns ?? DEFAULT_MAX_TURNS);
+  const protect = input.redactCredentials !== false;
+
+  // Credential-leak protection runs on every string before it can reach the
+  // model. Count per string so the reported total is the number of redactions
+  // actually performed, not the number of strings that happened to match.
+  let redactedSecretsCount = 0;
+  const redactedCategories = new Set<string>();
+  const guard = (text: string): string => {
+    if (!protect || !text) return text;
+    const audit = auditSecrets(text);
+    if (audit.secretsDetectedCount > 0) {
+      redactedSecretsCount += audit.secretsDetectedCount;
+      audit.redactedCategories.forEach((c) => redactedCategories.add(c));
+      return audit.redactedText;
+    }
+    return text;
+  };
 
   // Keep only the most recent turns the caller is willing to consider.
   const fullHistory = input.history ?? [];
@@ -67,22 +99,23 @@ export function assembleAiContext(input: AiContextInput): AssembledContext {
   const kept: ContextTurn[] = [];
   for (let i = candidates.length - 1; i >= 0; i -= 1) {
     const turn = candidates[i];
-    const cost = turn.content?.length ?? 0;
+    const content = guard(turn.content ?? '');
+    const cost = content.length;
     if (spent + cost > budget) break;
-    kept.push(turn);
+    kept.push({ ...turn, content });
     spent += cost;
   }
   kept.reverse();
   turns.push(...kept);
 
-  const headerParts = [`User's name: ${input.userName || 'Sir / Guest'}.`];
+  const headerParts = [`User's name: ${guard(input.userName || 'Sir / Guest')}.`];
 
   const includedNotes: string[] = [];
   const droppedNotes: string[] = [];
 
-  const keyValues = Object.entries(input.customKeyValues ?? {}).filter(
-    ([, v]) => typeof v === 'string' && v.length > 0,
-  );
+  const keyValues = Object.entries(input.customKeyValues ?? {})
+    .filter(([, v]) => typeof v === 'string' && v.length > 0)
+    .map(([k, v]) => [k, guard(v)] as const);
   if (keyValues.length > 0) {
     const kvText = keyValues.map(([k, v]) => `${k}: ${v}`).join('; ');
     if (spent + kvText.length <= budget) {
@@ -92,7 +125,7 @@ export function assembleAiContext(input: AiContextInput): AssembledContext {
   }
 
   for (const note of input.notes ?? []) {
-    const entry = `${note.title}: ${note.content}`;
+    const entry = `${guard(note.title)}: ${guard(note.content)}`;
     if (spent + entry.length > budget) {
       droppedNotes.push(note.title);
       continue;
@@ -113,5 +146,7 @@ export function assembleAiContext(input: AiContextInput): AssembledContext {
     droppedTurns: fullHistory.length - turns.length,
     charCount: spent,
     withinBudget: spent <= budget,
+    redactedSecretsCount,
+    redactedCategories: Array.from(redactedCategories),
   };
 }

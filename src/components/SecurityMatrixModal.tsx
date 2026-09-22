@@ -201,8 +201,20 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   SSH keys, cloud tokens, and API secrets are never stored in conversation context banks.
                 </p>
               </div>
-              <span className="px-3 py-1 bg-cyan-950 border border-cyan-700 text-cyan-300 rounded-lg text-xs font-mono font-bold">
-                PROTECTED
+              <span
+                className={
+                  securityState?.credentialLeakProtection === true
+                    ? 'px-3 py-1 bg-cyan-950 border border-cyan-700 text-cyan-300 rounded-lg text-xs font-mono font-bold'
+                    : securityState?.credentialLeakProtection === false
+                      ? 'px-3 py-1 bg-slate-800 text-slate-400 rounded-lg text-xs font-mono font-bold'
+                      : 'px-3 py-1 bg-slate-800 text-slate-500 rounded-lg text-xs font-mono font-bold'
+                }
+              >
+                {securityState?.credentialLeakProtection === true
+                  ? 'PROTECTED'
+                  : securityState?.credentialLeakProtection === false
+                    ? 'DISABLED'
+                    : 'UNKNOWN'}
               </span>
             </div>
           </div>

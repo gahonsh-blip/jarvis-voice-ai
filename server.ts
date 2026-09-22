@@ -85,6 +85,7 @@ import {
   type DeliveryInterpretation,
 } from './src/utils/communication/telegramDelivery';
 import { assembleAiContext } from './src/utils/memory/aiContext';
+import { auditSecrets } from './src/utils/computerOperator/credentialRedactor';
 import { mergeMemorySnapshots } from './src/utils/memory/memoryConflict';
 import {
   evaluatePermission,
@@ -8867,7 +8868,14 @@ app.post('/api/chat', async (req: Request, res: Response) => {
               notes: memoryState.notes,
               customKeyValues: memoryState.customKeyValues,
               history: effectiveHistory,
+              redactCredentials: securityMatrixState.credentialLeakProtection,
             });
+
+            if (context.redactedSecretsCount > 0) {
+              console.warn(
+                `[Security] Credential-leak protection redacted ${context.redactedSecretsCount} secret(s) from the model context (${context.redactedCategories.join(', ')}).`,
+              );
+            }
 
             const systemInstruction = `You are HERMES JARVIS, an autonomous AI agent running on an Oracle Always Free ARM Cloud server, controllable via Android Telegram Bot and Web Panel.
 ${context.systemInstruction}
