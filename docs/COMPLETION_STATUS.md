@@ -4,7 +4,38 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 22:36 IST (17:06 UTC) — **WORK SLOT 4**, the 22:35 IST
+Last cycle: 2026-09-23 23:06 IST (17:36 UTC) — **WORK SLOT 5**, the 23:05 IST
+fire of the 2026-09-23 window. Item 13 (`Zero-fake-success for all tools`).
+
+**The Telegram Gateway panel asserted liveness and cloud sync it never
+measured.** `TelegramGatewayModal.tsx` printed the seeded `config.botUsername`
+(the template literal `@HermesJarvisAssistantBot`, which the server only
+overwrites with the API's real handle inside the polling loop's `getMe`), so
+before any successful `getMe` the panel showed a bot handle that may not exist.
+Any non-live state was labelled `Real Telegram API (Long Polling)` — including
+the state where the status request had never answered — and the sidebar carried a
+fixed `24/7 Mobile Command` badge claiming messages "execute autonomously on your
+Oracle Cloud VM and sync live back to this matrix", a hosting and sync claim no
+code path in this process measures. The server also seeded
+`telegramConfig.totalMessagesReceived = 3`, a fabricated baseline presented as
+real received traffic.
+
+Fixed: `src/utils/telegramGatewayTruth.ts` gates every claim on an observed
+boolean (`telegramLiveness` is a tri-state, so an unanswered request reads
+`STATUS UNKNOWN`, not "offline" and not "online"); the token label says
+`Token present — connection not verified` rather than implying a connection; the
+template handle is labelled `(NOT REPORTED BY THE TELEGRAM API)`; the cloud-sync
+copy is replaced with an explicit refusal to claim a host or a sync path. The
+component keeps the server's config only when `telegramStatusKnown(data.config)`
+is true and seeds `statusKnown = false`, and the server now tracks
+`botUsernameReported` and seeds the counter at `0`.
+
+Guarded by the new `src/tests/telegramGatewayTruth.test.ts` (12 tests).
+Negative-validated: restoring the `24/7 Mobile Command` / Oracle copy fails
+exactly the source guard (`1 failed | 11 passed` of 12); restored → 12/12, and
+the full suite is **71 files / 1014 tests passed**.
+
+Last cycle (previous): 2026-09-22 22:36 IST (17:06 UTC) — **WORK SLOT 4**, the 22:35 IST
 fire of the 2026-09-23 window. Item 13 (`Zero-fake-success for all tools`).
 
 **The Autonomous Tools Hub asserted an unfetched kill-switch state as green.**
@@ -1307,6 +1338,46 @@ is connected to this environment.
    exactly the 3 source guards (`3 failed | 13 passed` of 16); restored → 16/16,
    and the full suite is **68 files / 979 tests passed**.
 
+## Bugs found and fixed (cycle 6 — Telegram gateway liveness honesty)
+
+1. **The Telegram Gateway header and status bar asserted states nothing had
+   observed, and marketed a cloud sync that does not exist** —
+   `TelegramGatewayModal.tsx` printed `config.botUsername` unconditionally. The
+   server seeds that field to the template `@HermesJarvisAssistantBot` and only
+   replaces it with the real handle inside the polling loop, so an
+   unauthenticated or never-connected gateway still displayed a plausible bot
+   handle. The transport line read `Real Telegram API (Long Polling)` for every
+   non-live state, including "status never fetched". The sidebar rendered a fixed
+   green `24/7 Mobile Command` badge with the copy "execute autonomously on your
+   Oracle Cloud VM and sync live back to this matrix" — a claim about *which
+   host* runs the process and about a replication path, neither of which any code
+   here measures. The server additionally seeded
+   `telegramConfig.totalMessagesReceived = 3`, so the panel opened showing three
+   received messages that had never arrived.
+
+   Fixed with the pure helper `src/utils/telegramGatewayTruth.ts`:
+   `telegramStatusKnown` / `telegramLiveness` form a tri-state (`LIVE`,
+   `NOT_LIVE`, `UNKNOWN`) so a failed or absent status request can never render
+   as either confirmed-live or confirmed-offline; `telegramTokenLabel` reports a
+   present token as `Token present — connection not verified` instead of implying
+   a connection; `telegramBotHandleLabel` marks the template handle
+   `(NOT REPORTED BY THE TELEGRAM API)`; `telegramCloudSyncClaim()` returns copy
+   that explicitly makes no host or sync claim. The component seeds
+   `statusKnown = false` and stores the server config only when
+   `telegramStatusKnown(data.config)` is a real boolean, and derives every label
+   from that gated value. `server.ts` gains `botUsernameReported` (set true only
+   after a successful `getMe`) and seeds `totalMessagesReceived` at `0`.
+
+2. **The received-message counter carried a fabricated baseline** — the literal
+   `3` in the `telegramConfig` seed was incremented by the real dispatch path,
+   so the first genuine message displayed as the fourth. Now `0`.
+
+Both are guarded by the new `src/tests/telegramGatewayTruth.test.ts` (12 tests,
+including source guards that pin the absence of the hardcoded strings and of a
+raw `config.botUsername` read). Negative-validated: restoring the
+`24/7 Mobile Command` / Oracle Cloud copy fails exactly the source guard
+(`1 failed | 11 passed` of 12); restored → 12/12.
+
 ## Bugs found and fixed (cycle 4 — telephony UI liveness honesty)
 
 1. **The Telephony Hub panel asserted a live voice agent and an answering
@@ -1355,6 +1426,14 @@ fix.
 ---
 
 ## Known limitations
+
+- Item 13's Telegram gateway panel fix (2026-09-23 23:06 IST): the panel now
+  refuses to claim liveness, a bot handle, a host, or a cloud sync that it has not
+  observed, but **no live Telegram bot token was available in this environment**,
+  so the `LIVE` rendering path (`isLiveConnected === true` after a real `getMe`)
+  is exercised only by unit tests against the helper, not against
+  `api.telegram.org`. Item 13 stays `PARTIAL`; the server's long-polling path
+  itself is unchanged by this slot.
 
 - Item 13's first-launch chat seed (2026-09-22 21:06 IST): `defaultInitialMessages`
   in `src/utils/offlineStorage.ts` no longer claims "synced with Oracle Cloud

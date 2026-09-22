@@ -4,6 +4,40 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 23:06 IST (17:36 UTC) — the Telegram Gateway panel asserted liveness and a cloud sync it never measured
+
+### Bug fix
+- `src/components/TelegramGatewayModal.tsx` — printed the seeded
+  `config.botUsername` (the template `@HermesJarvisAssistantBot`, replaced with
+  the real handle only after a successful `getMe`), labelled every non-live state
+  `Real Telegram API (Long Polling)` including "status never fetched", and carried
+  a fixed `24/7 Mobile Command` badge claiming messages "execute autonomously on
+  your Oracle Cloud VM and sync live back to this matrix".
+- `server.ts` — seeded `telegramConfig.totalMessagesReceived = 3`, so the panel
+  opened reporting three never-received messages and the first real one displayed
+  as the fourth. Now `0`; a new `botUsernameReported` flag records whether the
+  handle actually came from the Telegram API.
+
+### Added
+- `src/utils/telegramGatewayTruth.ts` — pure tri-state liveness helper
+  (`telegramStatusKnown` / `telegramLiveness` / `telegramLivenessLabel`) plus
+  `telegramTokenLabel`, `telegramBotHandleLabel`, `telegramTransportLabel` and
+  `telegramCloudSyncClaim()`, which make no host, connection or sync claim that
+  was not observed.
+
+### Changed
+- The modal seeds `statusKnown = false`, stores the server config only when
+  `telegramStatusKnown(data.config)` is a real boolean, and derives every liveness
+  label from that gated value. Unanswered status reads `STATUS UNKNOWN`.
+
+### Tests
+- `src/tests/telegramGatewayTruth.test.ts` (12 tests, incl. source guards).
+  Negative-validated: restoring the `24/7 Mobile Command` / Oracle copy fails
+  exactly the source guard (`1 failed | 11 passed` of 12); restored → 12/12.
+  Full suite: 71 files / 1014 tests passed.
+
+---
+
 ## [Unreleased] - 2026-09-22 22:36 IST (17:06 UTC) — the Autonomous Tools Hub rendered an unfetched kill-switch state as green
 
 ### Bug fix

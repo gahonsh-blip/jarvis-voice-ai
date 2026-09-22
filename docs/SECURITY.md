@@ -223,3 +223,26 @@ that the system is secure. No third-party penetration test has been performed.
 - `GET /api/deployment/verify` reports the conditions a deployment must satisfy.
   An `UNKNOWN` check blocks readiness rather than being assumed good: an
   unexercised backup is not evidence that backups work.
+
+## 9. Liveness claims on outbound integration surfaces
+
+An integration panel that displays a credential or a connection state is a
+security surface of its own: an operator reads it before deciding whether to trust
+a path with a message or a command. A panel must therefore never render a
+connection, a bot handle, a host or a replication path that no code path observed.
+
+The Telegram gateway is the reference implementation of this rule.
+`server.ts` seeds `telegramConfig.botUsername` to a template handle and sets
+`botUsernameReported = true` only after a successful `getMe`; it seeds
+`totalMessagesReceived` at `0` rather than a plausible baseline.
+`src/utils/telegramGatewayTruth.ts` turns the status response into a tri-state
+(`LIVE` / `NOT_LIVE` / `UNKNOWN`) so a failed or not-yet-issued request renders
+`STATUS UNKNOWN` and cannot be read as either confirmed-live or confirmed-offline.
+`TelegramGatewayModal.tsx` seeds `statusKnown = false` and keeps the server config
+only when `telegramStatusKnown(data.config)` is a real boolean.
+
+This is the same invariant enforced on the Permission Gateway and the Autonomous
+Tools Hub emergency badge (`src/utils/emergencyTruth.ts`): a security-relevant
+state that has not been observed is `UNKNOWN`, and `UNKNOWN` never enables an
+action. Guarded by `src/tests/telegramGatewayTruth.test.ts` (12 tests, including
+source guards that pin the absence of the hardcoded claims).
