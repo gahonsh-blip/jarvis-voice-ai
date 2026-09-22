@@ -4,6 +4,39 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-22 21:35 IST (16:05 UTC) — the Android bridge no longer fabricates a masked number from a caller label
+
+### Bug fix
+- `src/utils/androidBridgeEngine.ts` `maskPhoneNumber` — sliced the last four
+  *characters* of its input without checking for digits. A digit-free caller
+  label came back as a fragment of itself (`'Unknown'` → `'******nown'`,
+  `'UNKNOWN'` → `'******NOWN'`, `'private'` → `'******vate'`), leaking label
+  characters in phone-number shape. This is the live path: the route calls
+  `maskPhoneNumber(payload.callerNumber || 'Unknown')` when the bridge reports a
+  call with no resolvable number. A real spaced number was also mis-rendered
+  (`'+1 415 890 2134'` → `'+1  ******2134'`, double space) because the prefix was
+  `clean.slice(0, 3)` plus an appended space. Now digits are extracted first: a
+  digit-free input returns `'Unknown Number'`, and a real number keeps its
+  matched `+<area> ` prefix and last four digits with spacing normalised
+  (`'+91-9876543210'` → `'+91 ******3210'`).
+- `src/utils/telephonyPermissions.ts` was checked and does not share the
+  digit-free path — it already returns `'Unknown / Private'`. No change needed.
+
+### Tests
+- `src/tests/androidMobileBridge.test.ts` — two new scenarios (19–20; file now
+  39 tests, up from 37) covering the digit-free identifier and the
+  country-prefix preservation. Negative-validated: restoring the pre-fix body
+  fails exactly those two (`2 failed | 37 passed` of 39, observed
+  `expected '******nown' to be 'Unknown Number'` and
+  `expected '+1  ******2134' to be '+1 ******2134'`); all 39 pass with the fix.
+
+### Verification
+- `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run` 68 files / 990 tests
+  passed (20.47 s); `npm run build` exit 0 (`dist/server.cjs` 852583 bytes,
+  `dist/` removed after measuring and never committed). Item 54 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-09-22 21:06 IST (15:36 UTC) — The first-launch chat transcript no longer claims a cloud sync
 
 ### Bug fix

@@ -167,6 +167,24 @@ The token vault no longer carries a hardcoded fallback key. Without
 random per-process key, so tokens do not survive a restart but are never
 protected by a key that is public in the repository.
 
+**Update 2026-09-22 21:35 IST — the bridge helper itself had a defect.** The
+description above treated `androidBridgeEngine.ts` as the canonical good mask,
+but it was only good for numbers that start with `+`. It sliced the last four
+*characters* of its input without checking that the input held digits, so a
+digit-free caller label came back as a fragment of itself (`'Unknown'` →
+`'******nown'`, `'private'` → `'******vate'`) — a leaked label element presented
+in phone-number shape. That is the live path: the route calls
+`maskPhoneNumber(payload.callerNumber || 'Unknown')` when the bridge reports a
+call with no resolvable number. A real spaced number was also mis-rendered:
+`'+1 415 890 2134'` became `'+1  ******2134'` (double space) because the prefix
+was `slice(0, 3)` and an extra space was appended. `maskPhoneNumber` now
+extracts the digits first: a digit-free input returns `'Unknown Number'`, and a
+real number keeps its matched `+<area> ` prefix and the last four digits, with
+spacing normalised (`'+91-9876543210'` → `'+91 ******3210'`). Guarded by
+`src/tests/androidMobileBridge.test.ts` Scenarios 19–20; negative-validated
+(`2 failed | 37 passed` with the pre-fix body restored). `telephonyPermissions.ts`
+never shared the digit-free defect — it already returns `'Unknown / Private'`.
+
 ## 7. Secret audit
 
 `GET /api/security/audit-secrets` scans tracked text files. It deliberately flags
