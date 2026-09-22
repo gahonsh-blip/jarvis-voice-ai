@@ -3283,3 +3283,10 @@ granted still displayed upload authorization on the banner.
 ### हिंदी सारांश (एक पंक्ति)
 - YouTube Studio हेडर अब असली scopes पढ़ता है और बिना canPublish साबित हुए upload
   की अनुमति नहीं दिखाता — 6 नए टेस्ट, पूरा सूट 1067 पास।
+
+### Verification addendum (observed this run)
+- `git status --short`: clean; no `.env` present, `.gitignore:4:.env` confirmed.
+- `git diff --stat origin/main`: 170 files, +33,338/-1,646 — no token/key, no
+  `node_modules`, no `dist` in the diff.
+- PR #4 is `open`, `draft=False` —
+  https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
