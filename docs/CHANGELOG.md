@@ -4,6 +4,32 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 01:06 IST (2026-09-22 19:36 UTC) — the unknown-caller announcement was dead code
+
+### Privacy fix
+- `src/utils/androidBridgeEngine.ts` — `handleIncomingCall` selected the
+  localized unknown-caller fallback with `masked !== 'Unknown'`, a sentinel
+  `maskPhoneNumber` no longer returns after slot 8's repair. The `अज्ञात नंबर`
+  branch was therefore unreachable and the announcement spliced the literal
+  `Unknown Number` into the Hindi sentence. The branch now selects on
+  `/\d/.test(masked)` and gives Hinglish/English their own honest fallback.
+- `src/utils/androidBridgeEngine.ts` — both `maskPhoneNumber` call sites no
+  longer pass the `|| 'Unknown'` sentinel; the helper classifies a digit-free
+  input itself.
+
+### Tests
+- `src/tests/androidMobileBridge.test.ts` — Scenario 21 guards that a bridge
+  call with no caller number fabricates no digits and does not splice
+  `Unknown Number` into the announcement (file now 40 tests, up from 39).
+  Negative-validated against the upstream-only engine: `1 failed | 39 passed`
+  of 40; `40 passed` with the repair.
+
+### Verification
+- lint (`tsc --noEmit`) exit 0; `npx vitest run` **75 files / 1047 tests
+  passed** (21.07 s).
+
+---
+
 ## [Unreleased] - 2026-09-23 00:25 IST (2026-09-22 18:55 UTC) — the finance-guard badge asserted a lock it never measured
 
 ### Security fix

@@ -4,7 +4,49 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 19:15 UTC (00:45 IST 2026-09-23) — **WORK SLOT 8**, the
+Last cycle: 2026-09-22 19:36 UTC (01:06 IST 2026-09-23) — **WORK SLOT 9**, the
+01:05 IST fire of the 2026-09-23 window. Item 54 (`Secret/token protection
+audit`), Android-bridge caller-ID privacy.
+
+**The localized unknown-caller announcement was unreachable dead code.** Slot 8
+repaired `maskPhoneNumber`, which now returns `'Unknown Number'` for a
+digit-free caller identifier. But `handleIncomingCall` still selected on the
+old sentinel — `const displayNum = masked !== 'Unknown' ? masked : 'अज्ञात नंबर';`
+— and `maskPhoneNumber` can no longer return `'Unknown'`, so that fallback
+could never fire. A call with no resolvable number was spoken as
+"...से कॉल आया है" with `Unknown Number` spliced into the Hindi sentence
+instead of the intended `अज्ञात नंबर`, and the Hinglish/English branches had
+no honest fallback at all (they would have said "incoming call from Unknown
+Number").
+
+Fixed: the branch in `src/utils/androidBridgeEngine.ts` now selects on
+`/\d/.test(masked)` — presence of a real digit — rather than the stale magic
+string, and each language keeps its own phrasing (`अज्ञात नंबर` for Hindi,
+`an unknown number` for Hinglish/English). Both call sites stopped passing the
+`|| 'Unknown'` sentinel into `maskPhoneNumber`, which classifies a digit-free
+input itself.
+
+Guarded by Scenario 21 in `src/tests/androidMobileBridge.test.ts` (file now 40
+tests, up from 39): a bridge call with no caller number must produce no
+fabricated digits and must not splice `Unknown Number` into the announcement.
+Negative-validated against the upstream-only engine: the guard fails exactly
+alone — observed `1 failed | 39 passed` of 40 — and `40 passed` once the
+repair is restored. Gates on `93562fd`: lint (`tsc --noEmit`) exit 0;
+`npx vitest run` **75 files / 1047 tests passed** (21.07 s).
+
+Honest correction on the commit evidence: `93562fd`'s message also claims it
+"requires at least 4 digits before masking" in `maskPhoneNumber`. That line
+came from this slot's first draft, and the rebase conflict resolution kept
+slot 8's more thorough upstream body instead — the pushed diff for
+`maskPhoneNumber` is empty and the message overstates it. The real change in
+`93562fd` is the `handleIncomingCall` branch and the two call sites, as
+described above. The message is left uncorrected because force-pushing is
+forbidden for this project; this note is the correction.
+
+Item 54 remains `PARTIAL` — another found-and-fixed privacy defect in the
+sweep, not proof the sweep is complete.
+
+Previous cycle: 2026-09-22 19:15 UTC (00:45 IST 2026-09-23) — **WORK SLOT 8**, the
 00:35 IST fire of the 2026-09-23 window. Item 13
 (`Zero-fake-success for all tools`), extended to the Dashboard geolocation radar.
 
