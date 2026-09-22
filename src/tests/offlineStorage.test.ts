@@ -68,3 +68,33 @@ describe('loadLocalMemory', () => {
     expect(loadLocalMemory()).toEqual(defaultInitialMemory);
   });
 });
+
+// Regression guard: the first-launch chat history seed narrated a cloud sync
+// that no code performs. `defaultInitialMessages` is what App.tsx renders when
+// localStorage holds no transcript, so on a fresh install the operator read
+// "synced with Oracle Cloud Always Free ARM node" — a claim nothing observes.
+// The project's own notes state the process runs in this container, not the
+// Oracle ARM VM, and no sync route exists in this build.
+describe('first-launch chat seed makes no unobserved cloud claim', () => {
+  it('says cloud sync is not configured rather than claiming it happened', async () => {
+    const { defaultInitialMessages } = await loadModule();
+    const systemMessage = defaultInitialMessages.find((m) => m.role === 'system');
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage!.content).toContain('Cloud sync is NOT configured');
+  });
+
+  it('never asserts a completed sync or a specific cloud node', async () => {
+    const { defaultInitialMessages } = await loadModule();
+    const joined = defaultInitialMessages.map((m) => m.content).join('\n');
+    expect(joined).not.toMatch(/synced with/i);
+    expect(joined).not.toMatch(/Oracle Cloud/i);
+    expect(joined).not.toMatch(/ARM node/i);
+  });
+
+  it('source of the seed no longer contains the fabricated sync string', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(path.join(__dirname, '..', 'utils', 'offlineStorage.ts'), 'utf8');
+    expect(source).not.toContain('synced with Oracle Cloud Always Free ARM node');
+  });
+});

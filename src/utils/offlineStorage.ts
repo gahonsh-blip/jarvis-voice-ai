@@ -16,7 +16,7 @@ export const defaultInitialMessages: ChatMessage[] = [
   {
     id: 'init-1',
     role: 'system',
-    content: 'HERMES JARVIS PROTOCOL ACTIVE. Local offline storage initialized & synced with Oracle Cloud Always Free ARM node.',
+    content: 'HERMES JARVIS PROTOCOL ACTIVE. Local offline storage initialized. Cloud sync is NOT configured in this build.',
     timestamp: new Date().toISOString(),
   },
   {
