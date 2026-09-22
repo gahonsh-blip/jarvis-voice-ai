@@ -3176,3 +3176,60 @@ Slot: WORK | IST time: 01:35 | Window date: 2026-09-23 | Slots completed so far:
 ### हिंदी सारांश (एक पंक्ति)
 - Telegram सुरक्षा रिपोर्ट अब असली Security Matrix स्थिति से बनती है, न कि
   हार्डकोड किए गए दावे से; 9 नए टेस्ट, पूरा सूट 1056 टेस्ट पास।
+
+---
+
+## Slot 11 — WORK — 2026-09-23 02:05 IST (run 02:06→02:19 IST; 2026-09-22 20:49 UTC)
+
+Slot: WORK | window_date 2026-09-23 | slots_completed 10 → 11
+
+### Completed
+- **#25/#26 Social account authentication / Real platform API integration — `PARTIAL`.**
+  Fixed the fabricated granted-scope claim. Files: `src/utils/socialPublishHonesty.ts`
+  (`PLATFORM_PUBLISH_SCOPES`, `grantedScopesFromTokenResponse`, `scopeGranted`,
+  `publishScopeGranted`), `server.ts` (`getPlatformIntegrationsStatus`,
+  `/api/auth/linkedin/status`, `/api/auth/linkedin/callback`,
+  `/api/auth/youtube/status`, `/api/auth/youtube/callback`), guard
+  `src/tests/socialPublishHonesty.test.ts` (18 tests, 5 new).
+  Observed: `npx vitest run src/tests/socialPublishHonesty.test.ts` → 18 passed.
+- **#26 publish-reach honesty** — `Live on …` messages (`Live on LinkedIn personal
+  member profile!`, `Live on Facebook Page!`, `Live on Instagram!`,
+  `Live on X/Twitter!`, `VERIFIED & BROADCASTED: Live on YouTube Channel`) replaced
+  by the observed fact: `VERIFIED UPLOAD` + returned URN/id; only a `public`
+  YouTube upload reads `VERIFIED & PUBLIC`, `private`/`unlisted` name who can see it.
+- **#26 YouTube pre-flight** — `verifyAndPublishToYouTube` refuses with
+  `success:false`, `executionStatus:'NOT_PUBLISHED'`,
+  `verificationStatus:'MISSING_CREDENTIALS'`, `finalTruthState:'DRAFT'` when the
+  stored grant lacks `youtube.upload`.
+
+### Bugs found (all fixed)
+1. Invented OAuth scopes reported as granted — `conn?.scopes || ['w_member_social',
+   'openid','profile','email']` (and the YouTube readonly/upload pair) in three
+   status endpoints when nothing had been recorded.
+2. A silent token response (no `scope` field) read as a full grant in the LinkedIn
+   callback, turning a request into a recorded grant.
+3. `canPublish: true` derived from `channels.list` alone — watch access, not upload.
+4. `Live` claimed for an upload the provider stored `private`/`unlisted`.
+
+### Verification
+- Negative control: weakening `publishScopeGranted` so an unrecorded list reads as
+  granted → observed `1 failed | 17 passed` of 18. Restored → `18 passed`.
+- Full suite: `76 files / 1061 tests passed` (vitest 4.1.11, 19.95 s).
+- Lint: exit 0 (`tsc --noEmit`). Build: exit 0, `dist/server.cjs` 840.3 kb.
+- E2E: NOT RUN this slot. Security audit: NOT RUN (manual check only — no `.env`
+  staged, no secret in diff).
+
+### Commits / push
+- `ef2dba7` fix(social): stop claiming scopes the provider never granted
+- `9957290` docs(hermes): record slot 11 social scope-honesty fix
+- Pushed `origin/feature/hermes-full-completion` → `9957290`.
+- State branch `automation/hermes-state` → `769cf94` (slots_completed 11).
+
+### Board
+- Preserved: 25 `PARTIAL`, 26 `PARTIAL`, 27/28/29 `VERIFIED`, 13 `PARTIAL`.
+- PR #4: open, not re-opened this slot. Main merge: NOT MERGED — awaiting human.
+- Deploy: NOT_CONFIGURED — no deployment target in this environment.
+
+### हिंदी सारांश (एक पंक्ति)
+- सोशल कनेक्शन अब वे scopes नहीं दिखाते जो कभी grant नहीं हुए; "Live" दावे की जगह
+  असली URN/privacy बताया गया — 18 टेस्ट पास, पूरा सूट 1061 पास।
