@@ -1,15 +1,15 @@
 {
   "window_date": "2026-09-23",
   "window_started_at": "2026-09-22T15:35:00Z",
-  "last_slot_at": "2026-09-22T17:44:00Z",
-  "slots_completed": 5,
+  "last_slot_at": "2026-09-22T18:15:00Z",
+  "slots_completed": 6,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "20cfc6c",
+  "last_commit": "bb340d6",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": ["1:physical Android device", "2:real device screenshot", "3:computer operator hardware", "55:real-device E2E hardware", "13:no live Telegram bot token for LIVE render path"],
+  "blocked_items": ["1:physical Android device", "2:real device screenshot", "3:computer operator hardware", "55:real-device E2E hardware", "13:no real browser speech platform for LIVE render path"],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
