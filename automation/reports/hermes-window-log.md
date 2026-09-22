@@ -2562,3 +2562,42 @@ Next Slot:
 - Deploy: NOT_CONFIGURED — no deployment target/hosting integration in this environment; dist/server.cjs is the deployment unit.
 - Main merge: NOT MERGED — awaiting human approval. Never auto-merge.
 
+
+## 2026-09-22 21:06 IST (15:36 UTC) — WORK SLOT 1, window 2026-09-23
+
+New window. Prior `automation/hermes-state` carried `window_date` 2026-09-22 with
+`finalized: true` and `slots_completed: 19`; this run starts 2026-09-22 21:06 IST,
+after that window closed at 05:00 IST, so it is a **fresh window** and the counter
+resets to 1. The idempotency guard does not apply — today's IST date belongs to
+the new window, not the finalized one. Noted for the morning review.
+
+Item advanced: **#13 Zero-fake-success for all tools** — remains `PARTIAL`.
+
+- **Bug:** `defaultInitialMessages` in `src/utils/offlineStorage.ts` is the seed
+  chat history `App.tsx` renders on a fresh install. Its system message read
+  `Local offline storage initialized & synced with Oracle Cloud Always Free ARM
+  node.` No sync route exists, the `PendingSyncItem` queue is never drained to a
+  remote, and the process runs in this container (not the Oracle VM). The seed
+  memory note also hardcoded `Oracle Always Free ARM64 + Local Hybrid Engine` and
+  `Offline-First LocalStorage & Backend Sync` as if measured.
+- **Fix:** system message now states cloud sync is NOT configured; `system_engine`
+  and `persistence_mode` now state the deployment target and remote sync are NOT
+  configured.
+- **Tests:** `src/tests/offlineStorage.test.ts`, 8 tests (was 4). Two
+  negative-validations performed and observed: restoring the sync string gave
+  `3 failed | 4 passed` (of 7 at the time); restoring the ARM64 engine string gave
+  `1 failed | 7 passed` (of 8).
+- **Evidence/gates:** `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run`
+  **68 files / 988 tests passed** (19.06 s); `npm run build` exit 0
+  (`dist/server.cjs` 852453 bytes / 832.5 kb; `dist/` removed, never committed).
+- **Security:** `.env` git-ignored (`.gitignore:4`); `git status --short` clean;
+  secret-pattern scan of `git diff origin/main` matches only empty `KEY=` lines in
+  `.env.example`.
+- Commits: `2858e11`, `ab06e5b`. Push: succeeded to
+  `origin/feature/hermes-full-completion`.
+- E2E / device / provider calls: NOT RUN (no hardware, no credentials).
+- Deploy: NOT_CONFIGURED — no deployment target present in this sandbox.
+- Main merge: NOT MERGED — awaiting human approval.
+
+हिंदी सारांश: पहली बार खुलने वाली चैट अब झूठा क्लाउड-सिंक नहीं दिखाती; #13 अभी भी PARTIAL है।
+
