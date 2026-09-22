@@ -89,3 +89,40 @@ describe('LocationServicesModal does not fabricate a GPS fix', () => {
     expect(src).toContain('locationBriefing');
   });
 });
+
+describe('DashboardMapSnippet does not assert an active fix or measured accuracy', () => {
+  const src = read('DashboardMapSnippet.tsx');
+
+  it('never renders a hardcoded ACTIVE POSITION FIX banner', () => {
+    expect(src).not.toContain('ACTIVE POSITION FIX');
+    // Provenance must come from the shared helper, keyed on the real source.
+    expect(src).toContain('locationSourceLabel(source)');
+  });
+
+  it('never renders a fabricated ±Nm precision independent of provenance', () => {
+    expect(src).not.toMatch(/±\{Math\.round\(coords\.accuracy\)\}m/);
+    expect(src).toContain('accuracyDisplay(source, coords.accuracy)');
+  });
+
+  it('accepts a source prop and forwards it to every location helper', () => {
+    expect(src).toMatch(/source\??:\s*CoordsSource\s*\|\s*null/);
+    expect(src).toContain('type CoordsSource');
+  });
+});
+
+describe('App surfaces the real coordinate provenance to the dashboard snippet', () => {
+  const src = fs.readFileSync(path.resolve(__dirname, '../App.tsx'), 'utf8');
+
+  it('tracks userCoordsSource state and updates it only from live GPS', () => {
+    expect(src).toContain('userCoordsSource');
+    expect(src).toContain('setUserCoordsSource(');
+    // The initial state must be cache (or null), never a fabricated 'live'.
+    expect(src).toMatch(/loadCachedLocation\(\)\?\.coords\s*\?\s*'cache'\s*:\s*null/);
+  });
+
+  it('passes the provenance down to DashboardMapSnippet', () => {
+    const idx = src.indexOf('<DashboardMapSnippet');
+    const snippet = src.slice(idx, src.indexOf('/>', idx));
+    expect(snippet).toContain('source={userCoordsSource}');
+  });
+});

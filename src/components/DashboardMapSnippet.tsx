@@ -1,11 +1,17 @@
 import React from 'react';
 import { MapPin, Navigation, Crosshair, Radio, RefreshCw, ArrowUpRight, Compass } from 'lucide-react';
 import { GeoCoordinates, LocationAddress } from '../types/location';
-import { formatDMS } from '../utils/locationService';
+import {
+  formatDMS,
+  locationSourceLabel,
+  accuracyDisplay,
+  type CoordsSource,
+} from '../utils/locationService';
 
 interface DashboardMapSnippetProps {
   coords: GeoCoordinates | null;
   address: LocationAddress | null;
+  source?: CoordsSource | null;
   isLoading?: boolean;
   onOpenModal: () => void;
   onRefresh?: () => void;
@@ -14,6 +20,7 @@ interface DashboardMapSnippetProps {
 export const DashboardMapSnippet: React.FC<DashboardMapSnippetProps> = ({
   coords,
   address,
+  source = 'live',
   isLoading = false,
   onOpenModal,
   onRefresh,
@@ -40,7 +47,7 @@ export const DashboardMapSnippet: React.FC<DashboardMapSnippetProps> = ({
               GEO-TELEMETRY & RADAR
             </h3>
             <span className="text-[10px] font-mono text-slate-400">
-              {coords ? 'ACTIVE POSITION FIX' : 'INITIALIZING GPS...'}
+              {coords ? locationSourceLabel(source) : 'NO FIX — INITIALIZING GPS...'}
             </span>
           </div>
         </div>
@@ -115,7 +122,7 @@ export const DashboardMapSnippet: React.FC<DashboardMapSnippetProps> = ({
                 <div className="text-right">
                   <div className="text-[9px] font-mono text-slate-400 uppercase">PRECISION</div>
                   <div className="text-[11px] font-mono font-bold text-emerald-400">
-                    ±{Math.round(coords.accuracy)}m
+                    {accuracyDisplay(source, coords.accuracy)}
                   </div>
                 </div>
               </div>

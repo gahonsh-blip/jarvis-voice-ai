@@ -43,6 +43,7 @@ import {
   loadCachedLocation,
   saveCachedLocation,
   reverseGeocodeCoordinates,
+  type CoordsSource,
 } from './utils/locationService';
 import { telephonyAudio } from './utils/telephonyAudio';
 import {
@@ -176,6 +177,11 @@ export default function App() {
   const [userAddress, setUserAddress] = useState<LocationAddress | null>(() => {
     return loadCachedLocation()?.address || null;
   });
+  // Provenance of `userCoords`: only 'live' is a hardware GPS reading. Anything
+  // loaded from cache / applied as a preset / typed manually must stay labelled.
+  const [userCoordsSource, setUserCoordsSource] = useState<CoordsSource | null>(() => {
+    return loadCachedLocation()?.coords ? 'cache' : null;
+  });
   const [isLocationLoading, setIsLocationLoading] = useState<boolean>(false);
 
   const handleRefreshLocation = useCallback(() => {
@@ -194,6 +200,7 @@ export default function App() {
           timestamp: pos.timestamp,
         };
         setUserCoords(c);
+        setUserCoordsSource('live');
         setIsLocationLoading(false);
         const addr = await reverseGeocodeCoordinates(c.latitude, c.longitude);
         setUserAddress(addr);
@@ -1679,6 +1686,7 @@ export default function App() {
             <DashboardMapSnippet
               coords={userCoords}
               address={userAddress}
+              source={userCoordsSource}
               isLoading={isLocationLoading}
               onOpenModal={() => setActiveApp('location')}
               onRefresh={handleRefreshLocation}
@@ -1894,9 +1902,10 @@ export default function App() {
         isOpen={activeApp === 'location'}
         onClose={() => setActiveApp(null)}
         onSpeak={speakText}
-        onCoordinatesUpdated={(c, a) => {
+        onCoordinatesUpdated={(c, a, source) => {
           setUserCoords(c);
           setUserAddress(a);
+          setUserCoordsSource(source);
         }}
       />
     </div>

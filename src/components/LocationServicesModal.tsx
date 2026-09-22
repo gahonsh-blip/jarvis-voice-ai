@@ -45,7 +45,11 @@ interface LocationServicesModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSpeak?: (text: string) => void;
-  onCoordinatesUpdated?: (coords: GeoCoordinates, address: LocationAddress | null) => void;
+  onCoordinatesUpdated?: (
+    coords: GeoCoordinates,
+    address: LocationAddress | null,
+    source: CoordsSource,
+  ) => void;
 }
 
 export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
@@ -114,7 +118,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           const addr = await reverseGeocodeCoordinates(newCoords.latitude, newCoords.longitude);
           setAddress(addr);
           saveCachedLocation(newCoords, addr);
-          onCoordinatesUpdated?.(newCoords, addr);
+          onCoordinatesUpdated?.(newCoords, addr, 'live');
         },
         (err) => {
           setIsLoading(false);
@@ -172,7 +176,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           setCoords(updated);
           setCoordsSource('live');
           saveCachedLocation(updated, address);
-          onCoordinatesUpdated?.(updated, address);
+          onCoordinatesUpdated?.(updated, address, 'live');
         },
         (err) => {
           setPermissionError(`Live tracking interrupted: ${err.message}`);
@@ -246,6 +250,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
     setIsLoading(false);
     // Deliberately not persisted: a preset is a simulated position, and caching
     // it would resurrect it as if it were a real fix on the next load.
+    onCoordinatesUpdated?.(newCoords, addr, 'preset');
   };
 
   // Apply manual coordinates
@@ -271,7 +276,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
     setAddress(addr);
     setIsLoading(false);
     saveCachedLocation(customCoords, addr);
-    onCoordinatesUpdated?.(customCoords, addr);
+    onCoordinatesUpdated?.(customCoords, addr, 'manual');
     setShowManualInput(false);
   };
 
