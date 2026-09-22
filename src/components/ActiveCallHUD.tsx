@@ -30,6 +30,7 @@ import {
   getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
+import { resolveDisplayNumber, shouldMaskParty } from '../utils/telephonyPrivacyDisplay';
 
 interface ActiveCallHUDProps {
   activeCall: CallRecord | null;
@@ -145,7 +146,9 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 font-mono">{activeCall.callerNumber}</p>
+              <p className="text-xs text-slate-400 font-mono">
+                {resolveDisplayNumber(activeCall.callerNumber, effectiveContacts, isMaskActive)}
+              </p>
             </div>
           </div>
         </div>
@@ -272,7 +275,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
 
   // 4. LIVE IN-CALL HUD
   const counterpart = activeCall.direction === 'outbound' ? activeCall.recipientName : effectiveInboundCallerName;
-  const counterpartNumber = activeCall.direction === 'outbound' ? activeCall.recipientNumber : activeCall.callerNumber;
+  const counterpartIsMasked = activeCall.direction === 'inbound' && shouldMaskParty(activeCall.callerNumber, effectiveContacts, isMaskActive);
 
   return (
     <div id="live-call-hud" className="fixed bottom-6 right-6 z-50 w-[440px] rounded-2xl border border-cyan-500/50 bg-slate-950/95 shadow-2xl backdrop-blur-2xl overflow-hidden animate-in slide-in-from-bottom-5">
@@ -301,7 +304,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <h4 className="text-sm font-bold text-white truncate max-w-[200px]">{counterpart}</h4>
-              {isMaskActive && isUnknownInbound && (
+              {counterpartIsMasked && (
                 <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950 border border-cyan-800/60 px-1 py-0.2 rounded">
                   MASKED
                 </span>

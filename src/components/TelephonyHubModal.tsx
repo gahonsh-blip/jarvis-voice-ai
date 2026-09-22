@@ -47,6 +47,7 @@ import {
   getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
+import { resolveDisplayNumber } from '../utils/telephonyPrivacyDisplay';
 import {
   telephonyEndpointLabel,
   telephonyBrainLabel,
@@ -1116,7 +1117,9 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                             )}
                         </div>
                         <p className="text-xs text-slate-400 font-mono">
-                          {selectedLog.direction === 'outbound' ? selectedLog.recipientNumber : selectedLog.callerNumber}
+                          {selectedLog.direction === 'outbound'
+                            ? selectedLog.recipientNumber
+                            : resolveDisplayNumber(selectedLog.callerNumber, effectiveContacts, maskUnknownEnabled)}
                         </p>
                       </div>
 
