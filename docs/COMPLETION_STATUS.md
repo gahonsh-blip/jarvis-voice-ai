@@ -4,7 +4,44 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-22 18:55 UTC (00:25 IST 2026-09-23) — **WORK SLOT 7**, the
+Last cycle: 2026-09-22 19:15 UTC (00:45 IST 2026-09-23) — **WORK SLOT 8**, the
+00:35 IST fire of the 2026-09-23 window. Item 13
+(`Zero-fake-success for all tools`), extended to the Dashboard geolocation radar.
+
+**The dashboard radar asserted a live GPS fix for coordinates that were not
+live.** `DashboardMapSnippet.tsx` printed the constant `ACTIVE POSITION FIX`
+(or `CURRENT FIX`) for *any* non-null `coords`, and a fabricated `±Nm`
+precision from `Math.round(coords.accuracy)` — but the coordinates it receives
+are just as often loaded from `loadCachedLocation()`, applied as a tactical
+preset, or typed manually in `LocationServicesModal`. Slot 6 had centralised
+provenance in `src/utils/locationService.ts` (`CoordsSource`,
+`locationSourceLabel()`, `accuracyDisplay()`) and made the modal carry a
+`source` on its `onCoordinatesUpdated` callback, but `App.tsx` still passed
+only `coords`/`address` to the snippet, so the HUD could not know a cache
+entry from a device read and kept claiming a fix.
+
+Fixed: `App.tsx` now tracks `userCoordsSource` (`CoordsSource | null`), seeds
+it `'cache'` only when `loadCachedLocation()` actually returned coordinates
+(never a fabricated `'live'`), sets it `'live'` only on the
+`getCurrentPosition` success path, forwards it to `DashboardMapSnippet`, and
+wires the modal callback's third argument through to the state setter. The
+snippet's banner and precision field now render `locationSourceLabel(source)`
+and `accuracyDisplay(source, coords.accuracy)`, so a cached/preset/manual point
+reads its real provenance and `N/A — no GPS fix` instead of a live-fix claim.
+
+Guard by `src/tests/locationServicesTruth.test.ts` extended to 12 tests: source
+guards that `DashboardMapSnippet` contains neither `ACTIVE POSITION FIX` nor
+the `±{Math.round(coords.accuracy)}m` expression and instead calls the shared
+helpers with `source`, plus `App.tsx` guards that `userCoordsSource` exists,
+is never seeded `'live'`, and is passed down as `source={userCoordsSource}`.
+Negative-validated: restoring `'ACTIVE POSITION FIX'` fails exactly that guard
+— observed `1 failed | 11 passed` of 12; restored → 12/12. Gates on `4701be6`:
+lint (`tsc --noEmit`) exit 0, vitest **75 files / 1046 tests passed**, build
+exit 0 (`dist/server.cjs` 856683 bytes / 836.6 kb). Still `PARTIAL` — no
+physical device has exercised the live branch here; this closes one more
+fabricated-claim surface in a pattern-driven sweep.
+
+Previous cycle: 2026-09-22 18:55 UTC (00:25 IST 2026-09-23) — **WORK SLOT 7**, the
 00:05 IST fire of the 2026-09-23 window. Item 13
 (`Zero-fake-success for all tools`), extended to the Security Matrix claim
 `FINANCE SAFETY LOCK ACTIVE (100% EXCLUDED)`.

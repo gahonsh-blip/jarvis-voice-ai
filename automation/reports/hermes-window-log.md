@@ -3041,3 +3041,13 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - फाइनेंस गार्ड पैनल का झूठा "100% EXCLUDED" बैज हटाकर असली दोनों इंजनों से चलने
   वाला सेल्फ-चेक जोड़ा; 6/6 नए टेस्ट पास, पूरी सूट 1041 टेस्ट पास, lint/build हरा।
+
+## 2026-09-23 00:35 IST — WORK SLOT 8 (window 2026-09-23)
+
+- Item #13 `Zero-fake-success for all tools` — Dashboard geolocation radar slice.
+- Bug found: `DashboardMapSnippet.tsx` rendered `ACTIVE POSITION FIX` + a fabricated `±{Math.round(coords.accuracy)}m` precision for any non-null coords, including cache/preset/manual points; `App.tsx` never forwarded provenance.
+- Fixed: `App.tsx` tracks `userCoordsSource` (seeded cache only when loadCachedLocation() returned coords, set live only on the geolocation success path), forwards it as source={userCoordsSource}; snippet renders locationSourceLabel(source) and accuracyDisplay(source, coords.accuracy).
+- Tests: 75 files / 1046 passed. Lint exit 0. Build exit 0 (dist/server.cjs 836.6 kb).
+- Negative validation: restoring ACTIVE POSITION FIX -> 1 failed | 11 passed of 12.
+- Commit: 4701be6. Branch: feature/hermes-full-completion. Push: succeeded.
+- Main merge: NOT MERGED - awaiting human approval. Deploy: NOT_CONFIGURED.
