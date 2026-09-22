@@ -7069,14 +7069,16 @@ app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
 
 // Mobile Personal Status & Morning Briefing Telemetry Endpoints
 app.get('/api/mobile/telemetry', (req: Request, res: Response) => {
+  const device = bridgeGateway.getDevice();
   res.json({
     success: true,
     serverTime: new Date().toISOString(),
+    // Ambient weather has no source in this process. It used to return a fixed
+    // temperature/humidity snapshot labelled 'New Delhi' that callers could read
+    // as a live reading; the absence is reported explicitly instead.
     weatherSnapshot: {
-      location: 'New Delhi / Local GPS',
-      temperatureC: 27,
-      condition: 'Clear Sky / साफ मौसम',
-      humidity: 48,
+      available: false,
+      reason: 'No weather source is connected to this server process.',
     },
     systemScheduler: {
       activeJobs: 4,
@@ -7086,6 +7088,7 @@ app.get('/api/mobile/telemetry', (req: Request, res: Response) => {
       level4Enforced: true,
       categories: ['battery', 'weather', 'notifications', 'calendar', 'email', 'device_health'],
     },
+    connectedDevice: device ? { deviceId: device.deviceId, model: device.model } : null,
   });
 });
 
@@ -8863,14 +8866,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'weather_inquiry': {
         const isHi = language.startsWith('hi') || /[\u0900-\u097F]/.test(message) || message.toLowerCase().includes('kya') || message.toLowerCase().includes('hai') || message.toLowerCase().includes('batao');
+        // No weather provider is wired into this server process and the Android
+        // bridge heartbeat carries no ambient weather reading, so a real value
+        // cannot exist. The handler used to print a constant temperature and
+        // humidity for 'New Delhi' as if it were a current reading; report the
+        // absence instead.
         spokenResponse = isHi
-          ? `आज का मौसम साफ है (Clear Sky) और वर्तमान तापमान लगभग 27°C (New Delhi) है। आर्द्रता 48% है।`
-          : `Today's weather is Clear Sky with a temperature of 27°C (New Delhi) and 48% humidity.`;
-        actionExecuted = true;
+          ? `अभी कोई मौसम स्रोत कनेक्टेड नहीं है, इसलिए मौसम या तापमान का डेटा उपलब्ध नहीं है।`
+          : `No weather source is connected, so no weather or temperature data is available.`;
+        actionExecuted = false;
         actionDetail = {
           type: 'weather_inquiry',
-          title: 'Current Weather Telemetry',
-          payload: { location: 'New Delhi / Local GPS', temperatureC: 27, condition: 'Clear Sky / साफ मौसम', humidity: 48 },
+          title: 'Weather Unavailable (no source connected)',
         };
         break;
       }
