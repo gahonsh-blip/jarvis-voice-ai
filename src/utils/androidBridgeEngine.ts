@@ -115,10 +115,18 @@ export const DEFAULT_BRIDGE_SETTINGS: AndroidBridgeSettings = {
 export function maskPhoneNumber(numberStr: string): string {
   if (!numberStr) return 'Unknown Number';
   const clean = numberStr.trim();
+  if (!clean) return 'Unknown Number';
+
+  // Non-numeric identifiers ("Unknown", "N/A", "private") carry no number to
+  // mask; returning a mangled slice of the label would leak it and read as a
+  // phone number. Report the honest unknown state instead.
+  const digits = clean.replace(/\D/g, '');
+  if (!digits) return 'Unknown Number';
   if (clean.length <= 4) return '****';
-  const lastFour = clean.slice(-4);
-  const prefix = clean.startsWith('+') ? clean.slice(0, 3) : '';
-  return `${prefix ? prefix + ' ' : ''}******${lastFour}`;
+
+  const lastFour = digits.padStart(4, '*').slice(-4);
+  const prefix = clean.match(/^(\+?\d{1,3})[\s-]/);
+  return `${prefix ? prefix[1] + ' ' : ''}******${lastFour}`;
 }
 
 /**

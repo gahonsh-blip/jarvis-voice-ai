@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   androidBridgeEngine,
   AndroidBridgeManager,
+  maskPhoneNumber,
 } from '../utils/androidBridgeEngine';
 import { simulatedAndroidAdapter } from '../utils/androidBridgeAdapter';
 import { processOfflineCommand } from '../utils/localJarvisEngine';
@@ -633,5 +634,23 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     const online = await simulatedAndroidAdapter.openApp('com.whatsapp');
     expect(online.success).toBe(false);
     expect(online.message).toContain('awaiting device confirmation');
+  });
+
+  it('Scenario 19: maskPhoneNumber reports non-numeric identifiers honestly instead of leaking a mangled slice', () => {
+    // Regression: "Unknown" previously produced "******nown", a mangled fragment
+    // of the input that leaked characters and read as a phone number.
+    expect(maskPhoneNumber('Unknown')).toBe('Unknown Number');
+    expect(maskPhoneNumber('UNKNOWN')).toBe('Unknown Number');
+    expect(maskPhoneNumber('N/A')).toBe('Unknown Number');
+    expect(maskPhoneNumber('private')).toBe('Unknown Number');
+    expect(maskPhoneNumber('   ')).toBe('Unknown Number');
+    expect(maskPhoneNumber('')).toBe('Unknown Number');
+  });
+
+  it('Scenario 20: maskPhoneNumber preserves the country prefix and last four digits of real numbers', () => {
+    expect(maskPhoneNumber('+91 9876543210')).toBe('+91 ******3210');
+    expect(maskPhoneNumber('9876543210')).toBe('******3210');
+    expect(maskPhoneNumber('+1 415 890 2134')).toBe('+1 ******2134');
+    expect(maskPhoneNumber('+91-9876543210')).toBe('+91 ******3210');
   });
 });
