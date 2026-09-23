@@ -4,6 +4,8 @@ import path from 'path';
 import {
   describeBillingCost,
   describeDeclaredCost,
+  billingBadgeLabel,
+  parseBillingEntitlement,
 } from '../../utils/hardening/billingEntitlementTruth';
 
 // server.ts binds a port on import, so the reply assertions read the source
@@ -56,5 +58,60 @@ describe('the blueprint surfaces do not assert a zero-cost guarantee', () => {
 
   it('the phase row labels the Always Free figure as a declared plan', () => {
     expect(serverFlat).not.toContain("cost: '₹0 Always Free Guaranteed'");
+  });
+});
+
+describe('the badge label never asserts an unobserved zero-cost guarantee', () => {
+  it('names the unqueried entitlement instead of a ₹0 badge', () => {
+    const badge = billingBadgeLabel(null);
+    expect(badge).toContain('declared plan');
+    expect(badge).toContain('not probed');
+    expect(badge).not.toContain('₹0');
+  });
+
+  it('keeps an unqueried entitlement labelled when it is undefined', () => {
+    expect(billingBadgeLabel(undefined)).toContain('not probed');
+  });
+
+  it('only shows a confirmed figure after a real billing observation', () => {
+    expect(billingBadgeLabel('FREE')).toContain('confirmed by billing');
+    expect(billingBadgeLabel('BILLED')).toContain('BILLED');
+  });
+});
+
+describe('parseBillingEntitlement only accepts an explicit observation', () => {
+  it('returns null for a payload that never reported an entitlement', () => {
+    expect(parseBillingEntitlement({ metrics: {} })).toBeNull();
+    expect(parseBillingEntitlement({})).toBeNull();
+    expect(parseBillingEntitlement(null)).toBeNull();
+    expect(parseBillingEntitlement(undefined)).toBeNull();
+  });
+
+  it('rejects a non-observation value rather than upgrading it', () => {
+    expect(parseBillingEntitlement({ billingEntitlement: 'free' })).toBeNull();
+    expect(parseBillingEntitlement({ billingEntitlement: true })).toBeNull();
+    expect(parseBillingEntitlement({ billingEntitlement: 0 })).toBeNull();
+  });
+
+  it('passes through an explicit FREE/BILLED observation', () => {
+    expect(parseBillingEntitlement({ billingEntitlement: 'FREE' })).toBe('FREE');
+    expect(parseBillingEntitlement({ billingEntitlement: 'BILLED' })).toBe('BILLED');
+  });
+});
+
+const componentDir = path.resolve(process.cwd(), 'src/components');
+const readComponent = (file: string) => fs.readFileSync(path.join(componentDir, file), 'utf8');
+
+describe('decorative cost badges derive from the observed entitlement', () => {
+  it('the HUD header does not print a fixed ₹0 Always Free badge', () => {
+    const src = readComponent('HUDHeader.tsx');
+    expect(src).not.toContain('₹0 Always Free');
+    expect(src).toContain('billingBadgeLabel');
+  });
+
+  it('the Oracle panel header does not print a fixed Forever Free badge', () => {
+    const src = readComponent('OracleCloudModal.tsx');
+    expect(src).not.toContain('₹0.00 / Forever Free');
+    expect(src).toContain('billingBadgeLabel');
   });
 });

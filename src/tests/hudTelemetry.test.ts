@@ -53,6 +53,14 @@ describe('HUD telemetry — never fabricates a reading', () => {
     expect(parseHudTelemetry({})).toEqual(UNAVAILABLE_HUD_TELEMETRY);
   });
 
+  it('carries the billing entitlement observation only when explicitly reported', () => {
+    expect(parseHudTelemetry({ billingEntitlement: 'FREE' }).billingEntitlement).toBe('FREE');
+    expect(parseHudTelemetry({ billingEntitlement: 'BILLED' }).billingEntitlement).toBe('BILLED');
+    // A payload with no billing field is unobserved, not free.
+    expect(parseHudTelemetry({ metrics: {} }).billingEntitlement).toBeNull();
+    expect(parseHudTelemetry({ billingEntitlement: 'always free' }).billingEntitlement).toBeNull();
+  });
+
   it('returns the unavailable snapshot when the fetch fails or is not ok', async () => {
     const failing = vi.fn(async () => {
       throw new Error('network down');

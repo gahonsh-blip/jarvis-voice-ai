@@ -10,11 +10,21 @@
 // ever substituted.
 // =============================================================================
 
+import {
+  parseBillingEntitlement,
+  type BillingEntitlement,
+} from './hardening/billingEntitlementTruth';
+
 export interface HudTelemetrySnapshot {
   /** Real host CPU utilisation percentage, or null when unmeasurable/unknown. */
   cpuUsage: number | null;
   /** Real host RAM utilisation percentage, or null when unmeasurable/unknown. */
   ramUsage: number | null;
+  /**
+   * Billing entitlement observation carried by the same payload, or null when
+   * the billing/entitlement API was never queried. Null is not "free".
+   */
+  billingEntitlement: BillingEntitlement | null;
   /** Where the sample came from. `unavailable` means no real reading is held. */
   metricsSource: string;
   /** ISO timestamp of the sample, or null when unknown. */
@@ -24,6 +34,7 @@ export interface HudTelemetrySnapshot {
 export const UNAVAILABLE_HUD_TELEMETRY: HudTelemetrySnapshot = {
   cpuUsage: null,
   ramUsage: null,
+  billingEntitlement: null,
   metricsSource: 'unavailable',
   sampledAt: null,
 };
@@ -48,13 +59,14 @@ export function parseHudTelemetry(payload: unknown): HudTelemetrySnapshot {
 
   const cpuUsage = toMetric(metrics.cpuUsage);
   const ramUsage = toMetric(metrics.ramUsage);
+  const billingEntitlement = parseBillingEntitlement(payload);
   const metricsSource =
     typeof record.metricsSource === 'string' && record.metricsSource.length > 0
       ? record.metricsSource
       : 'unavailable';
   const sampledAt = typeof record.metricsSampledAt === 'string' ? record.metricsSampledAt : null;
 
-  return { cpuUsage, ramUsage, metricsSource, sampledAt };
+  return { cpuUsage, ramUsage, billingEntitlement, metricsSource, sampledAt };
 }
 
 /**

@@ -42,3 +42,25 @@ export function describeDeclaredCost(declaredLabel: string, entitlement: Billing
   if (entitlement === 'FREE' || entitlement === 'BILLED') return describeBillingCost(entitlement);
   return `${declaredLabel} — declared plan, entitlement NOT_PROBED`;
 }
+
+/**
+ * Compact chip label for the HUD and the Oracle panel header. Mirrors
+ * {@link describeBillingCost} in short form so a decorative badge cannot assert
+ * a zero-cost guarantee the process never observed.
+ */
+export function billingBadgeLabel(entitlement: BillingEntitlement | null | undefined): string {
+  if (entitlement === 'FREE') return '₹0 — confirmed by billing';
+  if (entitlement === 'BILLED') return 'BILLED — charge observed';
+  return 'Always Free — declared plan, not probed';
+}
+
+/**
+ * Read the entitlement out of an `/api/oracle-cloud` payload. Any value other
+ * than an explicit `FREE`/`BILLED` observation is treated as unobserved (null),
+ * so a malformed or absent field can never be upgraded to a claim.
+ */
+export function parseBillingEntitlement(payload: unknown): BillingEntitlement | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const value = (payload as { billingEntitlement?: unknown }).billingEntitlement;
+  return value === 'FREE' || value === 'BILLED' ? value : null;
+}

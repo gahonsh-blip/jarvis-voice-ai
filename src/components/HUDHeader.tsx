@@ -24,6 +24,7 @@ import {
 import { getLanguageOption } from '../utils/languages';
 import { locationFixBadge, type CoordsSource } from '../utils/locationService';
 import { syncStatusLabel, type SyncLiveness } from '../utils/syncTruth';
+import { billingBadgeLabel } from '../utils/hardening/billingEntitlementTruth';
 import {
   UNAVAILABLE_HUD_TELEMETRY,
   fetchHudTelemetry,
@@ -261,8 +262,11 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
                 <h1 className="text-base sm:text-lg font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-blue-200 to-teal-300">
                   HERMES JARVIS
                 </h1>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono font-bold">
-                  ₹0 Always Free
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono font-bold"
+                  title="Always Free is the declared plan; the billing/entitlement API is not queried, so this is not an observed charge state."
+                >
+                  {billingBadgeLabel(telemetry.billingEntitlement)}
                 </span>
                 {syncLiveness === 'SYNCED' ? (
                   <span className="hidden sm:inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-mono">

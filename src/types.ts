@@ -354,6 +354,11 @@ export interface OracleVMStatus {
   };
   metricsSource?: 'live_host' | 'unavailable';
   metricsSampledAt?: string | null;
+  // Billing entitlement is an OCI billing-API fact. It is null until a billing
+  // observation exists; null must never be rendered as "free". See
+  // src/utils/hardening/billingEntitlementTruth.ts.
+  billingEntitlement?: 'FREE' | 'BILLED' | null;
+  billingObservedAt?: string | null;
   // `active` is a tri-state observation, not a configuration echo: `true`/`false`
   // mean a port was actually observed open/closed, `null` means it was never
   // probed. The server sets `null` for every rule because nothing here contacts

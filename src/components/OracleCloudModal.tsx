@@ -15,6 +15,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { OracleVMStatus } from '../types';
+import { billingBadgeLabel } from '../utils/hardening/billingEntitlementTruth';
 import {
   normalizeUptimeHours,
   normalizePublicIp,
@@ -95,8 +96,11 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-100">Oracle Cloud Always Free ARM Server</h2>
-                <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
-                  ₹0.00 / Forever Free
+                <span
+                  className="px-2 py-0.5 text-[11px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold"
+                  title="Always Free is the declared plan; the billing/entitlement API is not queried, so this is not an observed charge state."
+                >
+                  {billingBadgeLabel(vmStatus?.billingEntitlement)}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
