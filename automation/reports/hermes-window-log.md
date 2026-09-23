@@ -4032,3 +4032,11 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - वॉइस ऑर्ब और कॉल-लेवल बार्स अब रैंडम नंबर से नहीं हिलते; 8 नए टेस्ट पास,
   पूरा सूट 1140/1140, बिल्ड सफल; पुश हो गया।
+
+## 2026-09-24 01:05 IST — WORK SLOT 9 (window 2026-09-24)
+
+Item 2 (`Android → JARVIS → Server E2E`), mandated first; items 1 and 31 advanced alongside. **The real bridge adapter dispatched an irreversible call-answer with no human approval and threw away the server verdict.** `RealAndroidBridgeAdapter.answerCall()` posted `{ callId }` with no `approved` flag while `/api/mobile/bridge/call/answer` refuses anything but `approved: true`; it also read `data.status` though the gateway answers `data.outcome`, so `BLOCKED`, `NOT_CONFIGURED` and a real `DISPATCHED` all rendered as a bare `FAILED`. `sendReply` shared the verdict bug. Fixed: both refuse locally with `AUTHORIZATION_REQUIRED` unless approved, `answerCall` sends `approved: true`, and both surface `data.status ?? data.outcome ?? FAILED` with the real message. This restores the substance of the lost commit `d295139` (never pushed).
+
+Two live-server tests asserted `CONNECTED` / `REPLY_CONFIRMED` against a server that cannot grant either here (bridge routes require a paired session; pairing is off without `MOBILE_BRIDGE_PAIRING_SECRET`). They now pair when the secret exists and otherwise assert the honest unauthenticated rejection.
+
+Tests: full vitest **87 files / 1148 tests passed** (was 85/1136 + 2 failures); targeted 3 files / 27 passed. Lint exit 0. Build exit 0, `dist/server.cjs` 843.2 kB. Negative-validated the approval gate (1 failed | 6 passed without it). E2E NOT RUN (no handset). Audit NOT RUN (no script). Push `139039b..89257c4`. Item 2 stays `PARTIAL` (hardware leg). No PR this slot. Main: not merged.

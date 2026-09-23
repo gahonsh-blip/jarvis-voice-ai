@@ -4,7 +4,51 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-23 19:19 UTC (00:49 IST 2026-09-24) — **WORK SLOT 8** of the
+Last cycle: 2026-09-23 19:35 UTC (01:05 IST 2026-09-24) — **WORK SLOT 9** of the
+2026-09-24 window, the 01:05 IST fire. Mandated-first item 2 (`Android →
+JARVIS → Server E2E`), the **real bridge adapter's approval gate and verdict
+mapping** (items 1 and 31 advanced alongside).
+
+**A real adapter dispatched an irreversible action with no approval, and threw
+away the server's verdict.** `RealAndroidBridgeAdapter.answerCall()` POSTed to
+`/api/mobile/bridge/call/answer` with body `{ callId }` only — no `approved`
+flag — so a call could be answered on the handset with no human approval, while
+the server route refuses any dispatch whose `approved` is not `true`. The same
+method (and `sendReply`) read the verdict from `data.status`, but the bridge
+gateway answers with `data.outcome`, so every non-success result was flattened
+into a bare `FAILED`: a `BLOCKED` kill-switch refusal, a `NOT_CONFIGURED` "no
+live device", and a real dispatch all read identically. This was the substance
+of a prior slot's commit (`d295139`) that a later local reset discarded before
+it was ever pushed. Fixed: `answerCall(callId, approved = false)` and
+`sendReply` now refuse locally with `AUTHORIZATION_REQUIRED` unless
+`approved === true`, `answerCall` sends `approved: true`, and both surface
+`data.status ?? data.outcome ?? 'FAILED'` with the server message/error.
+
+Evidence: `src/tests/realAndroidBridgeAdapter.test.ts`. A new real-adapter unit
+test drives `answerCall` with a fetch stub that records whether a request was
+made and asserts no request leaves the adapter without approval.
+Negative-validated: deleting the guard makes the new test fail exactly
+(`1 failed | 6 passed` → 7/7 restored). The two live-server integration tests
+previously asserted `CONNECTED` / `REPLY_CONFIRMED` against a server that cannot
+grant either here — `/api/mobile/bridge/connect` requires a paired session and
+pairing is disabled without `MOBILE_BRIDGE_PAIRING_SECRET`. They now pair when
+the operator has provisioned the secret and otherwise assert the honest
+unauthenticated rejection, so green means what it says.
+
+Gates observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted
+`npx vitest run` on `realAndroidBridgeAdapter` + `androidBridgeHttpPrivacy` +
+`mobileBridgeSession` **3 files / 27 tests passed**; full `npx vitest run`
+**87 files / 1148 tests passed** (19.20 s); `npm run build` exit 0,
+`dist/server.cjs` **843.2 kB** (863457 bytes). `npm audit` **NOT RUN** (no audit
+script in `package.json`). E2E: **NOT RUN** — no physical handset and no paired
+device in this sandbox. Push: `139039b..89257c4` to
+`feature/hermes-full-completion`, succeeded (confirmed on the remote). Item 2
+stays `PARTIAL` — the device-to-server leg needs hardware. Item 13
+(`Zero-fake-success for all tools`) also remains `PARTIAL`, and its status cell
+is unchanged this slot; the adapter's silent `FAILED` flattening is recorded
+here rather than under item 13.
+
+Last cycle (previous): 2026-09-23 19:19 UTC (00:49 IST 2026-09-24) — **WORK SLOT 8** of the
 2026-09-24 window, the 00:35 IST fire. Item 13 (`Zero-fake-success for all
 tools`), the **voice visualiser and the call level bars**.
 
@@ -1587,8 +1631,8 @@ files / 675 tests, clean lint, clean build.
 
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
-| 1 | Real Android Mobile Bridge connection | `PARTIAL` | Authenticated pairing + capability handshake verified by `androidBridge.e2e.test.ts` (real server process). Physical device leg unverified. |
-| 2 | Android → JARVIS → Server E2E test | `PARTIAL` | Full server-side chain verified E2E. Device-to-server leg needs hardware. **2026-09-21 22:06 IST** — the owner-approval leg of the chain was reading refusals as consent (see item 34); a refused call now stays `AWAITING_APPROVAL` and the guard is pinned in `src/tests/androidMobileBridge.test.ts`. |
+| 1 | Real Android Mobile Bridge connection | `PARTIAL` | Authenticated pairing + capability handshake verified by `androidBridge.e2e.test.ts` (real server process). Physical device leg unverified. **2026-09-23 19:35 UTC (01:05 IST 2026-09-24)** — the real adapter's connect/handshake itself was still asserted by a live test that could never pass: `/api/mobile/bridge/connect` (and every bridge route but `/pair`) requires a paired session token, and pairing is disabled unless `MOBILE_BRIDGE_PAIRING_SECRET` is set, so the test asserted `CONNECTED` against a server that always answers 401. The test now pairs first when the secret is provisioned and otherwise asserts the honest unauthenticated rejection. Client-side adapter contract remains exercised by `src/tests/realAndroidBridgeAdapter.test.ts`. Still `PARTIAL` — no paired physical handset. |
+| 2 | Android → JARVIS → Server E2E test | `PARTIAL` | Full server-side chain verified E2E. Device-to-server leg needs hardware. **2026-09-23 19:35 UTC (01:05 IST 2026-09-24)** — `RealAndroidBridgeAdapter.answerCall()` was completely ungated: it POSTed an irreversible call-answer with no human approval while the server demanded `approved: true`, and it read only `data.status` though the gateway answers `data.outcome`, flattening every response into a bare `FAILED`. Now it refuses locally with `AUTHORIZATION_REQUIRED` and maps the real verdict (`BLOCKED`/`NOT_CONFIGURED`/`DISPATCHED`). Guarded by `src/tests/realAndroidBridgeAdapter.test.ts`; negative-validated (removing the gate fails exactly the approval test). **2026-09-21 22:06 IST** — the owner-approval leg of the chain was reading refusals as consent (see item 34); a refused call now stays `AWAITING_APPROVAL` and the guard is pinned in `src/tests/androidMobileBridge.test.ts`. |
 | 3 | Real Android battery/status telemetry | `VERIFIED` (server) | Device-reported telemetry only; fabricated defaults removed. |
 | 4 | Real Android notifications integration | `VERIFIED` (server) | Notification listener gated and replay-protected. Sensitive-content filter is now tested: `src/tests/mobileNotificationPrivacy.test.ts` (39 tests). A garbled Hindi OTP matcher that let Hindi OTP bodies through was found and fixed 2026-09-20 21:05 IST. 2026-09-21 02:10 IST: a regression introduced by the 01:05 IST slot had made the redaction guard switchable off via `sensitiveFilteringEnabled`; that was reverted (guard is unconditional, field removed) and is pinned by `src/tests/androidBridgePrivacySettings.test.ts` (5 tests), negative-validated. |
 | 5 | Real Android location/GPS integration | `VERIFIED` (server) | `ACCESS_FINE_LOCATION` gating with real coordinates accepted. |
@@ -1690,7 +1734,7 @@ Bugs found and fixed while building this:
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
 | 30 | Real Telegram delivery | `PARTIAL` | Delivery is now verified against Telegram's returned `message_id`. A confirmed send is `VERIFIED`; a 2xx without an id is `UNVERIFIED`; a blocked bot reports `PERMISSION_REQUIRED`. Evidence: `src/utils/communication/telegramDelivery.ts`, `src/tests/telegramDelivery.test.ts` (10 tests), `src/tests/telegramDelivery.e2e.test.ts` (3 tests against a real server with a local Telegram stand-in). The physical leg — a message reaching a real phone over api.telegram.org — still needs the operator's bot token and a real send. |
-| 31 | Real notification reply | `PARTIAL` | Reply route requires an explicit `approved: true` and reports `DISPATCHED`, never success, until the device confirms. Delivery on a real handset is unverified. **2026-09-22 03:35 IST — the pending-approval REPLY button on the bridge screen no longer fabricates the approval or the dispatch.** `MobileBridgeModal.tsx` `dispatchReply` asked for no approval, sent no request, and set the event `AUTHORIZED` while speaking "Dispatching via the Android bridge"; its approval ternary had two identical branches, so the computed answer was discarded, and the route it claimed to have reached refuses every request without `approved: true`. The decision is now `src/utils/mobileReplyDispatchTruth.ts` (`replyDispatchDecision` refuses `NOT_REPLY_EVENT` / `SENSITIVE_CONTENT` / `NO_REPLY_TEXT` / `NO_DISTINCT_APPROVAL`; `replyDispatchOutcome` never infers success from an HTTP status), the UI takes a reply body plus a distinct `I APPROVE SENDING THIS REPLY` checkbox, leaves the event `PENDING_APPROVAL` on refusal, reports `NOT_CONFIGURED` without a paired session token, and drives status/audit/speech from the observed response. Guarded by `src/tests/mobileReplyDispatchTruth.test.ts` (16 tests; negative-validated — restoring the old component fails exactly the 3 source guards, `3 failed \| 13 passed`, restored → 16/16, full suite 68 files / 979 tests passed). **2026-09-22 04:05 IST — the dispatch outcome is no longer read as a delivery.** The same `dispatchReply` still marked a positive outcome `EXECUTED` and wrote `result: 'SUCCESS'` into the audit log, but the only response that produces a positive outcome is the server's `DISPATCHED, verified: false` — the reply was handed to the bridge, not confirmed by the device, which reports separately via `action/confirm`. Status and audit now come from `replyEventStatusForOutcome` / `replyAuditProjection` in the same helper: `DISPATCHED`/`UNVERIFIED` → event `AUTHORIZED`, audit `UNVERIFIED`; `BLOCKED` → `REJECTED` / `DENIED`; `NOT_CONFIGURED` → `PENDING_APPROVAL`; only `action/confirm` may record `EXECUTED`/`SUCCESS`. The queue label reads `AUTHORIZED — AWAITING DEVICE CONFIRMATION` and `EXECUTED` renders as `CONFIRMED BY DEVICE`, so the screen states which of the two is known. `MobileAuditEntry.result` gained `UNVERIFIED` as a legitimate value. Test file now 21 tests; negative-validated (`1 failed \| 20 passed` with the old expressions restored). Still `PARTIAL`: no real handset and no paired device received a reply, so device-side delivery remains unconfirmed. |
+| 31 | Real notification reply | `PARTIAL` | Reply route requires an explicit `approved: true` and reports `DISPATCHED`, never success, until the device confirms. Delivery on a real handset is unverified. **2026-09-23 19:35 UTC (01:05 IST 2026-09-24)** — the real adapter depended entirely on the server for the approval gate and flattened the server's `outcome` (`DISPATCHED`/`BLOCKED`/`NOT_CONFIGURED`) into `FAILED`; it now refuses an unapproved reply locally with `AUTHORIZATION_REQUIRED` and surfaces the real verdict. Guarded by `src/tests/realAndroidBridgeAdapter.test.ts`. **2026-09-22 03:35 IST — the pending-approval REPLY button on the bridge screen no longer fabricates the approval or the dispatch.** `MobileBridgeModal.tsx` `dispatchReply` asked for no approval, sent no request, and set the event `AUTHORIZED` while speaking "Dispatching via the Android bridge"; its approval ternary had two identical branches, so the computed answer was discarded, and the route it claimed to have reached refuses every request without `approved: true`. The decision is now `src/utils/mobileReplyDispatchTruth.ts` (`replyDispatchDecision` refuses `NOT_REPLY_EVENT` / `SENSITIVE_CONTENT` / `NO_REPLY_TEXT` / `NO_DISTINCT_APPROVAL`; `replyDispatchOutcome` never infers success from an HTTP status), the UI takes a reply body plus a distinct `I APPROVE SENDING THIS REPLY` checkbox, leaves the event `PENDING_APPROVAL` on refusal, reports `NOT_CONFIGURED` without a paired session token, and drives status/audit/speech from the observed response. Guarded by `src/tests/mobileReplyDispatchTruth.test.ts` (16 tests; negative-validated — restoring the old component fails exactly the 3 source guards, `3 failed \| 13 passed`, restored → 16/16, full suite 68 files / 979 tests passed). **2026-09-22 04:05 IST — the dispatch outcome is no longer read as a delivery.** The same `dispatchReply` still marked a positive outcome `EXECUTED` and wrote `result: 'SUCCESS'` into the audit log, but the only response that produces a positive outcome is the server's `DISPATCHED, verified: false` — the reply was handed to the bridge, not confirmed by the device, which reports separately via `action/confirm`. Status and audit now come from `replyEventStatusForOutcome` / `replyAuditProjection` in the same helper: `DISPATCHED`/`UNVERIFIED` → event `AUTHORIZED`, audit `UNVERIFIED`; `BLOCKED` → `REJECTED` / `DENIED`; `NOT_CONFIGURED` → `PENDING_APPROVAL`; only `action/confirm` may record `EXECUTED`/`SUCCESS`. The queue label reads `AUTHORIZED — AWAITING DEVICE CONFIRMATION` and `EXECUTED` renders as `CONFIRMED BY DEVICE`, so the screen states which of the two is known. `MobileAuditEntry.result` gained `UNVERIFIED` as a legitimate value. Test file now 21 tests; negative-validated (`1 failed \| 20 passed` with the old expressions restored). Still `PARTIAL`: no real handset and no paired device received a reply, so device-side delivery remains unconfirmed. |
 | 32 | Call detection E2E | `PARTIAL` | Call state is reported from device telemetry, and the E2E suite covers the telemetry chain. No physical call has been detected by this host. |
 | 33 | Call answering | `PERMISSION_REQUIRED` | Answering is refused unless the device holds the dialer role; the refusal names the required grant. No real call has been answered. |
 | 34 | Message sending with approval | `PARTIAL` | Approval gate verified server-side (`approved: true` required, kill switch honoured). Real-device delivery unverified. **2026-09-21 22:06 IST** — the shared `evaluateOwnerApproval` parser read Hindi refusals as consent for both calls and messages: the bare verb stem `उठा` was an approval keyword and Devanagari matching used a prefix fallback, so `कॉल मत उठाओ` returned `APPROVE`. Stem dropped, whole-token matching enforced, rejection evaluated first. Guarded by `src/tests/androidMobileBridge.test.ts` (18 assertions), negative-validated (**7 tests fail** with the fix reverted, measured 22:47 IST). |
