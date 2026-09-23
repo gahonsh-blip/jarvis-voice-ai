@@ -81,6 +81,10 @@ import {
   describePublicIp,
 } from './src/utils/hardening/ociInstanceTruth';
 import { describeBillingCost } from './src/utils/hardening/billingEntitlementTruth';
+import {
+  telegramHostClaim,
+  telegramSeedMessages,
+} from './src/utils/hardening/telegramHostClaim';
 import { aiEngineProviderLabel, aiEngineModelName } from './src/utils/hardening/aiEngineTruth';
 import {
   buildDeliveryReceipt,
@@ -2888,29 +2892,7 @@ async function executeApprovedAction(
 // ==============================================================================
 // 6. REAL TELEGRAM BOT MOBILE CONTROLLER ENGINE
 // ==============================================================================
-let telegramMessages = [
-  {
-    id: 'tg-1',
-    sender: 'jarvis_bot' as const,
-    text: '🤖 *HERMES JARVIS MOBILE GATEWAY ONLINE*\nGood day, Sir! Connected to your Oracle Always Free ARM VM. What task would you like to assign today?',
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    type: 'text' as const,
-  },
-  {
-    id: 'tg-2',
-    sender: 'user' as const,
-    text: 'JARVIS, project check करो।',
-    timestamp: new Date(Date.now() - 1800000).toISOString(),
-    type: 'text' as const,
-  },
-  {
-    id: 'tg-3',
-    sender: 'jarvis_bot' as const,
-    text: '📊 *PROJECT AUDIT REPORT*\n\n✅ *Active Repositories*: 2\n• `ai-freelance-portal` — Branch main: clean, 0 open issues\n• `jarvis-hermes-core` — Oracle VM deployment sync complete\n\n🎯 *Next Step*: Would you like me to run unit tests or create today\'s social post?',
-    timestamp: new Date(Date.now() - 1790000).toISOString(),
-    type: 'report' as const,
-  },
-];
+let telegramMessages = telegramSeedMessages(getLocalHostIdentity());
 
 function getCleanTelegramToken(): string | null {
   const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim().replace(/^["']|["']$/g, '');
@@ -3139,7 +3121,7 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
 
   // 1. /start or Hello/Hi greeting
   if (clean === '/start' || lower === 'start' || lower === 'hi' || lower === 'hello' || lower === 'नमस्ते' || lower === 'kaisa hai' || lower === 'kaise ho') {
-    botReplyText = `🤖 *HERMES JARVIS ONLINE MOBILE CONTROLLER*\n\nGreetings, ${memoryState.name || 'Sir'}! Connected to your Oracle Always Free ARM VM (24/7 Daemon Active).\n\n*Quick Mobile Commands:*\n• \`JARVIS, project check करो\` — Codebase & Git Audit\n• \`JARVIS, आज की LinkedIn post बनाओ\` — Social Draft & Level 4 Approval\n• \`JARVIS, client lead quotation बनाओ\` — Freelance Proposal\n• \`JARVIS, server status बताओ\` — Cloud & Telemetry\n• \`JARVIS, कल सुबह 9 बजे report देना\` — Schedule Daily Briefing\n\n🛡️ *Security Matrix*: ${securityMatrixPosture(securityMatrixState).levelLabel} active. Human approval: ${securityMatrixPosture(securityMatrixState).humanApproval}.`;
+    botReplyText = `🤖 *HERMES JARVIS ONLINE MOBILE CONTROLLER*\n\nGreetings, ${memoryState.name || 'Sir'}! ${telegramHostClaim(getLocalHostIdentity())} (no 24/7 uptime has been measured here).\n\n*Quick Mobile Commands:*\n• \`JARVIS, project check करो\` — Codebase & Git Audit\n• \`JARVIS, आज की LinkedIn post बनाओ\` — Social Draft & Level 4 Approval\n• \`JARVIS, client lead quotation बनाओ\` — Freelance Proposal\n• \`JARVIS, server status बताओ\` — Cloud & Telemetry\n• \`JARVIS, कल सुबह 9 बजे report देना\` — Schedule Daily Briefing\n\n🛡️ *Security Matrix*: ${securityMatrixPosture(securityMatrixState).levelLabel} active. Human approval: ${securityMatrixPosture(securityMatrixState).humanApproval}.`;
     inlineKeyboard = {
       inline_keyboard: [
         [
@@ -3299,7 +3281,7 @@ User message: "${clean}".`,
             maxOutputTokens: 250,
           },
         });
-        botReplyText = result.text?.trim() || `Sir, your command "${clean}" was parsed and logged on your cloud node.`;
+        botReplyText = result.text?.trim() || `Sir, your command "${clean}" was parsed and logged by this daemon process.`;
       } catch (geminiErr: any) {
         console.warn('[Telegram Bot] Gemini fallback:', geminiErr?.message);
         botReplyText = `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis server online. Command "${clean}" received and recorded.`;
@@ -3314,7 +3296,7 @@ User message: "${clean}".`,
       } else if (lower.includes('thank') || lower.includes('धन्यवाद') || lower.includes('shukriya')) {
         botReplyText = `Always at your service, ${memoryState.name || 'Sir'}. Let me know if you need any other tasks executed.`;
       } else {
-        botReplyText = `Command received: "${clean}". Hermes Jarvis cloud daemon standing by. You can ask me to check projects, create social posts, generate quotations, or check server health.`;
+        botReplyText = `Command received: "${clean}". Hermes Jarvis daemon standing by. You can ask me to check projects, create social posts, generate quotations, or check server health.`;
       }
     }
   }
