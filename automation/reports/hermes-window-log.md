@@ -3855,7 +3855,8 @@ Branch:  feature/hermes-full-completion
 Commit:  7496aed
 Push:    succeeded — a5c164d..7496aed to origin/feature/hermes-full-completion
 
-PR:         #4 (open, non-draft) — not refreshed this slot
+PR:         #4 (open, non-draft, mergeable_state=clean, head 13046b6) — queried
+            via the GitHub API this slot
 Main merge: NOT MERGED — awaiting human approval (never auto-merge)
 Deploy:     NOT_CONFIGURED — no deployment target/hosting integration present;
             verified dist/server.cjs is the deployment unit
