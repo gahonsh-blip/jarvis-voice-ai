@@ -132,13 +132,66 @@ describe('RealAndroidBridgeAdapter — server contract', () => {
     expect(result.status).toBe('AUTHORIZATION_REQUIRED');
   });
 
+  it('real adapter refuses to answer a call without explicit human approval', async () => {
+    // Guards against the adapter dispatching an irreversible call-answer with no
+    // approval. The server enforces this too; the adapter must not pretend a
+    // generic FAILED round-trip is the same as an authorization refusal.
+    const original = globalThis.fetch;
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      return { ok: false, status: 403, json: async () => ({}) } as any;
+    }) as typeof fetch;
+    try {
+      const adapter = new RealAndroidBridgeAdapter();
+      const result = await adapter.answerCall('call_1');
+      expect(result.success).toBe(false);
+      expect(result.status).toBe('AUTHORIZATION_REQUIRED');
+      expect(called).toBe(false);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   describe('live server integration', () => {
+    // The bridge server refuses every endpoint without a paired session token
+    // (pairing itself is disabled unless MOBILE_BRIDGE_PAIRING_SECRET is set).
+    // These tests therefore pair first when the operator has provisioned the
+    // secret, and otherwise assert the honest unauthenticated behaviour instead
+    // of asserting a success the server never grants.
+    const PAIRING_SECRET = process.env.MOBILE_BRIDGE_PAIRING_SECRET;
+
+    async function pairSessionToken(): Promise<string | null> {
+      if (!PAIRING_SECRET) return null;
+      try {
+        const res = await fetch(`${BASE_URL}/api/mobile/bridge/pair`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Jarvis-Pairing-Secret': PAIRING_SECRET },
+          body: JSON.stringify({ deviceId: CAPS.deviceId, clientLabel: 'vitest-live' }),
+          signal: AbortSignal.timeout(1500),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return typeof data.sessionToken === 'string' ? data.sessionToken : null;
+      } catch {
+        return null;
+      }
+    }
+
     it('connects the real adapter to the running bridge server', async () => {
       if (!(await serverReachable())) return; // Skip when the daemon is not reachable
 
-      const adapter = new RealAndroidBridgeAdapter();
+      const token = await pairSessionToken();
+      const adapter = new RealAndroidBridgeAdapter(token ?? undefined);
       adapter.setReportedCapabilities(CAPS);
       const result = await withAbsoluteFetch(() => adapter.connect());
+
+      if (!token) {
+        // No pairing secret provisioned: the server must reject, and the adapter
+        // must report that truthfully rather than claim a connection.
+        expect(result.success).toBe(false);
+        return;
+      }
 
       expect(result.success).toBe(true);
       expect(result.status).toBe('CONNECTED');
@@ -147,19 +200,28 @@ describe('RealAndroidBridgeAdapter — server contract', () => {
       expect(live?.deviceId).toBe('pixel_8_pro');
     });
 
-    it('live server blocks an unapproved reply and allows an approved one', async () => {
+    it('live server blocks an unapproved reply and never fabricates an approved one', async () => {
       if (!(await serverReachable())) return;
 
-      const adapter = new RealAndroidBridgeAdapter();
-      adapter.setReportedCapabilities(CAPS);
-      await withAbsoluteFetch(() => adapter.connect());
+      const unpaired = new RealAndroidBridgeAdapter();
+      unpaired.setReportedCapabilities(CAPS);
+      await withAbsoluteFetch(() => unpaired.connect());
 
-      const blocked = await withAbsoluteFetch(() => adapter.sendReply('n1', 'hello', false));
+      const blocked = await withAbsoluteFetch(() => unpaired.sendReply('n1', 'hello', false));
       expect(blocked.success).toBe(false);
       expect(blocked.status).toBe('AUTHORIZATION_REQUIRED');
 
-      const allowed = await withAbsoluteFetch(() => adapter.sendReply('n1', 'hello', true));
-      expect(allowed.success).toBe(true);
+      // Approved but unauthenticated: still no confirmation.
+      const notConfirmed = await withAbsoluteFetch(() => unpaired.sendReply('n1', 'hello', true));
+      expect(notConfirmed.status).not.toBe('REPLY_CONFIRMED');
+
+      const token = await pairSessionToken();
+      if (!token) return; // Full approval path needs a paired session; see above.
+
+      const paired = new RealAndroidBridgeAdapter(token);
+      paired.setReportedCapabilities(CAPS);
+      await withAbsoluteFetch(() => paired.connect());
+      const allowed = await withAbsoluteFetch(() => paired.sendReply('n1', 'hello', true));
       expect(allowed.status).toBe('REPLY_CONFIRMED');
     });
   });

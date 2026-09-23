@@ -14,7 +14,7 @@ export interface AndroidBridgeAdapter {
   disconnect(): Promise<void>;
   getStatus(): AndroidBridgeStatus;
   getCapabilities(): AndroidDeviceCapabilities | null;
-  answerCall(callId: string): Promise<{ success: boolean; status: string; message: string }>;
+  answerCall(callId: string, approved?: boolean): Promise<{ success: boolean; status: string; message: string }>;
   sendReply(
     notificationId: string,
     replyText: string,
@@ -129,7 +129,21 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
     return androidBridgeEngine.getCapabilities();
   }
 
-  public async answerCall(callId: string): Promise<{ success: boolean; status: string; message: string }> {
+  public async answerCall(
+    callId: string,
+    approved: boolean = false
+  ): Promise<{ success: boolean; status: string; message: string }> {
+    // Answering a live call is an outward, irreversible action. The server
+    // already rejects an unapproved dispatch, so refuse locally and report the
+    // authorization outcome truthfully instead of a generic FAILED round-trip.
+    if (approved !== true) {
+      return {
+        success: false,
+        status: 'AUTHORIZATION_REQUIRED',
+        message:
+          'Explicit human approval (approved: true) is required before answering a call on the device.',
+      };
+    }
     try {
       const res = await fetch(`${this.endpoint}/call/answer`, {
         method: 'POST',
@@ -137,13 +151,15 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
           'Content-Type': 'application/json',
           ...(this.authToken ? { 'X-JARVIS-AUTH-TOKEN': this.authToken } : {}),
         },
-        body: JSON.stringify({ callId }),
+        body: JSON.stringify({ callId, approved: true }),
       });
       const data = await res.json();
       return {
         success: data.success || false,
-        status: data.status || 'FAILED',
-        message: data.message || 'Call answer executed',
+        // The gateway reports its verdict as `outcome`; keep that vocabulary so a
+        // BLOCKED/NOT_CONFIGURED/DISPATCHED result is not flattened into FAILED.
+        status: data.status || data.outcome || 'FAILED',
+        message: data.message || data.error || 'Call answer executed',
       };
     } catch (err: any) {
       return {
@@ -159,6 +175,15 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
     replyText: string,
     approved: boolean = false
   ): Promise<{ success: boolean; status: string; message: string }> {
+    // Sending a reply is an outward action. Refuse locally when unapproved so the
+    // caller gets a clear authorization verdict rather than a server round-trip.
+    if (!approved) {
+      return {
+        success: false,
+        status: 'AUTHORIZATION_REQUIRED',
+        message: 'Explicit human approval (approved: true) is required to send a message reply.',
+      };
+    }
     try {
       const res = await fetch(`${this.endpoint}/message/reply`, {
         method: 'POST',
@@ -171,8 +196,8 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
       const data = await res.json();
       return {
         success: data.success || false,
-        status: data.status || 'FAILED',
-        message: data.message || 'Reply executed',
+        status: data.status || data.outcome || 'FAILED',
+        message: data.message || data.error || 'Reply executed',
       };
     } catch (err: any) {
       return {
