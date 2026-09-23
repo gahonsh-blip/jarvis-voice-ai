@@ -4,6 +4,46 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-09-23 20:35 UTC (02:05 IST 2026-09-24) — **WORK SLOT 11** of
+the 2026-09-24 window, the 02:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **Telegram gateway's seeded transcript
+and Oracle hosting claim**.
+
+**A cold start rendered invented work as a recorded conversation, and the bot's
+own greeting named a host it never checked.** `telegramMessages` was seeded with
+three messages before anything was received: a bot greeting, a user command, and
+a bot `PROJECT AUDIT REPORT` naming two repositories (`ai-freelance-portal`,
+`jarvis-hermes-core`) with "Branch main: clean, 0 open issues" and "Oracle VM
+deployment sync complete". `/api/telegram/messages` returns that array, so the
+Telegram gateway and web panel displayed a fabricated audit as history. In the
+same area, the `/start` reply (and three plain-language fallbacks) told the
+operator "Connected to your Oracle Always Free ARM VM (24/7 Daemon Active)";
+this process never queries an OCI control plane and never measures daemon
+uptime. Fixed: new `src/utils/hardening/telegramHostClaim.ts` derives the
+hosting sentence from the measured host identity — `telegramHostClaim()` states
+an Oracle/OCI instance only as a hostname match ("hostname match only — the OCI
+control plane is not queried"), and otherwise reports the Oracle claim as NOT
+verified. `telegramSeedMessages()` replaces the transcript with a single,
+explicitly-labelled startup notice stating "No Telegram message has been
+exchanged in this session" and "Work performed: none". The three
+"cloud node"/"cloud daemon" fallbacks no longer locate the bot on a node it
+cannot see.
+
+Evidence: `src/tests/hardening/telegramHostClaim.test.ts` (8 tests) covers the
+non-Oracle and Oracle-matching host claims, the single-notice seed, and source
+guards pinning the removed literals (`HERMES JARVIS MOBILE GATEWAY ONLINE`,
+`PROJECT AUDIT REPORT`, `Connected to your Oracle Always Free ARM VM (24/7
+Daemon Active)`) plus the derived wiring. Negative-validated: restoring both
+fabrications fails exactly the four matching guards
+(`4 failed | 4 passed`), restored → 8/8.
+
+Gates observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted
+`npx vitest run src/tests/hardening/telegramHostClaim.test.ts` **1 file / 8
+tests passed**; full suite and build recorded in the window report for this
+slot. E2E: **NOT RUN** — no handset, no display. Push: `b4766a1..97c1c23` to
+`feature/hermes-full-completion`, succeeded. Item 13 stays `PARTIAL` — the sweep
+is pattern-driven and more unmeasured-claim surfaces remain.
+
 Last cycle: 2026-09-23 20:05 UTC (01:35 IST 2026-09-24) — **WORK SLOT 10** of
 the 2026-09-24 window, the 01:35 IST fire. Item 13 (`Zero-fake-success for all
 tools`), the **Oracle Always Free cost claim**. Item 2 was attempted first as

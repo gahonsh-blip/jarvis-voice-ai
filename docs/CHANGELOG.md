@@ -4,6 +4,34 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 02:05 IST (2026-09-23 20:35 UTC) — work slot 11: Telegram seeded transcript & Oracle hosting claim
+
+### Fixed
+- `telegramMessages` was seeded with three messages before anything was
+  received — a bot greeting, a user command, and a bot `PROJECT AUDIT REPORT`
+  naming two repositories, "Branch main: clean, 0 open issues" and "Oracle VM
+  deployment sync complete". `/api/telegram/messages` returns that array, so
+  the gateway and web panel showed a fabricated audit as recorded history. The
+  seed is now one explicitly-labelled startup notice stating no message was
+  exchanged and no work was performed.
+- The `/start` reply and three plain-language fallbacks told the operator
+  "Connected to your Oracle Always Free ARM VM (24/7 Daemon Active)". This
+  process never queries an OCI control plane and never measures daemon uptime.
+  New `src/utils/hardening/telegramHostClaim.ts` (`telegramHostClaim`,
+  `telegramGatewayWelcome`, `telegramSeedMessages`) derives the hosting
+  sentence from the measured host identity and qualifies an Oracle instance as
+  a hostname match only.
+- Backlog item #13 (`Zero-fake-success for all tools`) remains `PARTIAL`.
+
+### Tests
+- New `src/tests/hardening/telegramHostClaim.test.ts` (8 tests): both host
+  claims, the single-notice seed, and source guards pinning the removed
+  literals and the derived wiring. Negative-validated — restoring both
+  fabrications fails exactly the four matching guards (`4 failed | 4 passed`),
+  restored → 8/8.
+
+---
+
 ## [Unreleased] - 2026-09-24 01:35 IST (2026-09-23 20:05 UTC) — work slot 10: Oracle Always Free cost claim
 
 ### Fixed
