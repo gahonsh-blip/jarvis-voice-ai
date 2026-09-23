@@ -4,6 +4,30 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 03:35 IST (2026-09-23 22:05 UTC) — work slot 14: Telegram lead listing rendered from stored records
+
+### Fixed
+- The Telegram `cmd_view_leads` ("View Freelance Leads") branch interpolated
+  only the lead count into two hardcoded rows — `Aarav Tech Solutions — ₹65,000
+  (Quotation Sent)` and `Global Horizon Exports — ₹85,000 (AI Requirements
+  Extracted)`. A renamed, deleted or newly added lead still produced the same
+  two lines, so the message asserted records that need not exist and hid the
+  records that did. The branch now renders `freelanceLeadsReply(memoryState.freelanceLeads)`.
+- `src/utils/freelanceLeadTruth.ts`: new pure `freelanceLeadsReply(leads)`.
+  Lists each stored lead with its own name, amount, currency and status; states
+  an empty pipeline plainly (`ACTIVE FREELANCE LEADS (0)` + "No freelance lead
+  is stored in the pipeline") instead of inventing a first row; and escapes
+  Telegram markdown in client-supplied names.
+
+### Tests
+- `src/tests/freelanceLeadTruth.test.ts`: renders stored leads; does not emit
+  the sample names for a different store; plain empty-pipeline message; markdown
+  escaping; and a source guard asserting the `cmd_view_leads` branch calls the
+  helper and no longer contains the `Aarav Tech Solutions` / `₹65,000` literal.
+  Negative validated (revert the helper call → 1 of 5 fails).
+
+---
+
 ## [Unreleased] - 2026-09-24 03:05 IST (2026-09-23 21:35 UTC) — work slot 13: decorative cost / entitlement badges
 
 ### Fixed

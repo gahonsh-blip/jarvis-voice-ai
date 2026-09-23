@@ -4,7 +4,46 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-23 21:35 UTC (03:05 IST 2026-09-24) — **WORK SLOT 13** of
+Last cycle: 2026-09-23 22:05 UTC (03:35 IST 2026-09-24) — **WORK SLOT 14** of
+the 2026-09-24 window, the 03:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **Telegram "View Freelance Leads"
+reply**.
+
+**The lead listing was a fixed string, not a report on the pipeline.** The
+`cmd_view_leads` branch of the Telegram callback handler built its reply from
+two hardcoded rows — `Aarav Tech Solutions — ₹65,000 (Quotation Sent)` and
+`Global Horizon Exports — ₹85,000 (AI Requirements Extracted)` — interpolating
+only `memoryState.freelanceLeads.length` into the header. Renaming a lead,
+deleting one, or adding a third changed only the count in the header: the body
+still named the same two sample records and still hid the real ones. The user
+who pressed the button was shown records that need not exist, which is exactly
+the fabricated-status class this item tracks.
+
+Fixed: `src/utils/freelanceLeadTruth.ts` adds a pure
+`freelanceLeadsReply(leads)`. It lists each stored lead with its own client
+name, budget amount, currency and status; when the store is empty it says
+`ACTIVE FREELANCE LEADS (0)` and "No freelance lead is stored in the pipeline. I
+did not find one to report." rather than inventing a first row; and it escapes
+Telegram Markdown metacharacters in client-supplied names so a lead called
+`Bad*Name_Co` cannot break the message structure. `server.ts` now calls the
+helper against `memoryState.freelanceLeads`.
+
+Evidence: `src/tests/freelanceLeadTruth.test.ts` (5 tests) asserts the listing
+contains the actual stored names/amounts, that a different single lead produces
+no sample name, that an empty store yields the explicit empty-pipeline line and
+no `₹`, that markdown is escaped, and a source guard asserting the
+`cmd_view_leads` branch calls `freelanceLeadsReply(memoryState.freelanceLeads)`
+and no longer contains `Aarav Tech Solutions` or `₹65,000`. Negative-validated:
+replacing the helper call with the count-only line fails the source guard
+(observed `1 failed | 4 passed`); helper restored → `5 passed`.
+Gates observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted
+`npx vitest run src/tests/freelanceLeadTruth.test.ts` **1 file / 5 tests
+passed**; full suite **91 files / 1186 tests passed** (19.53 s); `npm run build`
+exit 0, artifact `dist/server.cjs` 866008 bytes. E2E: **NOT RUN** — no handset.
+Push: `75c2116..8b6cc6e` to `feature/hermes-full-completion`, succeeded. Item 13
+stays `PARTIAL` — the sweep continues and other unmeasured-claim surfaces remain.
+
+Last cycle (previous): 2026-09-23 21:35 UTC (03:05 IST 2026-09-24) — **WORK SLOT 13** of
 the 2026-09-24 window, the 03:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **decorative cost / entitlement
 badges**.
