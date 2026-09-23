@@ -40,6 +40,15 @@ export class ScreenObserver {
   }
 
   /**
+   * Whether observations currently come from a real desktop source. When false,
+   * `observeScreen` returns the built-in illustrative view, so nothing observed
+   * through it may be presented as a verified real-screen state.
+   */
+  public static isHostBacked(): boolean {
+    return this.source !== null;
+  }
+
+  /**
    * Captures the current screen state, inspecting visible windows and UI elements
    */
   public static async observeScreen(options: ScreenCaptureOptions = {}): Promise<ScreenObservation> {

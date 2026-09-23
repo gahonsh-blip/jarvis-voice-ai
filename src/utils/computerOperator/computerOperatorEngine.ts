@@ -291,8 +291,17 @@ export class ComputerOperatorEngine {
       }
 
       // 5. STAGE: COMPLETED
-      const finalSummaryEn = `Task completed successfully: "${objective}". All ${plan.steps.length} step(s) executed and visually verified. System state nominal.`;
-      const finalSummaryHi = `कार्य सफलतापूर्वक संपन्न: "${objective}"। सभी ${plan.steps.length} चरण निष्पादित एवं सत्यापित।`;
+      // Only the host-backed observer can attest that a screen was seen. Against
+      // the built-in illustrative view the step verifications compared two
+      // fabricated frames, so the run may not claim visual confirmation.
+      const hostBacked = ScreenObserver.isHostBacked();
+      const totalSteps = plan.steps.length;
+      const finalSummaryEn = hostBacked
+        ? `Task completed: "${objective}". All ${totalSteps} step(s) executed and verified against the host desktop.`
+        : `SIMULATION_ONLY: task "${objective}" ran through all ${totalSteps} step(s) against the illustrative screen view. No host desktop was observed, so execution was not visually verified.`;
+      const finalSummaryHi = hostBacked
+        ? `कार्य पूर्ण: "${objective}"। सभी ${totalSteps} चरण निष्पादित एवं होस्ट स्क्रीन पर सत्यापित।`
+        : `SIMULATION_ONLY: कार्य "${objective}" ने सभी ${totalSteps} चरण निष्पादित किए, परंतु कोई होस्ट स्क्रीन नहीं देखी गई — दृश्य सत्यापन नहीं हुआ।`;
 
       task.resultSummary = redactSecrets(finalSummaryEn);
       task.resultSummaryHi = redactSecrets(finalSummaryHi);
@@ -343,18 +352,46 @@ export class ComputerOperatorEngine {
 
     // Execute the approved action. This is the one dispatch path that may carry
     // `approved: true`; the host executor holds a Level-4 action without it.
+    // The result is awaited and inspected — a failed or non-host-backed
+    // execution must never be reported as verified.
+    let execResult: { success: boolean; message: string; error?: string } = {
+      success: false,
+      message: 'No pending action was attached to this task.',
+    };
     if (task.currentAction) {
-      await this.executor.executeAction(task.currentAction, { approved: true });
+      execResult = await this.executor.executeAction(task.currentAction, { approved: true });
     }
 
+    if (!execResult.success) {
+      const errorMsg = redactSecrets(execResult.error || execResult.message || 'Approved action did not succeed.');
+      TaskTracker.emitEvent(task, {
+        id: `evt-${Date.now()}-resumed-fail`,
+        taskId: task.taskId,
+        timestamp: new Date().toISOString(),
+        stage: 'BLOCKED',
+        message: `Authorized action did not complete: ${errorMsg}`,
+        messageHi: `अधिकृत कार्य पूर्ण नहीं हुआ: ${errorMsg}`,
+        error: errorMsg,
+      });
+      task.status = 'FAILED';
+      task.error = errorMsg;
+      return task;
+    }
+
+    const hostBacked = ScreenObserver.isHostBacked();
+    const completionMessage = hostBacked
+      ? `Authorized action completed and verified against the host desktop: "${task.objective}".`
+      : `SIMULATION_ONLY: authorized action ran against the illustrative screen view for "${task.objective}". No host desktop was observed, so completion was not verified.`;
+
+    task.resultSummary = redactSecrets(completionMessage);
     task.status = 'COMPLETED';
     TaskTracker.emitEvent(task, {
       id: `evt-${Date.now()}-resumed-done`,
       taskId: task.taskId,
       timestamp: new Date().toISOString(),
       stage: 'COMPLETED',
-      message: `Authorized action completed and verified: "${task.objective}".`,
-      messageHi: `अधिकृत कार्य पूर्ण एवं सत्यापित: "${task.objectiveHi || task.objective}"।`,
+      message: completionMessage,
+      messageHi: `अधिकृत कार्य पूर्ण: "${task.objectiveHi || task.objective}"।`,
     });
 
     return task;
