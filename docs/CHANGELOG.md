@@ -4,6 +4,27 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 23:46 IST (2026-09-23 18:16 UTC) — work slot 6: daemon AI-engine status truth
+
+### Fixed
+- `/api/daemon/status` returned `aiEngine.model = 'gemini-2.5-flash'` and
+  `provider = 'Google Gemini 2.5 Flash'` unconditionally, next to
+  `fallbackActive: !process.env.GEMINI_API_KEY`. Without an API key the process
+  answers with the offline bilingual heuristic engine, yet the status body still
+  named a Gemini model that never ran. `aiEngineProviderLabel` /
+  `aiEngineModelName` in the new `src/utils/hardening/aiEngineTruth.ts` derive
+  both values from the key's presence and report **no model** (`null`) when the
+  offline engine is in use; `src/types.ts` widens `aiEngine.model` to
+  `string | null`.
+- Backlog item #13 (`Zero-fake-success for all tools`) remains `PARTIAL`.
+
+### Tests
+- New `src/tests/aiEngineStatusTruth.test.ts` (4 tests): helper truth table plus
+  source guards pinning the absence of the constant-model literal and the route's
+  use of the helpers. Negative-validated: reverting the fix fails 2 of 4.
+
+---
+
 ## [Unreleased] - 2026-09-23 23:16 IST (2026-09-23 17:46 UTC) — work slot 5: finance guard false positives
 
 ### Fixed

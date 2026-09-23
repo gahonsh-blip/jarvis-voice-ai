@@ -3803,3 +3803,80 @@ Next Slot:
 - Finance guard की गलती ठीक की — छोटे टोकन ("eth") साधारण शब्दों ("whether")
   में मिलकर जायज़ टेक्स्ट को गलत तरीके से ब्लॉक कर रहे थे; 8 नए टेस्ट, पूरा
   सूट 82 फ़ाइलें / 1116 टेस्ट पास, लिंट और बिल्ड हरे, सबूत के साथ पुश किया।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:35
+Window date: 2026-09-24   Window slots completed so far: 6
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL, slice advanced) — `/api/daemon/status`
+  reported `aiEngine.model = 'gemini-2.5-flash'` and a Gemini provider label
+  unconditionally, even with `fallbackActive: true` (no GEMINI_API_KEY), so it
+  advertised a model that never ran. New `src/utils/hardening/aiEngineTruth.ts`
+  (`aiEngineProviderLabel`, `aiEngineModelName`) derives both from key presence
+  and returns `null` model when the offline engine is in use; `server.ts` wired
+  to the helpers; `src/types.ts` widened to `string | null`. Evidence:
+  `src/tests/aiEngineStatusTruth.test.ts` (4 tests passed).
+
+In Progress:
+- #13 Zero-fake-success for all tools — PARTIAL; remaining unmeasured-claim
+  surfaces not yet enumerated/swept.
+
+Remaining:
+- #13 (further surfaces), plus the hardware/credential-blocked tail of the
+  backlog (items 1-2 Android device, 8 Windows host, 25-29 provider creds,
+  51/54/60 third-party audit) — see docs/COMPLETION_STATUS.md.
+
+Bugs Found:
+- `/api/daemon/status` AI-engine block named a Gemini model unconditionally while
+  `fallbackActive` said the offline heuristic engine was answering. Found by
+  grepping the status block against the rest of the surface after reading
+  `aiEngine` in `src/types.ts`.
+
+Bugs Fixed:
+- `aiEngine.model`/`provider` now derive from the API key's presence; the offline
+  path reports no model. Verified by `aiEngineStatusTruth.test.ts` (4/4) and
+  negative-validated: reverting both helpers and the wiring fails exactly 2 of 4.
+
+Tests:    83 files / 1120 tests passed (full `npx vitest run`, 19.76 s)
+          targeted: aiEngineStatusTruth 4/4; fabricatedStatusClaims +
+          toolSurfaceTruthfulness 2 files / 36 tests passed
+Lint:     PASS — `npm run lint` (tsc --noEmit) exit 0
+Build:    PASS — `npm run build` exit 0, dist/server.cjs 843.1 kB
+E2E:      NOT RUN — no real-device harness, no display in this sandbox
+Security: npm audit NOT RUN (no audit script in package.json); no .env staged,
+          no token in diff, patch limited to 4 source/test files
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  7496aed
+Push:    succeeded — a5c164d..7496aed to origin/feature/hermes-full-completion
+
+PR:         #4 (open, non-draft) — not refreshed this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target/hosting integration present;
+            verified dist/server.cjs is the deployment unit
+
+Blocked:
+- #1/#2 Android E2E — requires a physical Android handset (none in sandbox)
+- #8 Computer Operator Windows capture — requires a Windows host
+- #25-29 social/telephony live dispatch — requires provider credentials
+- #51/#54/#60 hardening — requires a third-party audit / live credential rotation
+
+Human Approval Required:
+- Human merge of PR #4 to main after reading the final verification report.
+- A decision on whether the remaining item-13 surfaces warrant continued nightly
+  sweeps or a stop rule.
+
+Next Slot:
+- #13 continuation: sweep the remaining unmeasured-claim surfaces (UI status
+  strings in components, e.g. ComputerOperatorModal "LIVE COMMAND STREAM &
+  TELEMETRY", and any other unconditional status label) — same class of
+  fabrication, cheap to verify, no hardware required.
+
+हिंदी सारांश (एक पंक्ति):
+- `/api/daemon/status` अब वही AI मॉडल बताता है जो असल में जवाब दे रहा है; बिना
+  API key के कोई मॉडल नाम नहीं, टेस्ट 4/4 पास (पूरा सूट 1120/1120)।

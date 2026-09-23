@@ -4,7 +4,42 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-23 17:46 UTC (23:16 IST 2026-09-23) — **WORK SLOT 5** of the
+Last cycle: 2026-09-23 18:16 UTC (23:46 IST 2026-09-23) — **WORK SLOT 6** of the
+2026-09-24 window, the 23:35 IST fire. Item 13 (`Zero-fake-success for all
+tools`), the **`/api/daemon/status` AI-engine block**.
+
+**The daemon advertised a model that was not running.** `/api/daemon/status`
+returned `aiEngine.model = 'gemini-2.5-flash'` and
+`provider = 'Google Gemini 2.5 Flash'` unconditionally, directly beside
+`fallbackActive: !process.env.GEMINI_API_KEY`. On a process with no
+`GEMINI_API_KEY` — which answers every request with the offline bilingual
+heuristic engine — the status body still named a Gemini model that never ran,
+so any consumer of the block would report a live cloud model where only the
+heuristic engine existed. Fixed: new `src/utils/hardening/aiEngineTruth.ts`
+derives both values from the key's presence (`aiEngineProviderLabel` names the
+Gemini provider only when configured, the offline engine otherwise;
+`aiEngineModelName` returns `null` — no model — when the offline engine is in
+use), the route is wired to those helpers, and `src/types.ts` widens
+`aiEngine.model` to `string | null`.
+
+Evidence: `src/tests/aiEngineStatusTruth.test.ts` (4 tests) — `aiEngineModelName`
+returns the Gemini model only when configured and `null` otherwise, the offline
+provider label contains no `gemini`, source guards pin the absence of the old
+constant-model literal and tie the route to the helpers. Negative-validated this
+slot: reverting both helpers and the wiring fails exactly 2 of 4; restored →
+4/4.
+
+Gates observed this slot on `7496aed`: `npm run lint` (`tsc --noEmit`) exit 0;
+targeted `npx vitest run src/tests/aiEngineStatusTruth.test.ts` **4 tests
+passed**; related guards `fabricatedStatusClaims.test.ts` +
+`toolSurfaceTruthfulness.test.ts` **2 files / 36 tests passed**; full
+`npx vitest run` **83 files / 1120 tests passed** (19.76 s); `npm run build`
+exit 0, `dist/server.cjs` **843.1 kB**. `npm audit` **NOT RUN** (no audit script
+in `package.json`). E2E: **NOT RUN** — no real-device harness and no display in
+this sandbox. Push: `a5c164d..7496aed` to `feature/hermes-full-completion`,
+succeeded. Item 13 stays `PARTIAL` (more unmeasured-claim surfaces remain).
+
+Previous cycle: 2026-09-23 17:46 UTC (23:16 IST 2026-09-23) — **WORK SLOT 5** of the
 2026-09-24 window, the 23:05 IST fire. Item 13 (`Zero-fake-success for all
 tools`), the **finance exclusion guard's own correctness**.
 
@@ -1969,6 +2004,14 @@ fix.
   leg. The secret-pattern scan of `git diff origin/main` returns only
   previously-documented synthetic fixtures; it is a pattern scan, not a proof of
   absence of credentials.
+
+- Item 13's `/api/daemon/status` AI-engine fix (2026-09-23 23:46 IST): the block
+  now names a Gemini model only when `GEMINI_API_KEY` is present and reports
+  `null` otherwise, so it can no longer advertise a model that is not running.
+  This is a truthfulness fix for the status body — it is **not** evidence that a
+  Gemini call succeeds: the `geminiConfigured === true` branch is exercised only
+  by unit tests in this environment (no API key present), so the live
+  model-answering path remains `UNVERIFIED`. Item 13 stays `PARTIAL`.
 
 - Item 13's Telegram gateway panel fix (2026-09-23 23:06 IST): the panel now
   refuses to claim liveness, a bot handle, a host, or a cloud sync that it has not
