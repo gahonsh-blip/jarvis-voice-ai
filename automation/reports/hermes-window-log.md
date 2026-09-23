@@ -4133,3 +4133,71 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - चारों प्रोएक्टिव रूटीन अब बिना मापे 'Nominal' सर्वर स्थिति का दावा नहीं करते;
   अब ईमानदारी से NOT_MEASURED रिपोर्ट करते हैं (7 टेस्ट पास, lint/build ग्रीन)।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:05
+Window date: 2026-09-24   Window slots completed so far: 13
+
+Completed:
+- #13 Zero-fake-success for all tools — decorative cost / entitlement badges.
+  `HUDHeader.tsx` no longer prints the literal `₹0 Always Free` chip and
+  `OracleCloudModal.tsx` no longer prints `₹0.00 / Forever Free`; both render
+  `billingBadgeLabel(entitlement)` from
+  `src/utils/hardening/billingEntitlementTruth.ts`, which names the unqueried
+  state and only shows a ₹0 figure after an explicit FREE observation.
+  Evidence: `src/tests/hardening/billingEntitlementTruth.test.ts` (17 tests),
+  `src/tests/hudTelemetry.test.ts` (8 tests) — 2 files / 25 tests passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — PARTIAL. Remaining surfaces: ActiveCallHUD
+  and other always-on status chips not yet audited.
+
+Remaining:
+- #13 still PARTIAL; the rest of the mandated order (Android Bridge, Real
+  Android E2E, Real Screenshot, Computer Operator, GitHub/Social/Communication,
+  AI-Memory, Autonomous Tasks, Voice, Wake Word, Hardening) untouched this slot.
+
+Bugs Found:
+- Two unconditional cost badges (`₹0 Always Free`, `₹0.00 / Forever Free`)
+  asserted a zero-cost entitlement for a process that never contacts the OCI
+  billing API — the same confident badge would render for a tenancy that had
+  started billing.
+
+Bugs Fixed:
+- Both badges now derive from the observed entitlement. Negative-validated:
+  restoring the `₹0 Always Free` literal into `HUDHeader.tsx` fails the HUD
+  source guard (1 of 17 in the billing file), restored → 17/17.
+
+Tests:    90 files / 1181 tests passed (20.17 s)
+Lint:     npm run lint (tsc --noEmit) exit 0
+Build:    npm run build exit 0, dist/server.cjs 865583 bytes
+E2E:      NOT RUN — no handset in this sandbox
+Security: NOT RUN (no security-relevant change this slot)
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  b228de8
+Push:    succeeded (306daff..b228de8) to origin/feature/hermes-full-completion
+
+PR:         NONE (not opened this work slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- real Android device E2E — requires a handset
+- real screenshot / display capture — requires a display
+- live social / telephony provider dispatch — requires credentials
+- live bridge pairing — MOBILE_BRIDGE_PAIRING_SECRET not provisioned
+
+Human Approval Required:
+- none this slot
+
+Next Slot:
+- #13 sweep: audit ActiveCallHUD and the remaining always-on status chips for
+  unmeasured claims, then move down the mandated order.
+
+हिंदी सारांश (एक पंक्ति):
+- HUD हेडर और Oracle पैनल के बिना-जाँचे '₹0 फ्री' बैज अब घोषित-योजना बताते हैं,
+  ₹0 केवल असली billing अवलोकन के बाद दिखता है (25 टेस्ट पास, lint/build ग्रीन)।

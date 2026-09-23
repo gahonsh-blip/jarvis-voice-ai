@@ -4,7 +4,56 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-23 21:05 UTC (02:35 IST 2026-09-24) — **WORK SLOT 12** of
+Last cycle: 2026-09-23 21:35 UTC (03:05 IST 2026-09-24) — **WORK SLOT 13** of
+the 2026-09-24 window, the 03:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **decorative cost / entitlement
+badges**.
+
+**Two always-on cost badges asserted a zero-cost guarantee for an entitlement
+that is never queried.** `HUDHeader.tsx` rendered the literal chip `₹0 Always
+Free` next to the app title, and `OracleCloudModal.tsx` rendered
+`₹0.00 / Forever Free` in the panel header. Both are unconditional markup:
+nothing in the repository contacts the OCI billing or entitlement API, so no
+run has ever observed that the tenancy is in a free-tier state, and a tenancy
+that had started billing would render the identical confident badge. The
+Oracle panel was already careful everywhere else — its plan row says "Declared
+plan … not read from a running instance" and its port rules are tri-state
+`active: null` until probed — so the header badge was the last unmeasured
+assertion in that panel.
+
+Fixed: `src/utils/hardening/billingEntitlementTruth.ts` gains
+`billingBadgeLabel(entitlement)` and `parseBillingEntitlement(payload)`. The
+badge names the unqueried state (`Always Free (declared plan — entitlement not
+probed)`) and only prints a `₹0` figure after an explicit `FREE` observation;
+`BILLED` is labelled as such. `parseBillingEntitlement` folds any value that
+is not exactly `FREE`/`BILLED` (including a lowercase `'free'`, a boolean, or a
+missing field) to `null`, so a malformed or absent field can never be upgraded
+into a claim. `src/types.ts` adds nullable `billingEntitlement` /
+`billingObservedAt` to `OracleVMStatus`, and `src/utils/hudTelemetry.ts` carries
+the entitlement from the same `/api/oracle-cloud` payload so the HUD badge
+reflects what the endpoint actually reported rather than a constant.
+
+Evidence: `src/tests/hardening/billingEntitlementTruth.test.ts` now asserts the
+unobserved badge contains `declared plan` / `not probed` and never `₹0`, that
+`undefined` stays labelled, that only a real observation yields a confirmed
+figure, that `parseBillingEntitlement` rejects non-observation values, and that
+neither component source still contains the fixed `₹0 Always Free` /
+`₹0.00 / Forever Free` literal while both call `billingBadgeLabel`.
+`src/tests/hudTelemetry.test.ts` pins the entitlement pass-through and the
+null-on-missing-field behaviour. Negative-validated: restoring the
+`₹0 Always Free` literal into `HUDHeader.tsx` fails the HUD source guard
+(1 of 17 in the billing file), restored → 17/17. Negative validation was run
+against a file backup and the original restored before commit.
+
+Gates observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted
+`npx vitest run src/tests/hardening/billingEntitlementTruth.test.ts
+src/tests/hudTelemetry.test.ts` **2 files / 25 tests passed**; full suite
+**90 files / 1181 tests passed** (20.17 s); `npm run build` exit 0, artifact
+`dist/server.cjs` 865583 bytes. E2E: **NOT RUN** — no handset.
+Push: `306daff..b228de8` to `feature/hermes-full-completion`, succeeded. Item 13
+stays `PARTIAL` — the sweep continues and other unmeasured-claim surfaces remain.
+
+Last cycle (previous): 2026-09-23 21:05 UTC (02:35 IST 2026-09-24) — **WORK SLOT 12** of
 the 2026-09-24 window, the 02:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **proactive routines' server-status
 verdict**.

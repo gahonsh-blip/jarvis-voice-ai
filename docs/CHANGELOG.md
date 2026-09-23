@@ -4,6 +4,33 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 03:05 IST (2026-09-23 21:35 UTC) — work slot 13: decorative cost / entitlement badges
+
+### Fixed
+- `HUDHeader.tsx` rendered the literal chip `₹0 Always Free` and
+  `OracleCloudModal.tsx` rendered `₹0.00 / Forever Free`, both unconditional
+  markup, while nothing in the repo queries the OCI billing / entitlement API.
+  The badges now render `billingBadgeLabel(entitlement)`: the unqueried state
+  reads `Always Free (declared plan — entitlement not probed)`, and a `₹0`
+  figure appears only after an explicit `FREE` observation. `BILLED` is labelled
+  as such.
+- `src/utils/hardening/billingEntitlementTruth.ts`: new `billingBadgeLabel` and
+  `parseBillingEntitlement`. The parser folds any value that is not exactly
+  `FREE`/`BILLED` (lowercase, boolean, missing field) to `null`, so a malformed
+  payload can never be upgraded into a claim.
+- `src/types.ts`: nullable `billingEntitlement` / `billingObservedAt` on
+  `OracleVMStatus`. `src/utils/hudTelemetry.ts` now carries the entitlement from
+  the same `/api/oracle-cloud` payload instead of rendering a constant.
+
+### Tests
+- `src/tests/hardening/billingEntitlementTruth.test.ts`: unobserved badge wording
+  (never `₹0`), `undefined` stays labelled, observation-only confirmed figure,
+  parser rejection of non-observation values, and source guards pinning the
+  fixed literals out of both components. Negative validated (restore the
+  `₹0 Always Free` literal → 1 of 17 fails).
+- `src/tests/hudTelemetry.test.ts`: entitlement pass-through plus null on a
+  missing / malformed field.
+
 ## [Unreleased] - 2026-09-24 02:35 IST (2026-09-23 21:05 UTC) — work slot 12: proactive routines' server-status verdict
 
 ### Fixed
