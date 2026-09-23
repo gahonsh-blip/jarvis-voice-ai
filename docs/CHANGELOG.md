@@ -4,6 +4,35 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 00:49 IST (2026-09-23 19:19 UTC) — work slot 8: voice visualiser & call level bars
+
+### Fixed
+- `App.tsx` seeded `volumeLevel` from `Math.floor(20 + Math.random() * 60)` on a
+  100 ms interval when speech recognition started, so `JarvisOrb`'s ring scaled
+  and pulsed as though it followed a microphone amplitude — no audio analyser is
+  wired into that path. The voice path now uses
+  `src/utils/hardening/micInputTruth.ts`, which returns a level only for a finite
+  measurement in `0..100` and `0` otherwise.
+- `ActiveCallHUD.tsx` sized each of its six `Audio Waveform Bars` from
+  `Math.floor(Math.random() * 16 + 4)` on every render, so the strip danced as
+  though it followed live call audio. `src/utils/hardening/callWaveform.ts` now
+  supplies a fixed decorative bar profile with a clamped index lookup.
+- Backlog item #13 (`Zero-fake-success for all tools`) remains `PARTIAL`.
+
+### Tests
+- New `src/tests/hardening/micInputTruth.test.ts` (4 tests) and
+  `src/tests/hardening/callWaveform.test.ts` (4 tests), each with a source guard
+  that the fabricated expression is gone and the honest call is present.
+  Negative-validated: restoring each fabricated expression fails exactly 1 of 4,
+  restored → 4/4.
+
+### Verification
+- lint (`tsc --noEmit`) exit 0; targeted 2 files / 8 tests passed; full vitest
+  **85 files / 1136 tests passed**; build exit 0 (`dist/server.cjs` 843.2 kB).
+  `npm audit` NOT RUN (no audit script). E2E NOT RUN (no device/display here).
+
+---
+
 ## [Unreleased] - 2026-09-23 23:46 IST (2026-09-23 18:16 UTC) — work slot 6: daemon AI-engine status truth
 
 ### Fixed
