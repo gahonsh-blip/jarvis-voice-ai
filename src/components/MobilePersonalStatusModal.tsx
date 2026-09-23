@@ -55,6 +55,10 @@ import {
   briefingProvenance,
   briefingProvenanceLabel,
 } from '../utils/spokenBriefingTruth';
+import {
+  telegramBroadcastNotice,
+  telegramBroadcastTransportFailure,
+} from '../utils/hardening/telegramBroadcastNotice';
 
 interface Props {
   isOpen: boolean;
@@ -227,13 +231,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
         }),
       });
       const data = await res.json();
-      if (data.success) {
-        setTelegramNotice('✅ Briefing broadcast to Telegram Mobile successfully!');
-      } else {
-        setTelegramNotice(`Notice: ${data.message || 'Telegram simulator broadcast complete.'}`);
-      }
+      setTelegramNotice(telegramBroadcastNotice(data).text);
     } catch (err: any) {
-      setTelegramNotice(`Telegram broadcast completed (Simulated/Live): ${err.message}`);
+      setTelegramNotice(telegramBroadcastTransportFailure(err).text);
     } finally {
       setTelegramSending(false);
       setTimeout(() => setTelegramNotice(null), 5000);
