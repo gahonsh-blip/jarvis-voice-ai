@@ -4,6 +4,23 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 02:35 IST (2026-09-23 21:05 UTC) — work slot 12: proactive routines' server-status verdict
+
+### Fixed
+- Each of the four routines built by `buildProactiveReports()` in `server.ts`
+  published `systemHealth.serverStatus = 'Nominal'` as a literal. Nothing
+  measured it, so a wedged or degraded server reported the same confident
+  verdict. New `src/utils/hardening/serverHealthTruth.ts` returns `NOT_MEASURED`
+  by default and reserves `Nominal`/`Warning`/`Critical` for a status derived
+  from an external observation. Each routine now carries the matching note in
+  `keyInsights`. `src/types.ts` widens `serverStatus` with `NOT_MEASURED`.
+
+### Tests
+- `src/tests/hardening/serverHealthTruth.test.ts` (7 tests): unmeasured default,
+  unknown-value handling, claim wording, and source guards pinning the literal
+  out of `server.ts` with the derived wiring present four times. Negative
+  validated (restore one literal → 2 of 7 fail).
+
 ## [Unreleased] - 2026-09-24 02:05 IST (2026-09-23 20:35 UTC) — work slot 11: Telegram seeded transcript & Oracle hosting claim
 
 ### Fixed

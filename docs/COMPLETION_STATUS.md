@@ -4,6 +4,45 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-09-23 21:05 UTC (02:35 IST 2026-09-24) — **WORK SLOT 12** of
+the 2026-09-24 window, the 02:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **proactive routines' server-status
+verdict**.
+
+**Every scheduled routine reported the server healthy without measuring it.**
+The four routines assembled by `buildProactiveReports()` in `server.ts` (daily
+briefing, system pulse, project progress, social recap) each set
+`systemHealth.serverStatus = 'Nominal'` as a literal. Nothing computed it, and
+the routines are produced by the process they describe — so a wedged, saturated,
+or degraded server returned exactly the same confident verdict, in the one
+situation where the claim is most likely false. The same blocks already label
+CPU/RAM `NOT_MEASURED` when no live host metrics exist and state "Cloud node
+uptime: not probed by this server", so the health verdict was the last
+unmeasured assertion in an otherwise careful report.
+
+Fixed: new `src/utils/hardening/serverHealthTruth.ts` — `assessedServerStatus()`
+returns `NOT_MEASURED` (the honest default for a self-assessment), and
+`isMeasuredServerStatus()` / `describeServerHealthClaim()` reserve
+`Nominal`/`Warning`/`Critical` for a status actually derived from an external
+observation. All four routines now call `assessedServerStatus()` and carry the
+matching note in `keyInsights`. `src/types.ts` widens `serverStatus` to include
+`NOT_MEASURED`.
+
+Evidence: `src/tests/hardening/serverHealthTruth.test.ts` (7 tests) covers the
+unmeasured default, the unknown-value handling, the claim wording, and source
+guards pinning `serverStatus: 'Nominal'` out of `server.ts` with the derived
+wiring present exactly four times. Negative-validated: restoring one literal
+fails 2 of 7 (the source guard and the occurrence count), restored → 7/7.
+Negative validation was run against a file backup and the original restored
+before commit.
+
+Gates observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted
+`npx vitest run src/tests/hardening/serverHealthTruth.test.ts` **1 file / 7
+tests passed**; full suite **90 files / 1172 tests passed**; `npm run build`
+exit 0, artifact `dist/server.cjs` 865583 bytes. E2E: **NOT RUN** — no handset.
+Push: `ce1cd2b..0696f8b` to `feature/hermes-full-completion`, succeeded. Item 13
+stays `PARTIAL` — the sweep continues and other unmeasured-claim surfaces remain.
+
 Last cycle: 2026-09-23 20:35 UTC (02:05 IST 2026-09-24) — **WORK SLOT 11** of
 the 2026-09-24 window, the 02:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **Telegram gateway's seeded transcript
