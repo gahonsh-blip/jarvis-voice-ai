@@ -4280,3 +4280,67 @@ Next Slot:
  हिंदी सारांश (एक पंक्ति):
  - Telegram का "View Freelance Leads" जवाब अब असली लीड रिकॉर्ड से बनता है, दो
    नकली नमूना पंक्तियाँ हटा दी गईं (5 टेस्ट पास, lint/पूरी सूट/build ग्रीन)।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:05 (second-to-last work slot)
+Window date: 2026-09-24   Window slots completed so far: 15
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (ongoing sweep). This slot removed
+  the fabricated zero-cost guarantee in the /api/blueprint/report cost table
+  (section 4): seven fixed `₹0.00` rows + `₹0.00 / Forever Free` total under a
+  "Strict Zero-Cost Blueprint" heading. Evidence: server.ts ~4004-4019 now calls
+  declaredCostCell()/describeDeclaredCost(); src/utils/hardening/billingEntitlementTruth.ts
+  adds declaredCostCell(); test src/tests/hardening/billingEntitlementTruth.test.ts
+  (20 tests, +4 assertions) — observed 1 file / 20 passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — other unmeasured-claim surfaces remain; sweep continues.
+
+Remaining:
+- #1 Android Bridge, #2 Real Android E2E, #55 Real Screenshot — BLOCKED (no hardware/credential).
+- Computer Operator, GitHub Automation, Social Automation, Communication, AI/Memory,
+  Autonomous Tasks, Voice, Wake Word, Production Hardening — see docs/COMPLETION_STATUS.md.
+
+Bugs Found:
+- The blueprint report contradicted itself: the header (fixed in slot 13) said the
+  billing entitlement was NOT_PROBED, while the cost table directly beneath still
+  guaranteed `₹0.00 / Forever Free` as a total. Found by grepping hardcoded cost
+  literals in server.ts after the slot-14 lead-listing fix.
+
+Bugs Fixed:
+- Made the whole cost table derive from the declared-plan helpers. Verification:
+  restoring the pre-fix server.ts (commit bee0259) fails the two new source guards
+  (observed `2 failed | 18 passed`); fix restored → `20 passed`.
+
+Tests:    91 files / 1189 tests passed (npx vitest run, 19.88 s)
+Lint:     pass — npm run lint (tsc --noEmit) exit 0
+Build:    pass — npm run build exit 0; dist/server.cjs 866712 bytes
+E2E:      NOT RUN — no Android handset available in this sandbox
+Security: NOT RUN (no audit command in this slot); .env not staged, no secrets in diff
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  3e89b9c (code) + docs commit
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         NONE (no PR opened this slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target/hosting integration present in this sandbox
+
+Blocked:
+- #1 Android Bridge, #2 Real Android E2E, #55 Real Screenshot — require a real handset.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13 continues: next unmeasured-claim surface in the remaining seeds/telemetry
+  (e.g. memory/runtime seed values in server.ts), or the 04:35 finalization slot
+  runs full verification + PR refresh.
+
+हिंदी सारांश (एक पंक्ति):
+- स्लॉट 15: ब्लूप्रिंट रिपोर्ट की लागत तालिका से बनावटी `₹0.00 / Forever Free` दावा हटाकर
+  उसे "घोषित योजना (लागत API कभी नहीं पूछी)" के रूप में दिखाया गया; सभी गेट हरे।

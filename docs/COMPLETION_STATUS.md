@@ -4,7 +4,44 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-23 22:05 UTC (03:35 IST 2026-09-24) — **WORK SLOT 14** of
+Last cycle: 2026-09-23 22:35 UTC (04:05 IST 2026-09-24) — **WORK SLOT 15** of
+the 2026-09-24 window, the 04:05 IST fire (second-to-last work slot). Item 13
+(`Zero-fake-success for all tools`), the **blueprint report cost table**.
+
+**The reported blueprint still asserted a zero-cost guarantee in its own cost
+table.** `/api/blueprint/report` section 4 printed a fixed `₹0.00` on all seven
+component rows and `₹0.00 / Forever Free` as the total, under the heading
+"Strict Zero-Cost Blueprint". Slot 13 had already corrected the *header* line of
+the same report to `describeBillingCost(oracleCloudState.billingEntitlement)`, so
+the report contradicted itself: the header said the entitlement was
+`NOT_PROBED` while the table beneath it guaranteed a total. Nothing in this
+process queries a provider billing or entitlement API, so those figures were an
+unobserved guarantee — the exact class item 13 tracks.
+
+Fixed: `src/utils/hardening/billingEntitlementTruth.ts` gains a pure
+`declaredCostCell(declaredLabel)`, which always returns
+`<label> — declared plan, no billing API queried`; `server.ts` derives all seven
+component rows from it and the total from the existing `describeDeclaredCost`
+(which names the entitlement `NOT_PROBED` when unobserved). The section heading
+became "Declared Zero-Cost Blueprint" with a sentence stating every figure is a
+declared plan, not an observation.
+
+Evidence: `src/tests/hardening/billingEntitlementTruth.test.ts` gains 4
+assertions (20 tests total in the file) — the source no longer contains
+`₹0.00 / Forever Free` or `Strict Zero-Cost Blueprint`; exactly 7
+`declaredCostCell('₹0')` calls appear; the total uses
+`describeDeclaredCost('₹0', oracleCloudState.billingEntitlement)`; and
+`declaredCostCell` never emits a bare `₹0`. Negative-validated: restoring the
+pre-fix `server.ts` (commit `bee0259`) fails the two new source guards (observed
+`2 failed | 18 passed`); fix restored → `20 passed`. Gates observed this slot:
+`npm run lint` (`tsc --noEmit`) exit 0; targeted
+`npx vitest run src/tests/hardening/billingEntitlementTruth.test.ts` **1 file /
+20 tests passed**; full suite **91 files / 1189 tests passed** (19.88 s);
+`npm run build` exit 0, artifact `dist/server.cjs` 866712 bytes. E2E: **NOT RUN**
+— no handset. Item 13 stays `PARTIAL` — the sweep continues and other
+unmeasured-claim surfaces remain.
+
+Last cycle (previous):
 the 2026-09-24 window, the 03:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **Telegram "View Freelance Leads"
 reply**.

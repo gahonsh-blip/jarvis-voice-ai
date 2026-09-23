@@ -4,6 +4,31 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 04:05 IST (2026-09-23 22:35 UTC) — work slot 15: blueprint cost table derived from declared-plan helpers
+
+### Fixed
+- `/api/blueprint/report` section 4 printed a fixed `₹0.00` on all seven
+  component rows and `₹0.00 / Forever Free` as the total, under a "Strict
+  Zero-Cost Blueprint" heading. Nothing in the process queries a billing or
+  entitlement API, so the table asserted an unobserved guarantee — and it
+  contradicted the report header, which slot 13 had already corrected to
+  `describeBillingCost`. The table now derives every figure from the truth
+  helpers; the heading is "Declared Zero-Cost Blueprint" with an explicit
+  statement that the figures are the declared plan, not an observation.
+- `src/utils/hardening/billingEntitlementTruth.ts`: new pure
+  `declaredCostCell(declaredLabel)` returning
+  `<label> — declared plan, no billing API queried`.
+
+### Tests
+- `src/tests/hardening/billingEntitlementTruth.test.ts`: four new assertions —
+  no `₹0.00 / Forever Free` or `Strict Zero-Cost Blueprint` in the source;
+  exactly seven `declaredCostCell('₹0')` calls; the total uses
+  `describeDeclaredCost('₹0', oracleCloudState.billingEntitlement)`; and
+  `declaredCostCell` never emits a bare `₹0`. Negative validated (restore the
+  pre-fix `server.ts` → 2 of 20 fail).
+
+---
+
 ## [Unreleased] - 2026-09-24 03:35 IST (2026-09-23 22:05 UTC) — work slot 14: Telegram lead listing rendered from stored records
 
 ### Fixed
