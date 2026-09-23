@@ -3716,3 +3716,90 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - HUD के GPS पिल से नकली "GEO-SERVICES" हटाया — अब यह असली लोकेशन provenance
   दिखाता है; 16 टेस्ट पास, लिंट और बिल्ड हरे, सबूत के साथ पुश किया गया।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:05
+Window date: 2026-09-24 (window started 2026-09-23 21:05 IST)   Window slots completed so far: 5
+
+Note on slot identity: initial orientation reported "NO_STATE" because the local
+checkout was a shallow clone with no `automation/hermes-state` ref and no
+`docs/COMPLETION_STATUS.md`. After fetching the real remote branches the state
+file was read: `window_date` 2026-09-24, `slots_completed` 4, `current_item` 13.
+This run is therefore **slot 5**, not slot 1, and all work was rebased onto the
+real remote tip (`8d4b1b9`) after `git reset --hard`.
+
+Completed:
+- #13 Zero-fake-success for all tools — WORK SLICE: the finance exclusion
+  guard's own correctness. `isFinanceBlocked()` in `server_tools.ts` gated each
+  keyword with a word-boundary regex **plus** a bare `lower.includes(kw)`
+  fallback. Short finance tokens (`eth`, `btc`, `upi`, `cvv`) occur inside
+  ordinary English words, so benign operator text ("tell me whether the build
+  passed", "run the tests together", "use a different method") was returned as
+  `{ blocked: true, reason: '...Financial operation involving "eth"...' }`.
+  Fallback removed; word-boundary matching is the only rule. Evidence: edit to
+  `server_tools.ts` lines 73-79; new test file
+  `src/tests/financeGuardFalsePositives.test.ts` (8 tests) — observed
+  `8 passed (8)`; the pre-existing `financeGuard.test.ts` and
+  `financeGuardTruth.test.ts` still pass (targeted run 3 files / 27 tests
+  passed). Item remains `PARTIAL` (more unmeasured-claim surfaces remain).
+
+In Progress:
+- #13 Zero-fake-success for all tools — `PARTIAL`. The pattern-driven sweep of
+  unmeasured-claim surfaces is not exhausted.
+
+Remaining:
+- #13 continues; #51 (security audit), #54 (secret/token audit), #60 (final
+  documentation) stay `PARTIAL`/`NOT_AVAILABLE` for external legs.
+- #1, #2, #8, #50 and #55 remain blocked on real hardware.
+
+Bugs Found:
+- Finance-guard false positive on benign English text (see Completed). Found by
+  reading `isFinanceBlocked()` during orientation, then confirmed empirically:
+  "whether"/"together"/"method" returned `blocked: true`.
+
+Bugs Fixed:
+- The false positive above. Verification that proves it: negative-validation —
+  restoring `|| lower.includes(kw)` fails exactly 3 of 8 in the new file
+  (observed `3 failed | 5 passed`); with the fix restored → `8 passed (8)`.
+
+Tests:    3 files / 27 tests passed (targeted, finance-guard files);
+          full `npx vitest run` 82 files / 1116 tests passed (20.72 s)
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0
+Build:    `npm run build` exit 0, dist/server.cjs 862985 bytes (842.8 kB)
+E2E:      NOT RUN — no real-device harness and no display in this sandbox
+Security: `npm audit` NOT RUN (no audit script in package.json). No `.env`
+          staged, no token in the diff.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row),
+               docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  7d9ea03 (fix + test)
+Push:    succeeded — 8d4b1b9..7d9ea03 to origin/feature/hermes-full-completion
+
+PR:         NONE this slot (work slot; not the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this sandbox; the verified artifact is the deployment unit
+
+Blocked:
+- Real Android device E2E — requires a physical handset (no device in sandbox)
+- Real screenshot / display capture — requires a display (none in sandbox)
+- Live social / telephony provider dispatch — requires provider credentials
+
+Human Approval Required:
+- None for this slot's change. Merge of the PR to `main` still awaits human
+  review at the finalization slot.
+
+Next Slot:
+- Continue item 13: audit the next unmeasured-claim surface in the tool
+  inventory. Operational note for the next slot: the clone is shallow, so
+  `git fetch origin` alone does not create `origin/automation/hermes-state` /
+  `origin/feature/hermes-full-completion` tracking refs — fetch them explicitly
+  with a refspec before reading state, or the slot will wrongly report NO_STATE.
+
+हिंदी सारांश (एक पंक्ति):
+- Finance guard की गलती ठीक की — छोटे टोकन ("eth") साधारण शब्दों ("whether")
+  में मिलकर जायज़ टेक्स्ट को गलत तरीके से ब्लॉक कर रहे थे; 8 नए टेस्ट, पूरा
+  सूट 82 फ़ाइलें / 1116 टेस्ट पास, लिंट और बिल्ड हरे, सबूत के साथ पुश किया।

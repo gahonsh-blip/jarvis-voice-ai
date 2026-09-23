@@ -4,6 +4,28 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 23:16 IST (2026-09-23 17:46 UTC) — work slot 5: finance guard false positives
+
+### Fixed
+- `isFinanceBlocked()` in `server_tools.ts` matched each keyword with a
+  word-boundary regex **and** a bare `lower.includes(kw)` fallback. Short finance
+  tokens (`eth`, `btc`, `upi`, `cvv`) occur inside ordinary English words, so
+  benign operator text ("tell me **wheth**er the build passed", "run the tests
+  **togeth**er", "use a different **meth**od") was returned as a blocked
+  financial operation. The substring fallback is removed; word-boundary matching
+  is the only rule, and every real financial phrasing still blocks.
+- Backlog item #13 (`Zero-fake-success for all tools`) remains `PARTIAL`.
+
+### Tests
+- New `src/tests/financeGuardFalsePositives.test.ts` (8 tests): seven benign
+  phrases containing short tokens must not block, and six real financial
+  phrasings must still block. Negative-validated — restoring
+  `|| lower.includes(kw)` fails exactly 3 of 8 (`3 failed | 5 passed`),
+  restored → 8/8. Gates on `7d9ea03`: lint exit 0, vitest **82 files / 1116
+  tests passed**, build exit 0 (`dist/server.cjs` 862985 bytes / 842.8 kB).
+
+---
+
 ## [Unreleased] - 2026-09-23 22:40 IST (2026-09-23 17:10 UTC) — work slot 4: HUD GPS provenance
 
 ### Fixed
