@@ -71,9 +71,12 @@ export function isFinanceBlocked(textOrAction: string): { blocked: boolean; reas
   ];
 
   for (const kw of financeKeywords) {
-    // Check word boundaries or inclusion
+    // Word-boundary matching only. The previous bare `lower.includes(kw)` fallback
+    // was unsafe: short finance tokens ("eth", "btc", "upi", "cvv", "bhim") occur
+    // inside ordinary English words ("whether", "together", "method", "recall"),
+    // so benign conversation was misclassified as a blocked financial operation.
     const regex = new RegExp(`\\b${kw.replace(/\s+/g, '\\s+')}\\b`, 'i');
-    if (regex.test(lower) || lower.includes(kw)) {
+    if (regex.test(lower)) {
       return {
         blocked: true,
         reason: `JARVIS Security Guard: Financial operation involving "${kw}" is strictly restricted and excluded from autonomous control. JARVIS is prohibited from accessing, executing, or automating any banking, UPI, cards, wallets, investments, loans, crypto, or payment transactions.`,
