@@ -4,7 +4,39 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-23 18:16 UTC (23:46 IST 2026-09-23) — **WORK SLOT 6** of the
+Last cycle: 2026-09-23 18:41 UTC (00:11 IST 2026-09-24) — **WORK SLOT 7** of the
+2026-09-24 window, the 00:05 IST fire. Item 13 (`Zero-fake-success for all
+tools`), the **proactive-briefing approval posture**.
+
+**The proactive briefings asserted a gate they had not read.** `buildProactiveReports()`
+hardcoded `(Human Approval Enforced)` into the morning briefing's insights and
+`Human-in-the-loop gate active` into the evening briefing's insights, both
+unconditionally. `humanApprovalForExternal` is operator-flippable through
+`POST /api/security/update`, so with the gate turned off the routine still told
+the operator the gate was enforcing — the exact "relaxed gate is trusted"
+failure the project forbids. Fixed: the builder now derives
+`const posture = securityMatrixPosture(securityMatrixState)` (the existing
+hardening helper) and both insights render `External-action approval:
+${posture.humanApproval}`, which reports `DISABLED` when the flag is false and
+`UNKNOWN` when it was never observed.
+
+Evidence: `src/tests/hardening/securityMatrixTruth.test.ts` — three new tests in
+a `the proactive briefing insights derive the approval posture` block: the
+flattened `server.ts` must not contain `Human Approval Enforced` or
+`Human-in-the-loop gate active`, and must contain the derived
+`External-action approval: ${posture.humanApproval}` insight. Negative-validated
+this slot: restoring the two literals fails exactly 3 of 12; restored → 12/12.
+
+Gates observed this slot on `c5f655f`: `npm run lint` (`tsc --noEmit`) exit 0;
+targeted `npx vitest run src/tests/hardening/securityMatrixTruth.test.ts`
+**12 tests passed**; related guards `fabricatedStatusClaims.test.ts` +
+`auditTrailTruth.test.ts` **2 files / 22 tests passed**; full `npx vitest run`
+**84 files / 1132 tests passed** (21.20 s); `npm run build` exit 0,
+`dist/server.cjs` **843.2 kB**. `npm audit` **NOT RUN** (no audit script in
+`package.json`). E2E: **NOT RUN** — no real-device harness and no display in
+this sandbox. Push: `311b521..c5f655f` to `feature/hermes-full-completion`,
+succeeded. Item 13 stays `PARTIAL` (more unmeasured-claim surfaces remain).
+Previous cycle: 2026-09-23 18:16 UTC (23:46 IST 2026-09-23) — **WORK SLOT 6** of the
 2026-09-24 window, the 23:35 IST fire. Item 13 (`Zero-fake-success for all
 tools`), the **`/api/daemon/status` AI-engine block**.
 

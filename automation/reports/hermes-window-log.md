@@ -3881,3 +3881,75 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - `/api/daemon/status` अब वही AI मॉडल बताता है जो असल में जवाब दे रहा है; बिना
   API key के कोई मॉडल नाम नहीं, टेस्ट 4/4 पास (पूरा सूट 1120/1120)।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:05
+Window date: 2026-09-24   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL) — the proactive briefings no
+  longer assert an approval gate they never read. `buildProactiveReports()` in
+  `server.ts` hardcoded "(Human Approval Enforced)" (morning) and
+  "Human-in-the-loop gate active" (evening) unconditionally; both now render
+  `posture.humanApproval` from `securityMatrixPosture(securityMatrixState)`.
+  Evidence: `src/tests/hardening/securityMatrixTruth.test.ts` (3 new tests) —
+  observed 12/12 passed; negative-validated (restore literals → 3 of 12 fail).
+
+In Progress:
+- #13 — stays PARTIAL; further unmeasured-claim surfaces remain (UI status
+  strings such as ComputerOperatorModal "LIVE COMMAND STREAM & TELEMETRY").
+
+Remaining:
+- #1/#2 Android E2E, #8 Windows capture, #25-29 provider-live dispatch,
+  #51/#54/#60 hardening — blocked on hardware/credentials (see Blocked).
+
+Bugs Found:
+- The proactive morning/evening briefings reported the human-approval gate as
+  enforcing regardless of `humanApprovalForExternal`, which is flippable via
+  `POST /api/security/update`. Found by continuing the item-13 claim-surface
+  sweep from the HUD/audit fixes of slots 5-6 into `buildProactiveReports()`.
+
+Bugs Fixed:
+- The two hardcoded approval claims above, replaced by the observed posture
+  helper. Verified by the new tests plus a negative validation (3/12 fail with
+  the old literals, 12/12 pass with the fix).
+
+Tests:    84 files / 1132 tests passed (21.20 s) — `npx vitest run`
+Lint:     `npm run lint` (tsc --noEmit) exit 0
+Build:    `npm run build` exit 0; dist/server.cjs 843.2 kB
+E2E:      NOT RUN — no physical Android handset and no display in this sandbox
+Security: NOT RUN (`npm audit` — no audit script in package.json). No token,
+          key or .env is staged or committed; `git check-ignore -v .env` OK.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + evidence);
+               automation/reports/hermes-window-log.md (this section)
+Branch:  feature/hermes-full-completion
+Commit:  c5f655f (fix), plus this docs commit
+Push:    succeeded — 311b521..c5f655f to origin/feature/hermes-full-completion
+
+PR:         #4 (open, non-draft) — awaiting human review
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; dist/server.cjs is the verified artifact.
+
+Blocked:
+- #1/#2 Android E2E — requires a physical Android handset (none in sandbox)
+- #8 Computer Operator Windows capture — requires a Windows host
+- #25-29 social/telephony live dispatch — requires provider credentials
+- #51/#54/#60 hardening — requires a third-party audit / live credential rotation
+
+Human Approval Required:
+- Human merge of PR #4 to main after reading the final verification report.
+- A decision on whether the remaining item-13 surfaces warrant continued nightly
+  sweeps or a stop rule.
+
+Next Slot:
+- #13 continuation: sweep `ComputerOperatorModal.tsx` ("LIVE COMMAND STREAM &
+  TELEMETRY") and the remaining unconditional UI status labels — same class of
+  fabrication, cheap to verify, no hardware required.
+
+हिंदी सारांश (एक पंक्ति):
+- प्रोएक्टिव ब्रीफिंग अब ह्यूमन-अप्रूवल गेट की स्थिति असली फ़्लैग से पढ़कर बताती
+  है, हार्डकोड नहीं; 3 नए टेस्ट पास, पूरा सूट 1132/1132, बिल्ड सफल।
