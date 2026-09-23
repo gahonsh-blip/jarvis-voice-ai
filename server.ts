@@ -7,6 +7,7 @@ import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
+import { freelanceLeadsReply } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
 import {
   AUDIT_LOG_SOURCE_RECORDED,
@@ -3360,8 +3361,7 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data === 'cmd_morning_report') {
     await processMobileCommand('JARVIS, morning report बताओ', 'user', chatId);
   } else if (data === 'cmd_view_leads') {
-    const leadsCount = memoryState.freelanceLeads.length;
-    const reply = `💼 *ACTIVE FREELANCE LEADS (${leadsCount})*\n\n1. *Aarav Tech Solutions* — ₹65,000 (Quotation Sent)\n2. *Global Horizon Exports* — ₹85,000 (AI Requirements Extracted)`;
+    const reply = freelanceLeadsReply(memoryState.freelanceLeads);
     if (chatId) await sendRealTelegramMessage(chatId, reply);
   } else if (data.startsWith('approve_post_') || data === 'approve_publish_post_1') {
     const postId = data.startsWith('approve_post_') ? data.replace('approve_post_', '') : 'post-1';
