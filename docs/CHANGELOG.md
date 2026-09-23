@@ -4,6 +4,27 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 22:40 IST (2026-09-23 17:10 UTC) — work slot 4: HUD GPS provenance
+
+### Fixed
+- `HUDHeader.tsx` rendered a hardcoded green `GPS: GEO-SERVICES` pill in every
+  state — no fix, cached position, simulated tactical preset, or manual entry —
+  asserting a device GPS link the HUD never checked, even though every other
+  location surface already tracked provenance via `CoordsSource`. Added
+  `locationFixBadge()` to `src/utils/locationService.ts` (only `live` is marked
+  live; `null` → `NO FIX`), the pill now derives from it and is grey for
+  anything but a live fix, and `App.tsx` forwards `locationSource={userCoordsSource}`.
+- Backlog item #13 (`Zero-fake-success for all tools`) remains `PARTIAL`.
+
+### Tests
+- `src/tests/locationServicesTruth.test.ts` extended to 16 tests: the pill never
+  contains the hardcoded claim, derives from `locationFixBadge`, and only a live
+  source is marked live. Negative-validated — restoring the hardcoded label
+  fails 1 of 16, restored → 16/16. Gates on `144a995`: lint exit 0, vitest **81
+  files / 1108 tests passed**, build exit 0 (`dist/server.cjs` 842.8 kB).
+
+---
+
 ## [Unreleased] - 2026-09-23 22:16 IST (2026-09-23 16:46 UTC) — work slot 3: computer-operator completion summaries
 
 ### Fixed
