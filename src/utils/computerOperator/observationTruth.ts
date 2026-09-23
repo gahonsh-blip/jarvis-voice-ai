@@ -62,6 +62,29 @@ export function observationResolutionLabel(observation: ScreenObservation | null
   return `${res.width}x${res.height}`;
 }
 
+/**
+ * Why a semantic interpretation must be withheld, or null when the observation
+ * is real and can be summarised.
+ *
+ * `ScreenInterpreter` always produces a confident "Screen showing ..." summary,
+ * so rendering it against an illustrative preview or an unreachable host would
+ * restate the same fabricated live-screen claim the rest of this panel refuses
+ * to make.
+ */
+export function observationInterpretationNotice(
+  observation: ScreenObservation | null,
+  isPreview: boolean
+): string | null {
+  switch (screenSyncState(observation, isPreview)) {
+    case 'ILLUSTRATIVE':
+      return 'Interpretation withheld: the view above is an illustrative preview, not the live desktop.';
+    case 'UNOBSERVED':
+      return 'Interpretation withheld: the host desktop could not be observed, so no screen content is claimed.';
+    default:
+      return null;
+  }
+}
+
 /** The reason an observation is ambiguous, when one was given. */
 export function observationAmbiguityNotice(
   observation: ScreenObservation | null,

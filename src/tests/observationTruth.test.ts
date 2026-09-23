@@ -18,6 +18,7 @@ import {
   observationPlatformLabel,
   observationResolutionLabel,
   observationAmbiguityNotice,
+  observationInterpretationNotice,
 } from '../utils/computerOperator/observationTruth';
 
 const baseObservation: ScreenObservation = {
@@ -122,6 +123,27 @@ describe('observationAmbiguityNotice', () => {
   });
 });
 
+describe('observationInterpretationNotice', () => {
+  it('withholds the summary for an illustrative preview', () => {
+    const notice = observationInterpretationNotice(baseObservation, true);
+    expect(notice).toContain('Interpretation withheld');
+    expect(notice).toContain('illustrative preview');
+  });
+
+  it('withholds the summary when the host desktop was not observed', () => {
+    const notice = observationInterpretationNotice(ambiguousObservation, false);
+    expect(notice).toContain('Interpretation withheld');
+  });
+
+  it('withholds the summary when there is no observation at all', () => {
+    expect(observationInterpretationNotice(null, false)).toContain('Interpretation withheld');
+  });
+
+  it('allows the summary only for a real host observation', () => {
+    expect(observationInterpretationNotice(baseObservation, false)).toBeNull();
+  });
+});
+
 describe('ComputerOperatorModal does not print unmeasured screen state', () => {
   const src = fs.readFileSync(
     path.resolve(__dirname, '../components/ComputerOperatorModal.tsx'),
@@ -144,5 +166,10 @@ describe('ComputerOperatorModal does not print unmeasured screen state', () => {
     expect(src).toContain('screenSyncLabel');
     expect(src).toContain('observationResolutionLabel');
     expect(src).toContain('observationPlatformLabel');
+  });
+
+  it('gates the semantic interpretation summary behind the truth helper', () => {
+    expect(src).toContain('observationInterpretationNotice');
+    expect(src).toContain('interpretationNotice ??');
   });
 });

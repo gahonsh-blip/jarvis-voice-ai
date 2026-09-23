@@ -32,6 +32,7 @@ import {
 } from '../utils/computerOperator';
 import {
   observationAmbiguityNotice,
+  observationInterpretationNotice,
   observationPlatformLabel,
   observationResolutionLabel,
   screenSyncLabel,
@@ -174,6 +175,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   const interpretation = currentObservation ? ScreenInterpreter.interpret(currentObservation) : null;
   const syncState = screenSyncState(currentObservation, observationIsPreview);
   const ambiguityNotice = observationAmbiguityNotice(currentObservation, observationIsPreview);
+  const interpretationNotice = observationInterpretationNotice(currentObservation, observationIsPreview);
 
   return (
     <div
@@ -457,8 +459,8 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                 <Eye className="w-3.5 h-3.5 text-cyan-400" />
                 <span>SEMANTIC SCREEN INTERPRETATION:</span>
               </div>
-              <p className="text-slate-300 leading-relaxed">
-                {isHindi ? interpretation?.summaryHi : interpretation?.summary}
+              <p className={`leading-relaxed ${interpretationNotice ? 'text-slate-500 italic' : 'text-slate-300'}`}>
+                {interpretationNotice ?? (isHindi ? interpretation?.summaryHi : interpretation?.summary)}
               </p>
             </div>
           </div>
