@@ -1,19 +1,19 @@
 {
   "window_date": "2026-09-24",
   "window_started_at": "2026-09-23T15:35:00Z",
-  "last_slot_at": "2026-09-23T15:40:00Z",
-  "slots_completed": 1,
+  "last_slot_at": "2026-09-23T16:27:00Z",
+  "slots_completed": 2,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "4465fe2",
+  "last_commit": "6ea1e62",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    "Real Android device E2E — no physical handset in sandbox",
-    "Real screenshot / display capture — no display in sandbox",
-    "Live social/telephony provider dispatch — no provider credentials"
+    "Real Android device E2E \u2014 no physical handset in sandbox",
+    "Real screenshot / display capture \u2014 no display in sandbox",
+    "Live social/telephony provider dispatch \u2014 no provider credentials"
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
