@@ -3953,3 +3953,82 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - प्रोएक्टिव ब्रीफिंग अब ह्यूमन-अप्रूवल गेट की स्थिति असली फ़्लैग से पढ़कर बताती
   है, हार्डकोड नहीं; 3 नए टेस्ट पास, पूरा सूट 1132/1132, बिल्ड सफल।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35 (fired 00:35 IST 2026-09-24)
+Window date: 2026-09-24   Window slots completed so far: 8
+
+Completed:
+- #13 Zero-fake-success for all tools — stopped two live-looking voice meters
+  from moving on random numbers.
+  · App.tsx seeded volumeLevel from Math.floor(20 + Math.random() * 60) on a
+    100 ms interval when recognition started, so JarvisOrb's ring scaled and
+    pulsed as if it followed a microphone amplitude; no audio analyser exists in
+    that path. New src/utils/hardening/micInputTruth.ts returns a level only for
+    a finite measurement in 0..100 and 0 otherwise; the voice path now sets a
+    neutral level.
+  · ActiveCallHUD.tsx sized each of six Audio Waveform Bars from
+    Math.floor(Math.random() * 16 + 4) on every render. New
+    src/utils/hardening/callWaveform.ts supplies a fixed decorative profile with
+    a clamped index lookup; the HUD renders that.
+  · Evidence: src/tests/hardening/micInputTruth.test.ts (4 tests),
+    src/tests/hardening/callWaveform.test.ts (4 tests) — each carries a source
+    guard that the fabricated expression is gone and the honest call is present.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. taskTracker.ts:38 still
+  suffixes task IDs with Math.random() (an identifier, not a status claim).
+
+Remaining:
+- #13 PARTIAL (this sweep); items 1-7 Android and 25-29 social/telephony
+  provider work stay BLOCKED/NOT_AVAILABLE on hardware/credentials.
+
+Bugs Found:
+- The orb volume visualiser and the ActiveCallHUD level bars both animated from
+  Math.random(), presenting decorative motion as a live audio measurement.
+
+Bugs Fixed:
+- Both the above. Negative-validated: restoring
+  setVolumeLevel(Math.floor(20 + Math.random() * 60)) fails exactly 1 of 4
+  (1 failed | 3 passed), restored -> 4/4; restoring
+  Math.floor(Math.random() * 16 + 4) in the HUD fails exactly 1 of 4
+  (1 failed | 3 passed), restored -> 4/4.
+
+Tests:    Full npx vitest run — 86 files / 1140 tests passed (19.70 s). Targeted
+          2 files / 8 tests passed. Observed in this run.
+Lint:     npm run lint (tsc --noEmit) exit 0 — observed.
+Build:    npm run build exit 0, dist/server.cjs 843.2 kB (863457 bytes) — observed.
+E2E:      NOT RUN — no real-device harness and no display in this sandbox.
+Security: npm audit NOT RUN — no audit script in package.json. No secret read,
+          written, or committed this slot.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row),
+               docs/CHANGELOG.md (new Unreleased section).
+Branch:  feature/hermes-full-completion
+Commit:  ecd7e13 (HEAD); fixes 2dddb0a and ec2fa91
+Push:    succeeded — 42677cd..ec2fa91, ec2fa91..2dddb0a, 2dddb0a..ecd7e13 to
+         origin/feature/hermes-full-completion; state pushed 368db07..950b6df to
+         origin/automation/hermes-state.
+
+PR:         not created this slot (work slot; finalization slot opens/refreshes)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; the verified artifact is dist/server.cjs.
+
+Blocked:
+- Real Android device E2E — requires a physical handset (none in sandbox).
+- Real screenshot / display capture — requires a display (none in sandbox).
+- Live social / telephony provider dispatch — requires provider credentials.
+
+Human Approval Required:
+- None raised this slot.
+
+Next Slot:
+- #13 Zero-fake-success — continue the sweep on a fresh surface not yet audited.
+
+हिंदी सारांश (एक पंक्ति):
+- वॉइस ऑर्ब और कॉल-लेवल बार्स अब रैंडम नंबर से नहीं हिलते; 8 नए टेस्ट पास,
+  पूरा सूट 1140/1140, बिल्ड सफल; पुश हो गया।
