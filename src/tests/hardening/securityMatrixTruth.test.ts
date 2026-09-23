@@ -70,3 +70,19 @@ describe('the Telegram security audit reply derives its posture', () => {
     expect(serverFlat).toContain('posture.credentialLeakProtection');
   });
 });
+
+describe('the proactive briefing insights derive the approval posture', () => {
+  it('no longer hardcodes the approval enforcement claim in a briefing', () => {
+    expect(serverFlat).not.toContain('Human Approval Enforced');
+  });
+
+  it('no longer asserts a human-in-the-loop gate that may be off', () => {
+    expect(serverFlat).not.toContain('Human-in-the-loop gate active');
+  });
+
+  it('reports the observed approval posture in the briefing insights', () => {
+    expect(
+      serverFlat.includes('External-action approval: ${posture.humanApproval}'),
+    ).toBe(true);
+  });
+});

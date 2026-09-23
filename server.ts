@@ -1576,6 +1576,10 @@ function buildProactiveReports(): any[] {
   const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
   const publishedPosts = memoryState.socialPosts.filter((p) => p.status === 'published').length;
   const level = securityMatrixState.currentLevel;
+  // The approval gate is operator-flippable, so the briefing may only state what
+  // the matrix actually holds. The previous literals asserted the gate was on
+  // even when /api/security/update had turned it off.
+  const posture = securityMatrixPosture(securityMatrixState);
 
   return [
     {
@@ -1590,7 +1594,8 @@ function buildProactiveReports(): any[] {
         `Prepared Quotations: ${pendingQuotations}`,
         `Social Drafts Awaiting Approval: ${pendingPosts}`,
         `Host CPU: ${cpuText} • RAM: ${ramText}`,
-        `System Security Level: Level ${level} (Human Approval Enforced)`,
+        `System Security Level: Level ${level}`,
+        `External-action approval: ${posture.humanApproval}`,
         'Cloud node uptime: not probed by this server',
       ],
       systemHealth: {
@@ -1629,7 +1634,7 @@ function buildProactiveReports(): any[] {
       contentEn: `Sir, evening plan. ${publishedPosts} post(s) published, ${pendingPosts} draft(s) still behind the Level-4 approval gate. Reach and impression metrics are not collected by this server.`,
       contentHi: `सर, शाम की योजना। ${publishedPosts} पोस्ट प्रकाशित, ${pendingPosts} ड्राफ्ट लेवल-4 स्वीकृति गेट पर।`,
       keyInsights: [
-        'Human-in-the-loop gate active',
+        `External-action approval: ${posture.humanApproval}`,
         `Published posts: ${publishedPosts} • Awaiting approval: ${pendingPosts}`,
         'Reach/impression metrics: not collected',
       ],
