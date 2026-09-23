@@ -4,6 +4,31 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 22:16 IST (2026-09-23 16:46 UTC) — work slot 3: computer-operator completion summaries
+
+### Fixed
+- `computerOperatorEngine.ts` reported every successful Screen-Research run as
+  `All N step(s) executed and visually verified. System state nominal.`, even
+  when `ScreenObserver` served the built-in illustrative view whose pre/post
+  frames are both synthetic — so the step "verifications" compared fabricated
+  frames and still claimed a real screen was seen. The claim is now gated on
+  `ScreenObserver.isHostBacked()`: host-backed runs read `verified against the
+  host desktop`, illustrative runs are prefixed `SIMULATION_ONLY` and state the
+  run was not visually verified.
+- `resumeApprovedTask` awaited nothing from `executor.executeAction(...)` and
+  stamped `COMPLETED` / `Authorized action completed and verified` for any
+  approved action, including one the executor rejected. It now reads the result
+  and ends `FAILED` (with a `BLOCKED` event carrying the real error) when the
+  action did not succeed.
+- Backlog item #13 (`Zero-fake-success for all tools`) remains `PARTIAL`.
+
+### Tests
+- `src/tests/computerOperatorTaskStatus.test.ts` (6 tests): SIMULATION_ONLY
+  labelling, host-backed verification claim, failed approved action ending
+  `FAILED`, non-approved resume refused. Negative-validated — reverting the
+  resume guard fails 2 of 6. Gates on `2afb84b`: lint exit 0, vitest **81 files
+  / 1104 tests passed**, build exit 0 (`dist/server.cjs` 863007 bytes).
+
 ## [Unreleased] - 2026-09-23 21:53 IST (2026-09-23 16:23 UTC) — work slot 2: computer-operator interpretation card
 
 ### Fixed

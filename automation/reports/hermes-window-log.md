@@ -3578,3 +3578,66 @@ Deploy: NOT_CONFIGURED — no deployment target in this environment.
 Main merge: NOT MERGED — awaiting human approval.
 Item 13 stays `PARTIAL`: this is one more real fabrication closed, not proof the
 sweep across all tool surfaces is exhausted.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:16
+Window date: 2026-09-24   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools (slice: Computer Operator completion
+  summaries) — src/utils/computerOperator/computerOperatorEngine.ts +
+  screenObserver.ts; test src/tests/computerOperatorTaskStatus.test.ts
+  (6 tests passed); full suite 81 files / 1104 tests passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — still PARTIAL; more unmeasured-claim
+  surfaces remain across the tool inventory.
+
+Remaining:
+- #13 and the wider zero-fake-success sweep; other items blocked on
+  hardware/credentials (listed below).
+
+Bugs Found:
+- computerOperatorEngine.ts claimed "All N step(s) executed and visually
+  verified" even when the only frames came from the built-in illustrative
+  observer (both frames synthetic).
+- resumeApprovedTask did not await/read executeAction's result and stamped
+  COMPLETED / "completed and verified" for a rejected Level-4 action.
+
+Bugs Fixed:
+- Both above. Verification: src/tests/computerOperatorTaskStatus.test.ts 6/6;
+  negative-validated — reverting the resume guard fails 2 of 6
+  (expected 'COMPLETED' to be 'FAILED'); restored -> 6/6.
+
+Tests:    81 files / 1104 tests passed (npx vitest run, 18.91 s)
+Lint:     pass (npm run lint / tsc --noEmit, exit 0)
+Build:    pass (npm run build, exit 0; dist/server.cjs 863007 bytes)
+E2E:      NOT RUN — no real-device harness, no display in sandbox
+Security: npm audit NOT RUN (no audit script in package.json); .env git-ignored
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  2afb84b
+Push:    succeeded (6ea1e62..2afb84b -> origin/feature/hermes-full-completion)
+
+PR:         #4 (see repository)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            dist/server.cjs is the verified deployment unit available.
+
+Blocked:
+- Real Android device E2E — requires physical handset (none in sandbox)
+- Real screenshot / display capture — requires a display (none in sandbox)
+- Live social/telephony provider dispatch — requires provider credentials
+
+Human Approval Required:
+- Human review and merge of PR #4 to main.
+
+Next Slot:
+- Item 13, next unmeasured-claim surface in the tool inventory.
+
+हिंदी सारांश:
+- स्क्रीन-रिसर्च इंजन अब बिना होस्ट स्क्रीन के "सत्यापित" होने का दावा नहीं करता, और अस्वीकृत
+  Level-4 कार्य FAILED दर्ज होता है; टेस्ट 81 फ़ाइल / 1104 पास।
