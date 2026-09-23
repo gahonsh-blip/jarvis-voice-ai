@@ -564,7 +564,9 @@ export interface ProactiveReportItem {
   contentHi: string;
   keyInsights: string[];
   systemHealth: {
-    serverStatus: 'Nominal' | 'Warning' | 'Critical';
+    // 'NOT_MEASURED' is the honest default: the routines are built by the very
+    // process they would assess, so they carry no independent health verdict.
+    serverStatus: 'NOT_MEASURED' | 'Nominal' | 'Warning' | 'Critical';
     activeWebsitesMonitored: number;
     pendingTasksCount: number;
     socialPostsPublished: number;

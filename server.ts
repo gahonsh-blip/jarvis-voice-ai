@@ -81,6 +81,7 @@ import {
   describePublicIp,
 } from './src/utils/hardening/ociInstanceTruth';
 import { describeBillingCost } from './src/utils/hardening/billingEntitlementTruth';
+import { assessedServerStatus, describeServerHealthClaim } from './src/utils/hardening/serverHealthTruth';
 import {
   telegramHostClaim,
   telegramSeedMessages,
@@ -1609,9 +1610,10 @@ function buildProactiveReports(): any[] {
         `System Security Level: Level ${level}`,
         `External-action approval: ${posture.humanApproval}`,
         'Cloud node uptime: not probed by this server',
+        describeServerHealthClaim(assessedServerStatus()),
       ],
       systemHealth: {
-        serverStatus: 'Nominal' as const,
+        serverStatus: assessedServerStatus(),
         activeWebsitesMonitored: 0,
         pendingTasksCount: pendingQuotations + pendingPosts,
         socialPostsPublished: publishedPosts,
@@ -1629,9 +1631,10 @@ function buildProactiveReports(): any[] {
         'Website uptime: not measured (no site configured)',
         `Host CPU: ${cpuText} • RAM: ${ramText}`,
         'Security anomaly scan: not performed',
+        describeServerHealthClaim(assessedServerStatus()),
       ],
       systemHealth: {
-        serverStatus: 'Nominal' as const,
+        serverStatus: assessedServerStatus(),
         activeWebsitesMonitored: 0,
         pendingTasksCount: 0,
         socialPostsPublished: publishedPosts,
@@ -1649,9 +1652,10 @@ function buildProactiveReports(): any[] {
         `External-action approval: ${posture.humanApproval}`,
         `Published posts: ${publishedPosts} • Awaiting approval: ${pendingPosts}`,
         'Reach/impression metrics: not collected',
+        describeServerHealthClaim(assessedServerStatus()),
       ],
       systemHealth: {
-        serverStatus: 'Nominal' as const,
+        serverStatus: assessedServerStatus(),
         activeWebsitesMonitored: 0,
         pendingTasksCount: pendingPosts,
         socialPostsPublished: publishedPosts,
@@ -1669,9 +1673,10 @@ function buildProactiveReports(): any[] {
         'Total Commands Executed: ' + memoryState.stats.totalCommands,
         'Memory store: jarvis_memory.json (local write)',
         'Off-host backup: not configured',
+        describeServerHealthClaim(assessedServerStatus()),
       ],
       systemHealth: {
-        serverStatus: 'Nominal' as const,
+        serverStatus: assessedServerStatus(),
         activeWebsitesMonitored: 0,
         pendingTasksCount: 0,
         socialPostsPublished: publishedPosts,
