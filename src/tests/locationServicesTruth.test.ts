@@ -5,6 +5,7 @@ import {
   locationSourceLabel,
   accuracyDisplay,
   locationBriefing,
+  locationFixBadge,
   type CoordsSource,
 } from '../utils/locationService';
 
@@ -124,5 +125,34 @@ describe('App surfaces the real coordinate provenance to the dashboard snippet',
     const idx = src.indexOf('<DashboardMapSnippet');
     const snippet = src.slice(idx, src.indexOf('/>', idx));
     expect(snippet).toContain('source={userCoordsSource}');
+  });
+
+  it('passes the provenance down to HUDHeader for the GPS pill', () => {
+    const idx = src.indexOf('<HUDHeader');
+    const header = src.slice(idx, src.indexOf('/>', idx));
+    expect(header).toContain('locationSource={userCoordsSource}');
+  });
+});
+
+describe('HUDHeader GPS pill reports real provenance, never a fixed live claim', () => {
+  const src = read('HUDHeader.tsx');
+
+  it('never renders the hardcoded GEO-SERVICES claim', () => {
+    expect(src).not.toContain('GEO-SERVICES');
+  });
+
+  it('derives the pill from locationFixBadge(locationSource)', () => {
+    expect(src).toContain('locationFixBadge(locationSource)');
+    expect(src).toContain('type CoordsSource');
+  });
+
+  it('only the live provenance badge is marked live', () => {
+    expect(locationFixBadge('live')).toEqual({ label: 'LIVE GPS', live: true });
+    for (const source of ['cache', 'preset', 'manual', null] as (CoordsSource | null)[]) {
+      const badge = locationFixBadge(source);
+      expect(badge.live).toBe(false);
+      expect(badge.label).not.toBe('LIVE GPS');
+    }
+    expect(locationFixBadge(null).label).toBe('NO FIX');
   });
 });

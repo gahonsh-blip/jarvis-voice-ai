@@ -1616,6 +1616,7 @@ export default function App() {
         onOpenPermissionGateway={() => setActiveApp('permission_gateway')}
         onOpenMobileStatus={() => setActiveApp('mobile_personal_status')}
         onOpenLocation={() => setActiveApp('location')}
+        locationSource={userCoordsSource}
       />
 
       {/* Main Sci-Fi Dashboard */}

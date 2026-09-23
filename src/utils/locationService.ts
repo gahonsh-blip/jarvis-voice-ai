@@ -200,6 +200,26 @@ export function locationSourceLabel(source: CoordsSource | null): string {
 }
 
 /**
+ * Compact provenance badge for a status bar. `live` is the only value that may
+ * be presented as a device GPS link; every other provenance — including none at
+ * all — renders as a non-live label.
+ */
+export function locationFixBadge(source: CoordsSource | null): { label: string; live: boolean } {
+  switch (source) {
+    case 'live':
+      return { label: 'LIVE GPS', live: true };
+    case 'cache':
+      return { label: 'CACHED FIX', live: false };
+    case 'preset':
+      return { label: 'PRESET ONLY', live: false };
+    case 'manual':
+      return { label: 'MANUAL ENTRY', live: false };
+    default:
+      return { label: 'NO FIX', live: false };
+  }
+}
+
+/**
  * Accuracy figure to display. A preset, manual, or cached coordinate has no
  * measured GPS precision, so it must never render a fabricated ±Nm value.
  */

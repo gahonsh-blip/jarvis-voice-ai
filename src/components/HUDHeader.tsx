@@ -22,6 +22,7 @@ import {
   Navigation,
 } from 'lucide-react';
 import { getLanguageOption } from '../utils/languages';
+import { locationFixBadge, type CoordsSource } from '../utils/locationService';
 import {
   UNAVAILABLE_HUD_TELEMETRY,
   fetchHudTelemetry,
@@ -47,6 +48,8 @@ interface HUDHeaderProps {
   onOpenPermissionGateway: () => void;
   onOpenMobileStatus?: () => void;
   onOpenLocation?: () => void;
+  /** Real provenance of the coordinates shown by the location surface. */
+  locationSource?: CoordsSource | null;
 }
 
 export const HUDHeader: React.FC<HUDHeaderProps> = ({
@@ -67,6 +70,7 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   onOpenPermissionGateway,
   onOpenMobileStatus,
   onOpenLocation,
+  locationSource = null,
 }) => {
   const [time, setTime] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
@@ -78,6 +82,11 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   const [showKillModal, setShowKillModal] = useState<boolean>(false);
   const [killNotice, setKillNotice] = useState<string | null>(null);
   const [isOperatingKillSwitch, setIsOperatingKillSwitch] = useState<boolean>(false);
+
+  // The GPS pill used to be a fixed green label, asserting a device link the
+  // HUD never checked. Derive it from the real coordinate provenance instead;
+  // only a live fix may render as a live link.
+  const gpsFix = locationFixBadge(locationSource);
 
   const fetchEmergencyStatus = async () => {
     try {
@@ -337,11 +346,17 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
               <button
                 onClick={onOpenLocation}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-emerald-500/50 transition-colors"
-                title="Open Geolocation & Tactical Navigation Services"
+                title={
+                  gpsFix.live
+                    ? 'Live device GPS fix available.'
+                    : 'No live device GPS fix — opening the location surface shows the real provenance (cached, preset or manual).'
+                }
               >
-                <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                <Navigation className={`w-3.5 h-3.5 ${gpsFix.live ? 'text-emerald-400' : 'text-slate-500'}`} />
                 <span className="text-slate-400">GPS:</span>
-                <span className="text-emerald-400 font-semibold">GEO-SERVICES</span>
+                <span className={gpsFix.live ? 'text-emerald-400 font-semibold' : 'text-slate-500 font-semibold'}>
+                  {gpsFix.label}
+                </span>
               </button>
             )}
           </div>
