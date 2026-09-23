@@ -3494,3 +3494,39 @@ Next window:
 हिंदी सारांश:
 - अंतिम स्लॉट: कोई नया विकास नहीं; पूरा सत्यापन किया — लिंट क्लीन, 1093 टेस्ट पास, बिल्ड क्लीन; PR #4 मानव अनुमोदन की प्रतीक्षा में।
 
+
+---
+
+## Slot — 2026-09-23 21:06 IST (WORK slot 1 of the new 2026-09-23 window)
+
+Item #13 `Zero-fake-success for all tools` — **PARTIAL** (read-only audit slice).
+No code was changed; no test/lint/build was run, so none is claimed.
+
+Surfaces read this slot and the evidence that they are already honest:
+
+- `src/utils/androidBridgeEngine.ts` `connectDevice()` (~line 478): status is
+  `LIMITED_CAPABILITY` when `caps.isSimulation` is true, `PERMISSION_REQUIRED`
+  when neither notification nor call permission is GRANTED, `LIMITED_CAPABILITY`
+  when telecom dialer role is absent, `PARTIALLY_CONNECTED` when only one of the
+  two is held, and `CONNECTED` only otherwise. No simulated device can report
+  `CONNECTED`.
+- `src/utils/androidBridgeAdapter.ts`: `SimulatedAndroidBridgeAdapter` marks
+  `isSimulation = true`, prefixes every message `[SIMULATION_ONLY]`, and
+  `sendReply` returns `success:false` / `AUTHORIZATION_REQUIRED` without explicit
+  approval.
+- `server.ts` `/api/computer-operator/screenshot` and `/execute-action`: HTTP
+  status and `success` are derived from `receipt.outcome`, never unconditional.
+- `server_tools.ts` integrations audit: `EMAIL` and `ORACLE_CLOUD` are pinned to
+  `NOT_AVAILABLE` with inline comments explaining why presence of credentials is
+  not `REAL_WORKING`.
+- `server.ts` `/api/auth/linkedin/status`: returns `connected:false` with an
+  explanatory message when no connection exists.
+
+Still outstanding for #13 (carried to the next slot): `ComputerOperatorModal.tsx`
+(`mockWindow` / "Fake Window Title Bar"), `AutonomousToolsModal.tsx` liveness
+labels, and a site-by-site read of the many `success: true` returns in
+`server.ts`.
+
+Gates: Tests NOT RUN · Lint NOT RUN · Build NOT RUN · E2E NOT RUN · Security NOT RUN
+(slot was read-only; nothing to verify).
+Deploy: NOT_CONFIGURED. Main merge: NOT MERGED — awaiting human approval.
