@@ -2387,6 +2387,19 @@ fix.
 
 ## Known limitations
 
+- **Finalization slot, 2026-09-24 04:36 IST — nothing was advanced.** Slot 16 of
+  the 2026-09-24 window (the 04:35 IST fire) started no new development. It
+  re-verified the frozen tip `ba1cdb3` on `feature/hermes-full-completion`:
+  `npm run lint` (tsc --noEmit) exit 0; `npx vitest run` **91 files / 1189 tests
+  passed** (20.39 s); `npm run build` exit 0, artifact `dist/server.cjs` 866712
+  bytes. Security checks observed: `git check-ignore -v .env` resolves to
+  `.gitignore:4`; `git status --short` clean; no `.env`, `node_modules/` or
+  `dist/` tracked; the secret-pattern scan of `git diff origin/main` returns only
+  previously-documented synthetic test fixtures and `redactSecrets` pattern
+  documentation — it is a pattern scan, not a proof of absence of credentials.
+  E2E, `npm audit` and a live provider dispatch are **NOT RUN** for the same
+  reasons recorded below. `DEPLOYMENT: NOT_CONFIGURED`.
+
 - **Finalization slot, 2026-09-23 04:36 IST — nothing was advanced.** Slot 16
   (the 04:35 IST fire) started no new development. Its only contribution is a
   re-verification of the frozen tip `89e60cb` and the observed gate evidence
