@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { getLanguageOption } from '../utils/languages';
 import { locationFixBadge, type CoordsSource } from '../utils/locationService';
+import { syncStatusLabel, type SyncLiveness } from '../utils/syncTruth';
 import {
   UNAVAILABLE_HUD_TELEMETRY,
   fetchHudTelemetry,
@@ -33,7 +34,12 @@ import {
 interface HUDHeaderProps {
   userName?: string;
   geminiConnected: boolean;
-  isOnline?: boolean;
+  /**
+   * The sync pill's liveness. Derived by the caller from two observed facts —
+   * browser connectivity and whether the backend answered — so the pill can
+   * never print SYNCED on an unobserved backend.
+   */
+  syncLiveness?: SyncLiveness;
   language?: string;
   onOpenSettings: () => void;
   onOpenMemory: () => void;
@@ -55,7 +61,7 @@ interface HUDHeaderProps {
 export const HUDHeader: React.FC<HUDHeaderProps> = ({
   userName,
   geminiConnected,
-  isOnline = true,
+  syncLiveness = 'OFFLINE_READY',
   language = 'en-US',
   onOpenSettings,
   onOpenMemory,
@@ -258,15 +264,20 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono font-bold">
                   ₹0 Always Free
                 </span>
-                {isOnline ? (
+                {syncLiveness === 'SYNCED' ? (
                   <span className="hidden sm:inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
                     SYNCED
                   </span>
-                ) : (
+                ) : syncLiveness === 'OFFLINE_READY' ? (
                   <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-500/50 text-amber-300 font-mono font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                     OFFLINE READY
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-600/60 text-slate-300 font-mono font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    {syncStatusLabel(syncLiveness)}
                   </span>
                 )}
               </div>

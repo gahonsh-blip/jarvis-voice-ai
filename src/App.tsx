@@ -90,6 +90,7 @@ import {
   SpeechDiagnostics,
 } from './utils/speechTtsEngine';
 import { isSpeechInterruptionCommand } from './utils/languages';
+import { syncLiveness, syncStatusLabel, reconnectStatusText } from './utils/syncTruth';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
 import { androidBridgeEngine } from './utils/androidBridgeEngine';
@@ -110,6 +111,9 @@ export default function App() {
   const [statusText, setStatusText] = useState<string>('SYSTEM READY • OFFLINE-FIRST STORAGE ACTIVE');
   const [geminiConnected, setGeminiConnected] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  // The backend's reachability is a separate observation from the browser's
+  // network state; it stays null until a probe has actually answered.
+  const [serverReachable, setServerReachable] = useState<boolean | null>(null);
   const [notepadInitialContent, setNotepadInitialContent] = useState<string>('');
   const [browserSearchQuery, setBrowserSearchQuery] = useState<string>('');
   const [speechDiagnostics, setSpeechDiagnostics] = useState<SpeechDiagnostics | null>(null);
@@ -272,13 +276,38 @@ export default function App() {
     }
   }, []);
 
+  // Probing the backend is the only way to distinguish "network restored" from
+  // "backend reachable". A browser `online` event proves only the former.
+  const probeBackend = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/health');
+      if (!res.ok) {
+        setServerReachable(false);
+        return false;
+      }
+      const data = await res.json();
+      setServerReachable(true);
+      if (data?.geminiEnabled) setGeminiConnected(true);
+      return true;
+    } catch {
+      setServerReachable(false);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
-    const handleOnline = () => {
+    const handleOnline = async () => {
       setIsOnline(true);
+      const reachable = await probeBackend();
+      if (!reachable) {
+        // Regaining a network path is not evidence the backend is back.
+        setStatusText(reconnectStatusText(false));
+        return;
+      }
       // Only show the syncing state when there is actually something to flush;
       // otherwise the label would sit on "SYNCING" with nothing in flight.
       if (getPendingSyncQueue().length === 0) {
-        setStatusText('BACKEND RECONNECTED');
+        setStatusText(reconnectStatusText(true));
         return;
       }
       setStatusText('BACKEND RECONNECTED • SYNCING MEMORY');
@@ -286,6 +315,7 @@ export default function App() {
     };
     const handleOffline = () => {
       setIsOnline(false);
+      setServerReachable(false);
       setStatusText('OFFLINE MODE ACTIVE • LOCAL PERSISTENCE RUNNING');
     };
 
@@ -296,7 +326,7 @@ export default function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [flushPendingSyncQueue]);
+  }, [flushPendingSyncQueue, probeBackend]);
 
   // Initialize Voices with Android Chrome resilience and asynchronous voiceschanged event listener
   useEffect(() => {
@@ -396,15 +426,18 @@ export default function App() {
         }, 0);
       })
       .catch((err) => {
+        setServerReachable(false);
         console.warn('[OfflineStorage] Server fetch failed, running seamlessly from local offline memory:', err);
       });
 
     fetch('/api/health')
       .then((res) => res.json())
       .then((data) => {
+        setServerReachable(true);
         if (data.geminiEnabled) setGeminiConnected(true);
       })
       .catch(() => {
+        setServerReachable(false);
         setGeminiConnected(false);
       });
   }, [flushPendingSyncQueue]);
@@ -1601,7 +1634,7 @@ export default function App() {
       <HUDHeader
         userName={memory.name}
         geminiConnected={geminiConnected}
-        isOnline={isOnline}
+        syncLiveness={syncLiveness({ browserOnline: isOnline, serverReachable })}
         language={voiceSettings.language}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenMemory={() => setActiveApp('memory')}
