@@ -31,6 +31,7 @@ import {
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
 import { resolveDisplayNumber, shouldMaskParty } from '../utils/telephonyPrivacyDisplay';
+import { callWaveformBars, callWaveformBarHeight } from '../utils/hardening/callWaveform';
 
 interface ActiveCallHUDProps {
   activeCall: CallRecord | null;
@@ -313,16 +314,16 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
           </div>
         </div>
 
-        {/* Audio Waveform Bars Simulation */}
+        {/* Decorative level bars — a fixed profile, not a live measurement */}
         <div className="flex items-center gap-1 h-5 px-2 py-1 rounded-md bg-slate-950 border border-slate-800">
-          {[...Array(6)].map((_, i) => (
+          {callWaveformBars.map((_, i) => (
             <div
               key={i}
               className={`w-1 rounded-full bg-cyan-400 transition-all duration-150 ${
                 isOnHold ? 'h-1 opacity-40' : 'animate-pulse'
               }`}
               style={{
-                height: isOnHold ? '4px' : `${Math.floor(Math.random() * 16 + 4)}px`,
+                height: isOnHold ? '4px' : `${callWaveformBarHeight(i)}px`,
                 animationDelay: `${i * 120}ms`,
               }}
             />
