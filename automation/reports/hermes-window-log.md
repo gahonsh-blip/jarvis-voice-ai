@@ -3530,3 +3530,51 @@ labels, and a site-by-site read of the many `success: true` returns in
 Gates: Tests NOT RUN · Lint NOT RUN · Build NOT RUN · E2E NOT RUN · Security NOT RUN
 (slot was read-only; nothing to verify).
 Deploy: NOT_CONFIGURED. Main merge: NOT MERGED — awaiting human approval.
+
+## Slot — 2026-09-23 21:35 IST (WORK SLOT 2 of the new 2026-09-24 window)
+
+Slot type: WORK. IST time at fire: 21:35 (observed `TZ=Asia/Kolkata date` =
+21:36:31 IST). Window date 2026-09-24; `slots_completed` before this run: 1
+(state branch: `window_date: 2026-09-24`, `finalized: false`).
+
+Item advanced: **#13 Zero-fake-success for all tools** — the Computer Operator
+modal's `SEMANTIC SCREEN INTERPRETATION` card.
+
+### Bug found
+`src/components/ComputerOperatorModal.tsx` rendered
+`ScreenInterpreter.interpret(currentObservation).summary` unconditionally.
+`ScreenInterpreter.interpret` (src/utils/computerOperator/screenInterpreter.ts:86)
+always emits a confident `Screen showing "<activeApplication>" (<windowTitle>).
+N interactive UI elements detected. ...` summary. Prior slots had gated the
+panel's status dot, resolution badge and platform field behind the
+`observationTruth` helpers, but this body was missed — so an illustrative
+built-in preview, or a host that could not be observed at all, still narrated a
+live screen reading.
+
+### Fix
+- New `observationInterpretationNotice(observation, isPreview)` in
+  `src/utils/computerOperator/observationTruth.ts`, built on the existing
+  `screenSyncState`: returns a withholding notice for `ILLUSTRATIVE` and
+  `UNOBSERVED`, and `null` only for a real (`OBSERVED`) host observation.
+- `ComputerOperatorModal.tsx` imports it, computes `interpretationNotice`, and
+  renders it ahead of the summary (`interpretationNotice ?? (...)`), dimmed and
+  italic so a withheld interpretation is visually distinct.
+
+### Verification (observed this run)
+- Targeted: `npx vitest run src/tests/observationTruth.test.ts` -> 1 file / 24
+  tests passed (175 ms). 5 new assertions added (4 helper behaviour + 1 source
+  guard that the modal still gates on `interpretationNotice ??`).
+- Negative validation: with the modal guard reverted, the source guard fails
+  (observed 1 failed | 23 passed); restored -> 24/24.
+- `npm run lint` (`tsc --noEmit`) -> exit 0.
+- Full `npx vitest run` -> 80 files / 1098 tests passed (20.60 s).
+- `npm run build` -> exit 0 (`dist/server.cjs` built; done in 49 ms).
+- Push: `4465fe2..3d3a7f7` to `feature/hermes-full-completion`, succeeded.
+
+Bugs found this slot: 1. Bugs fixed and verified: 1.
+E2E: NOT RUN — no real-device harness and no physical Android handset here.
+Security: no secret touched; change is UI/helper only, no permission gate changed.
+Deploy: NOT_CONFIGURED — no deployment target in this environment.
+Main merge: NOT MERGED — awaiting human approval.
+Item 13 stays `PARTIAL`: this is one more real fabrication closed, not proof the
+sweep across all tool surfaces is exhausted.

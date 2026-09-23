@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-23 21:53 IST (2026-09-23 16:23 UTC) — work slot 2: computer-operator interpretation card
+
+### Fixed
+- `ComputerOperatorModal.tsx`'s `SEMANTIC SCREEN INTERPRETATION` card rendered
+  `ScreenInterpreter.interpret(...).summary` unconditionally. `ScreenInterpreter`
+  always emits a confident `Screen showing "<app>" ...` summary, so an
+  illustrative preview or an unreachable host still narrated a live screen.
+  Added `observationInterpretationNotice()` in
+  `src/utils/computerOperator/observationTruth.ts` (on `screenSyncState`) and the
+  modal now renders it ahead of the summary.
+- Backlog item #13 (`Zero-fake-success for all tools`) remains `PARTIAL`.
+- Guarded by 5 new assertions in `src/tests/observationTruth.test.ts`;
+  negative-validated. Gates on `3d3a7f7`: lint exit 0, vitest **80 files / 1098
+  tests passed**, build exit 0.
+
 ## [Unreleased] - 2026-09-23 04:36 IST (2026-09-22 23:07 UTC) — finalization: window verified, no new development
 
 ### Verification only (no code change)
