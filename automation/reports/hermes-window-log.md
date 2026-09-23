@@ -3641,3 +3641,78 @@ Next Slot:
 हिंदी सारांश:
 - स्क्रीन-रिसर्च इंजन अब बिना होस्ट स्क्रीन के "सत्यापित" होने का दावा नहीं करता, और अस्वीकृत
   Level-4 कार्य FAILED दर्ज होता है; टेस्ट 81 फ़ाइल / 1104 पास।
+
+---
+
+## Slot 4 — 2026-09-24 22:35 IST (2026-09-23 17:15 UTC) — WORK
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:35
+Window date: 2026-09-24   Window slots completed so far: 4
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL) — HUD GPS provenance.
+  `src/components/HUDHeader.tsx` rendered a hardcoded green `GPS: GEO-SERVICES`
+  pill in every state (no fix / cache / simulated preset / manual entry),
+  asserting a device GPS link the HUD never checked, while every other location
+  surface already tracked provenance. Added `locationFixBadge()` to
+  `src/utils/locationService.ts` (only `live` marks live; `null` -> `NO FIX`);
+  the pill derives from it and is grey for anything but a live fix; `src/App.tsx`
+  forwards `locationSource={userCoordsSource}`. Evidence:
+  `src/tests/locationServicesTruth.test.ts` now 16 tests, all passing.
+
+In Progress:
+- #13 Zero-fake-success for all tools — more unmeasured-claim surfaces remain
+  across the tool inventory; item stays PARTIAL.
+
+Remaining:
+- #1 Real Android Mobile Bridge E2E, real screenshot, computer operator on a real
+  host, live social/telephony dispatch — BLOCKED on hardware/credentials.
+- Voice / wake word / production hardening — not yet reached this window.
+
+Bugs Found:
+- `HUDHeader.tsx` fabricated a live GPS link: hardcoded `GPS: GEO-SERVICES`
+  green pill for any state, including no-fix. Found by auditing HUD status
+  surfaces against the existing `CoordsSource` provenance model.
+
+Bugs Fixed:
+- Replaced the hardcoded pill with `locationFixBadge(locationSource)`. Verified
+  by `src/tests/locationServicesTruth.test.ts` (16/16). Negative-validated:
+  re-introducing the literal `GEO-SERVICES` fails 1 of 16 (observed
+  `1 failed | 15 passed`); restored -> 16/16.
+
+Tests:    16 passed (targeted, locationServicesTruth.test.ts); full suite 81
+          files / 1108 tests passed (20.30 s)
+Lint:     `tsc --noEmit` exit 0
+Build:    exit 0, dist/server.cjs 842.8 kB
+E2E:      NOT RUN — no real-device harness and no display in this sandbox
+Security: `npm audit` NOT RUN (no audit script in package.json)
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  144a995 (fix), 1381111 (docs)
+Push:    succeeded — 0fe4c38..144a995, then 1381111, to
+         origin/feature/hermes-full-completion
+
+PR:         NONE this slot (work slot; not the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this sandbox; the verified artifact is the deployment unit
+
+Blocked:
+- Real Android device E2E — requires a physical handset (no device in sandbox)
+- Real screenshot / display capture — requires a display (none in sandbox)
+- Live social / telephony provider dispatch — requires provider credentials
+
+Human Approval Required:
+- None for this slot's change. Merge of the PR to `main` still awaits human
+  review at the finalization slot.
+
+Next Slot:
+- Continue item 13: audit the next unmeasured-claim surface in the tool
+  inventory (candidate: remaining status badges that render a fixed
+  live/ready state without reading observed state).
+
+हिंदी सारांश (एक पंक्ति):
+- HUD के GPS पिल से नकली "GEO-SERVICES" हटाया — अब यह असली लोकेशन provenance
+  दिखाता है; 16 टेस्ट पास, लिंट और बिल्ड हरे, सबूत के साथ पुश किया गया।
