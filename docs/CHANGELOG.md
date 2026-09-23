@@ -4,6 +4,33 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 01:35 IST (2026-09-23 20:05 UTC) — work slot 10: Oracle Always Free cost claim
+
+### Fixed
+- The Telegram `cloud_telemetry` reply printed a fixed
+  `• *Cost*: ₹0 / Always Free Guaranteed` directly beneath live CPU/RAM
+  readings, and `/api/blueprint/report` printed
+  `₹0.00 / Always Free (Strict Zero-Cost Guarantee)` — for every process.
+  Nothing in this server calls the OCI billing/entitlement API, and the Oracle
+  Cloud modal already labels that same fact `NOT_PROBED`, so a "Guaranteed"
+  price sitting next to live telemetry read as an observation. New
+  `src/utils/hardening/billingEntitlementTruth.ts` (`describeBillingCost`,
+  `describeDeclaredCost`) reports a figure only for an observed `FREE`/`BILLED`
+  entitlement and otherwise names the missing probe;
+  `oracleCloudState.billingEntitlement` is seeded `null` (never `'FREE'`). The
+  Telegram reply, the report header and the Phase 1 blueprint row now state the
+  declared plan and the absent observation.
+- Backlog item #13 (`Zero-fake-success for all tools`) remains `PARTIAL`.
+
+### Tests
+- New `src/tests/hardening/billingEntitlementTruth.test.ts` (9 tests): the
+  tri-state helper plus source guards pinning the removed literals and the
+  derived `describeBillingCost` call. Negative-validated — restoring the
+  hardcoded reply fails exactly the matching guard (`1 failed | 8 passed`),
+  restored → 9/9.
+
+---
+
 ## [Unreleased] - 2026-09-24 00:49 IST (2026-09-23 19:19 UTC) — work slot 8: voice visualiser & call level bars
 
 ### Fixed
