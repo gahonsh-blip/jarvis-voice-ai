@@ -4201,3 +4201,82 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - HUD हेडर और Oracle पैनल के बिना-जाँचे '₹0 फ्री' बैज अब घोषित-योजना बताते हैं,
   ₹0 केवल असली billing अवलोकन के बाद दिखता है (25 टेस्ट पास, lint/build ग्रीन)।
+
+---
+
+ HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+ Slot:        WORK  |  IST time: 03:35
+ Window date: 2026-09-24   Window slots completed so far: 14
+ 
+ Completed:
+ - #13 Zero-fake-success for all tools — the Telegram "View Freelance Leads"
+   (`cmd_view_leads`) reply now renders the stored pipeline instead of two fixed
+   sample rows. Evidence: `src/utils/freelanceLeadTruth.ts` (new pure
+   `freelanceLeadsReply`); `server.ts:3364` calls
+   `freelanceLeadsReply(memoryState.freelanceLeads)`;
+   `src/tests/freelanceLeadTruth.test.ts` 5 passed.
+ 
+ In Progress:
+ - #13 Zero-fake-success for all tools — remains `PARTIAL`. This slot fixed the
+   Telegram lead listing; other unmeasured-claim surfaces remain (next:
+   `ActiveCallHUD`'s decorative `callWaveformBars`, and the remaining always-on
+   status chips).
+ 
+ Remaining:
+ - #1 Android Bridge, real Android E2E, real screenshot, Computer Operator,
+   GitHub Automation, Social Automation, Communication, AI/Memory, Autonomous
+   Tasks, Voice, Wake Word, Production Hardening — see
+   `docs/COMPLETION_STATUS.md` for per-item status. Hardware/credential-bound
+   items stay `BLOCKED`.
+ 
+ Bugs Found:
+ - Telegram `cmd_view_leads` fabricated its lead listing: header interpolated
+   `memoryState.freelanceLeads.length`, but the body was a hardcoded pair
+   ("Aarav Tech Solutions — INR 65,000 (Quotation Sent)" / "Global Horizon
+   Exports — INR 85,000 (AI Requirements Extracted)"). Renaming, deleting or
+   adding a lead changed only the count, so the reply named records that need not
+   exist and hid the ones that did. Found by grepping the Telegram callback
+   handler for string-interpolated status text while sweeping item 13.
+ 
+ Bugs Fixed:
+ - The listing is now built from `memoryState.freelanceLeads`, states an empty
+   pipeline plainly, and escapes Telegram markdown in client-supplied names.
+   Negative-validated: reverting the helper call to the count-only line fails the
+   source guard (observed `1 failed | 4 passed`); helper restored → `5 passed`.
+ 
+ Tests:    91 files / 1186 tests passed (full `npx vitest run`, 19.53 s);
+           targeted `src/tests/freelanceLeadTruth.test.ts` 1 file / 5 passed
+ Lint:     passed — `npm run lint` (`tsc --noEmit`), exit 0
+ Build:    passed — `npm run build`, exit 0, artifact `dist/server.cjs` 866008 bytes
+ E2E:      NOT RUN — no handset in the sandbox
+ Security: NOT RUN as an audit — no `.env` staged, no token/key in the diff; the
+           change only reshapes an in-memory reply and adds no I/O
+ 
+ Documentation: `docs/COMPLETION_STATUS.md`, `docs/CHANGELOG.md`
+ Branch:  feature/hermes-full-completion
+ Commit:  f2e9c9e (fix 8b6cc6e)
+ Push:    succeeded — 75c2116..8b6cc6e and 8b6cc6e..f2e9c9e to origin
+ 
+ PR:         NONE (not opened this work slot)
+ Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+ Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+             in this environment
+ 
+ Blocked:
+ - real Android device E2E — requires a handset
+ - real screenshot / display capture — requires a display
+ - live social / telephony provider dispatch — requires credentials
+ - live bridge pairing — MOBILE_BRIDGE_PAIRING_SECRET not provisioned
+ 
+ Human Approval Required:
+ - none this slot
+ 
+ Next Slot:
+ - #13 sweep continues: fix `ActiveCallHUD`'s decorative `callWaveformBars`
+   (fixed profile presented as a live audio measurement), then the remaining
+   always-on status chips. Slot 15 (04:05 IST) is a work slot; slot 16 (04:35)
+   is finalization.
+ 
+ हिंदी सारांश (एक पंक्ति):
+ - Telegram का "View Freelance Leads" जवाब अब असली लीड रिकॉर्ड से बनता है, दो
+   नकली नमूना पंक्तियाँ हटा दी गईं (5 टेस्ट पास, lint/पूरी सूट/build ग्रीन)।
