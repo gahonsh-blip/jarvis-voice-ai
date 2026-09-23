@@ -10,6 +10,10 @@
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [],
+  "blocked_items": [
+    "Real Android device E2E — no physical handset in sandbox",
+    "Real screenshot / display capture — no display in sandbox",
+    "Live social/telephony provider dispatch — no provider credentials"
+  ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
