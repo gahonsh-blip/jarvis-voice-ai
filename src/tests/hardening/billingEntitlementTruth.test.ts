@@ -4,6 +4,7 @@ import path from 'path';
 import {
   describeBillingCost,
   describeDeclaredCost,
+  declaredCostCell,
   billingBadgeLabel,
   parseBillingEntitlement,
 } from '../../utils/hardening/billingEntitlementTruth';
@@ -58,6 +59,26 @@ describe('the blueprint surfaces do not assert a zero-cost guarantee', () => {
 
   it('the phase row labels the Always Free figure as a declared plan', () => {
     expect(serverFlat).not.toContain("cost: '₹0 Always Free Guaranteed'");
+  });
+
+  it('the cost table total is not a fixed ₹0.00 / Forever Free claim', () => {
+    expect(serverFlat).not.toContain('₹0.00 / Forever Free');
+    expect(serverFlat).not.toContain('Strict Zero-Cost Blueprint');
+  });
+
+  it('every cost-table row and the total derive from the declared-cost helpers', () => {
+    // 7 component rows call declaredCostCell; the total uses describeDeclaredCost.
+    expect(serverFlat.match(/declaredCostCell\('₹0'\)/g)?.length ?? 0).toBe(7);
+    expect(serverFlat).toContain("describeDeclaredCost('₹0', oracleCloudState.billingEntitlement)");
+  });
+});
+
+describe('declaredCostCell marks every table figure as an unobserved plan', () => {
+  it('never emits a bare ₹0 guarantee', () => {
+    const cell = declaredCostCell('₹0');
+    expect(cell).toContain('declared plan');
+    expect(cell).toContain('no billing API queried');
+    expect(cell).not.toMatch(/^₹0$/);
   });
 });
 

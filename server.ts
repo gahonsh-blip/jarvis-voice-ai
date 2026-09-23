@@ -81,7 +81,7 @@ import {
   describeRunState,
   describePublicIp,
 } from './src/utils/hardening/ociInstanceTruth';
-import { describeBillingCost } from './src/utils/hardening/billingEntitlementTruth';
+import { describeBillingCost, describeDeclaredCost, declaredCostCell } from './src/utils/hardening/billingEntitlementTruth';
 import { assessedServerStatus, describeServerHealthClaim } from './src/utils/hardening/serverHealthTruth';
 import {
   telegramHostClaim,
@@ -4001,18 +4001,22 @@ ${p.deliverables.map((d) => `- [${d.done ? 'x' : ' '}] ${d.text}`).join('\n')}
 
 ---
 
-## 💰 4. Strict Zero-Cost Blueprint (लागत विश्लेषण)
+## 💰 4. Declared Zero-Cost Blueprint (लागत विश्लेषण)
+
+Every figure below is the **declared plan**, not a billing observation: this
+process queries no provider billing or entitlement API, so it cannot confirm that
+a component is actually free.
 
 | Component | Target Solution | Monthly Cost |
 | :--- | :--- | :--- |
-| **Cloud Computing** | Oracle Cloud Always Free ARM Ampere A1 (4 OCPU, 24 GB) | **₹0.00** |
-| **Mobile Gateway** | Telegram Bot API (@HermesJarvisBot) | **₹0.00** |
-| **Agent Framework** | Hermes Autonomous Open-Source Agent | **₹0.00** |
-| **AI Brain** | Gemini 2.5/3.7 Flash + Smart Heuristic Fallback | **₹0.00** |
-| **Web Panel UI** | Single-page Responsive React + Tailwind Dashboard | **₹0.00** |
-| **Freelance CRM** | Integrated Quotation & Requirement Engine | **₹0.00** |
-| **Scheduler** | Server-side Crontab / NodeJS Timer Engine | **₹0.00** |
-| **Total** | **All Subsystems** | **₹0.00 / Forever Free** |
+| **Cloud Computing** | Oracle Cloud Always Free ARM Ampere A1 (4 OCPU, 24 GB) | ${declaredCostCell('₹0')} |
+| **Mobile Gateway** | Telegram Bot API (@HermesJarvisBot) | ${declaredCostCell('₹0')} |
+| **Agent Framework** | Hermes Autonomous Open-Source Agent | ${declaredCostCell('₹0')} |
+| **AI Brain** | Gemini 2.5/3.7 Flash + Smart Heuristic Fallback | ${declaredCostCell('₹0')} |
+| **Web Panel UI** | Single-page Responsive React + Tailwind Dashboard | ${declaredCostCell('₹0')} |
+| **Freelance CRM** | Integrated Quotation & Requirement Engine | ${declaredCostCell('₹0')} |
+| **Scheduler** | Server-side Crontab / NodeJS Timer Engine | ${declaredCostCell('₹0')} |
+| **Total** | **All Subsystems** | **${describeDeclaredCost('₹0', oracleCloudState.billingEntitlement)}** |
 
 ---
 *Report generated and validated by HERMES JARVIS Core.*

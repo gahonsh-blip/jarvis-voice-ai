@@ -55,6 +55,18 @@ export function billingBadgeLabel(entitlement: BillingEntitlement | null | undef
 }
 
 /**
+ * Cost cell for the blueprint's declared-cost table. Every row names a
+ * *declared plan*: this process queries no billing API for any of them, so a
+ * bare `₹0.00` cell (or a `₹0.00 / Forever Free` total) is an unobserved
+ * guarantee. The header of the same report was already corrected to
+ * `describeBillingCost`, but the table beneath it still printed the fixed
+ * figures, so the report contradicted itself.
+ */
+export function declaredCostCell(declaredLabel: string): string {
+  return `${declaredLabel} — declared plan, no billing API queried`;
+}
+
+/**
  * Read the entitlement out of an `/api/oracle-cloud` payload. Any value other
  * than an explicit `FREE`/`BILLED` observation is treated as unobserved (null),
  * so a malformed or absent field can never be upgraded to a claim.
