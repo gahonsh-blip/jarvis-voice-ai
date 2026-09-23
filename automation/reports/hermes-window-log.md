@@ -4062,3 +4062,74 @@ Fixed: new `src/utils/hardening/telegramHostClaim.ts` (`telegramHostClaim`, `tel
 Evidence: `src/tests/hardening/telegramHostClaim.test.ts` (8 tests) - both host claims, the single-notice seed, and source guards pinning the removed literals (`HERMES JARVIS MOBILE GATEWAY ONLINE`, `PROJECT AUDIT REPORT`, `Connected to your Oracle Always Free ARM VM (24/7 Daemon Active)`) plus the derived wiring. Negative-validated: restoring both fabrications fails exactly the four matching guards (`4 failed | 4 passed`), restored to 8/8.
 
 Tests: lint (`tsc --noEmit`) exit 0; targeted `telegramHostClaim` 1 file / 8 tests; full vitest **89 files / 1165 tests passed** (19.98 s); build exit 0, `dist/server.cjs` 864689 bytes (844.4 kB). E2E NOT RUN (no handset/display). Audit NOT RUN (no script). Push `b4766a1..97c1c23` then `97c1c23..ec82472`. Item 13 stays `PARTIAL` (more unmeasured-claim surfaces remain). No PR this slot. Main: NOT MERGED.
+
+
+---
+
+## Slot 12 — WORK — 2026-09-24 02:35 IST
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:35
+Window date: 2026-09-24 (IST)   Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools — proactive routines' server-status
+  verdict. `buildProactiveReports()` in server.ts set
+  `systemHealth.serverStatus = 'Nominal'` as a literal in all four routines;
+  nothing measured it. New src/utils/hardening/serverHealthTruth.ts returns
+  NOT_MEASURED by default; all four routines now call assessedServerStatus()
+  and carry the matching note. src/types.ts widened with NOT_MEASURED.
+  Evidence: src/tests/hardening/serverHealthTruth.test.ts (1 file / 7 tests
+  passed). Negative-validated: restoring one literal -> 2 of 7 fail; restored ->
+  7/7. Item stays PARTIAL (sweep continues).
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. Unmeasured-claim
+  surfaces remain (random/mock waveform and mic input, ActiveCallHUD).
+
+Remaining:
+- #1 Real Android Mobile Bridge connection — PARTIAL (needs paired handset).
+- #2 Android -> JARVIS -> Server real E2E — PARTIAL (needs paired handset).
+- Other items previously VERIFIED or blocked on hardware/credentials.
+
+Bugs Found:
+- Four scheduled routine reports asserted server health ('Nominal') with no
+  measurement, while the same blocks honestly mark CPU/RAM NOT_MEASURED.
+  Found by source sweep of buildProactiveReports() during the item-13 sweep.
+
+Bugs Fixed:
+- Replaced the literal with assessedServerStatus() (NOT_MEASURED) and the
+  matching note. Verified by the 7-test suite and by negative validation
+  (reverting one literal fails 2 tests; restored passes 7/7).
+
+Tests:    1172 passed / 1172 (90 files) — npx vitest run, exit 0
+Lint:     exit 0 — npm run lint (tsc --noEmit)
+Build:    exit 0 — npm run build; artifact dist/server.cjs 865583 bytes
+E2E:      NOT RUN — no handset/display in this sandbox
+Security: no .env staged, no token/key in diff, no node_modules/dist committed;
+          permission gateway untouched. git status --short reviewed.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  b7176fd (fix commit 0696f8b)
+Push:    succeeded — ce1cd2b..0696f8b then 0696f8b..b7176fd to origin
+
+PR:         existing PR to main (feature/hermes-full-completion); not refreshed this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; dist/server.cjs is the verified artifact.
+
+Blocked:
+- #1, #2 — require a paired Android handset and a real device/network path.
+- Any credential-dependent integration call — requires credentials not present.
+
+Human Approval Required:
+- Merge of feature/hermes-full-completion to main (owner reads final report).
+
+Next Slot:
+- Continue item 13: sweep mock/random waveform and mic-input presentation paths
+  and ActiveCallHUD for remaining unmeasured-claim surfaces.
+
+हिंदी सारांश (एक पंक्ति):
+- चारों प्रोएक्टिव रूटीन अब बिना मापे 'Nominal' सर्वर स्थिति का दावा नहीं करते;
+  अब ईमानदारी से NOT_MEASURED रिपोर्ट करते हैं (7 टेस्ट पास, lint/build ग्रीन)।
