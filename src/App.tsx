@@ -91,6 +91,7 @@ import {
 } from './utils/speechTtsEngine';
 import { isSpeechInterruptionCommand } from './utils/languages';
 import { syncLiveness, syncStatusLabel, reconnectStatusText } from './utils/syncTruth';
+import { micInputLevel } from './utils/hardening/micInputTruth';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
 import { androidBridgeEngine } from './utils/androidBridgeEngine';
@@ -1454,13 +1455,10 @@ export default function App() {
       recognitionRef.current = recognition;
       recognition.start();
 
-      // Visualiser pulse. This is decoration only — it is not a measurement of
-      // real input level, so it must never be presented as audio evidence.
-      const simPulse = setInterval(() => {
-        setVolumeLevel(Math.floor(20 + Math.random() * 60));
-      }, 100);
-
-      setTimeout(() => clearInterval(simPulse), 5000);
+      // No audio analyser is wired into this path, so there is no measured
+      // input level to render. The orb's ring stays neutral rather than
+      // pulsing from a random number that would read as live audio.
+      setVolumeLevel(micInputLevel(null));
     } catch (err) {
       console.warn('Recognition start failed:', err);
       setIsListening(false);
