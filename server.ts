@@ -80,6 +80,7 @@ import {
   describeRunState,
   describePublicIp,
 } from './src/utils/hardening/ociInstanceTruth';
+import { aiEngineProviderLabel, aiEngineModelName } from './src/utils/hardening/aiEngineTruth';
 import {
   buildDeliveryReceipt,
   classifyTelegramError,
@@ -3817,13 +3818,19 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
       lastHeartbeat: telegramConfig.lastActivity,
       errorMessage: telegramConfig.errorMessage,
     },
-    aiEngine: {
-      provider: process.env.GEMINI_API_KEY ? 'Google Gemini 2.5 Flash' : 'Bilingual Heuristic Engine (Offline-Safe)',
-      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
-      model: 'gemini-2.5-flash',
-      fallbackActive: !process.env.GEMINI_API_KEY,
-      bilingualSupport: true,
-    },
+    aiEngine: (() => {
+      // The provider/model describe the engine that will answer, not a
+      // hardcoded aspirational one: with no API key the offline heuristic
+      // engine serves every request and no model name is reported.
+      const geminiConfigured = Boolean(process.env.GEMINI_API_KEY);
+      return {
+        provider: aiEngineProviderLabel(geminiConfigured),
+        geminiConfigured,
+        model: aiEngineModelName(geminiConfigured),
+        fallbackActive: !geminiConfigured,
+        bilingualSupport: true,
+      };
+    })(),
     scheduler: {
       active: true,
       activeJobsCount: 4,

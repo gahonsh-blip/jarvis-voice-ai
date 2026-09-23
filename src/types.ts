@@ -644,7 +644,8 @@ export interface DaemonTelemetry {
   aiEngine: {
     provider: string;
     geminiConfigured: boolean;
-    model: string;
+    /** The cloud model that will answer, or null when the offline engine is in use. */
+    model: string | null;
     fallbackActive: boolean;
     bilingualSupport: boolean;
   };
