@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 04:37 IST (2026-09-24 23:07 UTC) — finalization slot: window re-verified, PR refreshed, nothing merged
+
+### Verified (no code change)
+- The frozen tip `3e6049a` of `feature/hermes-full-completion` was re-verified
+  end to end: `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run`
+  **98 files / 1285 tests passed** (20.46 s); `npm run build` exit 0, artifact
+  `dist/server.cjs` 871612 bytes.
+- Security: `git check-ignore -v .env` → `.gitignore:4`; `git status --short`
+  clean; no `.env`, `node_modules/` or `dist/` tracked; the branch-diff
+  secret-pattern scan returns only previously-documented synthetic fixtures and
+  `redactSecrets` pattern documentation.
+- PR #4 (→ `main`) is open, non-draft, `mergeable_state: clean`. **Not merged** —
+  the merge awaits human approval, which is the standing project rule.
+
+---
+
 ## [Unreleased] - 2026-09-25 04:15 IST (2026-09-24 22:45 UTC) — work slot 13: social draft staging stops logging unperformed work as verified
 
 ### Fixed
