@@ -4,6 +4,30 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 21:06 IST (2026-09-24 15:36 UTC) — work slot 1: process uptime is no longer labelled as VM uptime
+
+### Fixed
+- The Telegram reply headed `ORACLE CLOUD ARM VM STATUS` rendered
+  `Uptime: Nh` from `oracleCloudState.uptimeHours`, which is
+  `Date.now() - DAEMON_BOOT_TIME` — the lifetime of this Node process, not the
+  instance's cloud uptime. `OracleCloudModal.tsx` showed the same number on its
+  instance card as `Nh hours continuous`. Both now go through
+  `processUptimeLabel()`, which names the figure as the process uptime and
+  reports a non-finite or negative value as unmeasured; the reply and card say
+  the instance uptime is not probed here.
+- `src/utils/hardening/processUptimeTruth.ts`: new pure
+  `processUptimeLabel(hours)`.
+- `src/types.ts`: `OracleVMStatus.uptimeHours` documented at its declaration as
+  the process lifetime, not the cloud uptime.
+
+### Tests
+- `src/tests/hardening/processUptimeTruth.test.ts`: 10 tests — the helper's
+  rendering and its `not measured` fallbacks, plus source guards against the
+  removed `Uptime: ${...uptimeHours}h` literal and the `hours continuous` claim.
+  Negative-validated: restoring the pre-fix reply text fails 3 of 10.
+
+---
+
 ## [Unreleased] - 2026-09-24 04:05 IST (2026-09-23 22:35 UTC) — work slot 15: blueprint cost table derived from declared-plan helpers
 
 ### Fixed

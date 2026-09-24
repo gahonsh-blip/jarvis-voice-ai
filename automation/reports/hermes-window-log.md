@@ -4359,3 +4359,41 @@ Next Slot:
   - Deploy: NOT_CONFIGURED — no deployment target/hosting integration present; verified dist/server.cjs is the deployment unit.
   - Blocked (unchanged): real Android device E2E, real screenshot/display capture, live social/telephony provider dispatch, live bridge pairing success path.
 ---
+
+---
+
+## Slot — WORK 1, 2026-09-24 window, 21:05 IST fire (21:06 IST observed)
+
+No `automation/hermes-state` branch existed (`git show
+origin/automation/hermes-state:hermes-window-state.json` → NO_STATE), so this run
+was treated as slot 1 of a fresh window.
+
+**Item 13 (`Zero-fake-success for all tools`) — one more surface, PARTIAL.**
+
+The Telegram reply headed `ORACLE CLOUD ARM VM STATUS` printed
+`• *Status*: <run state> (Uptime: Nh)`. `N` is `oracleCloudState.uptimeHours`,
+computed as `Date.now() - DAEMON_BOOT_TIME` — the lifetime of the Node process,
+not the instance's cloud uptime. `OracleCloudModal.tsx` rendered the same figure
+on its instance card as `Nh hours continuous`. `toolSurfaceTruthfulness.test.ts`
+only guarded the old hardcoded `+342` offset, so the mislabel was uncovered.
+
+Fixed: new pure `src/utils/hardening/processUptimeTruth.ts` →
+`processUptimeLabel(hours)` = `this JARVIS process: Nh`, or
+`this JARVIS process: uptime not measured` for a non-finite/negative value.
+`server.ts` renders the reply line from it and states instance uptime is a
+control-plane fact this server does not measure; the modal uses the same helper
+and drops `hours continuous`. `OracleVMStatus.uptimeHours` documented in
+`src/types.ts`.
+
+Evidence: `src/tests/hardening/processUptimeTruth.test.ts` (new, 10 tests).
+Negative-validated: restoring the pre-fix reply text → **3 failed | 7 passed**;
+fix restored → **10 passed**.
+
+Gates observed this slot: `npm run lint` exit 0; `npx vitest run` **92 files /
+1199 tests passed**; `npm run build` exit 0 (`dist/server.cjs` 867083 bytes).
+E2E: NOT RUN (no handset). `npm audit`: NOT RUN (no such script).
+Commit `1f86051` pushed to `feature/hermes-full-completion`. Deploy:
+NOT_CONFIGURED. Main merge: NOT MERGED — awaiting human approval.
+
+Blocked (unchanged): real Android device E2E, real screenshot/display capture,
+live social/telephony provider dispatch.

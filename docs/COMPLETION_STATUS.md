@@ -4,8 +4,48 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-23 22:35 UTC (04:05 IST 2026-09-24) — **WORK SLOT 15** of
-the 2026-09-24 window, the 04:05 IST fire (second-to-last work slot). Item 13
+Last cycle: 2026-09-24 15:36 UTC (21:06 IST 2026-09-24) — **WORK SLOT 1** of
+the 2026-09-25 window, the 21:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **Telegram "Oracle Cloud ARM VM STATUS"
+uptime line**.
+
+**The status reply printed the JARVIS process lifetime as the VM uptime.**
+`oracleCloudState.uptimeHours` is computed as `Date.now() - DAEMON_BOOT_TIME` —
+the lifetime of *this Node process*. The Telegram reply headed
+`☁️ *ORACLE CLOUD ARM VM STATUS*` rendered it as
+`• *Status*: <run state> (Uptime: Nh)`, and `OracleCloudModal.tsx` rendered the
+same number on its instance card as `Nh hours continuous`. A reader takes both
+for the instance's cloud uptime, an OCI control-plane fact this process never
+queries. Nothing fabricated a *number* here, but the label turned a process
+measurement into a cloud claim — the class item 13 tracks.
+
+Fixed: new pure `src/utils/hardening/processUptimeTruth.ts` exports
+`processUptimeLabel(hours)`, which renders `this JARVIS process: Nh` and returns
+`this JARVIS process: uptime not measured` for a non-finite or negative figure.
+`server.ts` now renders the Telegram uptime line from
+`processUptimeLabel(oracleCloudState.uptimeHours)` and appends
+`(instance uptime is a control-plane fact this server does not measure)`;
+`OracleCloudModal.tsx` uses the same helper and appends `· instance uptime not
+probed` (the `hours continuous` claim is gone). The `OracleVMStatus.uptimeHours`
+field is now documented at its declaration as the process lifetime.
+
+Evidence: `src/tests/hardening/processUptimeTruth.test.ts` (new, 10 tests) pins
+the helper's rendering (measured, measured zero, fractional floor, unmeasured /
+negative / non-number → `not measured`; never the substring `vm uptime` or
+`instance uptime`) and reads `server.ts` / `OracleCloudModal.tsx` as source text
+(server.ts binds a port on import, matching `billingEntitlementTruth.test.ts`)
+to assert the removed `Uptime: ${...uptimeHours}h` literal is gone, the helper is
+used, and the "not measured" sentence is present. Negative-validated: restoring
+the pre-fix reply text fails 3 of the 10 assertions (observed
+`3 failed | 7 passed`); fix restored → `10 passed`. Gates observed this slot:
+`npm run lint` (`tsc --noEmit`) exit 0; full suite **92 files / 1199 tests
+passed** (20.07 s); `npm run build` exit 0, artifact `dist/server.cjs` 867083
+bytes. E2E: **NOT RUN** — no handset. Item 13 stays `PARTIAL` — the
+unmeasured-claim sweep continues.
+
+Last cycle (previous):
+2026-09-23 22:35 UTC (04:05 IST 2026-09-24) — **WORK SLOT 15** of
+the 2026-09-24 window, the 04:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **blueprint report cost table**.
 
 **The reported blueprint still asserted a zero-cost guarantee in its own cost
