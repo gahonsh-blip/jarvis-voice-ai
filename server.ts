@@ -17,6 +17,7 @@ import {
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
+import { privacyMatrixTruth, schedulerTruth } from './src/utils/hardening/mobileTelemetryTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -7096,12 +7097,20 @@ app.get('/api/mobile/telemetry', (req: Request, res: Response) => {
       reason: 'No weather source is connected to this server process.',
     },
     systemScheduler: {
-      activeJobs: 4,
-      nextBriefing: '09:00 AM IST',
+      ...schedulerTruth(
+        (memoryState.schedulerState as { lastMorningRunDate?: string }).lastMorningRunDate,
+        scheduledGoals.length
+      ),
     },
     privacyMatrix: {
-      level4Enforced: true,
-      categories: ['battery', 'weather', 'notifications', 'calendar', 'email', 'device_health'],
+      ...privacyMatrixTruth(securityMatrixState.humanApprovalForExternal, [
+        'battery',
+        'weather',
+        'notifications',
+        'calendar',
+        'email',
+        'device_health',
+      ]),
     },
     connectedDevice: device ? { deviceId: device.deviceId, model: device.model } : null,
   });
