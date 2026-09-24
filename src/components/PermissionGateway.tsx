@@ -747,10 +747,12 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
               <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-mono flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
-                  Action was authorized and executed successfully.
+                  Authorization recorded. Provider confirmation is required before this action can be reported as executed.
                 </span>
-                {activeRequest.resultUrn && (
+                {activeRequest.resultUrn ? (
                   <span className="text-[10px] text-emerald-400">Result: {activeRequest.resultUrn}</span>
+                ) : (
+                  <span className="text-[10px] text-amber-400">UNVERIFIED — no provider result</span>
                 )}
               </div>
             )}

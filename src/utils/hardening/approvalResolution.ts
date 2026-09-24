@@ -100,3 +100,32 @@ export function classifyApprovalOutcome(executionResult: unknown): ApprovalResol
       'Approved locally, but no provider confirmation was received. The action is UNVERIFIED and must not be reported as executed.',
   };
 }
+
+/**
+ * The reply the Telegram mobile admin receives after tapping an approval card.
+ *
+ * `handleTelegramCallback`'s `approve_perm_` branch only flips the request's
+ * status to EXECUTED; it never runs a dispatcher, so no provider ever confirms
+ * the action. The old reply nevertheless read `LEVEL 4 ACTION APPROVED &
+ * EXECUTED ... EXECUTED (Verified)`. This builds the honest line from the
+ * recorded status alone: EXECUTED means the operator's approval was recorded,
+ * not that the external action ran.
+ */
+export function formatUnconfirmedMobileApprovalReply(request: {
+  id: string;
+  exactAction?: string;
+  target?: string;
+  status?: string;
+}): string {
+  const action = request.exactAction || request.id;
+  if (request.status !== 'EXECUTED') {
+    return `⚠️ *ACTION NOTICE*\n\n• *Action*: ${action}\n• *Status*: ${request.status || 'UNKNOWN'}\n\nNo execution was recorded, so nothing was confirmed to have run.`;
+  }
+  return (
+    `⚠️ *LEVEL 4 APPROVAL RECORDED — EXECUTION NOT CONFIRMED*\n\n` +
+    `• *Action*: ${action}\n` +
+    `• *Target*: \`${request.target || 'unspecified'}\`\n` +
+    `• *Status*: APPROVAL RECORDED — the external action was NOT dispatched by this path\n\n` +
+    `This decision recorded your authorization. No provider confirmation was received, so the action is UNVERIFIED.`
+  );
+}

@@ -76,7 +76,7 @@ import {
 import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/androidBridgeGateway';
 import { maskAndroidCallerNumber } from './src/utils/androidBridgePrivacy';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
-import { classifyApprovalOutcome } from './src/utils/hardening/approvalResolution';
+import { classifyApprovalOutcome, formatUnconfirmedMobileApprovalReply } from './src/utils/hardening/approvalResolution';
 import {
   observeInstanceFromHost,
   describeRunState,
@@ -3399,8 +3399,10 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('approve_perm_')) {
     const permId = data.replace('approve_perm_', '');
     const updated = updateActionRequestStatus(permId, 'EXECUTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
+    // This branch records the human approval only — no dispatcher runs here, so
+    // no provider can confirm the external action. Never say "executed/verified".
     const confirmText = updated
-      ? `✅ *LEVEL 4 ACTION APPROVED & EXECUTED*\n\n• *Action*: ${updated.exactAction}\n• *Target*: \`${updated.target}\`\n• *Status*: EXECUTED (Verified)`
+      ? formatUnconfirmedMobileApprovalReply(updated)
       : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired.`;
 
     const botMsg = {
