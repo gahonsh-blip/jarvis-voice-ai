@@ -12,6 +12,7 @@ import {
   getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from './telephonyAudio';
+import { spamReasonLabel } from './hardening/spamVerdictTruth';
 
 const STORAGE_KEY_CALLS = 'hermes_jarvis_telephony_calls_v1';
 const STORAGE_KEY_SETTINGS = 'hermes_jarvis_telephony_settings_v1';
@@ -135,7 +136,8 @@ export function evaluateSpamRisk(callerNumber: string, firstLine: string): { isS
   }
 
   const isSpam = score >= 50;
-  return { isSpam, score: Math.min(score, 100), reason: reason || 'Verified Legitimate Caller' };
+  // No match means no indicator was found — never that the caller is vetted.
+  return { isSpam, score: Math.min(score, 100), reason: spamReasonLabel(reason) };
 }
 
 /**
