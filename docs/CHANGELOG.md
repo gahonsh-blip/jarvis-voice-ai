@@ -4,6 +4,46 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 02:50 IST (2026-09-24 21:20 UTC) — work slot 10: the Telegram approval reply stops reporting an approval as a verified execution
+
+### Fixed
+- `handleTelegramCallback()` (`server.ts`) handles the `approve_perm_` inline
+  button sent to the operator's phone for a Level 4 action. The branch only
+  records the human decision (`updateActionRequestStatus(permId, 'EXECUTED',
+  ...)`) and dispatches nothing — no LinkedIn publish, no GitHub issue, no
+  provider call — yet it replied `✅ *LEVEL 4 ACTION APPROVED & EXECUTED* …
+  • *Status*: EXECUTED (Verified)`. Every safeguard `/api/approvals/resolve`
+  applies to separate "recorded" from "confirmed" was bypassed by this path.
+- `PermissionGateway.tsx` rendered the same `EXECUTED` status as "Action was
+  authorized and executed successfully." with no provider result behind it.
+
+### Added
+- `formatUnconfirmedMobileApprovalReply()` in
+  `src/utils/hardening/approvalResolution.ts` — the only builder of that reply
+  now. It describes the recorded status and states plainly that the external
+  action was **not dispatched by this path** and is `UNVERIFIED`. A
+  non-`EXECUTED` status (e.g. `FAILED`) is reported as-is.
+- The `EXECUTED` panel in `PermissionGateway.tsx` reads "Authorization
+  recorded. Provider confirmation is required before this action can be
+  reported as executed." and shows `UNVERIFIED — no provider result` when no
+  `resultUrn` exists.
+- 6 assertions in `src/tests/approvalResolutionTruth.test.ts` (now 14 tests):
+  the reply never matches `/APPROVED & EXECUTED/` or `/\(Verified\)/`, still
+  names the action and target, does not claim `APPROVAL RECORDED` for a
+  non-`EXECUTED` status, falls back to the request id, plus two `server.ts`
+  source guards.
+
+### Verification
+- Negative-validated: restoring the old reply string fails exactly the two
+  `server.ts` guard tests (`2 failed | 12 passed`); restored → 14/14.
+- Gates observed: `npm run lint` (`tsc --noEmit`) exit 0; targeted 1 file /
+  14 tests passed; full suite **96 files / 1256 tests passed**; `npm run build`
+  exit 0, `dist/server.cjs` 869141 bytes.
+- E2E: NOT RUN — no Telegram bot credentials, no handset. Deploy:
+  NOT_CONFIGURED. Item 13 stays `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-09-25 00:45 IST (2026-09-24 19:15 UTC) — work slot 8: the server telephony turn path stops returning follow-ups as done work
 
 ### Fixed

@@ -4886,3 +4886,41 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - लाइव whisper-tip अब "AI सुझाव — कोई देखा गया सिस्टम इवेंट नहीं" के रूप में
   चिह्नित है; 29/29 टेस्ट पास, lint और build हरे।
+
+---
+
+## Slot 2026-09-25 02:35 IST (slots completed 10) — WORK
+
+Item 13 `Zero-fake-success for all tools` — the Telegram mobile approval reply.
+
+`handleTelegramCallback()` (`server.ts`) handles the `approve_perm_` inline
+button that `/api/approvals/create` sends to the operator's phone for a Level 4
+action. The branch does exactly one thing — `updateActionRequestStatus(permId,
+'EXECUTED', ...)` — and dispatches nothing, yet it replied `LEVEL 4 ACTION
+APPROVED & EXECUTED ... EXECUTED (Verified)`, and the client
+`PermissionGateway.tsx` rendered the same status as "Action was authorized and
+executed successfully."
+
+Fixed by `formatUnconfirmedMobileApprovalReply()` in
+`src/utils/hardening/approvalResolution.ts`, now the only builder of that reply:
+recorded status only, explicit "not dispatched by this path", reported as
+`UNVERIFIED`. The client panel now states that provider confirmation is required
+and shows `UNVERIFIED - no provider result` when no `resultUrn` exists.
+
+Evidence: `src/utils/hardening/approvalResolution.ts`, `server.ts`,
+`src/components/PermissionGateway.tsx`, `src/tests/approvalResolutionTruth.test.ts`.
+
+Tests:    targeted `approvalResolutionTruth.test.ts` - 1 file / 14 tests passed;
+          full suite 96 files / 1256 tests passed (both observed this slot).
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 (observed).
+Build:    `npm run build` exit 0; `dist/server.cjs` 869141 bytes (observed).
+E2E:      NOT RUN - no Telegram bot credentials, no handset.
+Security: no `.env` staged; no token/key in the diff; deploy NOT_CONFIGURED.
+Negative validation: restoring the old reply string fails exactly the two
+          `server.ts` guard tests (2 failed | 12 passed); restored -> 14/14.
+
+Item 13 remains `PARTIAL` - another real violation closed, not proof the sweep
+is exhausted.
+
+हिंदी सारांश: मोबाइल अप्रूवल अब "निष्पादित व सत्यापित" का दावा नहीं करता;
+14/14 टेस्ट, lint और build हरे; Item 13 `PARTIAL` ही है।
