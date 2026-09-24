@@ -4924,3 +4924,66 @@ is exhausted.
 
 हिंदी सारांश: मोबाइल अप्रूवल अब "निष्पादित व सत्यापित" का दावा नहीं करता;
 14/14 टेस्ट, lint और build हरे; Item 13 `PARTIAL` ही है।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:05
+Window date: 2026-09-25 (2026-09-24 window)   Window slots completed so far: 11
+
+Completed:
+- #13 Zero-fake-success for all tools — offline local call turn. `processTelephonyTurn()`
+  falls back to `generateLocalCallTurn()` when `POST /api/telephony/handle-turn` is
+  unreachable; that path only regex-matches the caller's words, yet its replies asserted
+  calendar writes, Telegram notices and caller-ID blocking, and its follow-ups read as
+  completed receipts. Reply now routed through `formatLocalTurnReply()` and every
+  follow-up through `formatLocalTurnFollowUp()` (new exports,
+  src/utils/hardening/callSummaryTruth.ts); four receipt-worded follow-ups rephrased as
+  outstanding requests. Evidence: src/utils/hardening/callSummaryTruth.ts,
+  src/utils/telephonyEngine.ts, src/tests/callSummaryTruth.test.ts (16 new assertions,
+  file now 44 tests). Negative-validated: bypassing the wrapper → 6 failed | 38 passed;
+  restored → 44/44.
+
+In Progress:
+- None. The slot's single item was finished, committed and pushed.
+
+Remaining:
+- #1 Real Android Mobile Bridge — PARTIAL; physical-device leg unverified (no handset).
+- #13 — stays PARTIAL; the sweep is pattern-driven, not exhausted.
+- Items 2–12 are VERIFIED or hardware/credential-blocked per docs/COMPLETION_STATUS.md.
+
+Bugs Found:
+- Offline local call-turn fabrication in `src/utils/telephonyEngine.ts`, found by reading
+  the fallback path reached from `processCallTurnWithAi` (App.tsx lines 672, 805).
+
+Bugs Fixed:
+- The above. Verified by a 5-case table over the outbound wrap-up/appointment and inbound
+  spam/medical/default branches, asserting the disclosure and marker on every returned
+  follow-up; negative validation proves the tests fail without the fix.
+
+Tests:    44 passed in the targeted file; full suite 96 files / 1271 tests passed (observed).
+Lint:     pass — `npx tsc --noEmit` exit 0 (observed).
+Build:    pass — `npm run build` exit 0; dist/server.cjs 869141 bytes (observed).
+E2E:      NOT RUN — no telephony provider credentials, no handset.
+Security: no .env, no token, no node_modules/dist in the committable diff (observed).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  ad2a20d
+Push:    succeeded — origin/feature/hermes-full-completion (5e26730..ad2a20d)
+
+PR:         NONE opened this slot (existing branch only)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- #1 Real Android Mobile Bridge device leg — requires a physical Android handset.
+
+Human Approval Required:
+- None beyond the standing rule.
+
+Next Slot:
+- #13 again, on the next surface not yet audited.
+
+हिंदी सारांश: ऑफ़लाइन कॉल-टर्न अब बिना किए गए काम का दावा नहीं करता; 16 नए टेस्ट,
+lint और build हरे; Item 13 `PARTIAL` ही है।

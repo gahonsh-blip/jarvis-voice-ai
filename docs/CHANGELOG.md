@@ -4,6 +4,39 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 03:15 IST (2026-09-24 21:45 UTC) — work slot 11: the offline call turn stops reporting unperformed actions
+
+### Fixed
+- `generateLocalCallTurn()` (`src/utils/telephonyEngine.ts`), the fallback
+  `processTelephonyTurn()` uses whenever `POST /api/telephony/handle-turn` is
+  unreachable, regex-matches the caller's words and dispatches nothing — no
+  calendar write, no Telegram message, no caller-ID block. Its replies still
+  asserted completed work ("I have locked this into Alex's calendar and synced
+  our reminders", "I have added the session to the calendar and notified the
+  team", "adding your caller ID to our blocked directory"), and every captured
+  follow-up read as a finished receipt ("Call completed successfully", "Calendar
+  event dispatched", "Blocked spam marketing number", "Medical appointment
+  confirmed for Friday 3:00 PM"). `App.tsx` surfaces both to the operator as the
+  call's outcome.
+
+### Added
+- `formatLocalTurnReply()` and `formatLocalTurnFollowUp()` in
+  `src/utils/hardening/callSummaryTruth.ts`. The reply is routed through the
+  former, which states it is a local automated response and not a record of
+  executed actions; each follow-up is routed through the latter, which marks it
+  captured offline and awaiting human follow-up. The four receipt-worded
+  follow-up literals were rephrased as outstanding requests.
+
+### Tests
+- 16 new assertions in `src/tests/callSummaryTruth.test.ts` (now 44 tests):
+  both formatters (append, idempotent, empty-input), a 5-case table asserting
+  the disclosure and the marker across the outbound wrap-up/appointment and
+  inbound spam/medical/default branches, `not.toMatch` guards for the fabricated
+  receipts, and two `telephonyEngine.ts` source guards. Negative-validated:
+  bypassing the wrapper fails 6 of 44, restored → 44/44.
+
+---
+
 ## [Unreleased] - 2026-09-25 02:50 IST (2026-09-24 21:20 UTC) — work slot 10: the Telegram approval reply stops reporting an approval as a verified execution
 
 ### Fixed
