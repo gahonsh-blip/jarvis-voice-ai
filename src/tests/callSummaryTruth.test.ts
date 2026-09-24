@@ -11,8 +11,12 @@ import {
   formatActionItem,
   formatLiveActionItem,
   whisperTipForDisplay,
+  formatLocalTurnFollowUp,
+  formatLocalTurnReply,
+  LOCAL_TURN_ACTION_ITEM_NOTE,
+  LOCAL_TURN_REPLY_NOTE,
 } from '../utils/hardening/callSummaryTruth';
-import { summarizeCallTranscript } from '../utils/telephonyEngine';
+import { generateLocalCallTurn, summarizeCallTranscript } from '../utils/telephonyEngine';
 import type { CallTurn } from '../types/telephony';
 
 // item 13 — the call-summary surface. `summarizeCallTranscript()` regex-matched
@@ -253,3 +257,106 @@ describe('server handle-turn does not invent a whisper tip', () => {
   });
 });
 
+
+// item 13, continued — the offline conversational turn. `processTelephonyTurn`
+// falls back to `generateLocalCallTurn` whenever `POST
+// /api/telephony/handle-turn` is unreachable, which is the offline-first case
+// this app exists for. The rule-based replies there were receipts for work
+// nothing performed ("I have locked this into Alex's calendar and synced our
+// reminders", "I have added the session to the calendar and notified the team",
+// "adding your caller ID to our blocked directory"), and the follow-ups read as
+// completed ("Medical appointment confirmed for Friday 3:00 PM", "Blocked spam
+// marketing number"). `generateLocalCallTurn` regex-matches the caller's words;
+// it writes no calendar, sends no Telegram message and blocks no number.
+
+describe('formatLocalTurnReply states an automated reply is not a record of actions', () => {
+  it('appends the disclosure to a reply', () => {
+    expect(formatLocalTurnReply('Hello.')).toBe(`Hello. ${LOCAL_TURN_REPLY_NOTE}`);
+  });
+
+  it('is idempotent', () => {
+    const once = formatLocalTurnReply('Hello.');
+    expect(formatLocalTurnReply(once)).toBe(once);
+  });
+
+  it('reports an empty reply as the disclosure alone', () => {
+    expect(formatLocalTurnReply('')).toBe(LOCAL_TURN_REPLY_NOTE);
+  });
+});
+
+describe('formatLocalTurnFollowUp presents an offline-captured item as outstanding', () => {
+  it('appends the captured-offline marker', () => {
+    expect(formatLocalTurnFollowUp('Blocked spam marketing number')).toBe(
+      `Blocked spam marketing number — ${LOCAL_TURN_ACTION_ITEM_NOTE}`
+    );
+  });
+
+  it('is idempotent', () => {
+    const once = formatLocalTurnFollowUp('Relay notes to Alex');
+    expect(formatLocalTurnFollowUp(once)).toBe(once);
+  });
+
+  it('reports an empty item instead of an empty task', () => {
+    expect(formatLocalTurnFollowUp('')).toBe(
+      `No action item recorded — ${LOCAL_TURN_ACTION_ITEM_NOTE}`
+    );
+  });
+});
+
+describe('generateLocalCallTurn marks its replies and follow-ups', () => {
+  const call = (direction: 'outbound' | 'inbound', latestInput: string) =>
+    generateLocalCallTurn({
+      direction,
+      callerName: 'Caller',
+      recipientName: 'Alex (Executive)',
+      dialogueHistory: [turn('t1', 'caller', 'hello'), turn('t2', 'agent', 'hi')],
+      latestInput,
+    });
+
+  const cases: Array<['outbound' | 'inbound', string]> = [
+    ['outbound', 'thank you'],
+    ['outbound', 'friday'],
+    ['inbound', 'solar'],
+    ['inbound', 'confirm'],
+    ['inbound', 'nothing matches here'],
+  ];
+
+  it.each(cases)('%s turn for %j carries the disclosure and marks every follow-up', (direction, input) => {
+    const result = call(direction, input);
+    expect(result.replyText).toContain(LOCAL_TURN_REPLY_NOTE);
+    for (const item of result.followUpActions ?? []) {
+      expect(item).toContain(LOCAL_TURN_ACTION_ITEM_NOTE);
+    }
+  });
+
+  it('never claims the calendar was written or a message sent', () => {
+    const result = call('outbound', 'friday');
+    expect(result.replyText).not.toMatch(/locked this into Alex.s calendar/i);
+    expect(result.replyText).not.toMatch(/synced our reminders/i);
+  });
+
+  it('no longer reports a spam number as already blocked', () => {
+    const result = call('inbound', 'solar');
+    expect(result.replyText).not.toMatch(/adding your caller ID to our blocked directory/i);
+    expect(result.followUpActions?.[0]).not.toMatch(/^Blocked spam marketing number/);
+    expect(result.followUpActions?.[1]).not.toMatch(/^Added to automated reject list/);
+  });
+});
+
+describe('telephonyEngine routes the offline turn through the truth helpers', () => {
+  const engineSource = fs.readFileSync(
+    path.resolve(__dirname, '../utils/telephonyEngine.ts'),
+    'utf8'
+  );
+
+  it('wraps the reply and follow-ups in generateLocalCallTurn', () => {
+    expect(engineSource).toContain('replyText: formatLocalTurnReply(turn.replyText)');
+    expect(engineSource).toContain('followUpActions: turn.followUpActions?.map(formatLocalTurnFollowUp)');
+  });
+
+  it('does not carry the fabricated receipt literals any more', () => {
+    expect(engineSource).not.toContain('I have locked this into Alex');
+    expect(engineSource).not.toContain('adding your caller ID to our blocked directory');
+    expect(engineSource).not.toContain('Medical appointment confirmed for Friday 3:00 PM');
+  });
+});

@@ -108,3 +108,47 @@ export function describeOutboundCall(counterpart: string): string {
 export function describeInboundCall(counterpart: string): string {
   return `JARVIS AI Receptionist answered an incoming call from ${counterpart}. The inquiry and any schedule/delivery notes were logged. Follow-up items below are recorded for human review and have not been performed by JARVIS.`;
 }
+
+/**
+ * Marker for the offline (no-server) conversational turn. `processTelephonyTurn`
+ * falls back to `generateLocalCallTurn` whenever `POST /api/telephony/handle-turn`
+ * is unreachable — the exact offline-first case this app exists for. The
+ * rule-based replies there were written as receipts for work nothing performed:
+ * "I have locked this into Alex's calendar and synced our reminders", "I have
+ * added the session to the calendar and notified the team", "adding your caller
+ * ID to our blocked directory". `generateLocalCallTurn` regex-matches the
+ * caller's words; it writes no calendar, sends no Telegram message and blocks no
+ * number. The reply is a script, not a record of side effects.
+ */
+export const LOCAL_TURN_REPLY_NOTE = 'Automated assistant reply — actions described are not confirmed as performed.';
+
+/** Appends the offline-turn disclosure to a rule-based reply. Idempotent. */
+export function formatLocalTurnReply(replyText: string): string {
+  const trimmed = (replyText ?? '').trim();
+  if (!trimmed) {
+    return LOCAL_TURN_REPLY_NOTE;
+  }
+  if (trimmed.includes(LOCAL_TURN_REPLY_NOTE)) {
+    return trimmed;
+  }
+  return `${trimmed} ${LOCAL_TURN_REPLY_NOTE}`;
+}
+
+/** Marker every offline-captured action item carries. */
+export const LOCAL_TURN_ACTION_ITEM_NOTE = 'captured offline — not confirmed as performed';
+
+/**
+ * Renders an offline-captured follow-up as an outstanding task. These strings
+ * were phrased as receipts ("Medical appointment confirmed for Friday 3:00 PM",
+ * "Blocked spam marketing number"); nothing performed them. Idempotent.
+ */
+export function formatLocalTurnFollowUp(item: string): string {
+  const trimmed = (item ?? '').trim();
+  if (!trimmed) {
+    return `No action item recorded — ${LOCAL_TURN_ACTION_ITEM_NOTE}`;
+  }
+  if (trimmed.includes(LOCAL_TURN_ACTION_ITEM_NOTE)) {
+    return trimmed;
+  }
+  return `${trimmed} — ${LOCAL_TURN_ACTION_ITEM_NOTE}`;
+}
