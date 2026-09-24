@@ -361,7 +361,9 @@ export function summarizeCallTranscript(transcript: CallTurn[], direction: 'outb
   }
 
   const fullText = transcript.map((t) => `${t.speaker}: ${t.text}`).join('\n').toLowerCase();
-  let sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' = 'positive';
+  // No keyword matched means the summariser observed nothing — it did not
+  // perform sentiment analysis, so the default must not assert a positive call.
+  let sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' = 'neutral';
   const followUps: string[] = [];
 
   if (fullText.includes('solar') || fullText.includes('spam') || fullText.includes('pre-selected') || fullText.includes('decline')) {

@@ -80,6 +80,24 @@ describe('summarizeCallTranscript reports only what the transcript supports', ()
     );
     expect(result.sentiment).toBe('negative');
   });
+
+  it('does not assert a positive call when it matched no keyword', () => {
+    const result = summarizeCallTranscript(
+      [turn('1', 'caller', 'Hi, just checking in about the weather today.')],
+      'inbound',
+      'Unknown'
+    );
+    expect(result.sentiment).toBe('neutral');
+  });
+
+  it('does not assert a positive call for a transcript with no sentiment signal', () => {
+    const result = summarizeCallTranscript(
+      [turn('1', 'caller', 'Hello?')],
+      'outbound',
+      'Dr. Wayne'
+    );
+    expect(result.sentiment).not.toBe('positive');
+  });
 });
 
 describe('describeOutboundCall / describeInboundCall never claim completion', () => {
