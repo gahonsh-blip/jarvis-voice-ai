@@ -4733,3 +4733,40 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - कॉल सारांश अब अनुमानित "positive" भावना दिखाने के बजाय ईमानदारी से "neutral"
   दर्शाता है, और की गई हुई कार्रवाई का झूठा दावा नहीं करता।
+
+---
+
+## Slot 7 — WORK — 2026-09-24 00:27 IST (2026-09-24 18:57 UTC)
+
+Item 13 (`Zero-fake-success for all tools`) — investigation only, no new
+violation closed. Five candidate surfaces were inspected against the source and
+each was found already mitigated or unreachable, so none was a genuine
+fabricated-success defect:
+
+- `src/utils/computerOperatorEngine.ts:372` — `executeOperatorTask` sizes its
+  step loop to `maxSteps = options.maxSteps ?? min(plan.actions.length, 8)` and
+  the success path writes `finalResult = 'COMPLETED_' + plan.actions.length +
+  '_STEPS'`. Alone that reads like a truncation lie (8 executed, N reported). It
+  is not reachable: the only real caller, `src/utils/operatorChatIntegration.ts:167`,
+  never passes `options.maxSteps`, and `planScreenActions` already slices
+  `actions` to `MAX_PLAN_STEPS` (8), so `plan.actions.length <= 8` and
+  `maxSteps === plan.actions.length`. No test added — no defect to pin.
+- `src/utils/computerOperator/hostScreenOperator.ts` — real adapter already
+  refuses unsupported actions with a reason and sets `simulationOnly = false`;
+  no fabricated `ok: true`.
+- `src/utils/computerOperator/computerOperatorEngine.ts` COMPLETED path — already
+  branches its final summary on `ScreenObserver.isHostBacked()` and prefixes
+  `SIMULATION_ONLY` when no host screen was observed.
+- `src/utils/blueprintTruth.ts` / `src/utils/financeGuardTruth.ts` — already
+  report `UNMEASURED`/`UNKNOWN` rather than a default figure.
+- `src/components/TelegramGatewayModal.tsx:422` ("100% real mobile control") —
+  decorative connect-guide marketing copy, not a measured panel claim. Left
+  unchanged (low value).
+
+Gates: `npm run lint` NOT RUN, `npx vitest run` NOT RUN, `npm run build` NOT RUN
+this slot — no source changed, so no new result existed to report, and prior
+slots' figures are not evidence for this tree. E2E: NOT RUN (no handset, no
+display). Deploy: NOT_CONFIGURED.
+
+Item 13 stays `PARTIAL`. Honest outcome: a negative result — none of the five
+examined surfaces warranted a change, and none was changed.
