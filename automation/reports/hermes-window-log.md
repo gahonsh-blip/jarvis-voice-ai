@@ -4441,3 +4441,42 @@ chain resolves; (2) when publishing state, confirm the target branch with
 file in the tree when switching back.
 
 Report: `/tmp/hermes-window-report.md` (this slot's section).
+
+---
+
+## 2026-09-24 21:36 IST (16:06 UTC) — WORK SLOT 2 (item 54)
+
+State read: `window_date` 2026-09-24, `slots_completed` 1, `current_item` 13
+(PARTIAL). This run is the 21:35 IST fire → slot 2 of the same window.
+
+Item advanced: **#54 Secret/token protection audit** (PARTIAL — regression
+coverage strengthened; no new leak family claimed). Item 13 is the
+`current_item` in state, but slot 1 had just landed a change there and the
+highest non-`VERIFIED` item this slot could genuinely advance was #54, whose
+fix from slot 1 had no test exercising it.
+
+**Coverage gap found.** Slot 1 replaced the malformed OpenAI quantifier
+(`{20,T3BlbkFJ`) with `/\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}\b/g`
+and removed the over-broad bare `[a-zA-Z0-9]{48,}` branch, but the test file
+only asserted the legacy `sk-<alnum>` shape. Added three cases for the
+`sk-proj-` / `sk-svcacct-` / `sk-admin-` forms that the new alternatives exist
+to catch.
+
+**A false-positive test caught during writing.** The first `sk-proj-` draft
+used `OPENAI_API_KEY=<key>`; negative-validated against the pre-slot-1 regex it
+still **passed** — the generic labelled-secret rule matches the `KEY=` label, so
+the assertion never exercised the OpenAI pattern at all. Rewrote it with an
+unlabelled key. Final negative validation against
+`/\bsk-[a-zA-Z0-9]{20,T3BlbkFJ[a-zA-Z0-9_-]*|[a-zA-Z0-9]{48,}\b/g`:
+`3 failed | 21 passed`; restored to the current pattern → 24/24.
+
+Gates observed this slot: `npm run lint` (`tsc --noEmit`) **exit 0**;
+`npx vitest run` **92 files / 1201 tests passed** (20.32 s); `npm run build`
+**exit 0** (`dist/server.cjs` 846.8 kB, `dist/server.cjs.map` 1.5 mb). E2E:
+**NOT RUN** (no handset). Security scan: `.env` ignored; the only diff is a test
+file — no credential material added.
+
+Commit `ea50779` (`test(security): cover modern sk-proj-/sk-svcacct-/sk-admin-
+key redaction`) pushed to `origin/feature/hermes-full-completion`
+(54984a7..ea50779). PR #4 left open, non-draft; merge remains a human decision.
+

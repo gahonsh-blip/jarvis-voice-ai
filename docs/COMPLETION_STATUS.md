@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-24 15:36 UTC (21:06 IST 2026-09-24) — **WORK SLOT 1** of
+Last cycle: 2026-09-24 16:06 UTC (21:36 IST 2026-09-24) — **WORK SLOT 2** of
+the 2026-09-25 window, the 21:35 IST fire. Item 54
+(`Secret/token protection audit`), the **modern OpenAI key-prefix coverage**.
+
+**The redactor fix landed without a test that exercised it.** Slot 1 replaced
+the malformed OpenAI quantifier (`{20,T3BlbkFJ`) with
+`/\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}\b/g`, adding explicit
+`sk-proj-` / `sk-svcacct-` / `sk-admin-` alternatives, but no assertion covered
+the prefixed forms — the existing OpenAI test used only the legacy
+`sk-<alnum>` shape. Coverage existed on paper, not for the changed branch.
+
+Added three regression cases to `src/tests/credentialRedactor.test.ts` for the
+`sk-proj-` / `sk-svcacct-` / `sk-admin-` shapes. Crucially, the `sk-proj-` case
+is **unlabelled** (a `KEY=` prefix is caught by the generic labelled-secret rule
+and would hide whether the OpenAI pattern itself matches) — the first draft used
+`OPENAI_API_KEY=...` and was a false positive: it passed even against the broken
+quantifier. Negative-validated against the pre-slot-1 regex
+(`/\bsk-[a-zA-Z0-9]{20,T3BlbkFJ[a-zA-Z0-9_-]*|[a-zA-Z0-9]{48,}\b/g`): all three
+new tests fail; restored to the current pattern → 24/24 pass.
+
+Evidence: `src/tests/credentialRedactor.test.ts` (now 24 tests; the three new
+cases observed `3 failed | 21 passed` under the old regex). Gates observed this
+slot: `npm run lint` (`tsc --noEmit`) exit 0; full suite **92 files / 1201 tests
+passed** (20.32 s); `npm run build` exit 0, artifact `dist/server.cjs` 846.8 kB
+(plus `dist/server.cjs.map` 1.5 mb). E2E: **NOT RUN** — no handset. Item 54 stays
+`PARTIAL` — test coverage strengthened, no new leak family claimed.
+
+Last cycle (previous): 2026-09-24 15:36 UTC (21:06 IST 2026-09-24) — **WORK SLOT 1** of
 the 2026-09-25 window, the 21:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **Telegram "Oracle Cloud ARM VM STATUS"
 uptime line**.

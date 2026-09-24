@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 21:36 IST (2026-09-24 16:06 UTC) — work slot 2: regression coverage for modern OpenAI key prefixes
+
+### Tests
+- `src/tests/credentialRedactor.test.ts`: three cases for the `sk-proj-`,
+  `sk-svcacct-` and `sk-admin-` key shapes that slot 1's regex fix introduced
+  but never asserted. The `sk-proj-` case uses an unlabelled key on purpose — a
+  `KEY=` label is caught by the generic labelled-secret rule and would make the
+  test pass even against the broken quantifier (observed on the first draft).
+  Negative-validated against the pre-fix regex: all three fail
+  (`3 failed | 21 passed`); current pattern → 24/24.
+
+---
+
 ## [Unreleased] - 2026-09-24 21:06 IST (2026-09-24 15:36 UTC) — work slot 1: process uptime is no longer labelled as VM uptime
 
 ### Fixed
