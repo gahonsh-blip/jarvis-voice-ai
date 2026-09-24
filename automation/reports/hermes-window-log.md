@@ -4987,3 +4987,48 @@ Next Slot:
 
 हिंदी सारांश: ऑफ़लाइन कॉल-टर्न अब बिना किए गए काम का दावा नहीं करता; 16 नए टेस्ट,
 lint और build हरे; Item 13 `PARTIAL` ही है।
+
+## 2026-09-25 03:35 IST — WORK SLOT 12 (item #13 mobile telemetry truth)
+
+Completed:
+- #13 Zero-fake-success for all tools — `GET /api/mobile/telemetry` answered
+  `privacyMatrix.level4Enforced: true` and `systemScheduler.activeJobs: 4` as
+  unmeasured literals. The Level 4 gate is operator-flippable via
+  `/api/security/matrix` (`humanApprovalForExternal`), so a process with the gate
+  disabled still told the phone external actions required human approval; the
+  scheduler defines five routines, not four. Fixed via new
+  `src/utils/hardening/mobileTelemetryTruth.ts` (tri-state `privacyMatrixTruth`,
+  routine-counting `schedulerTruth`) wired into `server.ts`.
+
+Evidence: `src/utils/hardening/mobileTelemetryTruth.ts`, `server.ts`,
+`src/tests/mobileTelemetryTruth.test.ts` (8 tests). Targeted run observed
+1 file / 8 tests passed. Negative-validated: restoring the two literals failed
+exactly 1 test (1 failed | 7 passed); restored → 8/8.
+
+Tests:    1279 passed / 1279 (97 files, full suite)
+Lint:     exit 0 (`tsc --noEmit`)
+Build:    exit 0, `dist/server.cjs` 870439 bytes
+E2E:      NOT RUN — no handset, no bridge pairing secret
+Security: clean tree; no .env, no secrets in diff
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  e8e97a7 (code fix 9823827)
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         #4 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this environment
+
+Blocked:
+- #1 Real Android Mobile Bridge device leg — requires a physical Android handset.
+
+Human Approval Required:
+- None beyond the standing rule.
+
+Next Slot:
+- #13 again (04:05 IST, slot 13) on the next surface not yet audited; the 04:35
+  slot finalizes.
+
+हिंदी सारांश: मोबाइल टेलीमेट्री अब बिना मापे Level-4 गेट और नौकरी-गिनती का झूठा
+दावा नहीं करती; 8 नए टेस्ट, lint और build हरे; Item 13 `PARTIAL` ही है।
