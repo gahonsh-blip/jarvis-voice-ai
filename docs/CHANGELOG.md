@@ -4,6 +4,36 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 03:45 IST (2026-09-24 22:15 UTC) — work slot 12: mobile telemetry stops reporting an unmeasured Level 4 gate and job count
+
+### Fixed
+- `GET /api/mobile/telemetry` (`server.ts`) answered
+  `privacyMatrix.level4Enforced: true` and `systemScheduler.activeJobs: 4` as
+  literals. The Level 4 gate is operator-flippable through `/api/security/matrix`
+  (`humanApprovalForExternal`), so a process with the gate disabled still told
+  the phone external actions required human approval; the scheduler defines five
+  recurring routines (four daily reports plus the 03:00 IST nightly repository
+  check), not four.
+
+### Added
+- `src/utils/hardening/mobileTelemetryTruth.ts` — `privacyMatrixTruth()` maps the
+  observed gate to a tri-state (`false` → `DISABLED`, unobserved → `null` /
+  `UNKNOWN — not observed`, only an explicit `true` → enabled), and
+  `schedulerTruth()` counts the routines the process defines plus
+  operator-registered scheduled goals and labels the next briefing as scheduled,
+  not observed as run. The route now uses both.
+
+### Tests
+- `src/tests/mobileTelemetryTruth.test.ts` (8 tests): tri-state mapping incl.
+  unobserved → `null`, routine count 5 ≠ 4, goal addition, honest next-briefing
+  label, and a `server.ts` source guard that the route no longer contains
+  `level4Enforced: true` / `activeJobs: 4` and calls both builders.
+  Negative-validated: restoring the two literals fails exactly 1 test
+  (`1 failed | 7 passed`), restored → 8/8. Full suite 97 files / 1279 tests
+  passed; lint exit 0; build exit 0 (`dist/server.cjs` 870439 bytes).
+
+---
+
 ## [Unreleased] - 2026-09-25 03:15 IST (2026-09-24 21:45 UTC) — work slot 11: the offline call turn stops reporting unperformed actions
 
 ### Fixed
