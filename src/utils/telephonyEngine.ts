@@ -13,6 +13,11 @@ import {
 } from '../types/telephony';
 import { telephonyAudio } from './telephonyAudio';
 import { spamReasonLabel } from './hardening/spamVerdictTruth';
+import {
+  describeInboundCall,
+  describeOutboundCall,
+  formatActionItem,
+} from './hardening/callSummaryTruth';
 
 const STORAGE_KEY_CALLS = 'hermes_jarvis_telephony_calls_v1';
 const STORAGE_KEY_SETTINGS = 'hermes_jarvis_telephony_settings_v1';
@@ -361,18 +366,18 @@ export function summarizeCallTranscript(transcript: CallTurn[], direction: 'outb
 
   if (fullText.includes('solar') || fullText.includes('spam') || fullText.includes('pre-selected') || fullText.includes('decline')) {
     sentiment = 'negative';
-    followUps.push('Added caller to spam blocklist');
+    followUps.push('Add caller to spam blocklist');
   } else if (fullText.includes('urgent') || fullText.includes('emergency') || fullText.includes('asap')) {
     sentiment = 'urgent';
-    followUps.push('High priority: follow up with caller immediately');
+    followUps.push('Follow up with caller urgently');
   }
 
   if (fullText.includes('reschedule') || fullText.includes('appointment') || fullText.includes('friday') || fullText.includes('calendar')) {
-    followUps.push('Calendar appointment updated');
+    followUps.push('Update calendar with the discussed appointment');
   }
 
   if (fullText.includes('gate') || fullText.includes('delivery') || fullText.includes('package')) {
-    followUps.push('Delivery gate access code provided (#4092)');
+    followUps.push('Complete delivery/gate-access follow-up with courier');
   }
 
   if (fullText.includes('sync') || fullText.includes('meeting') || fullText.includes('demo')) {
@@ -383,12 +388,18 @@ export function summarizeCallTranscript(transcript: CallTurn[], direction: 'outb
     followUps.push(`Review notes from call with ${counterpart}`);
   }
 
+  // A recorded follow-up is a task, not a receipt: nothing in this function
+  // dispatches a calendar event, blacklists a number, or sends an SMS.
   const summary =
     direction === 'outbound'
-      ? `JARVIS autonomously dialed ${counterpart}. Successfully conveyed objectives, gathered scheduling and operational updates, and synced action items.`
-      : `JARVIS AI Receptionist answered incoming call from ${counterpart}. Screened inquiry, confirmed schedule/delivery notes, and logged action items.`;
+      ? describeOutboundCall(counterpart)
+      : describeInboundCall(counterpart);
 
-  return { summary, sentiment, followUpActions: followUps };
+  return {
+    summary,
+    sentiment,
+    followUpActions: followUps.map(formatActionItem),
+  };
 }
 
 /**

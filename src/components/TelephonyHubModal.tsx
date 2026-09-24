@@ -57,6 +57,7 @@ import {
 } from '../utils/telephonyEndpointTruth';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
 import { ACOUSTIC_FILTER_STATUS, ACOUSTIC_FILTER_SPEC } from '../utils/hardening/acousticFilterTruth';
+import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
 import {
   downloadCallHistoryCsv,
   filterCallRecords,
@@ -1148,12 +1149,13 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     {selectedLog.followUpActions && selectedLog.followUpActions.length > 0 && (
                       <div className="mt-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40 p-3">
                         <div className="text-[11px] font-mono text-emerald-400 uppercase mb-1.5 font-bold">
-                          Assigned Action Items & Next Steps
+                          Recorded Action Items & Next Steps
                         </div>
+                        <p className="text-[10px] text-emerald-300/80 mb-1.5">{ACTION_ITEM_LIST_NOTE}</p>
                         <ul className="space-y-1">
                           {selectedLog.followUpActions.map((act, i) => (
-                            <li key={i} className="flex items-center gap-2 text-xs text-emerald-200">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
+                            <li key={i} className="flex items-start gap-2 text-xs text-emerald-200">
+                              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
                               <span>{act}</span>
                             </li>
                           ))}

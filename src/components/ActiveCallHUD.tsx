@@ -33,6 +33,7 @@ import { telephonyAudio } from '../utils/telephonyAudio';
 import { resolveDisplayNumber, shouldMaskParty } from '../utils/telephonyPrivacyDisplay';
 import { callWaveformBars, callWaveformBarHeight } from '../utils/hardening/callWaveform';
 import { ACOUSTIC_FILTER_LABEL } from '../utils/hardening/acousticFilterTruth';
+import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
 
 interface ActiveCallHUDProps {
   activeCall: CallRecord | null;
@@ -259,7 +260,8 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
 
           {activeCall.followUpActions && activeCall.followUpActions.length > 0 && (
             <div className="rounded-xl bg-emerald-950/30 border border-emerald-800/40 p-3">
-              <div className="text-[11px] font-mono text-emerald-400 uppercase tracking-wider mb-1.5">Action Items & Next Steps</div>
+              <div className="text-[11px] font-mono text-emerald-400 uppercase tracking-wider mb-1.5">Recorded Action Items & Next Steps</div>
+              <p className="text-[10px] text-emerald-300/80 mb-1.5">{ACTION_ITEM_LIST_NOTE}</p>
               <ul className="space-y-1">
                 {activeCall.followUpActions.map((act, i) => (
                   <li key={i} className="flex items-center gap-2 text-xs text-emerald-200">
