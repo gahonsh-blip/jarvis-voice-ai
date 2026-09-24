@@ -4810,3 +4810,79 @@ credential in the diff (`.env.example` placeholders only). Deploy:
 Item 13 stays `PARTIAL` — another real violation closed, not proof the sweep is
 exhausted. Next slot: the route's `whisperTip` strings, which render under
 `AI Whisper Tip` and state an assessment the keyword matcher did not perform.
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:05
+Window date: 2026-09-24   Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools — the live whisper-tip surface.
+  `POST /api/telephony/handle-turn` returned `parsed.whisperTip` verbatim from
+  its Gemini branch; the model answered with receipts for actions that route
+  never dispatches ("Appointment slot confirmed for Thursday 2:30 PM",
+  "Provided gate access #4829 to courier", "Robocall / telemarketer identified
+  and terminated"). `App.tsx` surfaces the value as a `whisper` transcript turn
+  and `ActiveCallHUD.tsx` renders it under "AI Whisper Tip", so an unmarked
+  receipt read as an observed event. Fallbacks fabricated too
+  (`|| 'Call proceeding smoothly'`, `let whisperTip = "AI tracking call turns"`)
+  and `src/utils/telephonyEngine.ts` carried the same pattern
+  ("Spam detected. Terminating line automatically.").
+  Evidence: `src/utils/hardening/callSummaryTruth.ts` (new
+  `whisperTipForDisplay()` — a model-authored tip is marked
+  "AI suggestion — not an observed system event"; an absent tip stays empty),
+  `server.ts`, `src/utils/telephonyEngine.ts`,
+  `src/tests/callSummaryTruth.test.ts` (8 new assertions, 29 total).
+  Observed: targeted `npx vitest run src/tests/callSummaryTruth.test.ts` →
+  1 file / 29 tests passed. Negative-validated: reverting the marker fails
+  exactly the marker assertion (`1 failed | 28 passed`), restored → 29/29.
+
+In Progress:
+- #13 is still `PARTIAL` — this closed one more real violation; it is not proof
+  the fake-success sweep is exhausted.
+
+Remaining:
+- #13 continues to be the highest-priority non-`VERIFIED` item; more surfaces
+  remain unswept. Hardware/credential items (Real Android E2E, Real Screenshot,
+  live provider dispatch, bridge pairing) remain BLOCKED in this sandbox.
+
+Bugs Found:
+- The live whisper tip asserted performed system events (see above), found by
+  reading the `handle-turn` route against the UI that renders its return value.
+
+Bugs Fixed:
+- Whisper tips are now labelled as unverified AI suggestions, and the fabricated
+  defaults/fallbacks are removed. Proof: 29/29 targeted tests, negative-validated.
+
+Tests:    1 file / 29 tests passed (targeted). Full suite: 96 files / 1250 tests passed.
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0.
+Build:    `npm run build` exit 0 — `dist/server.cjs` 868545 bytes (848.2 kB).
+E2E:      NOT RUN — no handset, no telephony provider credentials in sandbox.
+Security: NOT RUN (no audit script in this slot's budget); no `.env` touched,
+          no token written to any file.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row).
+Branch:  feature/hermes-full-completion
+Commit:  145fee7 (code fix 4819ab5)
+Push:    succeeded → origin/feature/hermes-full-completion (4819ab5..145fee7)
+
+PR:         NONE opened this slot (work slot; PR is opened/refreshed in the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; the verified `dist/server.cjs` is the unit available.
+
+Blocked:
+- Real Android device E2E — requires a physical handset.
+- Real screenshot capture — requires a display/hardware.
+- Live social/telephony provider dispatch — requires provider credentials.
+- Live bridge pairing success path — requires MOBILE_BRIDGE_PAIRING_SECRET.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- Continue #13: sweep the remaining tool-reporting surfaces for performed-action
+  phrasing not backed by a dispatched action, starting with the other
+  `handle-turn` response fields and the Telegram/notification reply text.
+
+हिंदी सारांश (एक पंक्ति):
+- लाइव whisper-tip अब "AI सुझाव — कोई देखा गया सिस्टम इवेंट नहीं" के रूप में
+  चिह्नित है; 29/29 टेस्ट पास, lint और build हरे।
