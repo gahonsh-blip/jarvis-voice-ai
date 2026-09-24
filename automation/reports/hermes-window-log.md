@@ -4645,3 +4645,81 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - रिवर्स-जियोकोड विफल होने पर ऐप जो अनुमानित इलाका बताती थी उसे असली पता बताकर
   दिखाती थी — अब उसे "offline estimate" के रूप में ईमानदारी से दर्शाया जाता है।
+
+---
+
+## WORK SLOT 6 — 2026-09-24 23:35 IST fire (retried execution, logged 23:50 IST)
+
+Slot:        WORK  |  IST time: 23:35–23:50
+Window date: 2026-09-24   Window slots completed so far: 5 (state before this slot) → 6
+
+Completed:
+- #13 Zero-fake-success — **the call-summary sentiment badge**.
+  `summarizeCallTranscript()` (`src/utils/telephonyEngine.ts`) defaulted
+  `sentiment` to `'positive'` when no keyword matched, so a benign transcript
+  rendered a green `POSITIVE` badge in `TelephonyHubModal.tsx` although the
+  function performs no sentiment analysis (it only tests four negative and three
+  urgency keywords). Default is now `'neutral'`.
+  Evidence: `src/utils/telephonyEngine.ts`; `src/tests/callSummaryTruth.test.ts`
+  → targeted **1 file / 13 tests passed**. Negative-validated: reverting the
+  default to `'positive'` gives **2 failed | 11 passed** (exactly the two new
+  tests), restored → 13/13. Commit `ea874b7`, pushed.
+- #13 Zero-fake-success — **the call-summary action items** (committed by the
+  earlier, killed execution of this same slot as `af0f303`; independently
+  re-verified this run). `src/utils/hardening/callSummaryTruth.ts` +
+  `summarizeCallTranscript()` return every follow-up marked "... — not performed
+  — recorded for human follow-up" instead of past-tense receipts, and both
+  summary builders name only what was observed.
+
+In Progress:
+- #13 Zero-fake-success — one more real violation closed, not proof the sweep is
+  exhausted.
+
+Remaining:
+- #13 Zero-fake-success — remaining surfaces unaudited.
+- Hardware/credential-blocked: real Android device E2E, real screenshot capture,
+  live social/telephony provider dispatch, live bridge pairing success path.
+
+Bugs Found:
+- The unobserved-sentiment default: a regex that matched nothing was rendered to
+  the operator as a positive call.
+
+Bugs Fixed:
+- Sentiment default `'positive'` → `'neutral'` (`ea874b7`), proven by the two
+  negative-validated regression tests above.
+
+Tests:    96 files / 1232 tests passed (full suite, clean run at af0f303 +
+          ea874b7 code); targeted callSummaryTruth 13/13 after the fix.
+Lint:     PASS — `npm run lint` (tsc --noEmit) exit 0.
+Build:    PASS — `npm run build` exit 0; dist/server.cjs 867083 bytes (846.8 kB).
+E2E:      NOT RUN — no handset/display in sandbox.
+Security: clean — `.env` ignored (.gitignore:4); `git status --short` empty;
+          no token/key/node_modules/dist stray in the tree.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md,
+               automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  ea874b7 (code fix) + docs commit this slot
+Push:    succeeded — af0f303..ea874b7 to origin/feature/hermes-full-completion
+
+PR:         #4 open, mergeable_state clean — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            verified artifact is dist/server.cjs (867083 bytes)
+
+Blocked:
+- Real Android device E2E — requires a physical handset
+- Real screenshot capture — requires a display/hardware
+- Live social/telephony provider dispatch — requires provider credentials
+- Live bridge pairing success path — requires MOBILE_BRIDGE_PAIRING_SECRET
+
+Human Approval Required:
+- The main merge (PR #4) — owner approval only.
+
+Next Slot:
+- #13 (Zero-fake-success) — continue the sweep on the next unaudited surface;
+  hardware-blocked E2E items stay recorded BLOCKED.
+
+हिंदी सारांश (एक पंक्ति):
+- कॉल सारांश अब अनुमानित "positive" भावना दिखाने के बजाय ईमानदारी से "neutral"
+  दर्शाता है, और की गई हुई कार्रवाई का झूठा दावा नहीं करता।

@@ -4,9 +4,10 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-24 18:10 UTC (23:40 IST 2026-09-24) — **WORK SLOT 6** of
-the 2026-09-24 window, the 23:35 IST fire. Item 13
-(`Zero-fake-success for all tools`), the **call-summary action items**.
+Last cycle: 2026-09-24 18:20 UTC (23:50 IST 2026-09-24) — **WORK SLOT 6** of
+the 2026-09-24 window, the 23:35 IST fire (retried execution). Item 13
+(`Zero-fake-success for all tools`), the **call-summary action items and
+sentiment badge**.
 
 **The call summary reported follow-ups as completed work.**
 `summarizeCallTranscript()` in `src/utils/telephonyEngine.ts` finalises a call
@@ -30,21 +31,33 @@ rephrased from past-tense receipts to imperatives (`Add caller to spam
 blocklist`, `Update calendar with the discussed appointment`). `CheckCircle2`
 was replaced with a neutral dot in the action list so the row is not a receipt.
 
-Guarded by `src/tests/callSummaryTruth.test.ts` (11 tests: the `formatActionItem`
+Guarded by `src/tests/callSummaryTruth.test.ts` (13 tests: the `formatActionItem`
 truth table and idempotence, `summarizeCallTranscript` marking every returned
 item and refusing the completion phrasing, both summary builders, the list note,
 and source guards on the removed literals). Negative-validated: restoring
 `Added caller to spam blocklist` / the `Successfully conveyed objectives` line
-fails exactly the matching source guard, restored → 11/11.
+fails exactly the matching source guard, restored → 13/13.
+
+**The sentiment badge asserted a call it did not assess.** The same function
+defaulted `sentiment` to `'positive'`, so a transcript that matched no keyword
+rendered a green `POSITIVE` badge (`TelephonyHubModal.tsx`) although the
+function performs no sentiment analysis — it only tests four negative keywords
+and three urgency keywords. The default is now `'neutral'`, which is what an
+unobserved signal honestly means; the negative and urgent branches are
+unchanged. Two regression tests added ("does not assert a positive call when it
+matched no keyword", "does not assert a positive call for a transcript with no
+sentiment signal"). Negative-validated: reverting the default to `'positive'`
+fails exactly those two (`2 failed | 11 passed`), restored → 13/13.
 
 Evidence: `src/utils/hardening/callSummaryTruth.ts`,
 `src/utils/telephonyEngine.ts`, `src/components/TelephonyHubModal.tsx`,
 `src/components/ActiveCallHUD.tsx`,
 `src/tests/callSummaryTruth.test.ts`. Gates observed this slot:
-`npm run lint` (`tsc --noEmit`) exit 0; targeted **1 file / 11 tests passed**
-(224 ms) and 6 telephony files / 68 tests passed; full suite **96 files / 1232
-tests passed** (21.07 s); `npm run build` exit 0, artifact `dist/server.cjs`
-846.8 kB. E2E: **NOT RUN** — no handset. Deploy: **NOT_CONFIGURED**. Item 13
+`npm run lint` (`tsc --noEmit`) exit 0; targeted **1 file / 13 tests passed**;
+full suite **96 files / 1232 tests passed** (clean run before the two sentiment
+tests were added; the target file's 13 include them); `npm run build` exit 0,
+artifact `dist/server.cjs` 846.8 kB (867083 bytes). E2E: **NOT RUN** — no
+handset. Deploy: **NOT_CONFIGURED**. Item 13
 stays `PARTIAL` — another real violation closed, not proof the sweep is
 exhausted.
 

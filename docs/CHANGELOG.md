@@ -4,6 +4,39 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 23:50 IST (2026-09-24 18:20 UTC) — work slot 6: the call summary stops reporting follow-ups as done work and stops asserting an unobserved positive call
+
+### Fixed
+- `summarizeCallTranscript()` (`src/utils/telephonyEngine.ts`) pushed action
+  items phrased as completed receipts (`Added caller to spam blocklist`,
+  `Calendar appointment updated`, `Calendar event dispatched`) and a summary
+  line (`Successfully conveyed objectives ... synced action items`) while only
+  regex-matching transcript text. Nothing in that path dispatches a calendar
+  event, blacklists a number, or sends an SMS. Its `sentiment` also defaulted
+  to `'positive'`, so a transcript matching no keyword rendered a green
+  `POSITIVE` badge although the function performs no sentiment analysis.
+
+### Added
+- `src/utils/hardening/callSummaryTruth.ts` — `formatActionItem()` marks a
+  recorded follow-up as outstanding (`... — not performed — recorded for human
+  follow-up`), `describeOutboundCall()` / `describeInboundCall()` state only
+  that a call took place, and `ACTION_ITEM_LIST_NOTE` sits under the heading.
+- Two sentiment regression tests pinning the unobserved default to `'neutral'`.
+
+### Changed
+- Item strings rephrased from past-tense receipts to imperatives; the
+  sentiment default is now `'neutral'`; `CheckCircle2` replaced with a neutral
+  dot in the action list.
+
+### Tests
+- `src/tests/callSummaryTruth.test.ts` — 13 tests. Negative-validated twice:
+  restoring the receipt literals fails the matching source guard, and reverting
+  the sentiment default fails exactly the two new tests (`2 failed | 11
+  passed`); both restored → 13/13. Full suite 96 files / 1232 tests passed;
+  build exit 0 (`dist/server.cjs` 846.8 kB).
+
+---
+
 ## [Unreleased] - 2026-09-24 23:19 IST (2026-09-24 17:49 UTC) — work slot 5: the geocode panel stops vouching for an offline quadrant guess
 
 ### Fixed
