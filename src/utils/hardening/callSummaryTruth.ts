@@ -66,6 +66,36 @@ export function formatLiveActionItem(item: string): string {
 }
 
 /**
+ * Marker for the live "AI Whisper Tip" surface. `POST
+ * /api/telephony/handle-turn` returns a `whisperTip` the model invents
+ * (`App.tsx` pushes it as a `whisper` transcript turn and `ActiveCallHUD.tsx`
+ * renders it under the label `AI Whisper Tip`). The model is asked for
+ * intelligence about the call, and it answers with unsupported assertions of
+ * system events — e.g. `Appointment slot confirmed for Thursday 2:30 PM`,
+ * `Robocall / telemarketer identified and terminated`. Nothing in that request
+ * path dispatched an appointment confirmation or terminated the line.
+ *
+ * A whisper tip is advice to the operator; it may not read as a receipt for an
+ * action the system performed. A model-authored tip is marked as a suggestion
+ * so a reader cannot mistake it for an observed event.
+ */
+export const WHISPER_TIP_NOT_AN_EVENT_NOTE = 'AI suggestion — not an observed system event';
+
+/**
+ * Renders a model-authored whisper tip as a suggestion. Applied to the
+ * untrusted LLM branch (the model can answer with a receipt no matter how the
+ * prompt is worded); the rule-based fallbacks author their strings as
+ * suggestions directly. Idempotent, and an empty tip stays empty so the UI
+ * reports the absence rather than a filled-in default.
+ */
+export function whisperTipForDisplay(tip: unknown): string {
+  const trimmed = typeof tip === 'string' ? tip.trim() : '';
+  if (!trimmed) return '';
+  if (trimmed.includes(WHISPER_TIP_NOT_AN_EVENT_NOTE)) return trimmed;
+  return `${trimmed} — ${WHISPER_TIP_NOT_AN_EVENT_NOTE}`;
+}
+
+/**
  * Honest summary for a completed outbound call. It states only what the
  * summariser can see: that a call took place, what was discussed, and that
  * follow-ups remain outstanding.

@@ -5,10 +5,12 @@ import {
   ACTION_ITEM_LIST_NOTE,
   ACTION_ITEM_NOT_PERFORMED_NOTE,
   LIVE_ACTION_ITEM_NOTE,
+  WHISPER_TIP_NOT_AN_EVENT_NOTE,
   describeInboundCall,
   describeOutboundCall,
   formatActionItem,
   formatLiveActionItem,
+  whisperTipForDisplay,
 } from '../utils/hardening/callSummaryTruth';
 import { summarizeCallTranscript } from '../utils/telephonyEngine';
 import type { CallTurn } from '../types/telephony';
@@ -173,7 +175,7 @@ describe('server handle-turn marks every returned follow-up as unperformed', () 
 
   it('imports the live formatter from the shared truth helper', () => {
     expect(serverSource).toContain(
-      "import { formatLiveActionItem } from './src/utils/hardening/callSummaryTruth'"
+      "import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth'"
     );
   });
 
@@ -193,3 +195,61 @@ describe('server handle-turn marks every returned follow-up as unperformed', () 
     expect(serverSource).not.toMatch(/shouldEndCall,\s*followUpActions,\s*\}/);
   });
 });
+
+// item 13, continued — the live whisper-tip surface. `handle-turn` asks the
+// model for "intelligence about the call" and the model answers with receipts
+// for actions nothing performed ("Appointment slot confirmed for Thursday
+// 2:30 PM", "Robocall / telemarketer identified and terminated"). `App.tsx`
+// pushes the value as a `whisper` transcript turn and `ActiveCallHUD.tsx`
+// renders it under the label "AI Whisper Tip" — so an unmarked receipt reads
+// as an observed system event. The same applies to the rule-based fallbacks.
+
+describe('whisperTipForDisplay marks a model-authored tip as a suggestion', () => {
+  it('labels a receipt-shaped tip as not an observed event', () => {
+    expect(whisperTipForDisplay('Robocall / telemarketer identified and terminated')).toBe(
+      `Robocall / telemarketer identified and terminated — ${WHISPER_TIP_NOT_AN_EVENT_NOTE}`
+    );
+  });
+
+  it('is idempotent for an already-marked tip', () => {
+    const once = whisperTipForDisplay('Appointment slot confirmed for Thursday 2:30 PM');
+    expect(whisperTipForDisplay(once)).toBe(once);
+  });
+
+  it('reports an absent tip as absent rather than filling in a default', () => {
+    expect(whisperTipForDisplay(undefined)).toBe('');
+    expect(whisperTipForDisplay('   ')).toBe('');
+  });
+
+  it('keeps a distinct marker so a whisper tip is not confused with an action item', () => {
+    expect(WHISPER_TIP_NOT_AN_EVENT_NOTE).not.toBe(LIVE_ACTION_ITEM_NOTE);
+    expect(WHISPER_TIP_NOT_AN_EVENT_NOTE).not.toBe(ACTION_ITEM_NOT_PERFORMED_NOTE);
+  });
+});
+
+describe('server handle-turn does not invent a whisper tip', () => {
+  const serverSource = fs.readFileSync(
+    path.resolve(__dirname, '../../server.ts'),
+    'utf8'
+  );
+
+  it('imports the whisper formatter from the shared truth helper', () => {
+    expect(serverSource).toContain('whisperTipForDisplay');
+  });
+
+  it('wraps the Gemini branch tip instead of returning it verbatim', () => {
+    expect(serverSource).toContain('whisperTip: whisperTipForDisplay(parsed.whisperTip)');
+  });
+
+  it('removed the fabricated default tip', () => {
+    expect(serverSource).not.toContain("parsed.whisperTip || 'Call proceeding smoothly'");
+    expect(serverSource).not.toContain('let whisperTip = "AI tracking call turns"');
+  });
+
+  it('no fallback tip reads as a completed system action', () => {
+    expect(serverSource).not.toContain('Appointment slot confirmed for Thursday 2:30 PM');
+    expect(serverSource).not.toContain('Provided gate access #4829 to courier');
+    expect(serverSource).not.toContain('Robocall / telemarketer identified and terminated');
+  });
+});
+

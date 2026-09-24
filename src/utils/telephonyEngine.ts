@@ -249,7 +249,7 @@ export function generateLocalCallTurn(params: {
     if (input.includes('friday') || input.includes('3:00') || input.includes('available') || input.includes('confirmed')) {
       return {
         replyText: 'Friday at 3:00 PM works perfectly. I have locked this into Alex’s calendar and synced our reminders. Is there any pre-visit paperwork or preparation we should have ready?',
-        whisperTip: 'Lock appointment to calendar and ask for paperwork requirements.',
+        whisperTip: 'Suggestion: offer to lock the appointment and ask about paperwork requirements.',
         sentiment: 'positive',
         intent: 'confirmation',
         shouldEndCall: false,
@@ -282,7 +282,7 @@ export function generateLocalCallTurn(params: {
   if (input.includes('gate') || input.includes('code') || input.includes('buzz') || input.includes('delivery')) {
     return {
       replyText: 'Hello Dave. For building access, the resident gate code is #4092. You may leave the package right outside door 4B on the second level. Thank you for delivering!',
-      whisperTip: 'Provided gate code #4092 and delivery instructions.',
+      whisperTip: 'Suggestion: note the gate code and delivery instructions you gave.',
       sentiment: 'positive',
       intent: 'delivery_gate_code',
       shouldEndCall: false,
@@ -304,7 +304,7 @@ export function generateLocalCallTurn(params: {
   if (input.includes('solar') || input.includes('utility') || input.includes('debt') || input.includes('pre-selected')) {
     return {
       replyText: 'This line is protected by HERMES JARVIS Autonomous Call Screening. This number does not accept unsolicited marketing inquiries. We are declining this offer and adding your caller ID to our blocked directory. Goodbye.',
-      whisperTip: 'Spam detected. Terminating line automatically.',
+      whisperTip: 'Possible spam — transcript matched keywords. Decide whether to end the call.',
       sentiment: 'negative',
       intent: 'spam_rejection',
       shouldEndCall: true,
@@ -315,7 +315,7 @@ export function generateLocalCallTurn(params: {
   if (input.includes('confirm') || input.includes('friday') || input.includes('doctor') || input.includes('clinic')) {
     return {
       replyText: 'Thank you Sarah. I have confirmed Alex’s attendance for Friday at 3:00 PM. I will ensure Alex brings his photo ID and arrives 10 minutes early. Thank you for calling to confirm!',
-      whisperTip: 'Confirmed Friday 3 PM appointment with medical office.',
+      whisperTip: 'Suggestion: confirm the Friday 3 PM appointment and note it for follow-up.',
       sentiment: 'positive',
       intent: 'appointment_confirmed',
       shouldEndCall: false,

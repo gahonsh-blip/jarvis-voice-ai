@@ -15,7 +15,7 @@ import {
   describeAuditTrail,
 } from './src/utils/hardening/auditTrailTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
-import { formatLiveActionItem } from './src/utils/hardening/callSummaryTruth';
+import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import {
   getEmergencyState,
@@ -7980,7 +7980,11 @@ CRITICAL VOICE PHONE GUIDELINES:
           success: true,
           turn: {
             replyText: parsed.replyText || "Understood. I have recorded that note.",
-            whisperTip: parsed.whisperTip || 'Call proceeding smoothly',
+            // The model authors this itself and often returns it as a receipt
+            // ("Appointment slot confirmed", "Robocall ... terminated") for an
+            // action this route never dispatches. An absent tip is reported as
+            // absent so the UI cannot render a default it did not observe.
+            whisperTip: whisperTipForDisplay(parsed.whisperTip),
             sentiment: parsed.sentiment || 'neutral',
             intent: parsed.intent || 'conversation',
             shouldEndCall: Boolean(parsed.shouldEndCall),
@@ -7998,26 +8002,29 @@ CRITICAL VOICE PHONE GUIDELINES:
     // High quality offline / rule-based fallback response
     const lowerUtterance = userUtterance.toLowerCase();
     let replyText = "Thank you for the update. I have noted that in Sir's executive calendar. Is there anything else you require?";
-    let whisperTip = "AI tracking call turns";
+    // Fallback tips are authored as suggestions only. A default that asserted
+    // "AI tracking call turns" claimed live analysis this route does not do; an
+    // unmatched turn reports no tip.
+    let whisperTip = "";
     let sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' = 'neutral';
     let shouldEndCall = false;
     let followUpActions: string[] = ['Logged call notes'];
 
     if (lowerUtterance.includes('reschedule') || lowerUtterance.includes('appointment') || lowerUtterance.includes('thursday')) {
       replyText = "Thursday at 2:30 PM is noted and accepted on our end. Please send the digital calendar invite to our verified contact. Thank you.";
-      whisperTip = "Appointment slot confirmed for Thursday 2:30 PM";
+      whisperTip = "Suggestion: confirm the Thursday 2:30 PM slot with a written invite.";
       sentiment = 'positive';
       shouldEndCall = true;
       followUpActions = ['Calendar updated: Thursday 2:30 PM', 'Send confirmation SMS'];
     } else if (lowerUtterance.includes('gate code') || lowerUtterance.includes('package') || lowerUtterance.includes('delivery')) {
       replyText = "Gate access code is #4829. Please place the delivery parcel securely behind the foyer pillar. Thank you, Dave.";
-      whisperTip = "Provided gate access #4829 to courier";
+      whisperTip = "Suggestion: confirm the courier used gate code #4829 and left the parcel.";
       sentiment = 'positive';
       shouldEndCall = true;
       followUpActions = ['Notify resident of package delivery at foyer'];
     } else if (lowerUtterance.includes('solar') || lowerUtterance.includes('free roof') || lowerUtterance.includes('interest rate')) {
       replyText = "This number is registered on the National Do-Not-Call Registry. Please remove this entry immediately. Goodbye.";
-      whisperTip = "Robocall / telemarketer identified and terminated";
+      whisperTip = "Possible robocall — the transcript matched spam keywords, not a carrier check.";
       sentiment = 'negative';
       shouldEndCall = true;
       followUpActions = ['Add number to local blocklist'];
