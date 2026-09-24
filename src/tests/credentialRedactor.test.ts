@@ -7,6 +7,23 @@ describe('credential redaction', () => {
     expect(out).not.toContain('sk-abcdefghijklmnopqrstuvwxyz1234567890ABCD');
   });
 
+  // The pattern now carries explicit sk-proj-/sk-svcacct-/sk-admin- alternatives
+  // for modern project-scoped keys. Without these the prefixed forms can slip
+  // past the bare sk- branch when a boundary lands inside the prefix.
+  it('redacts modern sk-proj- project keys', () => {
+    // Deliberately unlabelled: a "KEY=" prefix would be caught by the generic
+    // labelled-secret rule, hiding whether the OpenAI pattern itself matches.
+    const key = 'sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX0123456789abcdefghij';
+    expect(redactSecrets(`the agent pasted ${key} into the form`)).not.toContain(key);
+  });
+
+  it('redacts sk-svcacct- and sk-admin- service/Admin keys', () => {
+    const svc = 'sk-svcacct-ABCDEFGHIJKLMNOPQRSTUVWX0123456789abcdefghij';
+    const adm = 'sk-admin-ABCDEFGHIJKLMNOPQRSTUVWX0123456789abcdefghij';
+    expect(redactSecrets(`key=${svc}`)).not.toContain(svc);
+    expect(redactSecrets(`key=${adm}`)).not.toContain(adm);
+  });
+
   it('redacts a Google API key', () => {
     const key = 'AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q';
     expect(redactSecrets(`key=${key}`)).not.toContain(key);
