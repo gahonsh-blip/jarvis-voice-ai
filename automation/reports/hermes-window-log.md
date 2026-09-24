@@ -4770,3 +4770,43 @@ display). Deploy: NOT_CONFIGURED.
 
 Item 13 stays `PARTIAL`. Honest outcome: a negative result — none of the five
 examined surfaces warranted a change, and none was changed.
+
+---
+
+## Slot 8 — WORK — 2026-09-25 00:45 IST (2026-09-24 19:15 UTC)
+
+Item 13 (`Zero-fake-success for all tools`) — the **server telephony turn path**.
+
+`POST /api/telephony/handle-turn` (`server.ts:7928`) returned follow-ups phrased
+as completed work. Its Gemini branch returned `parsed.followUpActions` verbatim;
+its rule-based fallback returned `Calendar updated: Thursday 2:30 PM`, `Send
+confirmation SMS`, `Notify resident of package delivery at foyer` and `Add number
+to local blocklist`. Neither branch dispatches a calendar write, an SMS, a
+blocklist change or a package follow-up — the route only produces the reply text,
+and the UI renders the returned list as the call's action items. Slot 6 fixed the
+client-side `summarizeCallTranscript()` and missed this server path.
+
+Fixed with `formatLiveActionItem()` in `src/utils/hardening/callSummaryTruth.ts`:
+each captured item now reads `... — recorded live — not confirmed as performed`.
+Both branches map through it (Gemini strings coerced with `String(a)`). The
+marker is distinct from slot 6's retrospective marker so a live item is not
+confused with a summary item.
+
+Guarded by 8 new assertions in `src/tests/callSummaryTruth.test.ts` (now 21
+tests): formatter truth table, idempotence, distinct-marker check, and four
+server source guards (the import, both `map()` sites, and the absence of the raw
+`followUpActions,` shorthand in the fallback response). Negative-validated:
+reverting both `map()` calls fails exactly the two matching guards
+(`2 failed | 19 passed`); restored → 21/21.
+
+Gates observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted
+**1 file / 21 tests passed**; full vitest **96 files / 1242 tests passed**;
+`npm run build` exit 0 (`dist/server.cjs` 867819 bytes). E2E: **NOT RUN** (no
+handset, no provider credentials). Security: `git check-ignore -v .env` →
+`.gitignore:4:.env`; `git status --short` clean of stray files; no real
+credential in the diff (`.env.example` placeholders only). Deploy:
+**NOT_CONFIGURED**.
+
+Item 13 stays `PARTIAL` — another real violation closed, not proof the sweep is
+exhausted. Next slot: the route's `whisperTip` strings, which render under
+`AI Whisper Tip` and state an assessment the keyword matcher did not perform.

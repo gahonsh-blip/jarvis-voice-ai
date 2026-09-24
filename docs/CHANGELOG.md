@@ -4,6 +4,32 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 00:45 IST (2026-09-24 19:15 UTC) — work slot 8: the server telephony turn path stops returning follow-ups as done work
+
+### Fixed
+- `POST /api/telephony/handle-turn` (`server.ts`) returned follow-ups phrased
+  as completed work: the Gemini branch passed the model's
+  `parsed.followUpActions` through verbatim, and the rule-based fallback
+  returned `Calendar updated: Thursday 2:30 PM`, `Send confirmation SMS`,
+  `Notify resident of package delivery at foyer` and `Add number to local
+  blocklist`. Neither branch dispatches a calendar write, an SMS, a blocklist
+  change or a package follow-up — the route produces reply text only, and the
+  UI renders the returned list as the call's action items. Slot 6 fixed the
+  client summariser and missed this server path.
+
+### Added
+- `formatLiveActionItem()` in `src/utils/hardening/callSummaryTruth.ts` —
+  appends `recorded live — not confirmed as performed` to a captured follow-up
+  (idempotent, distinct from the retrospective summary marker). Both
+  `handle-turn` branches map their follow-ups through it.
+- 8 assertions in `src/tests/callSummaryTruth.test.ts` (now 21 tests): the
+  formatter truth table, idempotence, the distinct-marker check, and four
+  server source guards. Negative-validated — reverting both `map()` calls
+  fails exactly the two matching guards (`2 failed | 19 passed`), restored →
+  21/21.
+
+---
+
 ## [Unreleased] - 2026-09-24 23:50 IST (2026-09-24 18:20 UTC) — work slot 6: the call summary stops reporting follow-ups as done work and stops asserting an unobserved positive call
 
 ### Fixed
