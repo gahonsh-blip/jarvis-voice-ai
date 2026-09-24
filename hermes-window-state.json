@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-24",
   "window_started_at": "2026-09-24T15:35:00Z",
-  "last_slot_at": "2026-09-24T16:06:00Z",
-  "slots_completed": 2,
-  "current_item": 54,
-  "current_item_title": "Secret/token protection audit",
+  "last_slot_at": "2026-09-24T16:41:00Z",
+  "slots_completed": 3,
+  "current_item": 13,
+  "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "c061f38",
+  "last_commit": "45f9724",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -17,5 +17,5 @@
     "live bridge pairing success path (MOBILE_BRIDGE_PAIRING_SECRET not provisioned)"
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "window_date is the window's START date (21:05 IST fire). Do not treat a same-day window_date from a prior window as 'already finalized today' if it belongs to a window that started the previous evening. Slot 2 of the 2026-09-24 window (21:35 IST fire) advanced item 54: added negative-validated regression tests for the sk-proj-/sk-svcacct-/sk-admin- OpenAI key shapes that slot 1's regex fix introduced but never asserted. Feature branch last_commit c061f38; PR #4 open."
+  "note": "Slot 3 of the 2026-09-24 window (22:05 IST fire) rotated from item 54 back to item 13: evaluateSpamRisk() in src/utils/telephonyEngine.ts returned the literal reason 'Verified Legitimate Caller' whenever none of nine spam keywords matched, though the matcher consults no reputation source, STIR/SHAKEN attestation or contacts. Fixed via src/utils/hardening/spamVerdictTruth.ts (spamReasonLabel / NO_SPAM_MATCH_REASON), guarded by src/tests/spamVerdictTruth.test.ts (7 tests, negative-validated 2 failed|5 passed -> 7/7). Gates: lint exit 0, full vitest 93 files/1208 tests passed, build exit 0 (dist/server.cjs 867083 bytes). Item 13 stays PARTIAL; item 54 PARTIAL. Fix commit c6b5352, docs commit 45f9724. Push: ok. PR #4 open, merge a human decision. Rule reconfirmed: a no-match result is the absence of an indicator, never evidence a caller is vetted."
 }
