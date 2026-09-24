@@ -4405,3 +4405,39 @@ NOT_CONFIGURED. Main merge: NOT MERGED — awaiting human approval.
 
 Blocked (unchanged): real Android device E2E, real screenshot/display capture,
 live social/telephony provider dispatch.
+---
+
+### 2026-09-24 21:06 IST — slot 1 of the 2026-09-24 window (WORK)
+
+State: the `automation/hermes-state` branch **does** exist. The Phase A.3 check
+returned NO_STATE only because it ran before the branch was fetched; after
+`git fetch origin automation/hermes-state` the state was read (previous window
+started 2026-09-23 21:05 IST, finalized 04:35 IST on 2026-09-24,
+`slots_completed` 16). This run is the 21:05 IST fire, i.e. slot 1 of the
+2026-09-24 window. State was rewritten with `window_date` = the window **start**
+date and `finalized: false`, and a `note` field records that the previous window
+stamped `window_date` with its morning date — so a same-day `window_date` on a
+finalized record must not be read as "today's window already done".
+
+Item advanced: **#13 Zero-fake-success for all tools** (PARTIAL, one more
+surface). Items #1 and #2 are the first non-`VERIFIED` entries in the mandated
+order but are blocked solely by the missing handset, so the slot recorded them
+BLOCKED and advanced #13.
+
+**Operational bug found and fixed this slot (presentation integrity).**
+`git checkout -B automation/hermes-state origin/...` fails when the clone's
+`remote.origin.fetch` refspec is `main` only (the branch is not in the fetch
+refspec). The `&&` chain then skipped the state-branch creation, commit and push
+and fell through to `git checkout feature/hermes-full-completion` while still on
+the state branch, leaving an uncommitted `hermes-window-state.json` in the
+working tree that the next code-branch commit swept in (`52a3b4b`,
+"chore(state): ..." landed on the code branch). The remote branch was never
+polluted (`git ls-remote` confirmed `feature/hermes-full-completion` =
+`d21834b`), and the local branch was reset to `d21834b` this slot. Two durable
+fixes applied: (1) fetch refspecs for `feature/hermes-full-completion` and
+`automation/hermes-state` were added, so the documented Phase A.3 / Phase E.4
+chain resolves; (2) when publishing state, confirm the target branch with
+`git rev-parse --abbrev-ref HEAD` before committing, and never leave the state
+file in the tree when switching back.
+
+Report: `/tmp/hermes-window-report.md` (this slot's section).
