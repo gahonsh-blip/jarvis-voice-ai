@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { OracleVMStatus } from '../types';
 import { billingBadgeLabel } from '../utils/hardening/billingEntitlementTruth';
+import { processUptimeLabel } from '../utils/hardening/processUptimeTruth';
 import {
   normalizeUptimeHours,
   normalizePublicIp,
@@ -182,7 +183,9 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 {runState ?? UNKNOWN}
               </div>
               <span className="text-xs font-mono text-slate-400">
-                {uptimeHours != null ? `${uptimeHours} hours continuous` : 'uptime UNKNOWN'}
+                {uptimeHours != null
+                  ? `${processUptimeLabel(uptimeHours)} · instance uptime not probed`
+                  : 'uptime UNKNOWN'}
               </span>
             </div>
           </div>

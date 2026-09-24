@@ -342,6 +342,11 @@ export interface OracleVMStatus {
   status: 'RUNNING' | 'PROVISIONING' | 'STOPPED' | null;
   /** ISO8601 of the observation that produced `status`, or null if never observed. */
   statusObservedAt?: string | null;
+  // Measured lifetime of *this JARVIS process* (`Date.now() - DAEMON_BOOT_TIME`),
+  // NOT the instance's cloud uptime. The instance uptime is an OCI control-plane
+  // fact this server does not measure. See
+  // src/utils/hardening/processUptimeTruth.ts — surfaces must name it as the
+  // process uptime.
   uptimeHours: number;
   metrics: {
     cpuUsage: number | null;

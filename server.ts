@@ -82,6 +82,7 @@ import {
   describePublicIp,
 } from './src/utils/hardening/ociInstanceTruth';
 import { describeBillingCost, describeDeclaredCost, declaredCostCell } from './src/utils/hardening/billingEntitlementTruth';
+import { processUptimeLabel } from './src/utils/hardening/processUptimeTruth';
 import { assessedServerStatus, describeServerHealthClaim } from './src/utils/hardening/serverHealthTruth';
 import {
   telegramHostClaim,
@@ -3244,7 +3245,7 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
     const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
     const cpuLine = live?.cpuUsage != null ? `${live.cpuUsage}%` : 'unavailable';
     const ramLine = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : 'unavailable';
-    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${describeRunState(oracleCloudState.status)} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${cpuLine} | *RAM*: ${ramLine}\n• *Metrics Source*: ${live ? 'live host telemetry' : 'unavailable'}\n• *Cost*: ${describeBillingCost(oracleCloudState.billingEntitlement)}\n• *IP*: ${describePublicIp(oracleCloudState.publicIp)}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
+    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${describeRunState(oracleCloudState.status)}\n• *CPU*: ${cpuLine} | *RAM*: ${ramLine}\n• *Metrics Source*: ${live ? 'live host telemetry' : 'unavailable'}\n• *Uptime*: ${processUptimeLabel(oracleCloudState.uptimeHours)} (instance uptime is a control-plane fact this server does not measure)\n• *Cost*: ${describeBillingCost(oracleCloudState.billingEntitlement)}\n• *IP*: ${describePublicIp(oracleCloudState.publicIp)}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
     actionData = { type: 'telemetry', metrics: oracleCloudState.metrics };
   } else if (intentData.intent === 'security_audit') {
     const posture = securityMatrixPosture(securityMatrixState);
