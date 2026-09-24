@@ -56,6 +56,7 @@ import {
   receptionistLabel,
 } from '../utils/telephonyEndpointTruth';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
+import { ACOUSTIC_FILTER_STATUS, ACOUSTIC_FILTER_SPEC } from '../utils/hardening/acousticFilterTruth';
 import {
   downloadCallHistoryCsv,
   filterCallRecords,
@@ -602,7 +603,9 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                       <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Acoustic Simulation</label>
                       <div className="mt-1 flex items-center justify-between rounded-xl bg-slate-950 border border-slate-700 p-2 text-xs text-slate-300">
                         <span>PSTN / Cellular Bandpass</span>
-                        <span className="text-cyan-400 font-mono text-[10px]">300-3400Hz ON</span>
+                        <span className="text-slate-400 font-mono text-[10px]" title={ACOUSTIC_FILTER_SPEC}>
+                          {ACOUSTIC_FILTER_STATUS}
+                        </span>
                       </div>
                     </div>
                   </div>
