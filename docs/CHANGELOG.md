@@ -4,6 +4,28 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 22:47 IST (2026-09-24 17:17 UTC) — work slot 4: the call HUD stops claiming an acoustic bandpass it never applies
+
+### Fixed
+- `telephonyAudio.enableTelephoneBandpass()` creates a `BiquadFilterNode` that
+  is never connected into any audio graph — the synthesizer writes tones
+  directly to `ctx.destination` and has no call-audio input to filter. The HUD
+  still labelled the toggle `3G Filter` / `HD Voice`, titled it
+  `Telephone Acoustic Bandpass Filter (300-3400Hz)`, and the telephony hub
+  rendered `300-3400Hz ON`, presenting a simulated effect as an applied one.
+- Both surfaces now render the honest status
+  (`src/utils/hardening/acousticFilterTruth.ts`,
+  `ACOUSTIC_FILTER_STATUS = 'BANDPASS_NOT_APPLIED'`), and the
+  `acousticFilterEnabled` field comment in `src/types/telephony.ts` no longer
+  describes it as a call-audio simulation.
+
+### Tests
+- `src/tests/hardening/acousticFilterTruth.test.ts` (6 tests): status-string
+  unit cases plus source guards on `ActiveCallHUD.tsx` and
+  `TelephonyHubModal.tsx`. Negative-validated: restoring the `3G Filter` /
+  `HD Voice` literals fails exactly the matching case (`1 failed | 5 passed`);
+  restored → 6/6.
+
 ## [Unreleased] - 2026-09-24 22:11 IST (2026-09-24 16:41 UTC) — work slot 3: the spam screen stops vouching for callers
 
 ### Fixed

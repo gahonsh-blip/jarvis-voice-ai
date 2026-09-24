@@ -4530,3 +4530,45 @@ sweep is exhausted.
 
 हिंदी सारांश: टेलीफोनी स्पैम स्क्रीन जो बिना जाँचे कॉलर को 'Verified
 Legitimate' कहता था, वह ठीक किया गया; 7 नए टेस्ट, सभी गेट हरे।
+
+---
+
+## 2026-09-24 22:35 IST (WORK SLOT 4) — item 13: the acoustic bandpass that was never applied
+
+**Slot:** WORK, the 22:35 IST fire of the 2026-09-24 window (slot 4).
+
+**Item:** #13 `Zero-fake-success for all tools` — the telephony acoustic
+bandpass.
+
+**What was wrong.** `telephonyAudio.enableTelephoneBandpass()` creates a
+`BiquadFilterNode`, but the node is never connected into any audio graph. The
+synthesizer writes its tones straight to `ctx.destination` and has no call-audio
+input to filter. The UI nonetheless labelled the toggle `3G Filter` / `HD Voice`
+and titled it `Telephone Acoustic Bandpass Filter (300-3400Hz)`, and the
+telephony hub rendered a `300-3400Hz ON` status. That is a simulated effect
+surfaced to the operator as an applied one.
+
+**Fix.** `src/utils/hardening/acousticFilterTruth.ts` defines
+`ACOUSTIC_FILTER_STATUS = 'BANDPASS_NOT_APPLIED'` with a label and spec that say
+the profile is configured, not applied. `ActiveCallHUD.tsx` and
+`TelephonyHubModal.tsx` render those strings; `src/types/telephony.ts` and the
+`enableTelephoneBandpass` doc comment state the truth.
+
+**Tests.** `src/tests/hardening/acousticFilterTruth.test.ts` (6 tests):
+status-string unit cases and source guards on both components.
+Negative-validated: restoring the pre-fix literals fails exactly the matching
+case (`1 failed | 5 passed`); restored → 6/6.
+
+**Gates (observed).** `npm run lint` (`tsc --noEmit`) exit 0; targeted 1 file / 6
+tests passed; full suite 94 files / 1214 tests passed (22.00 s); `npm run build`
+exit 0, `dist/server.cjs` 846.8 kB (867083 bytes). E2E **NOT RUN** — no handset.
+Deploy **NOT_CONFIGURED**.
+
+**Item 13 stays `PARTIAL`** — one more real violation closed, not proof the
+sweep is exhausted.
+
+**Commit:** 9d2b426 (code) + docs commit this slot. Push: ok. PR #4 open, merge
+is a human decision.
+
+हिंदी सारांश: कॉल HUD फ़िल्टर को 'ON' दिखा रहा था जबकि फ़िल्टर कभी ऑडियो से जुड़ा
+ही नहीं था; अब सही स्थिति दिखती है — 6 नए टेस्ट, सभी गेट हरे।

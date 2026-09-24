@@ -4,7 +4,40 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-24 16:41 UTC (22:11 IST 2026-09-24) — **WORK SLOT 3** of
+Last cycle: 2026-09-24 17:17 UTC (22:47 IST 2026-09-24) — **WORK SLOT 4** of
+the 2026-09-24 window, the 22:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **telephony acoustic bandpass**.
+
+**The call HUD claimed an audio filter it never applies.**
+`telephonyAudio.enableTelephoneBandpass()` creates a `BiquadFilterNode`, but
+that node is never connected into any audio graph: the synthesizer writes tones
+straight to `ctx.destination` and has no call-audio input to filter. Meanwhile
+the HUD labelled the toggle `3G Filter` / `HD Voice` and titled it
+`Telephone Acoustic Bandpass Filter (300-3400Hz)`, and the telephony hub
+rendered a `300-3400Hz ON` status — a simulated effect surfaced to the operator
+as an applied one, exactly the class item 13 tracks.
+
+Fixed with `src/utils/hardening/acousticFilterTruth.ts`
+(`ACOUSTIC_FILTER_STATUS = 'BANDPASS_NOT_APPLIED'`, plus a label and spec that
+say the profile is configured but not applied). `ActiveCallHUD.tsx`,
+`TelephonyHubModal.tsx` and the `acousticFilterEnabled` field comment in
+`src/types/telephony.ts` now describe the filter honestly; the "ON" claim is
+gone.
+
+Guarded by `src/tests/hardening/acousticFilterTruth.test.ts` (6 tests: the
+status-string unit cases and source guards on both components). Negative-
+validated: restoring the `3G Filter` / `HD Voice` literals fails exactly the
+matching case (`1 failed | 5 passed`), restored → 6/6.
+
+Evidence: `src/utils/hardening/acousticFilterTruth.ts`,
+`src/tests/hardening/acousticFilterTruth.test.ts`. Gates observed this slot:
+`npm run lint` (`tsc --noEmit`) exit 0; targeted **1 file / 6 tests passed**;
+full suite **94 files / 1214 tests passed** (22.00 s); `npm run build` exit 0,
+artifact `dist/server.cjs` 846.8 kB (867083 bytes). E2E: **NOT RUN** — no
+handset. Deploy: **NOT_CONFIGURED**. Item 13 stays `PARTIAL` — another real
+violation closed, not proof the sweep is exhausted.
+
+Last cycle (previous): 2026-09-24 16:41 UTC (22:11 IST 2026-09-24) — **WORK SLOT 3** of
 the 2026-09-24 window, the 22:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **telephony spam-screen verdict**.
 
