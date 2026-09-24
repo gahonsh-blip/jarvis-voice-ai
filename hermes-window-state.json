@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-24",
   "window_started_at": "2026-09-24T15:35:00Z",
-  "last_slot_at": "2026-09-24T16:41:00Z",
-  "slots_completed": 3,
+  "last_slot_at": "2026-09-24T17:17:00Z",
+  "slots_completed": 4,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "45f9724",
+  "last_commit": "d23591c",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -17,5 +17,5 @@
     "live bridge pairing success path (MOBILE_BRIDGE_PAIRING_SECRET not provisioned)"
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 3 of the 2026-09-24 window (22:05 IST fire) rotated from item 54 back to item 13: evaluateSpamRisk() in src/utils/telephonyEngine.ts returned the literal reason 'Verified Legitimate Caller' whenever none of nine spam keywords matched, though the matcher consults no reputation source, STIR/SHAKEN attestation or contacts. Fixed via src/utils/hardening/spamVerdictTruth.ts (spamReasonLabel / NO_SPAM_MATCH_REASON), guarded by src/tests/spamVerdictTruth.test.ts (7 tests, negative-validated 2 failed|5 passed -> 7/7). Gates: lint exit 0, full vitest 93 files/1208 tests passed, build exit 0 (dist/server.cjs 867083 bytes). Item 13 stays PARTIAL; item 54 PARTIAL. Fix commit c6b5352, docs commit 45f9724. Push: ok. PR #4 open, merge a human decision. Rule reconfirmed: a no-match result is the absence of an indicator, never evidence a caller is vetted."
+  "note": "Slot 4 of the 2026-09-24 window (22:35 IST fire), item 13 continued: the telephony acoustic bandpass. enableTelephoneBandpass() in src/utils/telephonyAudio.ts creates a BiquadFilterNode that is never connected into any audio graph (the synthesizer writes tones directly to ctx.destination and has no call-audio input), yet ActiveCallHUD.tsx labelled the toggle 3G Filter/HD Voice with title 'Telephone Acoustic Bandpass Filter (300-3400Hz)' and TelephonyHubModal.tsx rendered '300-3400Hz ON'. Fixed via src/utils/hardening/acousticFilterTruth.ts (ACOUSTIC_FILTER_STATUS=BANDPASS_NOT_APPLIED); both surfaces + src/types/telephony.ts comment updated. Guarded by src/tests/hardening/acousticFilterTruth.test.ts (6 tests, negative-validated 1 failed|5 passed -> 6/6). Gates: lint exit 0, full vitest 94 files/1214 tests passed, build exit 0 (dist/server.cjs 867083 bytes). E2E NOT RUN, deploy NOT_CONFIGURED. Item 13 stays PARTIAL. Fix commit 9d2b426, docs commit d23591c. Push: ok. PR #4 open, merge a human decision."
 }

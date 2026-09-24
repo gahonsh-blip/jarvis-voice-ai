@@ -1,0 +1,589 @@
+{
+  "name": "",
+  "notes": [
+    {
+      "id": "1",
+      "title": "Project Setup Notes",
+      "content": "Jarvis Voice Assistant migrated to Node.js & React with full autonomy and speech recognition.",
+      "createdAt": "2026-08-31T10:26:35.715Z"
+    }
+  ],
+  "customKeyValues": {
+    "protocol": "Jarvis V2 Core",
+    "runtime": "Node.js + Oracle ARM64 Always Free",
+    "status": "ONLINE",
+    "persistence": "Durable Disk Sync (jarvis_memory.json)",
+    "version": "2.5.0-autonomous",
+    "system_engine": "Oracle Always Free ARM64 + Local Hybrid Engine",
+    "voice_status": "SpeechSynthesis + Web Audio API",
+    "persistence_mode": "Offline-First LocalStorage & Backend Sync"
+  },
+  "stats": {
+    "totalCommands": 264,
+    "actionsExecuted": 204,
+    "lastActive": "2026-09-23T22:09:51.368Z"
+  },
+  "processedTelegramUpdates": [],
+  "socialPosts": [
+    {
+      "id": "post-yt-1788332228268",
+      "platform": "YouTube",
+      "topic": "HERMES JARVIS Autonomous Core Overview",
+      "videoTitle": "HERMES JARVIS Autonomous Core Overview",
+      "content": "Automated end-to-end technical overview from HERMES JARVIS Autonomous Core.\n\n• Architecture: Oracle Always Free ARM Cloud + Gemini AI\n• Security Layer: Level-4 Human Authorization Matrix\n• Engine: YouTube Data API v3 (videos.insert)\n• Zero Fake Success Verified.",
+      "videoDescription": "Automated end-to-end technical overview from HERMES JARVIS Autonomous Core.\n\n• Architecture: Oracle Always Free ARM Cloud + Gemini AI\n• Security Layer: Level-4 Human Authorization Matrix\n• Engine: YouTube Data API v3 (videos.insert)\n• Zero Fake Success Verified.",
+      "hashtags": [
+        "#JARVIS",
+        "#AI",
+        "#AutonomousAgent",
+        "#GoogleCloud",
+        "#YouTubeAPI",
+        "#DevOps"
+      ],
+      "creativePrompt": "High-tech JARVIS HUD telemetry showing secure cloud authorization and automated upload.",
+      "status": "pending_approval",
+      "privacyStatus": "public",
+      "targetChannel": "GAHONSH Freelancing",
+      "isTestUpload": true,
+      "videoFileName": "synthetic_jarvis_test.mp4",
+      "scheduledTime": "Instant upon Level 4 Authorization",
+      "likesSimulated": 0,
+      "executionStatus": "PENDING_APPROVAL",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "post-1788332214572",
+      "platform": "YouTube",
+      "topic": "HERMES JARVIS Autonomous Core Overview",
+      "content": "💡 Perspective on HERMES JARVIS Autonomous Core Overview:\n\n1. Building with autonomous tools saves 10+ hours per week.\n2. Zero-cost infrastructure allows rapid prototyping.\n3. Human-in-the-loop verification guarantees precision.\n\nWhat are you automating next?\n\n#ArtificialIntelligence #Engineering #DevOps #Innovation #BuildInPublic",
+      "hashtags": [
+        "#AI",
+        "#Tech",
+        "#Automation",
+        "#Freelance",
+        "#DevOps"
+      ],
+      "creativePrompt": "Modern aesthetic graphic visualizing HERMES JARVIS Autonomous Core Overview, sleek cyber-tech gradient.",
+      "status": "pending_approval",
+      "scheduledTime": "Today at 07:00 PM IST",
+      "likesSimulated": 0,
+      "executionStatus": "PENDING_APPROVAL",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "post-1788332209078",
+      "platform": "YouTube",
+      "topic": "HERMES JARVIS Autonomous Core Overview",
+      "content": "💡 Perspective on HERMES JARVIS Autonomous Core Overview:\n\n1. Building with autonomous tools saves 10+ hours per week.\n2. Zero-cost infrastructure allows rapid prototyping.\n3. Human-in-the-loop verification guarantees precision.\n\nWhat are you automating next?\n\n#ArtificialIntelligence #Engineering #DevOps #Innovation #BuildInPublic",
+      "hashtags": [
+        "#AI",
+        "#Tech",
+        "#Automation",
+        "#Freelance",
+        "#DevOps"
+      ],
+      "creativePrompt": "Modern aesthetic graphic visualizing HERMES JARVIS Autonomous Core Overview, sleek cyber-tech gradient.",
+      "status": "pending_approval",
+      "scheduledTime": "Today at 07:00 PM IST",
+      "likesSimulated": 0,
+      "executionStatus": "PENDING_APPROVAL",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "post-yt-1788326056484",
+      "platform": "YouTube",
+      "topic": "HERMES JARVIS Autonomous Video Test",
+      "videoTitle": "HERMES JARVIS Autonomous Video Test",
+      "content": "Automated end-to-end test upload from HERMES JARVIS Autonomous Core.\n\n• Video Title: HERMES JARVIS Autonomous Video Test\n• Privacy Mode: PRIVATE (Safe Testing)\n• Upload Engine: YouTube Data API v3 (videos.insert)\n• Security Layer: Level-4 Human Authorization Gateway",
+      "videoDescription": "Automated end-to-end test upload from HERMES JARVIS Autonomous Core.\n\n• Video Title: HERMES JARVIS Autonomous Video Test\n• Privacy Mode: PRIVATE (Safe Testing)\n• Upload Engine: YouTube Data API v3 (videos.insert)\n• Security Layer: Level-4 Human Authorization Gateway",
+      "hashtags": [
+        "#JARVIS",
+        "#AutonomousAI",
+        "#GoogleCloud",
+        "#YouTubeDataAPI",
+        "#TestMode"
+      ],
+      "creativePrompt": "High-tech JARVIS HUD telemetry showing secure cloud authorization and automated upload.",
+      "status": "not_published",
+      "privacyStatus": "private",
+      "targetChannel": "YouTube Channel",
+      "isTestUpload": true,
+      "scheduledTime": "Instant upon Level 4 Authorization",
+      "likesSimulated": 0,
+      "executionStatus": "NOT_PUBLISHED",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "finalTruthState": "DRAFT",
+      "errorReason": "No valid YouTube access token or refresh token available"
+    },
+    {
+      "id": "post-1788177406675",
+      "platform": "LinkedIn",
+      "topic": "Zero Cost Cloud Architecture for AI Agents",
+      "content": "💡 Perspective on Zero Cost Cloud Architecture for AI Agents:\n\n1. Building with autonomous tools saves 10+ hours per week.\n2. Zero-cost infrastructure allows rapid prototyping.\n3. Human-in-the-loop verification guarantees precision.\n\nWhat are you automating next?\n\n#ArtificialIntelligence #Engineering #DevOps #Innovation #BuildInPublic",
+      "hashtags": [
+        "#AI",
+        "#Tech",
+        "#Automation",
+        "#Freelance",
+        "#DevOps"
+      ],
+      "creativePrompt": "Modern aesthetic graphic visualizing Zero Cost Cloud Architecture for AI Agents, sleek cyber-tech gradient.",
+      "status": "not_published",
+      "scheduledTime": "Today at 07:00 PM IST",
+      "likesSimulated": 0,
+      "executionStatus": "NOT_PUBLISHED",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "finalTruthState": "DRAFT",
+      "errorReason": "LinkedIn is not connected. Connect your Personal Profile via the \"Connect LinkedIn\" OAuth button or configure LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET. Post is held safely in local DRAFT queue without false claims."
+    },
+    {
+      "id": "post-1",
+      "platform": "LinkedIn",
+      "topic": "How Autonomous AI Agents are transforming Freelance Engineering",
+      "topicHi": "ऑटोनॉमस एआई एजेंट्स कैसे फ्रीलांसिंग को बदल रहे हैं",
+      "content": "🚀 The future of engineering isn't writing code manually from scratch — it's orchestrating autonomous AI agents like Hermes and Jarvis.\n\nFrom handling automated client requirement audits to drafting quotations and managing cloud servers, our Always-Free Oracle ARM stack delivers ₹0 infrastructure cost with enterprise capabilities.\n\nAre you building single-task chatbots or full autonomous agents?\n\n#ArtificialIntelligence #FreelanceTech #DevOps #OracleCloud #AutonomousAgents #BuildInPublic",
+      "hashtags": [
+        "#ArtificialIntelligence",
+        "#FreelanceTech",
+        "#DevOps",
+        "#OracleCloud",
+        "#AutonomousAgents"
+      ],
+      "creativePrompt": "Futuristic sci-fi holographic workspace showing an AI core managing multiple cloud nodes and mobile notifications, 8k resolution, cinematic lighting.",
+      "status": "not_published",
+      "scheduledTime": "Today at 05:00 PM IST",
+      "likesSimulated": 0,
+      "executionStatus": "NOT_PUBLISHED",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "finalTruthState": "DRAFT",
+      "errorReason": "LINKEDIN_ACCESS_TOKEN is not configured in server environment. Post is held safely in local DRAFT queue without false claims."
+    },
+    {
+      "id": "post-2",
+      "platform": "Twitter/X",
+      "topic": "Oracle Always Free ARM VM Guide",
+      "topicHi": "ओरेकल ऑलवेज फ्री एआरएम वीएम गाइड",
+      "content": "💡 PSA for developers:\nOracle Cloud offers 4 ARM OCPUs, 24GB RAM, and 200GB storage completely ₹0 / forever.\n\nPair it with an autonomous AI agent + Telegram webhook, and you have a 24/7 personal assistant on your phone without paying a penny.\n\nThread below on how we set up Phase 0 & 1 👇",
+      "hashtags": [
+        "#CloudComputing",
+        "#OracleCloud",
+        "#Developers",
+        "#AI"
+      ],
+      "creativePrompt": "Minimalist tech diagram of mobile connected to cloud server with zero cost badge.",
+      "status": "draft",
+      "scheduledTime": "Tomorrow at 10:00 AM IST",
+      "likesSimulated": 0,
+      "executionStatus": "DRAFT",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "DRAFT"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "log-1788332228270",
+      "timestamp": "2026-09-02T06:57:08.270Z",
+      "action": "Stage YouTube Video: \"HERMES JARVIS Autonomous Core Overview\" (PUBLIC) - Level 4 Gate Staged",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788332214572",
+      "timestamp": "2026-09-02T06:56:54.572Z",
+      "action": "Draft YouTube Post: \"HERMES JARVIS Autonomous Core Overview\" (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788332209078",
+      "timestamp": "2026-09-02T06:56:49.078Z",
+      "action": "Draft YouTube Post: \"HERMES JARVIS Autonomous Core Overview\" (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788332176695-cgc3",
+      "timestamp": "2026-09-02T06:56:16.695Z",
+      "action": "YouTube Channel Connected via OAuth 2.0 (GAHONSH Freelancing - UChdG0AL8NdFtGHzNY-C6XnQ)",
+      "levelRequired": 1,
+      "approvedBy": "HUMAN_CONFIRMATION",
+      "status": "VERIFIED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788326059163",
+      "timestamp": "2026-09-02T05:14:19.164Z",
+      "action": "Execute Level 4 YouTube Publish (post-yt-1788326056484)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_CONFIRMATION_WEB_PANEL",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "YouTube",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "No valid YouTube access token or refresh token available",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "log-1788326056486",
+      "timestamp": "2026-09-02T05:14:16.486Z",
+      "action": "Draft YouTube Test Video: \"HERMES JARVIS Autonomous Video Test\" (Privacy: PRIVATE) - Level 4 Gate Staged",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-resume-1788325572677",
+      "timestamp": "2026-09-02T05:06:12.677Z",
+      "action": "🟢 SYSTEM RESUMED by HUD_RESUME_BUTTON: Subsystems returned to standard Level 1-4 permission mode.",
+      "levelRequired": 4,
+      "approvedBy": "HUD_RESUME_BUTTON",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-killswitch-1788325561204",
+      "timestamp": "2026-09-02T05:06:01.204Z",
+      "action": "🚨 GLOBAL KILL SWITCH TRIGGERED by HUD_KILL_SWITCH_BUTTON: Terminated all background tasks, paused polling, and cleared 0 pending PermissionGateway item(s).",
+      "levelRequired": 4,
+      "approvedBy": "HUD_KILL_SWITCH_BUTTON",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788323290600",
+      "timestamp": "2026-09-02T04:28:10.600Z",
+      "action": "EXECUTED Approved Action: Send Freelance Quotation via SMTP on Recipient: client.enterprise@techcorp.io",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788323277837",
+      "timestamp": "2026-09-02T04:27:57.837Z",
+      "action": "EXECUTED Approved Action: Send Freelance Quotation via SMTP on Recipient: client.enterprise@techcorp.io",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-resume-1788323255733",
+      "timestamp": "2026-09-02T04:27:35.733Z",
+      "action": "🟢 SYSTEM RESUMED by HUD_RESUME_BUTTON: Subsystems returned to standard Level 1-4 permission mode.",
+      "levelRequired": 4,
+      "approvedBy": "HUD_RESUME_BUTTON",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-killswitch-1788323252423",
+      "timestamp": "2026-09-02T04:27:32.423Z",
+      "action": "🚨 GLOBAL KILL SWITCH TRIGGERED by HUD_KILL_SWITCH_BUTTON: Terminated all background tasks, paused polling, and cleared 0 pending PermissionGateway item(s).",
+      "levelRequired": 4,
+      "approvedBy": "HUD_KILL_SWITCH_BUTTON",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-1788323148909",
+      "timestamp": "2026-09-02T04:25:48.909Z",
+      "action": "EXECUTED Approved Action: Publish to LinkedIn Personal Profile on Personal Profile URN: urn:li:person:auth_user",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788323148908",
+      "timestamp": "2026-09-02T04:25:48.909Z",
+      "action": "Execute Level 4 LinkedIn Publish (post-1788177406675)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "LinkedIn",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "LinkedIn is not connected. Connect your Personal Profile via the \"Connect LinkedIn\" OAuth button or configure LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET. Post is held safely in local DRAFT queue without false claims.",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "log-1788323139931",
+      "timestamp": "2026-09-02T04:25:39.931Z",
+      "action": "EXECUTED Approved Action: Publish to LinkedIn Personal Profile on Personal Profile URN: urn:li:person:auth_user",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788323139930",
+      "timestamp": "2026-09-02T04:25:39.930Z",
+      "action": "Execute Level 4 LinkedIn Publish (post-1788177406675)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_PERMISSION_GATEWAY_UI",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "LinkedIn",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "LinkedIn is not connected. Connect your Personal Profile via the \"Connect LinkedIn\" OAuth button or configure LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET. Post is held safely in local DRAFT queue without false claims.",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "audit-1788177413803",
+      "timestamp": "2026-08-31T11:56:53.803Z",
+      "action": "Execute Level 4 LinkedIn Publish (post-1788177406675)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_CONFIRMATION_WEB_PANEL",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "LinkedIn",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "LINKEDIN_ACCESS_TOKEN is not configured in server environment. Post is held safely in local DRAFT queue without false claims.",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "audit-1788177409171",
+      "timestamp": "2026-08-31T11:56:49.171Z",
+      "action": "Human Rejected LinkedIn Post Draft (post-1788177406675)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_CONFIRMATION_WEB_PANEL",
+      "status": "BLOCKED",
+      "verificationStatus": "STANDBY",
+      "finalTruthState": "REJECTED"
+    },
+    {
+      "id": "log-1788177406675",
+      "timestamp": "2026-08-31T11:56:46.675Z",
+      "action": "Draft LinkedIn Post: \"Zero Cost Cloud Architecture for AI Agents\" (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "audit-1788176335875",
+      "timestamp": "2026-08-31T11:38:55.875Z",
+      "action": "Execute Level 4 LinkedIn Publish (post-1)",
+      "levelRequired": 4,
+      "approvedBy": "HUMAN_CONFIRMATION_WEB_PANEL",
+      "status": "NOT_PUBLISHED",
+      "targetPlatform": "LinkedIn",
+      "verificationStatus": "MISSING_CREDENTIALS",
+      "errorReason": "LINKEDIN_ACCESS_TOKEN is not configured in server environment. Post is held safely in local DRAFT queue without false claims.",
+      "finalTruthState": "DRAFT"
+    },
+    {
+      "id": "log-1",
+      "timestamp": "2026-08-31T09:38:50.226Z",
+      "action": "Read Git Repository Status (Level 1)",
+      "levelRequired": 1,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-2",
+      "timestamp": "2026-08-31T10:38:50.226Z",
+      "action": "Draft Social Media Post for LinkedIn (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    },
+    {
+      "id": "log-3",
+      "timestamp": "2026-08-31T11:23:50.226Z",
+      "action": "Generate Client Quotation ₹45,000 (Level 2)",
+      "levelRequired": 2,
+      "approvedBy": "AUTO_RULE",
+      "status": "EXECUTED",
+      "verificationStatus": "VERIFIED",
+      "finalTruthState": "VERIFIED"
+    }
+  ],
+  "freelanceLeads": [
+    {
+      "id": "lead-1",
+      "clientName": "Aarav Tech Solutions (Bengaluru)",
+      "source": "Website Form",
+      "projectType": "AI Integration",
+      "rawRequirement": "Need an autonomous customer support chatbot with WhatsApp integration and CRM sync.",
+      "budgetEstimate": {
+        "currency": "INR",
+        "amount": 65000
+      },
+      "status": "Quotation Sent",
+      "createdAt": "2026-08-30T11:38:50.226Z",
+      "quotation": {
+        "scopeSummary": "Autonomous multi-lingual WhatsApp AI bot with CRM lead capture & real-time notification webhook.",
+        "timelineDays": 10,
+        "totalPrice": 65000,
+        "milestones": [
+          {
+            "title": "Architecture & WhatsApp Business API Setup",
+            "price": 20000,
+            "days": 3
+          },
+          {
+            "title": "Gemini AI Prompt & Intent Engine",
+            "price": 25000,
+            "days": 4
+          },
+          {
+            "title": "CRM Database Sync & Testing",
+            "price": 20000,
+            "days": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "lead-2",
+      "clientName": "Global Horizon Exports",
+      "source": "Telegram AI Bot",
+      "projectType": "Full-Stack Web App",
+      "rawRequirement": "B2B product catalog portal with inventory tracker and PDF quotation generator.",
+      "budgetEstimate": {
+        "currency": "INR",
+        "amount": 85000
+      },
+      "status": "AI Requirements Extracted",
+      "createdAt": "2026-08-31T03:38:50.226Z"
+    }
+  ],
+  "schedulerState": {
+    "lastNightRunDate": "2026-09-02"
+  },
+  "youTubeConnection": {
+    "connected": true,
+    "authType": "OAUTH_2_0",
+    "channelId": "UChdG0AL8NdFtGHzNY-C6XnQ",
+    "channelTitle": "GAHONSH Freelancing",
+    "customUrl": "@gahonsh",
+    "avatarUrl": "https://yt3.ggpht.com/RG5NOUAsdcTZT65-nxyO4kLeHxnKm1i155IgQxN3DTmwydC3lWjbhE-GBIwQZRQ28m1NqPvafQ=s88-c-k-c0x00ffffff-no-rj",
+    "connectedAt": "2026-09-02T06:56:16.694Z",
+    "expiresAt": "2026-09-02T18:42:59.504Z",
+    "scopes": [
+      "https://www.googleapis.com/auth/youtube.readonly",
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "openid"
+    ],
+    "accessTokenEncrypted": {
+      "iv": "5fadffbaf762b08ccc621565492a0acd",
+      "content": "889a3ce24b9cdf6483887f4fbfa2e3718779a50d2e263de7cb9be2cd0bbfffb859a4acb91f1c7a107815ad6d00dcb870806e28e1e2bfae1fa4863259f0d1136ab69321489d7f929ef30947f792ee84865c6c9347014f2bbc586c45dbe2b718a3e6829844ca5e93e4043a322c986d71929917da5cb6073ddadf1cb6d5b8c63cda87f03baf357bf545e88c9d2cfd72d9e2c0654860e42033b0578c75139ec57a006341f7b83ac1b92480d4b945c9fa90f0b5290edb0ef6dfbcac2586f75a18ad04279e86f02ed97d4ec7ec9a064c78621a77a2aca3299f82c96fd2567e0d4bc021ae5170a64ee6c911c262a91d25907cbc455b1545d68bfcd5d0724f5ea378",
+      "tag": "b188fac7acee5e9457f07f698f59fb2b"
+    },
+    "refreshTokenEncrypted": {
+      "iv": "39981c14940b53a72a192771e89f6bcd",
+      "content": "8afde44166321a3b2e282753655c1694fa7ec382d58e63d7a701f5989a2c9081a4b87261b417e7a807f8005633ba3de85eb535280084372455e7cdf235ed7f849d5249cd49a8e7efcf16698d2c51ee2a8ca9facb5446c216f83989d9258c72a906233984a54259",
+      "tag": "0d283b96faa0f04f6ab1c0bd93bd47f0"
+    }
+  },
+  "conversationHistory": [
+    {
+      "role": "user",
+      "content": "मुझसे हिंदी में बात करो",
+      "timestamp": "2026-09-23T22:09:51.314Z"
+    },
+    {
+      "role": "jarvis",
+      "content": "जी सर, हिंदी मोड सक्रिय है। अब मैं आपसे हिंदी में बात करूँगा। बताइए, मैं आपकी क्या सहायता करूँ?",
+      "timestamp": "2026-09-23T22:09:51.314Z"
+    },
+    {
+      "role": "user",
+      "content": "अभी कितने बजे हैं?",
+      "timestamp": "2026-09-23T22:09:51.334Z"
+    },
+    {
+      "role": "jarvis",
+      "content": "वर्तमान समय 10:09 pm है और आज बुधवार, 23 सितंबर 2026 है।",
+      "timestamp": "2026-09-23T22:09:51.334Z"
+    },
+    {
+      "role": "user",
+      "content": "आज का मौसम बताओ",
+      "timestamp": "2026-09-23T22:09:51.339Z"
+    },
+    {
+      "role": "jarvis",
+      "content": "अभी कोई मौसम स्रोत कनेक्टेड नहीं है, इसलिए मौसम या तापमान का डेटा उपलब्ध नहीं है।",
+      "timestamp": "2026-09-23T22:09:51.339Z"
+    },
+    {
+      "role": "user",
+      "content": "YouTube की स्थिति क्या है?",
+      "timestamp": "2026-09-23T22:09:51.346Z"
+    },
+    {
+      "role": "jarvis",
+      "content": "YouTube चैनल \"GAHONSH Freelancing\" सक्रिय रूप से कनेक्टेड और सत्यापित है। API कोटा और टोकन स्टेटस सामान्य है।",
+      "timestamp": "2026-09-23T22:09:51.346Z"
+    },
+    {
+      "role": "user",
+      "content": "JARVIS क्या कर सकता है?",
+      "timestamp": "2026-09-23T22:09:51.351Z"
+    },
+    {
+      "role": "jarvis",
+      "content": "मैं HERMES JARVIS हूँ — आपका ऑटोनॉमस AI असिस्टेंट। मेरी प्रमुख क्षमताएं:\n1. 📱 मोबाइल पर्सनल स्टेटस, बैटरी व मौसम टेलीमेट्री\n2. 🛡️ 4-लेवल सुरक्षा मैट्रिक्स और अनुमति गेटवे\n3. 💼 फ्रीलांस लीड्स व स्वचालित कोटेशन जनरेटर\n4. 📱 सोशल मीडिया पोस्ट्स निर्माण व अनुमोदन\n5. 💻 गिट ऑडिट, फाइल्स एक्सप्लोरर व वेब रिसर्च\n6. 🌐 यूट्यूब वीडियो सारांश व ओरेकल क्लाउड मॉनिटरिंग",
+      "timestamp": "2026-09-23T22:09:51.351Z"
+    },
+    {
+      "role": "user",
+      "content": "2 + 2 कितना होता है?",
+      "timestamp": "2026-09-23T22:09:51.356Z"
+    },
+    {
+      "role": "jarvis",
+      "content": "2 + 2 का मान 4 होता है, सर।",
+      "timestamp": "2026-09-23T22:09:51.356Z"
+    },
+    {
+      "role": "user",
+      "content": "Hindi mein baat karo Jarvis",
+      "timestamp": "2026-09-23T22:09:51.363Z"
+    },
+    {
+      "role": "jarvis",
+      "content": "जी सर, हिंदी मोड सक्रिय है। अब मैं आपसे हिंदी में बात करूँगा। बताइए, मैं आपकी क्या सहायता करूँ?",
+      "timestamp": "2026-09-23T22:09:51.363Z"
+    },
+    {
+      "role": "user",
+      "content": "abhi ka time kya ho raha hai batao",
+      "timestamp": "2026-09-23T22:09:51.369Z"
+    },
+    {
+      "role": "jarvis",
+      "content": "वर्तमान समय 10:09 pm है और आज बुधवार, 23 सितंबर 2026 है।",
+      "timestamp": "2026-09-23T22:09:51.369Z"
+    }
+  ]
+}
