@@ -4572,3 +4572,76 @@ is a human decision.
 
 हिंदी सारांश: कॉल HUD फ़िल्टर को 'ON' दिखा रहा था जबकि फ़िल्टर कभी ऑडियो से जुड़ा
 ही नहीं था; अब सही स्थिति दिखती है — 6 नए टेस्ट, सभी गेट हरे।
+
+════════════════════════════════════════════════════════════════
+SLOT 5 — 2026-09-24 23:05 IST (WORK SLOT)
+════════════════════════════════════════════════════════════════
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:05
+Window date: 2026-09-24   Window slots completed so far: 5
+
+Completed:
+- #13 Zero-fake-success for all tools — reverse-geocode provenance closed.
+  `reverseGeocodeCoordinates()` (`src/utils/locationService.ts`) fell back to
+  `estimateOfflineRegion()` on a failed/non-OK Nominatim request, returning
+  confident civic names ('Indian Subcontinent Core', 'Telemetry Sector') that
+  `LocationServicesModal.tsx` stamped `CIVIC SECTOR / REVERSE GEOCODE` with a
+  `City:` row, and `DashboardMapSnippet.tsx` showed as a `CIVIC SECTOR` pill —
+  a guess presented as a resolved address. Fallback now returns
+  `resolved:false` / `source:'offline_estimate'` with an "offline estimate"
+  address; real lookups return `resolved:true` / `source:'nominatim'`. New
+  `isResolvedAddress()` gates every label (REGION ESTIMATE / NO GEOCODER).
+  Evidence: src/tests/geocodeEstimateTruth.test.ts — 7 tests; negative-validated
+  (flipping the fallback flag -> 3 failed | 4 passed), restored 7/7.
+
+In Progress:
+- #13 remains PARTIAL — this slot closed one more real violation; the sweep is
+  not provably exhausted.
+
+Remaining:
+- #13 continues (next waveform/telemetry surface); hardware-blocked Android E2E
+  and real screenshot capture remain BLOCKED (no handset/display).
+
+Bugs Found:
+- Reverse-geocode offline fallback fabricated a civic-looking address and the UI
+  labelled it a geocoded result. Found by reading the fallback path against the
+  modal's unconditional CIVIC SECTOR header.
+
+Bugs Fixed:
+- Removed the fabricated civic names + unlabelled fallback; added provenance
+  (`resolved`/`source`) and `isResolvedAddress()`; gated both components.
+  Verified by geocodeEstimateTruth.test.ts (7/7) and the negative validation.
+
+Tests:    2 files / 23 tests passed (targeted, 191 ms); full suite 95 files /
+          1221 tests passed (19.95 s); baseline locationServicesTruth 16/16.
+Lint:     PASS — `npm run lint` (tsc --noEmit) exit 0.
+Build:    PASS — `npm run build` exit 0; dist/server.cjs 867083 bytes (846.8 kB).
+E2E:      NOT RUN — no handset/display in sandbox.
+Security: clean — `.env` ignored (.gitignore:4); `git status --short` empty; no
+          token/key/node_modules/dist stray in the tree.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  7dba07d (fix 8733cc8 + docs 7dba07d)
+Push:    succeeded — 8733cc8..7dba07d to origin/feature/hermes-full-completion
+
+PR:         NONE opened this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            verified artifact is dist/server.cjs (867083 bytes)
+
+Blocked:
+- Real Android device E2E — requires a physical handset
+- Real screenshot capture — requires a display/hardware
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13 (Zero-fake-success) — the next unverified surface; hardware-blocked E2E
+  items stay recorded BLOCKED.
+
+हिंदी सारांश (एक पंक्ति):
+- रिवर्स-जियोकोड विफल होने पर ऐप जो अनुमानित इलाका बताती थी उसे असली पता बताकर
+  दिखाती थी — अब उसे "offline estimate" के रूप में ईमानदारी से दर्शाया जाता है।
