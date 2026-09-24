@@ -32,7 +32,7 @@ All notable improvements, security updates, and feature additions are documented
 - `src/tests/callSummaryTruth.test.ts` — 13 tests. Negative-validated twice:
   restoring the receipt literals fails the matching source guard, and reverting
   the sentiment default fails exactly the two new tests (`2 failed | 11
-  passed`); both restored → 13/13. Full suite 96 files / 1232 tests passed;
+  passed`); both restored → 13/13. Full suite 96 files / 1234 tests passed;
   build exit 0 (`dist/server.cjs` 846.8 kB).
 
 ---

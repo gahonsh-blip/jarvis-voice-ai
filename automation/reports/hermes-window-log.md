@@ -4688,8 +4688,8 @@ Bugs Fixed:
 - Sentiment default `'positive'` → `'neutral'` (`ea874b7`), proven by the two
   negative-validated regression tests above.
 
-Tests:    96 files / 1232 tests passed (full suite, clean run at af0f303 +
-          ea874b7 code); targeted callSummaryTruth 13/13 after the fix.
+Tests:    96 files / 1234 tests passed (full suite observed after the fix at
+          56469ad); targeted callSummaryTruth 13/13 after the fix.
 Lint:     PASS — `npm run lint` (tsc --noEmit) exit 0.
 Build:    PASS — `npm run build` exit 0; dist/server.cjs 867083 bytes (846.8 kB).
 E2E:      NOT RUN — no handset/display in sandbox.
