@@ -14,6 +14,7 @@ import {
   auditTrailCounts,
   describeAuditTrail,
 } from './src/utils/hardening/auditTrailTruth';
+import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
@@ -4274,16 +4275,23 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
 
   memoryState.socialPosts.unshift(newPost);
 
-  // Add Level 2 audit log
+  // Level 2 audit log — this route only staged a local draft, so the entry
+  // must not claim execution or verification.
+  const stagingAudit = stagedDraftAuditEntry({
+    platform: String(platform),
+    topic: newPost.topic,
+    level: 2,
+    gate: 'Level-2 draft review',
+  });
   pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: `Draft ${platform} Post: "${newPost.topic}" (Level 2)`,
+    action: stagingAudit.action,
     levelRequired: 2,
     approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    status: stagingAudit.status,
+    verificationStatus: stagingAudit.verificationStatus,
+    finalTruthState: stagingAudit.finalTruthState,
   });
 
   persistMemory();
@@ -4364,16 +4372,23 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     actionPayload: { postId: newPost.id, privacyStatus: validPrivacy, videoFileName: newPost.videoFileName },
   });
 
-  // Add Level 2 Audit Log for draft creation
+  // Staged for Level-4 authorization — nothing was published, so the audit row
+  // must not read as an executed/verified upload.
+  const stagingAudit = stagedDraftAuditEntry({
+    platform: 'YouTube',
+    topic: `${validTitle} (${validPrivacy.toUpperCase()})`,
+    level: 4,
+    gate: 'Level-4 authorization',
+  });
   pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: `Stage YouTube Video: "${validTitle}" (${validPrivacy.toUpperCase()}) - Level 4 Gate Staged`,
+    action: stagingAudit.action,
     levelRequired: 2,
     approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    status: stagingAudit.status,
+    verificationStatus: stagingAudit.verificationStatus,
+    finalTruthState: stagingAudit.finalTruthState,
   });
 
   persistMemory();
@@ -4429,16 +4444,23 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     actionPayload: { postId: newPost.id, privacyStatus: validPrivacy },
   });
 
-  // Add Level 2 Audit Log for draft creation
+  // Staged for Level-4 test authorization — no upload occurred, so the audit
+  // row must not read as an executed/verified upload.
+  const stagingAudit = stagedDraftAuditEntry({
+    platform: 'YouTube',
+    topic: `${title} (test, ${validPrivacy.toUpperCase()})`,
+    level: 4,
+    gate: 'Level-4 authorization',
+  });
   pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: `Draft YouTube Test Video: "${title}" (Privacy: ${validPrivacy.toUpperCase()}) - Level 4 Gate Staged`,
+    action: stagingAudit.action,
     levelRequired: 2,
     approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    status: stagingAudit.status,
+    verificationStatus: stagingAudit.verificationStatus,
+    finalTruthState: stagingAudit.finalTruthState,
   });
 
   persistMemory();

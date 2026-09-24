@@ -4,6 +4,31 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 04:15 IST (2026-09-24 22:45 UTC) — work slot 13: social draft staging stops logging unperformed work as verified
+
+### Fixed
+- `POST /api/social/generate`, `POST /api/social/youtube/upload-draft` and
+  `POST /api/social/youtube/draft-test` (`server.ts`) appended their
+  draft-staging audit row as `status: 'EXECUTED'` with `verificationStatus` and
+  `finalTruthState` both `'VERIFIED'`. The Security Matrix renders those two
+  fields as a green *confirmed* badge, so an event where **nothing left the
+  process** — a local draft was written and a Level-4 approval request was
+  staged — was presented as executed and verified external work. The row even
+  contradicted the post object the same request created
+  (`PENDING_APPROVAL` / `STANDBY` / `DRAFT`).
+- New `src/utils/hardening/socialDraftAuditTruth.ts` returns the only honest
+  truth triple for a staged draft (`PENDING` / `STANDBY` / `DRAFT`) and states in
+  the action text that no external action was performed. It can never emit a
+  verified claim.
+
+### Added
+- `src/tests/socialDraftAuditTruth.test.ts` — 6 tests. Three assert the truth
+  builder's output, three are a source-level regression guard over the three
+  routes. Negative-validated: reverting `/api/social/generate` to the literals
+  makes the guard fail; restoring the fix makes it pass.
+
+---
+
 ## [Unreleased] - 2026-09-25 03:45 IST (2026-09-24 22:15 UTC) — work slot 12: mobile telemetry stops reporting an unmeasured Level 4 gate and job count
 
 ### Fixed
