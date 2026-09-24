@@ -1,20 +1,21 @@
 {
   "window_date": "2026-09-24",
-  "window_started_at": "2026-09-23T15:35:00Z",
-  "last_slot_at": "2026-09-23T23:11:00Z",
-  "slots_completed": 16,
+  "window_started_at": "2026-09-24T15:35:00Z",
+  "last_slot_at": "2026-09-24T15:36:00Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "0b25dee",
+  "last_commit": "d21834b",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "lint exit 0; 91 files / 1189 tests passed; build exit 0 (dist/server.cjs 866712 bytes); security checks clean; PR #4 open; main NOT merged (awaiting human approval); deploy NOT_CONFIGURED",
+  "finalized": false,
+  "finalization_result": null,
   "blocked_items": [
     "real Android device E2E (no handset in sandbox)",
     "real screenshot/display capture (no display)",
     "live social/telephony provider dispatch (no credentials)",
     "live bridge pairing success path (MOBILE_BRIDGE_PAIRING_SECRET not provisioned)"
   ],
-  "last_report_path": "/tmp/hermes-window-report.md"
+  "last_report_path": "/tmp/hermes-window-report.md",
+  "note": "window_date is the window's START date (21:05 IST fire). The 2026-09-23 window wrote window_date=2026-09-24 (its 04:35 IST morning date) and finalized=true. Do not treat a same-day window_date from a prior window as 'already finalized today' if it belongs to a window that started the previous evening. This slot: 2026-09-24 21:05 IST fire = slot 1 of the 2026-09-24 window."
 }
