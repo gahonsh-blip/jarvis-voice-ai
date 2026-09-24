@@ -4480,3 +4480,53 @@ Commit `ea50779` (`test(security): cover modern sk-proj-/sk-svcacct-/sk-admin-
 key redaction`) pushed to `origin/feature/hermes-full-completion`
 (54984a7..ea50779). PR #4 left open, non-draft; merge remains a human decision.
 
+
+## 2026-09-24 22:05 IST (16:41 UTC) — WORK SLOT 3 (item 13)
+
+**Slot picked.** Clock read 22:06 IST = work slot (not a finalization fire).
+`docs/COMPLETION_STATUS.md` was read; item 13 (`Zero-fake-success for all
+tools`) remains `PARTIAL`, and the highest-value advance available without
+hardware was one more real trust-verdict violation. Slot 1 and slot 2 both
+worked item 54; this slot rotated back to the item-13 sweep.
+
+**Violation found.** `grep -rn "Legitimate" src/` returned exactly one hit:
+`evaluateSpamRisk()` in `src/utils/telephonyEngine.ts` stamped the literal
+reason `'Verified Legitimate Caller'` on any caller whose first-line text
+matched none of nine spam keywords. The matcher has no reputation source, no
+STIR/SHAKEN attestation and no contact lookup — so a caller the screen *could
+not assess* was reported to the operator as *verified legitimate*. This is the
+same class of unmeasured claim item 13 tracks (cf. the billing-entitlement and
+uptime fixes of previous slots).
+
+**Fix.** New `src/utils/hardening/spamVerdictTruth.ts`:
+`NO_SPAM_MATCH_REASON = 'No spam indicator matched — caller not vetted'` and
+`spamReasonLabel(reason)`, which returns the neutral constant for an absent/
+blank reason and preserves a genuine match reason verbatim.
+`telephonyEngine.ts` imports and routes the fallback through it.
+
+**Guards.** `src/tests/spamVerdictTruth.test.ts` (7 tests): neutral-reason unit
+cases, a guard that the constant contains neither "verified" nor "legitimate",
+the `evaluateSpamRisk` no-match branch (neutral reason, not a trust claim) and
+match branch (real reason preserved), plus two source guards pinning the
+import and the absence of the old literal. Negative validation: restoring the
+pre-fix literal fails exactly the matching pair — `2 failed | 5 passed`;
+restored → `7/7`. Targeted run: 2 files / 16 tests passed.
+
+**Gates observed this slot.** `npm run lint` (`tsc --noEmit`) **exit 0**;
+`npx vitest run` **93 files / 1208 tests passed** (20.90 s); `npm run build`
+**exit 0** (`dist/server.cjs` 867083 bytes / 846.8 kB). E2E: **NOT RUN** — no
+handset. Security: `git check-ignore -v .env` → `.gitignore:1:.env  .env`;
+no `.env`, token or key staged or in the diff.
+
+**Push.** Fix committed and pushed first (`c061f38..c6b5352`) while the tree was
+green, before the full-suite run and the docs polish, per the budget lesson.
+Docs (status + changelog + this log) pushed as a second commit. PR #4 left
+open and non-draft on `feature/hermes-full-completion`; merge to `main` remains
+a human decision. Deploy: **NOT_CONFIGURED** — no deployment target in this
+sandbox.
+
+**Item 13 stays `PARTIAL`** — one more real violation closed, not proof the
+sweep is exhausted.
+
+हिंदी सारांश: टेलीफोनी स्पैम स्क्रीन जो बिना जाँचे कॉलर को 'Verified
+Legitimate' कहता था, वह ठीक किया गया; 7 नए टेस्ट, सभी गेट हरे।

@@ -4,6 +4,28 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 22:11 IST (2026-09-24 16:41 UTC) — work slot 3: the spam screen stops vouching for callers
+
+### Fixed
+- `evaluateSpamRisk()` in `src/utils/telephonyEngine.ts` returned
+  `'Verified Legitimate Caller'` as its `reason` whenever none of its nine spam
+  keywords matched. The matcher compares first-line text only — it consults no
+  carrier reputation source, no STIR/SHAKEN attestation and no contacts — so a
+  caller it could not assess was reported to the operator as vetted.
+- The fallback routes through `spamReasonLabel()`
+  (`src/utils/hardening/spamVerdictTruth.ts`), which yields
+  `NO_SPAM_MATCH_REASON` — "No spam indicator matched — caller not vetted" —
+  and preserves a real match reason verbatim.
+
+### Tests
+- `src/tests/spamVerdictTruth.test.ts` (7 tests): neutral-reason unit cases, a
+  guard that the constant contains neither "verified" nor "legitimate", the
+  `evaluateSpamRisk` no-match and match branches, and two source guards.
+  Negative-validated against the pre-fix literal: `2 failed | 5 passed`;
+  restored → 7/7.
+
+---
+
 ## [Unreleased] - 2026-09-24 21:36 IST (2026-09-24 16:06 UTC) — work slot 2: regression coverage for modern OpenAI key prefixes
 
 ### Tests
