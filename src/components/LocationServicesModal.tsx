@@ -38,6 +38,7 @@ import {
   locationSourceLabel,
   accuracyDisplay,
   locationBriefing,
+  isResolvedAddress,
   type CoordsSource,
 } from '../utils/locationService';
 
@@ -458,11 +459,20 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                   <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex items-start gap-2.5">
                     <MapPin className="w-4 h-4 text-pink-400 shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-mono text-slate-400 uppercase">CIVIC SECTOR / REVERSE GEOCODE</div>
+                      <div className="text-[10px] font-mono text-slate-400 uppercase">
+                        {isResolvedAddress(address)
+                          ? 'CIVIC SECTOR / REVERSE GEOCODE'
+                          : 'REGION ESTIMATE / NO GEOCODER'}
+                      </div>
                       <p className="text-sm font-semibold text-slate-200 truncate">
                         {address?.formattedAddress || 'Reverse geocoding address...'}
                       </p>
-                      {address?.city && (
+                      {address?.city && !isResolvedAddress(address) && (
+                        <div className="text-[11px] font-mono text-amber-400 mt-0.5">
+                          Offline quadrant estimate — no civic address resolved
+                        </div>
+                      )}
+                      {address?.city && isResolvedAddress(address) && (
                         <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 mt-0.5">
                           <span>City: <strong className="text-cyan-300">{address.city}</strong></span>
                           <span>Country: <strong className="text-slate-300">{address.country}</strong></span>
@@ -704,7 +714,11 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                         </span>
                         <div className="mt-2 px-2.5 py-1 rounded-md bg-slate-950/90 border border-cyan-500/60 backdrop-blur-md text-center shadow-lg">
                           <div className="text-[10px] font-mono font-bold text-cyan-300">
-                            {address?.city || (coordsSource === 'live' ? 'GPS Lock Point' : 'Simulated Point')}
+                            {isResolvedAddress(address)
+                              ? address?.city
+                              : coordsSource === 'live'
+                                ? 'GPS Lock Point'
+                                : 'Simulated Point'}
                           </div>
                           <div className="text-[9px] font-mono text-slate-400">
                             {coords.latitude.toFixed(4)}°, {coords.longitude.toFixed(4)}°

@@ -5,6 +5,7 @@ import {
   formatDMS,
   locationSourceLabel,
   accuracyDisplay,
+  isResolvedAddress,
   type CoordsSource,
 } from '../utils/locationService';
 
@@ -98,7 +99,7 @@ export const DashboardMapSnippet: React.FC<DashboardMapSnippetProps> = ({
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-300"></span>
             </span>
             <span className="text-[9px] font-mono text-cyan-300 mt-1 font-bold">
-              {address?.city || 'CURRENT FIX'}
+              {isResolvedAddress(address) ? address?.city : 'CURRENT FIX'}
             </span>
           </div>
           {/* Subtle click prompt */}
@@ -131,7 +132,9 @@ export const DashboardMapSnippet: React.FC<DashboardMapSnippetProps> = ({
               <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800 flex items-center gap-2">
                 <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[9px] font-mono text-slate-400 uppercase">CIVIC SECTOR</div>
+                  <div className="text-[9px] font-mono text-slate-400 uppercase">
+                    {isResolvedAddress(address) ? 'CIVIC SECTOR' : 'REGION ESTIMATE'}
+                  </div>
                   <p className="text-xs font-semibold text-slate-200 truncate">
                     {address?.formattedAddress || address?.city || 'Detecting geographic sector...'}
                   </p>

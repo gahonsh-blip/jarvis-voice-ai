@@ -118,6 +118,8 @@ export async function reverseGeocodeCoordinates(lat: number, lon: number): Promi
         countryCode,
         postcode,
         road,
+        resolved: true,
+        source: 'nominatim',
       };
     }
   } catch (err) {
@@ -129,38 +131,49 @@ export async function reverseGeocodeCoordinates(lat: number, lon: number): Promi
 }
 
 /**
- * Approximate offline region when network reverse geocoder is unavailable
+ * Approximate offline region when network reverse geocoder is unavailable.
+ *
+ * This returns a coarse quadrant estimate, NOT a resolved civic address. It is
+ * marked `resolved: false` / `source: 'offline_estimate'` so every surface can
+ * distinguish "we looked this up" from "we guessed the quadrant".
  */
 function estimateOfflineRegion(lat: number, lon: number): LocationAddress {
   // Rough geographic quadrant checks
-  let city = 'Telemetry Sector';
-  let country = 'Earth Grid';
-  let countryCode = 'INT';
+  let city = 'Unresolved region';
+  let country = 'Unresolved';
+  let countryCode = 'UNK';
 
   if (lat >= 8 && lat <= 37 && lon >= 68 && lon <= 97) {
-    city = 'Indian Subcontinent Core';
-    country = 'India';
+    city = 'Indian Subcontinent (quadrant estimate)';
+    country = 'India (estimated)';
     countryCode = 'IN';
   } else if (lat >= 24 && lat <= 49 && lon >= -125 && lon <= -66) {
-    city = 'North American Sector';
-    country = 'United States';
+    city = 'North American (quadrant estimate)';
+    country = 'United States (estimated)';
     countryCode = 'US';
   } else if (lat >= 35 && lat <= 71 && lon >= -10 && lon <= 40) {
-    city = 'European Continental Zone';
-    country = 'European Union';
+    city = 'European Continental (quadrant estimate)';
+    country = 'Europe (estimated)';
     countryCode = 'EU';
   } else if (lat >= 20 && lat <= 46 && lon >= 122 && lon <= 154) {
-    city = 'East Asia Node';
-    country = 'Japan / Asia';
+    city = 'East Asia (quadrant estimate)';
+    country = 'Japan / Asia (estimated)';
     countryCode = 'JP';
   }
 
   return {
-    formattedAddress: `${city}, ${country} (${lat.toFixed(4)}°, ${lon.toFixed(4)}°)`,
+    formattedAddress: `${city} — ${country} (offline estimate, not a resolved address; ${lat.toFixed(4)}°, ${lon.toFixed(4)}°)`,
     city,
     country,
     countryCode,
+    resolved: false,
+    source: 'offline_estimate',
   };
+}
+
+/** True only when a real reverse geocoder resolved this address. */
+export function isResolvedAddress(address: LocationAddress | null): boolean {
+  return address?.resolved === true;
 }
 
 /**
