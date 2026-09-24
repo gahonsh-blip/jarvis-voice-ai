@@ -44,6 +44,28 @@ export function formatActionItem(item: string): string {
 export const ACTION_ITEM_LIST_NOTE = 'Recorded for human follow-up — not yet performed by JARVIS.';
 
 /**
+ * Marker for a follow-up captured live during a call turn. `POST
+ * /api/telephony/handle-turn` (server.ts) returns the model's/fallback's
+ * `followUpActions`, and the UI surfaces those strings directly. Nothing in
+ * that request path dispatches a calendar write, sends an SMS, blacklists a
+ * number or opens a package follow-up; the route only produces the reply text.
+ * So a live-captured item carries this marker rather than reading as a receipt.
+ */
+export const LIVE_ACTION_ITEM_NOTE = 'recorded live — not confirmed as performed';
+
+/** Idempotent formatter for a live-captured follow-up: a task, never a receipt. */
+export function formatLiveActionItem(item: string): string {
+  const trimmed = (item ?? '').trim();
+  if (!trimmed) {
+    return `No action item recorded — ${LIVE_ACTION_ITEM_NOTE}`;
+  }
+  if (trimmed.includes(LIVE_ACTION_ITEM_NOTE)) {
+    return trimmed;
+  }
+  return `${trimmed} — ${LIVE_ACTION_ITEM_NOTE}`;
+}
+
+/**
  * Honest summary for a completed outbound call. It states only what the
  * summariser can see: that a call took place, what was discussed, and that
  * follow-ups remain outstanding.

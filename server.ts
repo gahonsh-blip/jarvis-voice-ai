@@ -15,6 +15,7 @@ import {
   describeAuditTrail,
 } from './src/utils/hardening/auditTrailTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
+import { formatLiveActionItem } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import {
   getEmergencyState,
@@ -7983,7 +7984,9 @@ CRITICAL VOICE PHONE GUIDELINES:
             sentiment: parsed.sentiment || 'neutral',
             intent: parsed.intent || 'conversation',
             shouldEndCall: Boolean(parsed.shouldEndCall),
-            followUpActions: Array.isArray(parsed.followUpActions) ? parsed.followUpActions : [],
+            followUpActions: Array.isArray(parsed.followUpActions)
+              ? parsed.followUpActions.map((a: any) => formatLiveActionItem(String(a)))
+              : [],
           },
           source: 'gemini-2.5-flash',
         });
@@ -8028,7 +8031,10 @@ CRITICAL VOICE PHONE GUIDELINES:
         sentiment,
         intent: 'telephony_conversation',
         shouldEndCall,
-        followUpActions,
+        // The fallback matched transcript keywords only — it dispatched no
+        // calendar write, SMS or blocklist change. Every item is marked as a
+        // recorded task so the UI cannot render it as a finished one.
+        followUpActions: followUpActions.map(formatLiveActionItem),
       },
       source: 'autonomous_local_telephony_engine',
     });
