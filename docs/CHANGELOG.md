@@ -4,6 +4,39 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-24 23:19 IST (2026-09-24 17:49 UTC) — work slot 5: the geocode panel stops vouching for an offline quadrant guess
+
+### Fixed
+- `reverseGeocodeCoordinates()` (`src/utils/locationService.ts`) fell back to
+  `estimateOfflineRegion()` on a failed or non-OK Nominatim request, and that
+  fallback returned confident civic names (`'Indian Subcontinent Core'`,
+  `'Telemetry Sector'`) with country values. `LocationServicesModal.tsx`
+  stamped the result `CIVIC SECTOR / REVERSE GEOCODE` and rendered
+  `City: <name>`/`Country: <name>`; `DashboardMapSnippet.tsx` showed the same
+  as a `CIVIC SECTOR` pill. The UI presented a guess as a resolved address.
+
+### Added
+- `LocationAddress` (`src/types/location.ts`) carries optional
+  `resolved` / `source` provenance fields. The offline fallback sets
+  `resolved: false` / `source: 'offline_estimate'` and an address string that
+  says `offline estimate, not a resolved address`; a real lookup sets
+  `resolved: true` / `source: 'nominatim'`.
+- `isResolvedAddress()` exported from `locationService.ts`.
+
+### Changed
+- `LocationServicesModal.tsx` and `DashboardMapSnippet.tsx` gate their
+  `CIVIC SECTOR` / `REVERSE GEOCODE` labels on `isResolvedAddress()`, rendering
+  `REGION ESTIMATE / NO GEOCODER` and an amber offline-estimate note instead.
+  The modal's map pin falls back to `GPS Lock Point` rather than a guessed city.
+
+### Tests
+- `src/tests/geocodeEstimateTruth.test.ts` — 7 tests covering the three
+  `reverseGeocodeCoordinates` paths, the `isResolvedAddress` truth table, and
+  source guards on the fallback and both components. Negative-validated:
+  flipping the fallback flag fails 3.
+
+---
+
 ## [Unreleased] - 2026-09-24 22:47 IST (2026-09-24 17:17 UTC) — work slot 4: the call HUD stops claiming an acoustic bandpass it never applies
 
 ### Fixed

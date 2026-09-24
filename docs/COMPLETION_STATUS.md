@@ -4,7 +4,49 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-24 17:17 UTC (22:47 IST 2026-09-24) — **WORK SLOT 4** of
+Last cycle: 2026-09-24 17:49 UTC (23:19 IST 2026-09-24) — **WORK SLOT 5** of
+the 2026-09-24 window, the 23:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **reverse-geocode provenance**.
+
+**The geocode panel vouched for a lookup it never made.**
+`reverseGeocodeCoordinates()` in `src/utils/locationService.ts` falls back to
+`estimateOfflineRegion()` whenever the Nominatim request fails or returns
+non-OK. That fallback is a coarse geographic quadrant guess, but it returned
+confident civic names — `'Indian Subcontinent Core'`, `'Telemetry Sector'` —
+and the modal stamped the result `CIVIC SECTOR / REVERSE GEOCODE` and rendered
+`City: <name>` with a country. A reader takes that for a geocoder answer the
+app never received. Only the small `(lat, lon)` suffix hinted otherwise.
+
+The fallback now returns `resolved: false` / `source: 'offline_estimate'` and a
+`formattedAddress` that says `offline estimate, not a resolved address`; a real
+lookup returns `resolved: true` / `source: 'nominatim'`. New
+`isResolvedAddress()` (exported from `locationService.ts`, `resolved: true`
+required) gates every surface: `LocationServicesModal.tsx` renders
+`REGION ESTIMATE / NO GEOCODER` and an amber "Offline quadrant estimate" line
+instead of the `CIVIC SECTOR` header and `City:` row, and its map pin falls
+back to `GPS Lock Point` rather than the guessed city;
+`DashboardMapSnippet.tsx` gates its `CIVIC SECTOR` pill and `CURRENT FIX` pin
+label the same way. The `LocationAddress` type in `src/types/location.ts`
+carries the optional `resolved` / `source` fields.
+
+Guarded by `src/tests/geocodeEstimateTruth.test.ts` (7 tests: three
+`reverseGeocodeCoordinates` paths — rejected fetch, non-OK response, resolved
+response — the `isResolvedAddress` truth table, and source guards on the
+fallback body and both components). Negative-validated: flipping the fallback's
+`resolved: false` to `true` fails exactly 3 (`3 failed | 4 passed`), restored →
+7/7. Baseline before the edit: `locationServicesTruth.test.ts` **16/16 passed**.
+
+Evidence: `src/utils/locationService.ts`, `src/types/location.ts`,
+`src/components/LocationServicesModal.tsx`,
+`src/components/DashboardMapSnippet.tsx`,
+`src/tests/geocodeEstimateTruth.test.ts`. Gates observed this slot:
+`npm run lint` (`tsc --noEmit`) exit 0; targeted **2 files / 23 tests passed**
+(191 ms); full suite **95 files / 1221 tests passed** (19.95 s); `npm run build`
+exit 0, artifact `dist/server.cjs` 846.8 kB (867083 bytes). E2E: **NOT RUN** —
+no handset. Deploy: **NOT_CONFIGURED**. Item 13 stays `PARTIAL` — another real
+violation closed, not proof the sweep is exhausted.
+
+Last cycle (previous): 2026-09-24 17:17 UTC (22:47 IST 2026-09-24) — **WORK SLOT 4** of
 the 2026-09-24 window, the 22:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **telephony acoustic bandpass**.
 
