@@ -4364,9 +4364,17 @@ Next Slot:
 
 ## Slot — WORK 1, 2026-09-24 window, 21:05 IST fire (21:06 IST observed)
 
-No `automation/hermes-state` branch existed (`git show
-origin/automation/hermes-state:hermes-window-state.json` → NO_STATE), so this run
-was treated as slot 1 of a fresh window.
+The state branch `automation/hermes-state` **does** exist. An early `git show`
+before `git fetch origin automation/hermes-state` ran returned `NO_STATE`; after
+fetching, the committed state was read (window_date `2026-09-24`,
+slots_completed 16, finalized true, `finalization_result` from the 04:35 IST
+fire). That completed window started 2026-09-23 21:05 IST and set `window_date`
+to the *morning* date 2026-09-24. This run is the 2026-09-24 21:05 IST fire, the
+first slot of the **next** window, so it is treated as slot 1 of a fresh window
+and the state is rewritten with `window_date` set to the window's start date
+(2026-09-24) and `finalized: false`. The convention discrepancy is recorded in
+the state file (`note`) so later slots do not read the previous window's
+morning-stamped `window_date` as "already finalized today".
 
 **Item 13 (`Zero-fake-success for all tools`) — one more surface, PARTIAL.**
 
