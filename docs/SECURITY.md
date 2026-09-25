@@ -272,6 +272,35 @@ secret in a test is not a production leak.
 The audit is a pattern scan. A clean result means those patterns were absent, not
 that the system is secure. No third-party penetration test has been performed.
 
+### Filesystem tool confinement (`safeResolvePath`)
+
+The agent's filesystem tools (`realFsRead`, `realFsWrite`, `realFsDelete` in
+`server_tools.ts`) resolve every caller-supplied path through `safeResolvePath`.
+Containment is decided on path **segments** via `path.relative`, never on a raw
+string prefix: `/root-sibling`.startsWith(`/root`) is true, yet lies outside the
+root, so a prefix check alone let a sibling directory through.
+
+Staying inside the root is not sufficient on its own — the root contains the
+project's own credentials, which are exactly what an injected or compromised
+agent reaches for. A second guard, `isProtectedPath()`, therefore denies:
+
+- any path with a `.git`, `.ssh`, `.gnupg` or `.aws` segment — `.git/config` in
+  particular echoes back any credential embedded in a remote URL;
+- any basename matching `.env*`, `.npmrc`, `.pypirc`, `.netrc`,
+  `.yarnrc`/`.yarnrc.yml`, `.git-credentials`, `id_rsa|dsa|ecdsa|ed25519`, or a
+  `*.pem|key|p12|pfx|keystore|jks` bundle.
+
+Non-string, blank and NUL-containing paths are rejected before touching the
+filesystem. The NUL case matters because `path.resolve()` silently truncates at
+the NUL byte — `'a\0../../etc/passwd'` resolves to `<root>/a`, so such a path was
+neither rejected nor resolved to what it appeared to name.
+
+Guarded by `src/tests/workspaceFsSecurity.test.ts` (7 tests), negative-validated:
+disabling `isProtectedPath` fails 2 of 7.
+
+`.gitignore` ignores `.env`, `.env.local` and `.env.*.local`; the tracked
+`.env.example` is deliberately not ignored.
+
 ## 8. Backup, restore and deployment
 
 - `GET /api/backup` returns a snapshot only if it passes its own round-trip

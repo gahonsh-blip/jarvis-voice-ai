@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-26 04:21 IST (2026-09-25 22:51 UTC) — work slot 13: filesystem-tool credential confinement
+
+### Fixed
+- **The filesystem tools could read and write the project's own credentials.** The sibling-prefix containment fix already on this branch (`safeResolvePath` using `path.relative` instead of a raw `startsWith`) stopped a path *leaving* `PROJECT_ROOT`. It did not protect anything *inside* the root: `realFsRead`, `realFsWrite` and `realFsDelete` still accepted `.env` and `.git/config` verbatim. Probed on this head: `.git/config` read back 315 bytes and `.env` was writable — and `.git/config` carries any credential embedded in a remote URL, which is the first thing an injected or compromised agent would read.
+  - `safeResolvePath` now rejects non-string/blank paths and any path containing a NUL byte before touching the filesystem. `path.resolve()` silently *truncates* on a NUL byte (`'a\0../../etc/passwd'` resolves to `<root>/a`), so such a path was neither rejected nor resolved to what it appeared to name.
+  - Added `isProtectedPath()`: denies any path whose segment is `.git`, `.ssh`, `.gnupg` or `.aws`, or whose basename is `.env*`, `.npmrc`, `.pypirc`, `.netrc`, `.yarnrc(.yml)`, `.git-credentials`, an `id_rsa|dsa|ecdsa|ed25519` key, or a `*.pem|key|p12|pfx|keystore|jks` bundle.
+- **`.gitignore` did not ignore local credential overrides.** Added `.env.local` and `.env.*.local` alongside the existing `.env` line, without masking the tracked `.env.example`.
+
+### Tests
+- `src/tests/workspaceFsSecurity.test.ts` (7 tests): protected read/write/delete rejection, relative and absolute traversal, the sibling-prefix escape, NUL-byte injection, and a legitimate in-workspace read/write still succeeding.
+- Negative-validated: disabling `isProtectedPath` fails **2 of 7** (`2 failed | 5 passed`); restored → **7/7**.
+- Full suite observed: **108 files / 1417 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 910590 bytes).
+
 ## [Unreleased] - 2026-09-26 03:55 IST (2026-09-25 22:25 UTC) — work slot 12: screenshot, volume and power dispatch truth
 
 ### Fixed
