@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-26 02:20 IST (2026-09-25 20:50 UTC) — work slot 10: telephony voice-command dispatch truth
+
+### Fixed
+- **The `/api/chat` call commands reported success for calls nothing had made.** `make_call`, `answer_call`, `hangup_call` and `reject_call` in `server.ts` each set `actionExecuted = true` unconditionally and spoke an unqualified success — `Call Connected`, "फोन कॉल समाप्त कर दिया गया है", "Establishing audio channel now". Nothing was measured, so with the simulation provider active (the default when Twilio credentials are absent) or with no carrier configured, nothing answered, nothing ended and no channel existed, yet the transcript and Security Matrix counted performed external work.
+  - Added `src/utils/telephonyDispatchTruth.ts` plus a `evaluateTelephonyDispatch(phase)` helper in `server.ts` that derives the outcome from the active engine mode (`telephonyGatewayTruth.telephonyEngineMode`) and the live session state (new `TelephonySessionManager.getLatestActiveSession()`). A simulator is never a carrier; an unpolled session is never an answer; `actionExecuted` is true only on `GATEWAY_CONFIRMED`. Replies and action titles now name the outcome instead of asserting a connection.
+
+### Tests
+- `src/tests/telephonyDispatchTruth.test.ts` (new, 10 tests) — simulation never confirms answer/hangup; live gateway + answered state confirms; live gateway + `RINGING` stays unconfirmed; no session → `NO_ACTIVE_SESSION`; no carrier → `NO_GATEWAY_CONFIGURED`; failed call → `CALL_FAILED`; the four commands route through the verdict and the hardcoded titles are gone. Negative-validated: forcing `actionExecuted: true` fails exactly 7 of 10 assertions (`7 failed | 3 passed`); restored → 10/10.
+
+### Docs
+- `docs/COMPLETION_STATUS.md` — item 13 evidence and last-cycle entry updated for slot 10. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-09-26 01:40 IST (2026-09-25 20:12 UTC) — work slot 9: HUDHeader kill-switch state truth
 
 ### Fixed

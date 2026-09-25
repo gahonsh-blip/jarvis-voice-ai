@@ -4,7 +4,43 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-25 20:12 UTC (01:40 IST 2026-09-26) — **WORK SLOT 9** of the
+Last cycle: 2026-09-25 20:50 UTC (02:20 IST 2026-09-26) — **WORK SLOT 10** of the
+2026-09-26 window, the 02:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **voice telephony call commands**.
+
+**The voice call commands reported success for calls nothing had made.** The `/api/chat` intents
+`make_call`, `answer_call`, `hangup_call` and `reject_call` in `server.ts` each set
+`actionExecuted = true` unconditionally and spoke an unqualified success: "कॉल कनेक्ट हो गया है /
+JARVIS AI voice agent is active" with the title `Call Connected`; "फोन कॉल समाप्त कर दिया गया है"
+with the title `Call Ended`; "Initiating autonomous voice call … Establishing audio channel now".
+None of it was measured. With the simulation provider active (which is the default whenever Twilio
+credentials are absent) or with no carrier configured at all, nothing answered, nothing ended and
+no audio channel existed — yet the transcript and the Security Matrix counted performed external
+work. This is the same defect class already closed on the telephony endpoint badges and adapters,
+missed in the main chat switch.
+
+Fixed: added `src/utils/telephonyDispatchTruth.ts` and a `evaluateTelephonyDispatch(phase)` helper
+in `server.ts` that derives the outcome from exactly two observable facts — the active engine mode
+from `telephonyGatewayTruth.telephonyEngineMode(provider.id, provider.isConfigured())` and the
+live session state from a new `TelephonySessionManager.getLatestActiveSession()`. A simulator is
+never a carrier (`SIMULATION_ONLY`), an unpolled session is never an answer
+(`DISPATCHED_AWAITING_GATEWAY`), and `actionExecuted` is true only on `GATEWAY_CONFIRMED` (carrier
+moved the session to an answered state, or to `ENDED` for a hangup/reject). The spoken replies and
+action titles now name the outcome ("Call Answered (gateway confirmed)", "Call Action Not Executed
+(simulation only)") instead of asserting a connection.
+
+Guarded by `src/tests/telephonyDispatchTruth.test.ts` (10 tests): simulation never confirms an
+answer or a hangup; `LIVE_GATEWAY` + an answered state confirms; `LIVE_GATEWAY` + `RINGING` stays
+unconfirmed; no session yields `NO_ACTIVE_SESSION`; a missing carrier yields `NO_GATEWAY_CONFIGURED`;
+a failed call yields `CALL_FAILED`; and the server source routes all four commands through the
+verdict and no longer contains the hardcoded `Call Connected` / `Call Ended` / `Call Declined`
+titles. Negative-validated: forcing `actionExecuted: true` fails exactly 7 of the 10 assertions
+(`7 failed | 3 passed`); restored → **10/10**. Gates observed this slot: lint (`tsc --noEmit`) exit
+0; targeted 1 file / 10 tests passed. Full suite and build were deferred to the finalization slot
+(see "Last cycle" history). E2E: NOT RUN — no handset, no bridge pairing secret. Deploy:
+NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success path closed; more remain.
+
+Last cycle (previous): 2026-09-25 20:12 UTC (01:40 IST 2026-09-26) — **WORK SLOT 9** of the
 2026-09-26 window, the 01:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **HUDHeader kill-switch state**.
 
