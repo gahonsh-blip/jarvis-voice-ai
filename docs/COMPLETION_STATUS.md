@@ -4,7 +4,42 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-25 17:45 UTC (23:15 IST 2026-09-25) — **WORK SLOT 5** of the
+Last cycle: 2026-09-25 18:15 UTC (23:45 IST 2026-09-25) — **WORK SLOT 6** of the
+2026-09-25 window, the 23:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **offline (Local JARVIS Engine) YouTube status reply**.
+
+**The offline engine narrated a verified channel, a verified API and a "ready" Level-4 pipeline
+without making a single provider call.** Slot 5 fixed the *server* `/api/chat` branch; this slot
+ran the *offline* path (`processOfflineCommand` in `src/utils/localJarvisEngine.ts`), which runs
+with no network at all. Reproduced with `/tmp/repro.ts`: for `youtube status` with the seeded
+memory it answered *"YouTube channel \"GAHONSH Freelancing\" is connected and verified. The upload
+pipeline is standing by with Level-4 authorization enforcement."*, and Hindi *"…API status
+verified है और वीडियो अपलोड पाइपलाइन Level-4 सुरक्षा के साथ तैयार है।"* With
+`channelTitle` empty it named the hardcoded literal `'Connected Channel'` — a channel never read.
+
+Fixed: added `youtubeOfflineStatusReply()` and `offlineTokenFreshness()` to
+`src/utils/hardening/youtubeVoiceStatusTruth.ts` and wired the engine branch to them (removing the
+inlined fake strings). The offline reply now states only what the local record holds — whether a
+connection exists, the recorded channel name (never a placeholder), whether the recorded
+credential expiry has passed, and whether an upload scope is on record — and it says explicitly
+*"recorded in offline memory — it was not verified in this slot"*. An absent expiry or scope is
+reported as **unknown**, never as valid. `actionDetail.payload` now carries
+`channelVerified: false` and `tokenFreshness`. Also fixed a dead branch in the engine's language
+router: `'hinglish'.startsWith('hi')` is true, so testing the `hi` prefix first made the Hinglish
+branch unreachable — Hinglish requests were answered in Devanagari. `src/types.ts`
+`MemoryStore.youTubeConnection` gained the optional `expiresAt`/`scopes` the server already records.
+
+Guarded by `src/tests/localJarvisYouTubeStatusTruth.test.ts` (13 tests), which asserts the false
+phrases are absent in en-US, hi-IN and Hinglish, that the placeholder is gone, that Hinglish is not
+Devanagari, that the freshness classifier reads absence as `unknown`, and (by reading the engine
+source) that Hinglish is routed before the `hi` prefix. Negative-validated: stashing the engine
+diff fails **7 of 13**, restored → **13/13**. Gates observed this slot: lint exit 0; targeted
+4 files / 59 tests passed; see "Last cycle (previous)" below for the prior slot's full-suite
+numbers. E2E: NOT RUN — the offline engine makes no provider call by design and no Google OAuth
+client id/secret is present in this sandbox. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` —
+this closes another real fake-success path; more remain.
+
+Last cycle (previous): 2026-09-25 17:45 UTC (23:15 IST 2026-09-25) — **WORK SLOT 5** of the
 2026-09-25 window, the 23:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **YouTube voice status reply truth**.
 
