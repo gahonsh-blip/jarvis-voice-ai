@@ -114,4 +114,21 @@ describe('offline browser engine does not claim OS-level launches', () => {
     expect(engine).not.toContain('PowerShell console activated');
     expect(engine).not.toContain('Chrome browser window');
   });
+
+  it('does not claim Notepad, Calculator or Paint launched offline', () => {
+    expect(engine).not.toContain('Opening Notepad.');
+    expect(engine).not.toContain('Opening Calculator tool.');
+    expect(engine).not.toContain('Opening Paint canvas.');
+    expect(engine).not.toContain('Paint canvas open ho raha hai');
+  });
+
+  it('every offline app-launch reply disclaims the real desktop application', () => {
+    for (const marker of [
+      'Offline mode does not open a real Notepad application.',
+      'Offline mode does not open a real desktop Calculator application.',
+      'Offline mode does not open a real desktop Paint application.',
+    ]) {
+      expect(engine, marker).toContain(marker);
+    }
+  });
 });

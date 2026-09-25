@@ -1115,13 +1115,17 @@ export function processOfflineCommand(
 
   if (lower.includes('calculator') || lower.includes('कैलकुलेटर') || lower.includes('open math')) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'कैलकुलेटर खोला जा रहा है।' : isHinglish ? 'Calculator open ho raha hai.' : 'Opening Calculator tool.';
+    const reply = isHindi
+      ? 'इन-ऐप कैलकुलेटर दृश्य खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक डेस्कटॉप कैलकुलेटर ऐप नहीं खुलता।'
+      : isHinglish
+      ? 'In-app calculator view khol raha hoon, Sir. Offline mode mein asli desktop Calculator app nahi khulta.'
+      : 'Opening the in-app calculator view. Offline mode does not open a real desktop Calculator application.';
     return {
       reply,
       spokenText: reply,
       intent: 'open_calculator',
       actionExecuted: true,
-      actionDetail: { type: 'open_calculator', title: 'Open Calculator Tool' },
+      actionDetail: { type: 'open_calculator', title: 'Open Calculator View (in-app)' },
       updatedMemory,
       offline: true,
     };
@@ -1130,13 +1134,17 @@ export function processOfflineCommand(
   // 7. Notepad & Workspace
   if (lower.includes('notepad') || lower.includes('create file') || lower.includes('नोटपैड') || lower.includes('फाइल बनाओ') || lower.includes('write note')) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'नोटपैड खोला जा रहा है।' : isHinglish ? 'Notepad open ho raha hai.' : 'Opening Notepad.';
+    const reply = isHindi
+      ? 'इन-ऐप नोट्स वर्कस्पेस खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक नोटपैड ऐप नहीं खुलता।'
+      : isHinglish
+      ? 'In-app notes workspace khol raha hoon, Sir. Offline mode mein asli Notepad app nahi khulta.'
+      : 'Opening the in-app notes workspace. Offline mode does not open a real Notepad application.';
     return {
       reply,
       spokenText: reply,
       intent: 'open_notepad',
       actionExecuted: true,
-      actionDetail: { type: 'open_notepad', title: 'Open Notepad Workspace' },
+      actionDetail: { type: 'open_notepad', title: 'Open Notes Workspace (in-app)' },
       updatedMemory,
       offline: true,
     };
@@ -1453,13 +1461,17 @@ export function processOfflineCommand(
   // 8. Paint & Canvas
   if (lower.includes('paint') || lower.includes('drawing') || lower.includes('पेंट')) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'पेंट कैनवास खोला जा रहा है।' : isHinglish ? 'Paint canvas open ho raha hai.' : 'Opening Paint canvas.';
+    const reply = isHindi
+      ? 'इन-ऐप पेंट कैनवास खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक पेंट ऐप नहीं खुलता।'
+      : isHinglish
+      ? 'In-app paint canvas khol raha hoon, Sir. Offline mode mein asli Paint app nahi khulta.'
+      : 'Opening the in-app paint canvas. Offline mode does not open a real desktop Paint application.';
     return {
       reply,
       spokenText: reply,
       intent: 'open_paint',
       actionExecuted: true,
-      actionDetail: { type: 'open_paint', title: 'Open Paint Canvas' },
+      actionDetail: { type: 'open_paint', title: 'Open Paint Canvas (in-app)' },
       updatedMemory,
       offline: true,
     };

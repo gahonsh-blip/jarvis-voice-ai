@@ -4,6 +4,13 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-26 02:45 IST (2026-09-25 21:15 UTC) — work slot 11: launch dispatch truth
+
+### Fixed
+- **The `/api/chat` launch intents reported launches that never happened.** `operate_vscode`, `operate_browser` and `operate_terminal` in `server.ts` set `actionExecuted = true` and spoke an unqualified success without touching the host, so on this headless sandbox the transcript and Security Matrix recorded a desktop application as launched. The offline `src/utils/localJarvisEngine.ts` made the same claim in words — VS Code "brought to active foreground", "PowerShell console activated", a "Chrome browser window" opened.
+  - Added `src/utils/computerOperator/launchDispatchTruth.ts` plus `evaluateLaunchDispatch()` in `server.ts`, which routes the intent through the real `HostActionExecutor` `LAUNCH_APP` action and derives the verdict from the host capability map and the executor receipt: `NO_DISPLAY_SESSION`, `DISPATCHED_AWAITING_OBSERVATION`, `FOREGROUND_CONFIRMED` (the only outcome with `actionExecuted = true`), `FAILED`, `BLOCKED`, `UNVERIFIED`. The offline engine branches now state that offline mode cannot launch a real OS application.
+  - Guarded by `src/tests/launchDispatchTruth.test.ts` (11 tests), negative-validated (`1 failed | 10 passed` with the fake success restored, 11/11 with the fix).
+
 ## [Unreleased] - 2026-09-26 02:20 IST (2026-09-25 20:50 UTC) — work slot 10: telephony voice-command dispatch truth
 
 ### Fixed
