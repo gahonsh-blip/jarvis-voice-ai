@@ -5516,3 +5516,23 @@ Next Slot:
 - Commits: 8e88270 (fix), b9f2f60 (docs). Pushed to `feature/hermes-full-completion`.
 - E2E: NOT RUN (no Google OAuth client id/secret; offline engine makes no provider call by design).
   Deploy: NOT_CONFIGURED.
+
+## 2026-09-25 window — WORK slot 7 (00:05 IST fire, 2026-09-26 00:22 IST)
+
+- Item #13 `Zero-fake-success for all tools` — the receipt evidence guard itself.
+- Bug: `buildReceipt()` (`src/utils/executionTruth.ts`) rejected a `VERIFIED` claim only
+  when evidence was *absent*; evidence of kind `none` passed, so `makeEvidence('none', ...)`
+  yielded `verified: true`. `github.executeFixPlan()` did exactly that for an empty plan
+  (reported `VERIFIED` after doing no work).
+- Fix: new exported `isSubstantiveEvidence()` requires kind !== `none`; kind `none` →
+  `UNVERIFIED` with a `failureReason`; absent evidence still → `DISPATCHED`; the empty-plan
+  branch now reports `NOT_CONFIGURED` / `verified: false`.
+- Guards: `src/tests/executionTruthReceipt.test.ts` (new, 6 tests) + 2 assertions in
+  `src/tests/githubAutomationWorkflow.test.ts` (20 tests). Negative-validated both ways —
+  reverting the guard fails 1/6 exactly; restoring `outcome: 'VERIFIED'` fails 1/20 exactly.
+- Gates observed: lint exit 0; targeted 2 files / 26 tests passed; full suite
+  **103 files / 1355 tests passed**; build exit 0 (`dist/server.cjs` 885023 bytes).
+- Commits: 2e132c5 (fix), 6e9a6b7 (docs). Pushed to `feature/hermes-full-completion`.
+- E2E: NOT RUN (no handset, no bridge pairing secret). Deploy: NOT_CONFIGURED.
+- Note: state file said `slots_completed: 6` while the doc already recorded a 23:42 IST
+  cycle; numbering reported as 8 with the exact count marked UNKNOWN. Flagged for a later slot.
