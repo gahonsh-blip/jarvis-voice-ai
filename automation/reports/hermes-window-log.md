@@ -5236,3 +5236,32 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - `addAuditLog` हर पंक्ति को झूठा 'VERIFIED' दिखाता था; अब स्थिति अनुसार सत्य
   फ़ील्ड तय होते हैं — 1290 टेस्ट, lint और build हरे; `main` पर merge नहीं।
+
+## 2026-09-25T16:22Z — slot 2/16 (WORK)
+
+- Item worked: #13 Zero-fake-success for all tools
+- Status: PARTIAL (Telegram gateway send path made truthful)
+- Tests: targeted 2 files / 20 tests passed; full suite 99 files / 1300 tests passed; tsc --noEmit clean; build emitted dist/server.cjs (874122 bytes)
+- Commit: 3a7853a (fix), 01c1198 (docs)  Push: ok (feature/hermes-full-completion)
+- Notes / blockers:
+  - `POST /api/telegram/send` answered `success: true` unconditionally while
+    `processMobileCommand` fired the outbound Telegram send fire-and-forget
+    (`sendRealTelegramMessage(...).catch(...)`), so a blocked or failed send
+    still rendered as delivered and `TelegramGatewayModal` spoke the reply aloud.
+  - Fix: the processor now awaits `deliverTelegramMessage` and returns its
+    `DeliveryInterpretation` (non-delivery is logged, never assumed sent); the
+    route derives `success`/`delivered` from `delivery.delivered` and returns the
+    outcome, `messageId` and a plain notice; the echoed bubble is annotated
+    *delivered* / *NOT DELIVERED*; the modal gates `onSpeak` and its success flag
+    on `delivered === true`. New helper
+    `src/utils/hardening/telegramSendTruth.ts`.
+  - Tests: `src/tests/telegramSendTruth.test.ts` — 10 assertions (5 pure-logic +
+    5 route/modal source guards, since `server.ts` binds a port on import).
+    Negative-validated: marking `NOT_CONFIGURED` delivered fails exactly 1 test
+    (`1 failed | 9 passed`), restored → 10/10.
+  - E2E: NOT RUN — no handset, no Telegram bot token. Deploy: NOT_CONFIGURED.
+
+Next Slot:
+- #13, the next un-audited zero-fake-success surface (an endpoint or modal still
+  reporting unmeasured work as executed). Chosen because it is the
+  highest-priority non-VERIFIED item that is not hardware/credential blocked.
