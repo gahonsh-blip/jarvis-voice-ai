@@ -13,6 +13,8 @@ import {
   AUDIT_LOG_SOURCE_RECORDED,
   auditTrailCounts,
   describeAuditTrail,
+  deriveAuditFinalTruthState,
+  deriveAuditVerificationStatus,
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
@@ -759,8 +761,11 @@ export function addAuditLog(
     levelRequired,
     approvedBy,
     status,
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    // Derive the truth fields from the caller's own outcome. Previously both
+    // were hardcoded to 'VERIFIED', so a row logged as FAILED/PENDING/BLOCKED
+    // still rendered a green "confirmed" badge in the Security Matrix.
+    verificationStatus: deriveAuditVerificationStatus(status),
+    finalTruthState: deriveAuditFinalTruthState(status),
   };
   pushAuditEntry(entry);
   persistMemory();

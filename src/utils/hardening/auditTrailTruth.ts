@@ -79,3 +79,39 @@ export function describeAuditTrail(logs: AuditLogLike[] | null | undefined): str
   if (total === 0) return 'no events recorded';
   return `${recorded} of ${total} events recorded by this process`;
 }
+
+// ==============================================================================
+// AUDIT TRUTH-FIELD DERIVATION
+//
+// `addAuditLog` used to hardcode `verificationStatus` and `finalTruthState` to
+// `'VERIFIED'` for every caller, whatever `status` it passed. A scheduled task
+// logged as `FAILED`, an approval logged as `BLOCKED` and a due-but-unrun task
+// logged as `PENDING` therefore all rendered a green "confirmed" badge in the
+// Security Matrix — the row contradicted itself. These helpers make the truth
+// fields a function of the caller's own outcome, so an unconfirmed row can
+// never be presented as verified.
+// ==============================================================================
+
+/** Truth fields keyed by the caller's reported outcome. */
+export function deriveAuditVerificationStatus(
+  status: string,
+): 'VERIFIED' | 'UNVERIFIED' | 'STANDBY' {
+  if (status === 'VERIFIED') return 'VERIFIED';
+  if (status === 'PENDING') return 'STANDBY';
+  return 'UNVERIFIED';
+}
+
+export function deriveAuditFinalTruthState(
+  status: string,
+): 'VERIFIED' | 'FAILED' | 'REJECTED' | 'DRAFT' {
+  switch (status) {
+    case 'VERIFIED':
+      return 'VERIFIED';
+    case 'FAILED':
+      return 'FAILED';
+    case 'BLOCKED':
+      return 'REJECTED';
+    default:
+      return 'DRAFT';
+  }
+}

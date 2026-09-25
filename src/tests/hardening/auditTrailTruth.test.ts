@@ -5,8 +5,11 @@ import {
   AUDIT_LOG_SOURCE_RECORDED,
   auditTrailCounts,
   describeAuditTrail,
+  deriveAuditFinalTruthState,
+  deriveAuditVerificationStatus,
   normalizeAuditLog,
 } from '../../utils/hardening/auditTrailTruth';
+import { claimsVerifiedOutcome } from '../../utils/hardening/socialDraftAuditTruth';
 
 // server.ts binds a port on import, so the "no fabricated seed" assertions read
 // the source text, matching the convention in toolSurfaceTruthfulness.test.ts.
@@ -117,5 +120,35 @@ describe('the Security Matrix renders unrecorded rows as unrecorded', () => {
   it('labels provenance rather than trusting the stored status string', () => {
     expect(modalFlat).toContain('normalizeAuditLog(log)');
     expect(modalFlat).toContain('provenance.provenanceLabel');
+  });
+});
+
+describe('addAuditLog derives truth fields from the caller outcome', () => {
+  it('derives VERIFIED only for a verified outcome', () => {
+    expect(deriveAuditVerificationStatus('VERIFIED')).toBe('VERIFIED');
+    expect(deriveAuditFinalTruthState('VERIFIED')).toBe('VERIFIED');
+  });
+
+  it('never confirms a failed outcome', () => {
+    expect(deriveAuditVerificationStatus('FAILED')).toBe('UNVERIFIED');
+    expect(deriveAuditFinalTruthState('FAILED')).toBe('FAILED');
+    expect(claimsVerifiedOutcome({ verificationStatus: deriveAuditVerificationStatus('FAILED'), finalTruthState: deriveAuditFinalTruthState('FAILED') })).toBe(false);
+  });
+
+  it('never confirms a blocked outcome', () => {
+    expect(deriveAuditVerificationStatus('BLOCKED')).toBe('UNVERIFIED');
+    expect(deriveAuditFinalTruthState('BLOCKED')).toBe('REJECTED');
+    expect(claimsVerifiedOutcome({ verificationStatus: deriveAuditVerificationStatus('BLOCKED'), finalTruthState: deriveAuditFinalTruthState('BLOCKED') })).toBe(false);
+  });
+
+  it('never confirms a pending outcome', () => {
+    expect(deriveAuditVerificationStatus('PENDING')).toBe('STANDBY');
+    expect(deriveAuditFinalTruthState('PENDING')).toBe('DRAFT');
+    expect(claimsVerifiedOutcome({ verificationStatus: deriveAuditVerificationStatus('PENDING'), finalTruthState: deriveAuditFinalTruthState('PENDING') })).toBe(false);
+  });
+
+  it('does not hardcode the truth fields in addAuditLog', () => {
+    expect(serverFlat).toContain('verificationStatus: deriveAuditVerificationStatus(status),');
+    expect(serverFlat).toContain('finalTruthState: deriveAuditFinalTruthState(status),');
   });
 });
