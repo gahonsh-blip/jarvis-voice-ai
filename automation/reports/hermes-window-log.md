@@ -5671,3 +5671,74 @@ claim state without an observation; rotate the grep to the emergency/kill-switch
 surfaces not yet covered (e.g. any other component seeding an emergency boolean or rendering
 `DAEMON ACTIVE`-style badges without a `res.ok`-gated read). Prefer a slice finishable and
 pushable inside one slot.
+
+---
+
+## Slot: WORK - 2026-09-26 02:06 IST (state 11 -> 12)
+
+HERMES JARVIS - AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:06
+Window date: 2026-09-26   Window slots completed so far: 11 (state) -> 12
+
+Completed:
+- #13 Zero-fake-success for all tools - PARTIAL slice closed: telephony voice call
+  commands. Evidence: src/utils/telephonyDispatchTruth.ts (new),
+  src/utils/telephonySessionManager.ts (getLatestActiveSession added),
+  server.ts (evaluateTelephonyDispatch + make_call/answer_call/hangup_call/
+  reject_call now derive the verdict from engine mode + live session state);
+  src/tests/telephonyDispatchTruth.test.ts 10/10 passing.
+
+In Progress:
+- #13 Zero-fake-success for all tools - remains PARTIAL. Other tools still assert
+  unmeasured success; the telephony_hub sub-surface was not reviewed this slot.
+
+Remaining:
+- #13 facade paths outside telephony; then Voice / Wake Word / Production Hardening
+  items that are not hardware- or credential-blocked.
+
+Bugs Found:
+- make_call/answer_call/hangup_call/reject_call in server.ts set actionExecuted=true
+  unconditionally and spoke unqualified success ("Call Connected", "Call Ended",
+  "Establishing audio channel now") even when the simulation provider was active
+  (the default with no Twilio credentials) or no carrier was configured.
+- Flaky, not product: hostTelemetry.test.ts compared two live RAM reads for exact
+  equality; under full-suite load they differed (observed 21.3 vs 21.5).
+
+Bugs Fixed:
+- Telephony dispatch truth: actionExecuted is now true only on GATEWAY_CONFIRMED;
+  an unpolled session is never an answer and a simulator is never a carrier.
+  Verification: negative-validated (forcing actionExecuted:true fails 7 of 10
+  assertions: "7 failed | 3 passed"), then restored -> 10/10.
+- Flake: hostTelemetry sample-provenance assertion now uses a 1-point tolerance.
+
+Tests:    105 files / 1373 tests passed (full suite, observed)
+Lint:     tsc --noEmit exit 0, 0 TS errors (observed)
+Build:    exit 0 - dist/server.cjs 889871 bytes (869.0 kb), map 1659024 bytes
+E2E:      NOT RUN - no Android handset, no bridge pairing secret in this sandbox
+Security: .env not tracked (git check-ignore); no secret in diff; no node_modules/dist staged
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, this log
+Branch:  feature/hermes-full-completion
+Commit:  ad76c57
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         none opened this slot (slot-level branch work; finalization slot owns the PR)
+Main merge: NOT MERGED - awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED - no deployment target or hosting integration present
+
+Blocked:
+- #1, #2, #50, #55 Android E2E - require a physical Android handset
+- #8 Windows-host item - requires a Windows host
+- #54 credential rotation - requires live provider credentials
+- #60 external audit leg - third party
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13: continue the zero-fake-success sweep on the remaining tools (telephony_hub
+  and the non-telephony chat intents), one coherent slice at a time.
+
+Hindi summary (one line):
+- Voice call commands no longer claim "call connected" without real carrier proof;
+  10/10 new tests pass, full suite 1373 tests pass.
