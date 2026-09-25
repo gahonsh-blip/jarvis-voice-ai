@@ -1,24 +1,45 @@
 {
   "window_date": "2026-09-26",
   "window_started_at": "2026-09-25T18:36:20Z",
-  "last_slot_at": "2026-09-25T20:55:00Z",
-  "slots_completed": 12,
+  "last_slot_at": "2026-09-25T21:22:00Z",
+  "slots_completed": 13,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "d528e7a",
+  "last_commit": "631013c",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {"item": 1, "reason": "requires a physical Android handset"},
-    {"item": 2, "reason": "requires a physical Android handset"},
-    {"item": 8, "reason": "requires a Windows host"},
-    {"item": 50, "reason": "requires a physical Android handset"},
-    {"item": 55, "reason": "requires a physical Android handset / Windows host"},
-    {"item": 54, "reason": "live credential rotation requires provider credentials"},
-    {"item": 60, "reason": "external third-party audit leg"}
+    {
+      "item": 1,
+      "reason": "requires a physical Android handset"
+    },
+    {
+      "item": 2,
+      "reason": "requires a physical Android handset"
+    },
+    {
+      "item": 8,
+      "reason": "requires a Windows host"
+    },
+    {
+      "item": 50,
+      "reason": "requires a physical Android handset"
+    },
+    {
+      "item": 55,
+      "reason": "requires a physical Android handset / Windows host"
+    },
+    {
+      "item": 54,
+      "reason": "live credential rotation requires provider credentials"
+    },
+    {
+      "item": 60,
+      "reason": "external third-party audit leg"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot closing 2026-09-25T20:55Z (02:25 IST 2026-09-26). Prior state read from origin/automation/hermes-state was slots_completed: 11; incremented to 12. Item 13 slice: /api/chat call commands (make_call/answer_call/hangup_call/reject_call) no longer assert success unconditionally. New src/utils/telephonyDispatchTruth.ts + evaluateTelephonyDispatch in server.ts; TelephonySessionManager.getLatestActiveSession added; actionExecuted only on GATEWAY_CONFIRMED. Commits 3260023 (fix+test), bb65e3c (docs), ad76c57 (flake fix), d528e7a (report). Full suite 105 files/1373 tests passed; lint exit 0; build exit 0 (dist/server.cjs 889871 bytes). Also fixed flaky hostTelemetry RAM exact-equality assertion (now 1-point tolerance)."
+  "notes": "WORK slot 13 (02:35 IST 2026-09-26). Item 13 slice: the offline local engine app-launcher branches for Notepad, Calculator and Paint no longer claim a desktop launch; each reply names the in-app view and states offline mode cannot open the real desktop application, titles read (in-app). New assertions in src/tests/launchDispatchTruth.test.ts (now 13 tests) and updated src/tests/localJarvisEngine.test.ts Hindi calculator test to the honest reply. Negative-validated: reintroducing the fake literal fails 3 tests across 2 files; restored -> green. Gates observed: lint exit 0; full suite 106 files / 1386 tests passed; build exit 0 (dist/server.cjs 897797 bytes). Commits 5d2040d (fix+test+docs), 631013c (test). Item 13 remains PARTIAL; further fake-success paths remain (screenshot, volume, quotation, social, telephony-hub titles, search)."
 }
