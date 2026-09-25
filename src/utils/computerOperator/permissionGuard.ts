@@ -27,29 +27,60 @@ const DANGEROUS_COMMAND_PATTERNS = [
   /\bstop-service\s+windefend\b/i,
 ];
 
-const FINANCE_KEYWORDS = [
+// Finance detection lives in two lists because `\b` is an ASCII word boundary:
+// it correctly protects short tokens from matching inside unrelated words, but
+// it can never bound a Devanagari term. Short single tokens therefore require a
+// word boundary ("jupiter" must not trip "upi"), while multi-word phrases and
+// Hindi terms stay plain substring matches. This mirrors the word-boundary rule
+// already enforced by `isFinanceBlocked()` in `server_tools.ts`; the two guards
+// gate different paths (intent surface vs. the OS executor) and must not drift.
+const FINANCE_TOKENS = [
   'bank',
+  'banking',
   'upi',
   'paytm',
   'gpay',
   'phonepe',
+  'cvv',
+  'crypto',
+  'bitcoin',
+  'payout',
+  'neft',
+  'rtgs',
+  'imps',
+];
+
+const FINANCE_PHRASES = [
   'wire transfer',
+  'fund transfer',
   'transfer money',
   'transfer funds',
   'send funds',
   'move money',
   'transfer rupees',
   'credit card',
-  'cvv',
-  'crypto',
-  'bitcoin',
+  'debit card',
+  'net banking',
   'wallet transfer',
   'send money',
   'buy btc',
-  'payout',
   'पैसे भेजो',
   'खाते में',
 ];
+
+/**
+ * Returns the finance signature a description matched, or `null` when the text
+ * carries no financial intent.
+ */
+function matchFinanceSignature(desc: string): string | null {
+  for (const token of FINANCE_TOKENS) {
+    if (new RegExp(`\\b${token}\\b`).test(desc)) return token;
+  }
+  for (const phrase of FINANCE_PHRASES) {
+    if (desc.includes(phrase)) return phrase;
+  }
+  return null;
+}
 
 export class PermissionGuard {
   /**
@@ -76,16 +107,15 @@ export class PermissionGuard {
 
     const desc = this.describe(action);
 
-    for (const kw of FINANCE_KEYWORDS) {
-      if (desc.includes(kw)) {
-        return {
-          allowed: false,
-          requiresHumanApproval: false,
-          securityLevel: 4,
-          blockReason: `HERMES JARVIS Security Protocol: Financial operation involving "${kw}" is strictly prohibited from autonomous computer control.`,
-          dangerCategory: 'FINANCE_RESTRICTION',
-        };
-      }
+    const financeMatch = matchFinanceSignature(desc);
+    if (financeMatch) {
+      return {
+        allowed: false,
+        requiresHumanApproval: false,
+        securityLevel: 4,
+        blockReason: `HERMES JARVIS Security Protocol: Financial operation involving "${financeMatch}" is strictly prohibited from autonomous computer control.`,
+        dangerCategory: 'FINANCE_RESTRICTION',
+      };
     }
 
     if (

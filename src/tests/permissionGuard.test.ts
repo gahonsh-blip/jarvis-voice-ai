@@ -108,3 +108,41 @@ describe('PermissionGuard — isApprovalRequired helper', () => {
     expect(PermissionGuard.isApprovalRequired(makeAction({ type: 'INSPECT_SCREEN', securityLevel: 1 }))).toBe(false);
   });
 });
+
+// The finance exclusion is a safety rule, and the executor that actually
+// touches the OS reads it through `permanentBlock`. A prior version matched
+// short finance tokens with a bare substring test, which is wrong in both
+// directions: it blocked benign text and missed real financial instructions.
+describe('PermissionGuard — finance exclusion word-boundary matching', () => {
+  it.each([
+    'Read file jupiter_notes.txt',
+    'open rapid_notes.md',
+    'open the backup folder',
+    'open sculpture.png',
+    'open the tulips photo',
+    'setup dev environment',
+  ])('does not block benign text containing a short finance token as a substring: %s', (description) => {
+    const result = PermissionGuard.evaluateAction(makeAction({ description }));
+    expect(result.dangerCategory).not.toBe('FINANCE_RESTRICTION');
+    expect(result.allowed).toBe(true);
+  });
+
+  it('still blocks exact-word financial intent after the word-boundary change', () => {
+    for (const description of ['send money to vendor', 'buy bitcoin today', 'check the bank balance', 'pay via UPI to vendor']) {
+      const result = PermissionGuard.permanentBlock(makeAction({ description }));
+      expect(result?.dangerCategory, description).toBe('FINANCE_RESTRICTION');
+    }
+  });
+
+  it.each([
+    'Initiate fund transfer',
+    'Deposit via NEFT',
+    'Enter debit card details',
+    'RTGS settlement request',
+    'IMPS transfer to vendor',
+  ])('blocks the financial instruction that previously slipped through: %s', (description) => {
+    const result = PermissionGuard.permanentBlock(makeAction({ description }));
+    expect(result?.dangerCategory, description).toBe('FINANCE_RESTRICTION');
+    expect(result?.requiresHumanApproval).toBe(false);
+  });
+});
