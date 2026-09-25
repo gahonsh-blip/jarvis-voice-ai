@@ -71,6 +71,11 @@ import {
   runTelephonyTestSuite,
 } from './src/utils/telephonyTestRunner';
 import {
+  telephonyDispatchVerdict,
+  telephonyDispatchReply,
+  TelephonyDispatchPhase,
+} from './src/utils/telephonyDispatchTruth';
+import {
   loadPhonePermissions,
   savePhonePermissions,
   maskPhoneNumber,
@@ -8461,6 +8466,16 @@ app.get('/api/telephony/test-suite', async (req: Request, res: Response) => {
   }
 });
 
+// Resolve a voice/chat telephony command into an honest dispatch verdict.
+// The active engine mode and the live session state are the only facts that
+// can confirm a call action actually reached a carrier.
+function evaluateTelephonyDispatch(phase: TelephonyDispatchPhase) {
+  const provider = TelephonyProviderRegistry.getProvider();
+  const engineMode = telephonyEngineMode(provider.id, provider.isConfigured());
+  const activeSession = TelephonySessionManager.getLatestActiveSession();
+  return telephonyDispatchVerdict(phase, engineMode, activeSession?.state ?? null);
+}
+
 // Jarvis Main Chat & AI Reasoning API
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
@@ -8812,39 +8827,36 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'make_call': {
         const target = intentData.actionPayload?.target || 'Contact';
-        spokenResponse = language.startsWith('hi')
-          ? `${target} को ऑटोनॉमस वॉयस कॉल कनेक्ट किया जा रहा है। JARVIS टेलीफोनी चैनल सक्रिय है।`
-          : `Initiating autonomous voice call to ${target}. Establishing audio channel now.`;
-        actionExecuted = true;
+        const verdict = evaluateTelephonyDispatch('dial');
+        const base = telephonyDispatchReply(verdict.outcome, language);
+        spokenResponse = language.startsWith('hi') ? `${target}: ${base}` : `Call to ${target}: ${base}`;
+        actionExecuted = verdict.actionExecuted;
         actionDetail = {
           type: 'make_call',
-          title: `Calling ${target}`,
-          payload: { target, autoDial: true },
+          title: verdict.title,
+          payload: { target, outcome: verdict.outcome },
         };
         break;
       }
       case 'answer_call': {
-        spokenResponse = language.startsWith('hi')
-          ? 'कॉल कनेक्ट हो गया है। JARVIS AI बातचीत संभाल रहा है।'
-          : 'Connecting call with caller. JARVIS AI voice agent is active.';
-        actionExecuted = true;
-        actionDetail = { type: 'answer_call', title: 'Call Connected' };
+        const verdict = evaluateTelephonyDispatch('answer');
+        spokenResponse = telephonyDispatchReply(verdict.outcome, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'answer_call', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'hangup_call': {
-        spokenResponse = language.startsWith('hi')
-          ? 'फोन कॉल समाप्त कर दिया गया है। कॉल समरी तैयार की जा रही है।'
-          : 'Terminating active phone call. Compiling executive summary and action items.';
-        actionExecuted = true;
-        actionDetail = { type: 'hangup_call', title: 'Call Ended' };
+        const verdict = evaluateTelephonyDispatch('hangup');
+        spokenResponse = telephonyDispatchReply(verdict.outcome, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'hangup_call', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'reject_call': {
-        spokenResponse = language.startsWith('hi')
-          ? 'कॉल रिजेक्ट कर दिया गया है।'
-          : 'Declining incoming call and redirecting to automated voicemail.';
-        actionExecuted = true;
-        actionDetail = { type: 'reject_call', title: 'Call Declined' };
+        const verdict = evaluateTelephonyDispatch('reject');
+        spokenResponse = telephonyDispatchReply(verdict.outcome, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'reject_call', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'telephony_hub': {
