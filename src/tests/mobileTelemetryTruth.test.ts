@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   RECURRING_ROUTINE_IDS,
+  daemonSchedulerTruth,
   privacyMatrixTruth,
   schedulerTruth,
 } from '../utils/hardening/mobileTelemetryTruth';
@@ -71,5 +72,55 @@ describe('GET /api/mobile/telemetry route uses the truth builders', () => {
     expect(route).not.toContain('activeJobs: 4');
     expect(route).toContain('privacyMatrixTruth(');
     expect(route).toContain('schedulerTruth(');
+  });
+});
+
+describe('daemonSchedulerTruth counts and labels the routines it is given', () => {
+  const routines = [
+    { id: 'morning_9am', name: 'Morning Task Briefing', cronOrTime: '09:00 AM IST' },
+    { id: 'midday_2pm', name: 'Midday System & Site Audit', cronOrTime: '02:00 PM IST' },
+    { id: 'evening_630pm', name: 'Evening Social Growth Pulse', cronOrTime: '06:30 PM IST' },
+    { id: 'night_1030pm', name: 'Nightly Work Summary & Backup', cronOrTime: '10:30 PM IST' },
+    { id: 'nightly_repo_check', name: 'Nightly Repository Check', cronOrTime: '03:00 AM IST' },
+  ];
+
+  it('counts the routines passed in, never a fixed 4', () => {
+    const t = daemonSchedulerTruth(routines, 0);
+    expect(t.activeJobsCount).toBe(5);
+    expect(t.activeJobsCount).not.toBe(4);
+  });
+
+  it('adds operator-registered scheduled goals to the count', () => {
+    expect(daemonSchedulerTruth(routines, 3).activeJobsCount).toBe(8);
+  });
+
+  it('labels every nextRun as a configured plan, not an observation', () => {
+    const t = daemonSchedulerTruth(routines, 0);
+    expect(t.jobs).toHaveLength(5);
+    for (const job of t.jobs) {
+      expect(job.nextRun).toContain('configured plan');
+      expect(job.nextRun).toContain('not observed');
+    }
+  });
+
+  it('reports an unrecorded last run as not recorded', () => {
+    const t = daemonSchedulerTruth(routines, 0);
+    expect(t.jobs[0].lastRun).toBe('not recorded');
+    expect(
+      daemonSchedulerTruth([{ ...routines[0], lastRunDate: '2026-09-25' }], 0).jobs[0].lastRun,
+    ).toBe('2026-09-25');
+  });
+});
+
+describe('GET /api/daemon/status route uses the scheduler truth builder', () => {
+  it('does not hardcode activeJobsCount or a fabricated nextRun literal', () => {
+    const route = flat.slice(
+      flat.indexOf("app.get('/api/daemon/status'"),
+      flat.indexOf("app.get('/api/mobile/telemetry'"),
+    );
+    expect(route).not.toContain('activeJobsCount: 4');
+    expect(route).not.toContain('09:00 AM Tomorrow');
+    expect(route).not.toContain('10:30 PM Tonight');
+    expect(route).toContain('daemonSchedulerTruth(');
   });
 });

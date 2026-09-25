@@ -13,6 +13,13 @@
 //
 // This module builds both fields from the state that was actually read, and
 // reports an unobserved gate as `null` / UNKNOWN rather than `true`.
+//
+// `/api/daemon/status` carried the same two fabrications on the scheduler block
+// this module's mobile route had: a literal `activeJobsCount: 4` (there are
+// five routines) and per-job `nextRun` strings such as "09:00 AM Tomorrow"
+// presented as observations when they are only the configured plan. The daemon
+// block is now built by `daemonSchedulerTruth()` from the routine table below,
+// so the count and the labels cannot drift from the scheduler that runs.
 // =============================================================================
 
 import { triState } from './securityMatrixTruth';
@@ -71,5 +78,51 @@ export function schedulerTruth(
     nextBriefing: '09:00 AM IST (scheduled; not yet observed as run)',
     morningBriefingLastRun: lastMorningRunDate || 'not recorded',
     note: 'Job count reflects the routines defined in this process; it is not a liveness measurement of each job.',
+  };
+}
+
+/** A recurring routine with the last date it was actually observed to run. */
+export interface RoutineSpec {
+  id: string;
+  name: string;
+  cronOrTime: string;
+  lastRunDate?: string;
+}
+
+export interface DaemonSchedulerTruth {
+  active: boolean;
+  activeJobsCount: number;
+  jobs: {
+    id: string;
+    name: string;
+    cronOrTime: string;
+    lastRun: string;
+    nextRun: string;
+  }[];
+  note: string;
+}
+
+/**
+ * Honest scheduler block for `/api/daemon/status`. The old block hardcoded
+ * `activeJobsCount: 4` and labelled each job `nextRun: '09:00 AM Tomorrow'` etc.,
+ * a count and set of run labels that disagreed with the five routines the
+ * process actually schedules. The count is derived from the routines passed in,
+ * and every `nextRun` is labelled a configured plan rather than an observed run.
+ */
+export function daemonSchedulerTruth(
+  routines: RoutineSpec[],
+  scheduledGoalCount: number
+): DaemonSchedulerTruth {
+  return {
+    active: true,
+    activeJobsCount: routines.length + scheduledGoalCount,
+    jobs: routines.map((r) => ({
+      id: r.id,
+      name: r.name,
+      cronOrTime: r.cronOrTime,
+      lastRun: r.lastRunDate || 'not recorded',
+      nextRun: `${r.cronOrTime} (configured plan; not observed)`,
+    })),
+    note: 'Count and times reflect the routines this process schedules; nextRun is a configured plan, not a run observation.',
   };
 }

@@ -20,7 +20,7 @@ import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTru
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
-import { privacyMatrixTruth, schedulerTruth } from './src/utils/hardening/mobileTelemetryTruth';
+import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import {
   getEmergencyState,
@@ -3861,15 +3861,22 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
       };
     })(),
     scheduler: {
-      active: true,
-      activeJobsCount: 4,
-      jobs: [
-        { id: 'morning_9am', name: 'Morning Task Briefing', cronOrTime: '09:00 AM IST', lastRun: memoryState.schedulerState.lastMorningRunDate, nextRun: '09:00 AM Tomorrow' },
-        { id: 'midday_2pm', name: 'Midday System & Site Audit', cronOrTime: '02:00 PM IST', lastRun: memoryState.schedulerState.lastMiddayRunDate, nextRun: '02:00 PM Tomorrow' },
-        { id: 'evening_630pm', name: 'Evening Social Growth Pulse', cronOrTime: '06:30 PM IST', lastRun: memoryState.schedulerState.lastEveningRunDate, nextRun: '06:30 PM Tomorrow' },
-        { id: 'night_1030pm', name: 'Nightly Work Summary & Backup', cronOrTime: '10:30 PM IST', lastRun: memoryState.schedulerState.lastNightRunDate, nextRun: '10:30 PM Tonight' },
-      ],
-      lastRunLog: schedulerRunLog.slice(0, 10),
+      // The count and the per-job labels come from the routines this process
+      // actually schedules. The previous block hardcoded a count of 4 and
+      // labelled each `nextRun` as if the next run had been observed.
+      ...(() => {
+        const recurring: RoutineSpec[] = [
+          { id: 'morning_9am', name: 'Morning Task Briefing', cronOrTime: '09:00 AM IST', lastRunDate: memoryState.schedulerState.lastMorningRunDate },
+          { id: 'midday_2pm', name: 'Midday System & Site Audit', cronOrTime: '02:00 PM IST', lastRunDate: memoryState.schedulerState.lastMiddayRunDate },
+          { id: 'evening_630pm', name: 'Evening Social Growth Pulse', cronOrTime: '06:30 PM IST', lastRunDate: memoryState.schedulerState.lastEveningRunDate },
+          { id: 'night_1030pm', name: 'Nightly Work Summary & Backup', cronOrTime: '10:30 PM IST', lastRunDate: memoryState.schedulerState.lastNightRunDate },
+          { id: 'nightly_repo_check', name: 'Nightly Repository Check', cronOrTime: '03:00 AM IST', lastRunDate: (memoryState.schedulerState as { lastGithubNightlyRunDate?: string }).lastGithubNightlyRunDate },
+        ];
+        return {
+          ...daemonSchedulerTruth(recurring, scheduledGoals.length),
+          lastRunLog: schedulerRunLog.slice(0, 10),
+        };
+      })(),
     },
     storage: {
       persistenceFile: MEMORY_FILE_PATH,
