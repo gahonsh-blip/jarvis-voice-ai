@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 23:15 IST (2026-09-25 17:45 UTC) — work slot 5: YouTube voice status reply truth
+
+### Fixed
+- **A passing token refresh made the voice reply claim a verified channel and a nominal API quota.** The `/api/chat` `youtube_status_inquiry` branch in `server.ts` answered *every* successful `ensureValidYouTubeToken()` with `YouTube Channel "<name>" is active, verified, and ready. OAuth 2.0 token status is nominal.` That helper only establishes that a stored token is unexpired or that a refresh POST to `oauth2.googleapis.com/token` returned a credential — it never calls `channels.list`, and nothing in the codebase measures API quota. The branch also substituted a hardcoded `'Connected Channel'` when the stored `channelTitle` was empty, so a credential with no channel read spoke a name that was never observed. The repo's own seeded `jarvis_memory.json` has exactly this shape (`connected: true`, `expiresAt` 2026-09-02, encrypted blobs), where the token check can only pass by refreshing.
+  - New `src/utils/hardening/youtubeVoiceStatusTruth.ts`: `youtubeVoiceStatusReply()` builds the reply from the two facts the server actually holds — credential validity and the recorded scope grant — reusing `publishScopeGranted()` / `describeGrantedScopes()` from `src/utils/socialPublishHonesty.ts`. Upload authorization is stated as confirmed / not confirmed / unknown; the channel is named only when one was recorded, otherwise the reply says no channel has been read.
+  - The reply no longer contains "verified", "nominal" or "ready", in English or Hindi. The action payload now carries `tokenValid` plus `channelVerified: false` rather than a single boolean that conflated credential validity with channel verification.
+- **The Hindi branch of the reply was half-English.** Caught by the new test's Hindi assertions; the note and upload sentences are now fully bilingual.
+
+### Tests
+- `src/tests/youtubeVoiceStatusTruth.test.ts` — 9 assertions pinning the no-unobserved-claims rule, the three-state upload grant, the absent-channel case, and both languages. Negative-validated: restoring the phrase "is active, verified, and ready" fails 1 of 9, restored → 9/9.
+
+### Docs
+- `docs/COMPLETION_STATUS.md` — item 13 evidence and last-cycle entry updated for slot 5. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-09-25 22:35 IST (2026-09-25 17:05 UTC) — work slot 4: telephony engine-selection gateway truth
 
 ### Fixed
