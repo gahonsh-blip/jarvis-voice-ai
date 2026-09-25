@@ -4,7 +4,28 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-25 18:15 UTC (23:45 IST 2026-09-25) — **WORK SLOT 6** of the
+Last cycle: 2026-09-25 18:18 UTC (23:48 IST 2026-09-25) — **WORK SLOT 6** of the
+2026-09-25 window, the 23:42 IST fire, rebased and re-verified at 23:48 IST. Item 13
+(`Zero-fake-success for all tools`), the **daemon scheduler block truth**.
+
+**The `/api/daemon/status` scheduler block still carried the two fabrications the mobile route shed last cycle.**
+Measured against the server: the block answered a literal `activeJobsCount: 4` while the process
+schedules five recurring routines, and labelled every job `nextRun: '09:00 AM Tomorrow'`,
+`'10:30 PM Tonight'` etc. as if the next run had been observed. `ProactiveRoutinesModal.tsx` reads
+`/api/daemon/status`, and the count and labels disagreed with the five routines `server.ts`
+actually defines (four daily reports plus the 03:00 IST nightly repository check). Fixed:
+`daemonSchedulerTruth()` in `src/utils/hardening/mobileTelemetryTruth.ts` derives the count from
+the routine table it is handed plus the operator-registered scheduled-goal count, reports an
+unrecorded last run as `not recorded`, and labels each `nextRun` `… (configured plan; not
+observed)`; `server.ts` builds the block from the five routines it schedules. Guarded by the
+extended `src/tests/mobileTelemetryTruth.test.ts` (13 tests, 5 new); negative-validated — restoring
+`activeJobsCount: 4` fails exactly the two count assertions (`2 failed | 11 passed`), restored → 13/13.
+Gates observed: lint exit 0; targeted 1 file / 13 tests passed; full suite **102 files / 1349 tests
+passed**; build exit 0 (`dist/server.cjs` 884598 bytes). E2E: NOT RUN — no handset, no bridge
+pairing secret. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — one more real fake-success path
+closed; more remain.
+
+Last cycle (previous): 2026-09-25 18:15 UTC (23:45 IST 2026-09-25) — **WORK SLOT 6** of the
 2026-09-25 window, the 23:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **offline (Local JARVIS Engine) YouTube status reply**.
 
@@ -38,27 +59,6 @@ diff fails **7 of 13**, restored → **13/13**. Gates observed this slot: lint e
 numbers. E2E: NOT RUN — the offline engine makes no provider call by design and no Google OAuth
 client id/secret is present in this sandbox. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` —
 this closes another real fake-success path; more remain.
-Last cycle (previous): 2026-09-25 18:12 UTC (23:42 IST 2026-09-25) — **WORK SLOT 6** of the
-2026-09-25 window, the 23:42 IST fire. Item 13
-(`Zero-fake-success for all tools`), the **daemon scheduler block truth**.
-
-**The `/api/daemon/status` scheduler block still carried the two fabrications the mobile route shed last cycle.**
-Measured against the server: the block answered a literal `activeJobsCount: 4` while the process
-schedules five recurring routines, and labelled every job `nextRun: '09:00 AM Tomorrow'`,
-`'10:30 PM Tonight'` etc. as if the next run had been observed. `ProactiveRoutinesModal.tsx` reads
-`/api/daemon/status`, and the count and labels disagreed with the five routines `server.ts`
-actually defines (four daily reports plus the 03:00 IST nightly repository check). Fixed:
-`daemonSchedulerTruth()` in `src/utils/hardening/mobileTelemetryTruth.ts` derives the count from
-the routine table it is handed plus the operator-registered scheduled-goal count, reports an
-unrecorded last run as `not recorded`, and labels each `nextRun` `… (configured plan; not
-observed)`; `server.ts` builds the block from the five routines it schedules. Guarded by the
-extended `src/tests/mobileTelemetryTruth.test.ts` (13 tests, 5 new); negative-validated — restoring
-`activeJobsCount: 4` fails exactly the two count assertions (`2 failed | 11 passed`), restored → 13/13.
-Gates observed: lint exit 0; targeted 1 file / 13 tests passed; full suite **102 files / 1349 tests
-passed**; build exit 0 (`dist/server.cjs` 884598 bytes). E2E: NOT RUN — no handset, no bridge
-pairing secret. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — one more real fake-success path
-closed; more remain.
-
 Earlier cycle: 2026-09-25 17:45 UTC (23:15 IST 2026-09-25) — **WORK SLOT 5** of the
 2026-09-25 window, the 23:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **YouTube voice status reply truth**.
@@ -3066,6 +3066,24 @@ the `/api/daemon/status` route. Negative-validated: restoring
 ---
 
 ## Known limitations
+
+- **Finalization slot, 2026-09-25 18:18 UTC (23:48 IST 2026-09-25) — the 23:42
+  IST daemon-scheduler fix was landed; no new backlog item was advanced.** This
+  fire recovered the previous fire's work that had been committed locally but not
+  pushed: commit `fc53723` was rebased onto the remote tip `0485593` (resolving a
+  `docs/COMPLETION_STATUS.md` conflict) and pushed as `7d45966`, then the gate
+  numbers in its status entry were corrected to the counts observed here
+  (`3753b69`). Re-verified on the pushed tip: `npm run lint` (`tsc --noEmit`)
+  exit 0; targeted `npx vitest run src/tests/mobileTelemetryTruth.test.ts`
+  **1 file / 13 tests passed** (202 ms); full `npx vitest run` **102 files / 1349
+  tests passed** (21.01 s); `npm run build` exit 0, artifact `dist/server.cjs`
+  884598 bytes. E2E, `npm audit` and a live provider dispatch are **NOT RUN** for
+  the reasons recorded below. `DEPLOYMENT: NOT_CONFIGURED` — no deployment target
+  or hosting integration is present in this sandbox, so the verified
+  `dist/server.cjs` is the deployment unit available. Item 13 stays `PARTIAL`.
+  Note that this window's status numbers moved between fires (101→102 files,
+  1336→1349 tests) without a corresponding test commit in this branch's range;
+  the counts recorded here are the ones observed in this run, not inherited.
 
 - **Finalization slot, 2026-09-25 04:36 IST — nothing new was advanced.** Slot 16
   of the 2026-09-24 window (the 04:35 IST fire) started no new development. It
