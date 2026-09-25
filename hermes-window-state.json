@@ -1,45 +1,19 @@
 {
   "window_date": "2026-09-26",
-  "window_started_at": "2026-09-25T18:36:20Z",
-  "last_slot_at": "2026-09-25T22:29:23Z",
-  "slots_completed": 14,
-  "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools",
+  "window_started_at": "2026-09-25T15:35:00Z",
+  "last_slot_at": "2026-09-25T22:56:00Z",
+  "slots_completed": 15,
+  "current_item": 54,
+  "current_item_title": "Secret/token protection audit",
   "current_item_status": "PARTIAL",
-  "last_commit": "ef44c65",
+  "last_commit": "6e37618",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "reason": "requires a physical Android handset"
-    },
-    {
-      "item": 2,
-      "reason": "requires a physical Android handset"
-    },
-    {
-      "item": 8,
-      "reason": "requires a Windows host"
-    },
-    {
-      "item": 50,
-      "reason": "requires a physical Android handset"
-    },
-    {
-      "item": 55,
-      "reason": "requires a physical Android handset / Windows host"
-    },
-    {
-      "item": 54,
-      "reason": "live credential rotation requires provider credentials"
-    },
-    {
-      "item": 60,
-      "reason": "external third-party audit leg"
-    }
+    "1 Real Android Mobile Bridge connection - BLOCKED - requires a physical Android device",
+    "50 Hands-free Android control - NOT_AVAILABLE - no Android device attached",
+    "55 Real-device E2E test suite - NOT_AVAILABLE - no Android device or Windows host"
   ],
-  "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "WORK slot 14 (03:35 IST 2026-09-26). Item 13 slice: the /api/chat screenshot, volume (up/down) and power (shutdown/restart) intents no longer claim success. New truth helpers src/utils/computerOperator/screenshotDispatchTruth.ts (VERIFIED only when the receipt is VERIFIED AND the file is verified on disk; headless -> NOT_AVAILABLE), audioDispatchTruth.ts (reports the in-app voice-output level and states the system output level was NOT changed; actionExecuted false always), powerDispatchTruth.ts (never executes: NOT_IMPLEMENTED + permissionRequired, BLOCKED on emergency stop, NOT_AVAILABLE without a display session). open_notepad now routes through evaluateLaunchDispatch(). Guarded by src/tests/remainingFakeSuccess.test.ts (24 tests); negative-validated: reverting the two source files fails 10 of 24, restored -> 24/24. Two pre-existing localJarvisEngine.test.ts assertions encoded the old fake-success contract and were corrected to actionExecuted === false + honest reply. Gates observed: lint exit 0; full suite 107 files / 1410 tests passed; build exit 0 (dist/server.cjs 909349 bytes). Commits 4cb4be3, fa60208, ef44c65. Item 13 remains PARTIAL; further paths remain (quotation, social, telephony-hub titles, search)."
+  "last_report_path": "/tmp/hermes-window-report.md"
 }
