@@ -266,10 +266,37 @@ export function updateActionRequestStatus(
 // ==============================================================================
 // 4. REAL FILESYSTEM EXECUTION TOOLS (RESTRICTED TO PROJECT ROOT)
 // ==============================================================================
-const PROJECT_ROOT = process.cwd();
+const PROJECT_ROOT = path.resolve(process.cwd());
+
+const PROTECTED_PATH_SEGMENTS = new Set(['.git', '.ssh', '.gnupg', '.aws']);
+const PROTECTED_FILE_PATTERNS = [
+  /^\.env(\..+)?$/i,
+  /^\.npmrc$/i,
+  /^\.pypirc$/i,
+  /^\.netrc$/i,
+  /^\.yarnrc(\.yml)?$/i,
+  /^\.git-credentials$/i,
+  /^id_(rsa|dsa|ecdsa|ed25519)$/i,
+  /\.(pem|key|p12|pfx|keystore|jks)$/i,
+];
+
+function isProtectedPath(absolutePath: string): boolean {
+  const rel = path.relative(PROJECT_ROOT, absolutePath);
+  if (!rel) return false;
+  const segments = rel.split(path.sep).filter(Boolean);
+  if (segments.some((segment) => PROTECTED_PATH_SEGMENTS.has(segment.toLowerCase()))) return true;
+  const base = segments[segments.length - 1] ?? '';
+  return PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(base));
+}
 
 function safeResolvePath(relativePath: string): { safePath: string; error?: string } {
   try {
+    if (typeof relativePath !== 'string' || relativePath.trim() === '') {
+      return { safePath: '', error: 'Invalid path: a non-empty string is required.' };
+    }
+    if (relativePath.includes('\0')) {
+      return { safePath: '', error: 'Access denied: path contains an illegal null byte.' };
+    }
     const cleaned = path.normalize(relativePath).replace(/^(\.\.[\/\\])+/, '');
     const absolute = path.resolve(PROJECT_ROOT, cleaned);
     // Containment must be decided on path segments, never on a raw string prefix:
@@ -281,6 +308,9 @@ function safeResolvePath(relativePath: string): { safePath: string; error?: stri
       path.isAbsolute(relative);
     if (escapesRoot) {
       return { safePath: '', error: 'Access denied: Path is outside authorized workspace root.' };
+    }
+    if (isProtectedPath(absolute)) {
+      return { safePath: '', error: 'Access denied: Path targets a protected credential or VCS location.' };
     }
     return { safePath: absolute };
   } catch (err: any) {
