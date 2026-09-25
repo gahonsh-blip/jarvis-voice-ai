@@ -4,6 +4,27 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 21:20 IST (2026-09-25 15:50 UTC) — work slot 1: audit-trail truth fields
+
+### Fixed
+- **`addAuditLog()` no longer stamps every row `VERIFIED`.** It derived
+  `verificationStatus` and `finalTruthState` from hardcoded `'VERIFIED'` literals
+  while writing the caller's `status` verbatim, so a row logged `FAILED`,
+  `BLOCKED` or `PENDING` carried a green *confirmed* badge in the Security Matrix
+  that contradicted its own status string. Both fields are now derived from the
+  caller's outcome by `deriveAuditVerificationStatus()` /
+  `deriveAuditFinalTruthState()` in `src/utils/hardening/auditTrailTruth.ts`.
+
+### Tests
+- `src/tests/hardening/auditTrailTruth.test.ts` — 5 new assertions covering the
+  derivation for `VERIFIED`/`FAILED`/`BLOCKED`/`PENDING` and a `server.ts` source
+  guard against the hardcoded literals (19 tests total). Negative-validated:
+  disabling the derivation fails exactly 3 tests.
+
+### Verified
+- `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run` **98 files / 1290
+  tests passed**; `npm run build` exit 0, `dist/server.cjs` 872300 bytes.
+
 ## [Unreleased] - 2026-09-25 04:37 IST (2026-09-24 23:07 UTC) — finalization slot: window re-verified, PR refreshed, nothing merged
 
 ### Verified (no code change)
