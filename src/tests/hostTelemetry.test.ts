@@ -55,7 +55,11 @@ describe('hostTelemetry — real daemon-host metrics (no invented values)', () =
     expect(sample.metricsSource).toBe('node-os');
     expect(Number.isNaN(Date.parse(sample.sampledAt))).toBe(false);
     expect(sample.ramTotalGb).toBeGreaterThan(0);
-    expect(sample.ramUsage).toBe(getHostRam().percent);
+    // Two live reads taken at different instants: the host's RAM can move
+    // between them under load, so compare within a 1-point tolerance instead
+    // of for exact equality. The assertion still proves the sample carries the
+    // host's real percentage, not a constant.
+    expect(Math.abs(sample.ramUsage - getHostRam().percent)).toBeLessThanOrEqual(1);
   });
 
   it('derives RAM used from the host instead of the old hardcoded constants', () => {
