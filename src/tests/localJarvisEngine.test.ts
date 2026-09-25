@@ -85,7 +85,8 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     it('should support Hindi calculator commands', () => {
       const result = processOfflineCommand('कैलकुलेटर खोलो', initialMemory, 'hi-IN');
       expect(result.intent).toBe('open_calculator');
-      expect(result.reply).toContain('कैलकुलेटर खोला जा रहा है');
+      expect(result.reply).toContain('इन-ऐप कैलकुलेटर दृश्य खोला जा रहा है');
+      expect(result.reply).toContain('ऑफ़लाइन मोड में कोई वास्तविक डेस्कटॉप कैलकुलेटर ऐप नहीं खुलता');
     });
   });
 
