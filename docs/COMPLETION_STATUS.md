@@ -4,7 +4,39 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-25 19:45 UTC (01:15 IST 2026-09-26) — **WORK SLOT 8** of the
+Last cycle: 2026-09-25 20:12 UTC (01:40 IST 2026-09-26) — **WORK SLOT 9** of the
+2026-09-26 window, the 01:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **HUDHeader kill-switch state**.
+
+**The HUD header drew an unqueried emergency stop as a released one.** `HUDHeader.tsx` seeded
+`isKillSwitchActive` to `false`, fetched `/api/emergency/status` inside a `try` that discarded
+both the HTTP status and the parse result, and caught every failure silently. A header that could
+not reach the backend therefore rendered an ordinary, non-emergency surface with the KILL SWITCH
+control armed and no banner — an emergency stop nobody had queried, presented as a confirmed-resting
+one. The engage handler had the mirror defect: it set `isKillSwitchActive = true` on the bare
+`data.success` flag without reading the returned position, so it asserted a switch state the
+response had not confirmed. This is the same defect class already closed on the Permission Gateway
+(`permissionGatewayEmergencyLiveness.test.ts`) and the Autonomous Tools Hub
+(`autonomousToolsEmergencyLiveness.test.ts`); the header was missed.
+
+Fixed: the component now holds `useState<EmergencyStatusShape | null>(null)`, derives the switch
+position from the shared tri-state `emergencyLiveness()` / `emergencyStatusKnown()` helpers, treats
+a non-`ok` response and a non-boolean body as unobserved (fails closed), and adopts a post-toggle
+position only when `emergencyStatusKnown(data.emergencyState)` is true — otherwise it returns to
+`null` and lets the next poll decide. An unknown state renders an explicit
+`EMERGENCY STOP STATUS UNKNOWN` banner instead of the armed control surface.
+
+Guarded by `src/tests/hudHeaderEmergencyLiveness.test.ts` (5 tests): the seed is `null` and not a
+boolean, the derive imports and helper calls are present, the `res.ok` check precedes adoption of
+the payload, both toggle handlers gate on `emergencyStatusKnown`, and the unknown banner exists.
+Negative-validated: reverting to the boolean seed, the swallowed fetch and the constant
+`RELEASED` derivation fails exactly 3 of the 5 assertions (`3 failed | 2 passed`); restored →
+**5/5**. Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted 1 file / 5 tests passed;
+full suite **104 files / 1363 tests passed**; build exit 0 (`dist/server.cjs` 864.3 kb,
+`dist/server.cjs.map` 1.6 mb). E2E: NOT RUN — no handset, no bridge pairing secret. Deploy:
+NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success path closed; more remain.
+
+Last cycle (previous): 2026-09-25 19:45 UTC (01:15 IST 2026-09-26) — **WORK SLOT 8** of the
 2026-09-26 window, the 01:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **voice `security_audit` reply**.
 

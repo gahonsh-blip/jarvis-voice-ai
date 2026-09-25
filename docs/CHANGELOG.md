@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-26 01:40 IST (2026-09-25 20:12 UTC) — work slot 9: HUDHeader kill-switch state truth
+
+### Fixed
+- **The HUD header rendered an unqueried emergency stop as a released one.** `HUDHeader.tsx` seeded `isKillSwitchActive` to `false`, fetched `/api/emergency/status` inside a `try` that discarded both the HTTP status and the parse result, and caught every failure silently — so a header that could not reach the backend drew an ordinary, non-emergency surface with the KILL SWITCH control armed and no banner. The engage handler mirrored the defect: it set the state to `true` on the bare `data.success` flag without reading the returned position.
+  - The component now holds `useState<EmergencyStatusShape | null>(null)`, derives the switch position from the shared tri-state `emergencyLiveness()` / `emergencyStatusKnown()` helpers, treats a non-`ok` response and a non-boolean body as unobserved (fails closed), and adopts a post-toggle position only when `emergencyStatusKnown(data.emergencyState)` is true — otherwise it returns to `null` and lets the next poll decide. An unknown state renders an explicit `EMERGENCY STOP STATUS UNKNOWN` banner instead of the armed control surface. Same defect class already closed on the Permission Gateway and the Autonomous Tools Hub.
+
+### Tests
+- `src/tests/hudHeaderEmergencyLiveness.test.ts` (new, 5 tests) — seed is `null` and not a boolean, the derive imports and helper calls are present, the `res.ok` check precedes adoption of the payload, both toggle handlers gate on `emergencyStatusKnown`, and the unknown banner exists. Negative-validated: reverting to the boolean seed, the swallowed fetch and the constant `RELEASED` derivation fails exactly 3 of the 5 assertions (`3 failed | 2 passed`); restored → 5/5.
+
+### Docs
+- `docs/COMPLETION_STATUS.md` — item 13 evidence and last-cycle entry updated for slot 9. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-09-26 01:15 IST (2026-09-25 19:45 UTC) — work slot 8: voice security_audit posture truth
 
 ### Fixed
