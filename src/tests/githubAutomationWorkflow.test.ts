@@ -474,6 +474,9 @@ describe('executeFixPlan', () => {
     expect(report.planWasEmpty).toBe(true);
     expect(report.results).toHaveLength(0);
     expect(report.receipt.detailEn).toContain('no steps');
+    // An empty plan performed no work, so it must not report success.
+    expect(report.receipt.outcome).toBe('NOT_CONFIGURED');
+    expect(report.receipt.verified).toBe(false);
   });
 
   it('records NOT_CONFIGURED for a step with no implementation', async () => {

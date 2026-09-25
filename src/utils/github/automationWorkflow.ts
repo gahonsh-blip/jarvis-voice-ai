@@ -547,10 +547,12 @@ export async function executeFixPlan(
       receipt: buildReceipt({
         action: 'github.executeFixPlan',
         target: 'plan',
-        outcome: 'VERIFIED',
-        detailEn: 'The plan contained no steps, so no changes were attempted.',
+        // An empty plan did not verify anything — nothing ran. Reporting it as
+        // VERIFIED with `evidence: none` was an unsupported success claim; the
+        // honest outcome is that no work was configured to execute.
+        outcome: 'NOT_CONFIGURED',
+        detailEn: 'The plan contained no steps, so no changes were attempted and nothing was verified.',
         detailHi: 'योजना खाली थी, कोई बदलाव नहीं किया गया।',
-        evidence: makeEvidence('none', 'Empty plan'),
       }),
     };
   }

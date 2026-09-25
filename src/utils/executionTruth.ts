@@ -154,18 +154,41 @@ export interface ReceiptInit {
 }
 
 /**
+ * True only when the evidence actually proves something happened. `none` is the
+ * explicit "no observation" kind, so it can never stand in for proof.
+ */
+export function isSubstantiveEvidence(
+  evidence: ExecutionEvidence | null | undefined
+): boolean {
+  return Boolean(evidence && evidence.kind !== 'none');
+}
+
+/**
  * Builds a receipt and derives `verified` from the outcome — callers can never
  * hand-set success. Asking for VERIFIED without evidence is downgraded to
  * DISPATCHED so an unsupported claim cannot be constructed by accident.
+ *
+ * Evidence of kind `none` is NOT proof: it is the type's own way of saying
+ * "nothing was observed". A caller that supplies it and still asks for VERIFIED
+ * is downgraded too (to UNVERIFIED — the action ran, but nothing confirms it),
+ * because otherwise `evidence: makeEvidence('none', ...)` would be a
+ * loophole through this very guard.
  */
 export function buildReceipt(init: ReceiptInit): ExecutionReceipt {
   let outcome = init.outcome;
-  let evidence = init.evidence ?? null;
+  const evidence = init.evidence ?? null;
   let detailEn = init.detailEn;
+  let failureReason = init.failureReason;
 
-  if (outcome === 'VERIFIED' && !evidence) {
-    outcome = 'DISPATCHED';
-    detailEn = `${detailEn} (downgraded: no verification evidence was supplied)`;
+  if (outcome === 'VERIFIED' && !isSubstantiveEvidence(evidence)) {
+    const hadEvidence = evidence !== null;
+    outcome = hadEvidence ? 'UNVERIFIED' : 'DISPATCHED';
+    failureReason = hadEvidence
+      ? 'Verification was claimed but the supplied evidence was kind "none", which proves nothing.'
+      : failureReason;
+    detailEn = `${detailEn} (downgraded: ${
+      hadEvidence ? 'evidence of kind "none" proves nothing' : 'no verification evidence was supplied'
+    })`;
   }
 
   return {
@@ -178,7 +201,7 @@ export function buildReceipt(init: ReceiptInit): ExecutionReceipt {
     detailHi: init.detailHi,
     dispatchedAt: init.dispatchedAt,
     dispatchId: init.dispatchId,
-    failureReason: init.failureReason,
+    failureReason,
   };
 }
 
