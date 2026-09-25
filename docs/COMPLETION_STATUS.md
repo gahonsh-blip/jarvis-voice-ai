@@ -3302,6 +3302,19 @@ the `/api/daemon/status` route. Negative-validated: restoring
 
 ## Known limitations
 
+- **Finalization slot, 2026-09-26 04:36 IST (23:06 UTC 2026-09-25) — window
+  closed; no new backlog item was advanced.** Re-verified the frozen tip
+  `96bc552` on `feature/hermes-full-completion`: `npm run lint` (`tsc --noEmit`)
+  exit 0; full `npx vitest run` **108 files / 1417 tests passed** (21.86 s);
+  `npm run build` exit 0 with artifact `dist/server.cjs` **910590 bytes**. Security
+  checks clean: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status
+  --short` empty; no `.env`, token, key, `node_modules/` or `dist/` tracked or
+  staged. PR #4 is open, non-draft and `mergeable_state: clean` at head `96bc552`.
+  **Not merged — awaiting human approval.** The items genuinely advanced this
+  window (#13 zero-fake-success, #54 filesystem-tool credential confinement) both
+  remain `PARTIAL`; #1/#50/#55 remain hardware-blocked (`NOT_AVAILABLE`). Deploy:
+  `NOT_CONFIGURED` — no deployment target in this environment.
+
 - **Finalization slot, 2026-09-25 18:18 UTC (23:48 IST 2026-09-25) — the 23:42
   IST daemon-scheduler fix was landed; no new backlog item was advanced.** This
   fire recovered the previous fire's work that had been committed locally but not
