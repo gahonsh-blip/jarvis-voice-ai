@@ -8,6 +8,11 @@ import {
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
 import { androidBridgeEngine } from './androidBridgeEngine';
+import {
+  youtubeOfflineStatusReply,
+  offlineTokenFreshness,
+  type YouTubeVoiceMode,
+} from './hardening/youtubeVoiceStatusTruth';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
@@ -86,12 +91,15 @@ export function processOfflineCommand(
   const lower = clean.toLowerCase();
 
   // Determine actual language response mode
+  // `hinglish` must be tested before the `hi` prefix check: `'hinglish'`
+  // starts with `'hi'`, so the old order made the Hinglish branch dead code
+  // and answered a Hinglish request in Devanagari.
   const detectedLang = language === 'auto'
     ? detectSpeechLanguage(clean, language)
-    : language.startsWith('hi')
-    ? 'hindi'
     : language === 'hinglish'
     ? 'hinglish'
+    : language.startsWith('hi')
+    ? 'hindi'
     : 'english';
 
   const isHindi = detectedLang === 'hindi' || detectedLang === 'hi-IN';
@@ -472,49 +480,42 @@ export function processOfflineCommand(
     updatedMemory.stats.actionsExecuted += 1;
     const yt = currentMemory.youTubeConnection;
     const isConnected = Boolean(yt && yt.connected && (yt.channelTitle || yt.channelId));
+    const mode: YouTubeVoiceMode = isHindi ? 'hi' : isHinglish ? 'hinglish' : 'en';
 
-    if (!isConnected) {
-      const reply = isHindi
-        ? 'YouTube अभी connected नहीं है। OAuth 2.0 authorization बाकी है। आप Settings या Integrations से इसे कभी भी 1-Click में सुरक्षित जोड़ सकते हैं।'
-        : isHinglish
-        ? 'YouTube abhi connect nahi hai, Sir. OAuth authorization pending hai. Aap Settings se 1-click connect kar sakte hain.'
-        : 'YouTube is currently not connected, Sir. OAuth 2.0 authorization is required before channel data or video uploads can be processed.';
+    // The offline engine performs no provider call. The reply may only state
+    // what the local record holds; it previously claimed "connected and
+    // verified" with a "ready" Level-4 pipeline, and named a hardcoded
+    // 'Connected Channel' when no channel had ever been read.
+    const reply = youtubeOfflineStatusReply(
+      {
+        connected: isConnected,
+        channelTitle: yt?.channelTitle,
+        scopes: yt?.scopes,
+        expiresAt: yt?.expiresAt,
+      },
+      mode
+    );
 
-      return {
-        reply,
-        spokenText: isHindi
-          ? 'YouTube अभी connected नहीं है। OAuth authorization बाकी है।'
-          : isHinglish
-          ? 'YouTube abhi connect nahi hai, Sir. OAuth authorization pending hai.'
-          : 'YouTube is currently not connected, Sir. OAuth authorization is required.',
-        intent: 'youtube_status_inquiry',
-        actionExecuted: true,
-        actionDetail: { type: 'youtube_status_inquiry', title: 'YouTube Status: Not Connected' },
-        updatedMemory,
-        offline: true,
-      };
-    } else {
-      const channelTitle = yt?.channelTitle || 'Connected Channel';
-      const reply = isHindi
-        ? `YouTube चैनल "${channelTitle}" सफलतापूर्वक जुड़ा हुआ है। API status verified है और वीडियो अपलोड पाइपलाइन Level-4 सुरक्षा के साथ तैयार है।`
-        : isHinglish
-        ? `Sir, YouTube channel "${channelTitle}" connected hai aur API verified hai. Video pipeline Level-4 safety ke sath ready hai.`
-        : `YouTube channel "${channelTitle}" is connected and verified. The upload pipeline is standing by with Level-4 authorization enforcement.`;
-
-      return {
-        reply,
-        spokenText: isHindi
-          ? `YouTube चैनल ${channelTitle} connected है और वीडियो पाइपलाइन तैयार है।`
-          : isHinglish
-          ? `YouTube channel ${channelTitle} connected hai aur ready hai.`
-          : `YouTube channel ${channelTitle} is connected and verified.`,
-        intent: 'youtube_status_inquiry',
-        actionExecuted: true,
-        actionDetail: { type: 'youtube_status_inquiry', title: `YouTube Status: ${channelTitle}` },
-        updatedMemory,
-        offline: true,
-      };
-    }
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'youtube_status_inquiry',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'youtube_status_inquiry',
+        title: isConnected
+          ? `YouTube Status: ${yt?.channelTitle?.trim() || 'channel not read'}`
+          : 'YouTube Status: Not Connected',
+        payload: {
+          connected: isConnected,
+          channelVerified: false,
+          tokenFreshness: offlineTokenFreshness(yt?.expiresAt, new Date()),
+          channel: yt?.channelTitle ?? null,
+        },
+      },
+      updatedMemory,
+      offline: true,
+    };
   }
 
   // ==============================================================================

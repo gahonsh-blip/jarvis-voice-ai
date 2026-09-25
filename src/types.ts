@@ -97,6 +97,11 @@ export interface MemoryStore {
     channelTitle?: string;
     subscriberCount?: string;
     videoCount?: string;
+    // Recorded by the server when the OAuth grant is stored. Optional: an
+    // older record may carry neither, and an absent value is the absence of an
+    // observation — never "still valid" or "all scopes granted".
+    expiresAt?: string;
+    scopes?: string[];
   };
   notes: {
     id: string;
