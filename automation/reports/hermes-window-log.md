@@ -5622,3 +5622,52 @@ Next slot: continue #13. Recommended target — the remaining spoken/UI status l
 claim state without an observation (rotate the grep: security/telephony/oracle/mobile status
 strings in `server.ts` and `src/utils/localJarvisEngine.ts`). Prefer a slice finishable and
 pushable inside one slot.
+## 2026-09-26 01:35 IST — WORK SLOT (window 2026-09-26)
+
+Slot:        WORK  |  IST time: 01:35–01:50
+Window date: 2026-09-26. State branch `automation/hermes-state` read at 01:36 IST:
+`slots_completed: 10`, `finalized: false`, `current_item: 13`. This slot is 11. Numbering note: the
+doc calls this WORK SLOT 9 while the state counter increments 10 → 11 (previous slots flagged the
+same drift); the slot identity (01:35 IST fire, window 2026-09-26) is unambiguous, the counter is
+not — reported honestly, not reconciled.
+
+Item: #13 `Zero-fake-success for all tools` — remains `PARTIAL`. Advanced one more real path.
+
+What was advanced, honestly:
+- `HUDHeader.tsx` seeded `isKillSwitchActive = false`, fetched `/api/emergency/status` inside a
+  `try` that discarded both the HTTP status and the parse result, and swallowed every failure. A
+  header that could not reach the backend therefore rendered an ordinary, non-emergency surface
+  with the KILL SWITCH control armed and no banner — an emergency stop nobody had queried,
+  presented as a confirmed-resting one. The engage handler mirrored it: `setIsKillSwitchActive(true)`
+  on the bare `data.success` flag without reading the returned position. Same defect class already
+  closed on the Permission Gateway and the Autonomous Tools Hub; the header was missed.
+- Fix: `useState<EmergencyStatusShape | null>(null)`; the position is derived from the shared
+  tri-state `emergencyLiveness()` / `emergencyStatusKnown()` helpers; a non-`ok` response and a
+  non-boolean body are treated as unobserved (fail closed); a post-toggle position is adopted only
+  when `emergencyStatusKnown(data.emergencyState)` is true, otherwise it returns to `null` and the
+  next poll decides. Unknown renders an explicit `EMERGENCY STOP STATUS UNKNOWN` banner instead of
+  the armed control surface.
+
+Gates observed this slot:
+- `npm run lint` (`tsc --noEmit`) → exit 0.
+- Targeted `npx vitest run src/tests/hudHeaderEmergencyLiveness.test.ts` → **5/5 passed**.
+- Negative validation: reverting to the boolean seed, the swallowed fetch and a constant `RELEASED`
+  derivation fails exactly 3 of the 5 assertions (`3 failed | 2 passed`); restored → 5/5.
+- Full suite `npx vitest run` → **104 files / 1363 tests passed** (21.03 s).
+- `npm run build` → exit 0; `dist/server.cjs` 864.3 kb, `dist/server.cjs.map` 1.6 mb.
+- Security: `git status --short` shows only the intended files; `.env` remains untracked
+  (`.gitignore`). `npm audit` NOT RUN — no audit script in `package.json`.
+- E2E: NOT RUN — no handset, no bridge pairing secret in this sandbox.
+- Deploy: NOT_CONFIGURED — no deployment target in this environment.
+
+Bugs found: 1 (HUD header presenting an unqueried emergency stop as released).
+Bugs fixed: 1 (same), proven by the negative validation above.
+
+Commits: `d9af904` (fix(hud) + test), `e137561` (docs(hermes)). Both on
+`feature/hermes-full-completion` and pushed.
+
+Next slot: continue #13. Recommended target — the remaining spoken/UI status literals that can
+claim state without an observation; rotate the grep to the emergency/kill-switch and voice-status
+surfaces not yet covered (e.g. any other component seeding an emergency boolean or rendering
+`DAEMON ACTIVE`-style badges without a `res.ok`-gated read). Prefer a slice finishable and
+pushable inside one slot.
