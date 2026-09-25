@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-26",
   "window_started_at": "2026-09-25T18:36:20Z",
-  "last_slot_at": "2026-09-25T20:16:00Z",
-  "slots_completed": 11,
+  "last_slot_at": "2026-09-25T20:55:00Z",
+  "slots_completed": 12,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "dc785b1",
+  "last_commit": "d528e7a",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -20,5 +20,5 @@
     {"item": 60, "reason": "external third-party audit leg"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot closing 2026-09-25T20:16Z (01:46 IST 2026-09-26). Prior state read from origin/automation/hermes-state was slots_completed: 10; incremented to 11. Doc numbering calls this WORK SLOT 9 - drift between doc and state counter is UNKNOWN and reported honestly, not reconciled. Fix: HUDHeader kill-switch state now tri-state via emergencyTruth helpers; commits d9af904 (fix+test), e137561 (docs), dc785b1 (report)."
+  "notes": "Slot closing 2026-09-25T20:55Z (02:25 IST 2026-09-26). Prior state read from origin/automation/hermes-state was slots_completed: 11; incremented to 12. Item 13 slice: /api/chat call commands (make_call/answer_call/hangup_call/reject_call) no longer assert success unconditionally. New src/utils/telephonyDispatchTruth.ts + evaluateTelephonyDispatch in server.ts; TelephonySessionManager.getLatestActiveSession added; actionExecuted only on GATEWAY_CONFIRMED. Commits 3260023 (fix+test), bb65e3c (docs), ad76c57 (flake fix), d528e7a (report). Full suite 105 files/1373 tests passed; lint exit 0; build exit 0 (dist/server.cjs 889871 bytes). Also fixed flaky hostTelemetry RAM exact-equality assertion (now 1-point tolerance)."
 }
