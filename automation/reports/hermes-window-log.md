@@ -5493,3 +5493,26 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - YouTube स्टेटस वॉइस जवाब अब सत्यापित चैनल/कोटा का झूठा दावा नहीं करता — वह केवल
   क्रेडेंशियल और रिकॉर्ड किए गए स्कोप बताता है; 9/9 टेस्ट और पूरा सूट 1331 टेस्ट पास।
+
+---
+
+## Slot: WORK 23:35 IST — 2026-09-25 (slot 6 of 16)
+
+**Item 13 — Zero-fake-success for all tools (offline YouTube status reply)** — `PARTIAL`
+
+- Offline `processOfflineCommand` answered every stored YouTube connection with "connected and
+  verified", "API status verified" and a "ready" Level-4 pipeline, with no provider call, and named
+  the hardcoded literal `Connected Channel` when no channel had been read. Reproduced with
+  `/tmp/repro.ts` against the seeded memory.
+- Fixed via `youtubeOfflineStatusReply()` / `offlineTokenFreshness()` in
+  `src/utils/hardening/youtubeVoiceStatusTruth.ts`, wired into `src/utils/localJarvisEngine.ts`.
+  The reply now states only what the local record holds, says "recorded in offline memory — not
+  verified in this slot", and reports an absent expiry/scope as unknown.
+- Also fixed a dead branch in the engine language router: `hinglish` starts with `hi`, so the
+  Hinglish branch was unreachable and Hinglish answered in Devanagari.
+- Tests: `src/tests/localJarvisYouTubeStatusTruth.test.ts` 13/13; negative-validated (stash engine
+  diff → 7/13 fail; restore → 13/13). Full suite 102 files / 1344 tests passed. Lint exit 0.
+  Build exit 0, `dist/server.cjs` 883695 bytes.
+- Commits: 8e88270 (fix), b9f2f60 (docs). Pushed to `feature/hermes-full-completion`.
+- E2E: NOT RUN (no Google OAuth client id/secret; offline engine makes no provider call by design).
+  Deploy: NOT_CONFIGURED.
