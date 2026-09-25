@@ -79,6 +79,9 @@ import {
   launchVerdict,
   launchReply,
 } from './src/utils/computerOperator/launchDispatchTruth';
+import { screenshotVerdict, screenshotReply } from './src/utils/computerOperator/screenshotDispatchTruth';
+import { volumeVerdict, volumeReply } from './src/utils/computerOperator/audioDispatchTruth';
+import { powerVerdict, powerReply } from './src/utils/computerOperator/powerDispatchTruth';
 import {
   loadPhonePermissions,
   savePhonePermissions,
@@ -8485,6 +8488,9 @@ function evaluateTelephonyDispatch(phase: TelephonyDispatchPhase) {
 // without touching the host. This reaches the real executor and derives the
 // verdict from observable evidence: the host capability map and the `LAUNCH_APP`
 // receipt, which is VERIFIED only when the app was seen in the foreground.
+// `open_notepad`, `open_calculator`, `open_paint` and `open_chrome` route to an
+// in-app view and do not call this; they state the in-app routing plainly
+// instead of claiming a desktop launch.
 async function evaluateLaunchDispatch(appName: string, targetApp: string) {
   const caps = hostActionCapabilities();
   const capability = caps.LAUNCH_APP || caps.INSPECT_SCREEN;
@@ -8520,6 +8526,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     let actionExecuted = false;
     let actionDetail: any = null;
     let languageChangedTo: string | undefined;
+    // In-app voice-output level, mirroring the UI slider. Not a system mixer
+    // value — `audioDispatchTruth` never reports the host output level as changed.
+    let voiceOutputLevel = 1.0;
 
     switch (intentData.intent) {
       case 'finance_blocked': {
@@ -8844,9 +8853,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'open_notepad': {
-        spokenResponse = 'Opening Notepad. Ready for your notes, Sir.';
-        actionExecuted = true;
-        actionDetail = { type: 'open_notepad', title: 'Launching Notepad' };
+        const verdict = await evaluateLaunchDispatch('Notepad', 'notepad');
+        spokenResponse = launchReply('Notepad', verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'open_notepad', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'make_call': {
@@ -8884,100 +8894,115 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'telephony_hub': {
+        // Nothing outside this process opens a dialer; the console is routed in-app.
         spokenResponse = language.startsWith('hi')
-          ? 'टेलीफोनी हब और फोन डायलर खोला जा रहा है।'
-          : 'Opening Voice AI Telephony Hub and Smart Phone Dialer.';
+          ? 'इन-ऐप टेलीफोनी कंसोल खोला जा रहा है। कोई बाहरी फोन डायलर नहीं खुला।'
+          : 'Opening the in-app telephony console. No external phone dialer was opened.';
         actionExecuted = true;
-        actionDetail = { type: 'telephony_hub', title: 'Telephony Hub Opened' };
+        actionDetail = { type: 'telephony_hub', title: 'In-App Telephony Console (external dialer not opened)' };
         break;
       }
       case 'call_history': {
         spokenResponse = language.startsWith('hi')
-          ? 'कॉल हिस्ट्री और वॉयस लॉग्स दिखाए जा रहे हैं।'
-          : 'Displaying verified phone call history and executive transcripts.';
+          ? 'इस ऐप में दर्ज कॉल हिस्ट्री दिखाई जा रही है।'
+          : 'Showing the call history recorded in this app.';
         actionExecuted = true;
-        actionDetail = { type: 'call_history', title: 'Call Logs' };
+        actionDetail = { type: 'call_history', title: 'In-App Call Logs (no external phone records read)' };
         break;
       }
       case 'open_calculator': {
-        spokenResponse = 'Opening Calculator. Scientific computational tools ready.';
+        spokenResponse = 'Opening the in-app Calculator. No external calculator application was opened.';
         actionExecuted = true;
-        actionDetail = { type: 'open_calculator', title: 'Launching Calculator' };
+        actionDetail = { type: 'open_calculator', title: 'In-App Calculator (external app not opened)' };
         break;
       }
       case 'open_paint': {
-        spokenResponse = 'Opening Paint Canvas. Creative rendering module active.';
+        spokenResponse = 'Opening the in-app Paint Canvas. No external Paint application was opened.';
         actionExecuted = true;
-        actionDetail = { type: 'open_paint', title: 'Launching Paint Canvas' };
+        actionDetail = { type: 'open_paint', title: 'In-App Paint Canvas (external app not opened)' };
         break;
       }
       case 'open_chrome': {
-        spokenResponse = 'Opening Chrome Web Browser.';
+        spokenResponse = 'Opening the in-app Browser view. No external Chrome process was started.';
         actionExecuted = true;
-        actionDetail = { type: 'open_chrome', title: 'Opening Browser Window' };
+        actionDetail = { type: 'open_chrome', title: 'In-App Browser View (external Chrome not started)' };
         break;
       }
       case 'take_screenshot': {
-        spokenResponse = 'Capturing screen display right now.';
-        actionExecuted = true;
-        actionDetail = { type: 'take_screenshot', title: 'Screen Capture Triggered' };
+        const capture = await captureScreenshot({});
+        const verdict = screenshotVerdict(capture);
+        spokenResponse = screenshotReply(verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = {
+          type: 'take_screenshot',
+          title: verdict.title,
+          payload: {
+            outcome: verdict.outcome,
+            file: verdict.file?.absolutePath ?? null,
+            sizeBytes: verdict.file?.sizeBytes ?? null,
+            sha256: verdict.file?.sha256 ?? null,
+          },
+        };
         break;
       }
-      case 'volume_up': {
-        spokenResponse = 'Increasing master audio output level.';
-        actionExecuted = true;
-        actionDetail = { type: 'volume_up', title: 'Volume Adjusted (+)' };
-        break;
-      }
+      case 'volume_up':
       case 'volume_down': {
-        spokenResponse = 'Decreasing audio output level.';
-        actionExecuted = true;
-        actionDetail = { type: 'volume_down', title: 'Volume Adjusted (-)' };
+        const direction = intentData.intent === 'volume_up' ? 'up' : 'down';
+        const verdict = volumeVerdict(direction, voiceOutputLevel);
+        voiceOutputLevel = verdict.level;
+        spokenResponse = volumeReply(verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = {
+          type: direction === 'up' ? 'volume_up' : 'volume_down',
+          title: verdict.title,
+          payload: { outcome: verdict.outcome, inAppLevel: verdict.level },
+        };
         break;
       }
-      case 'pc_shutdown': {
-        spokenResponse = 'Simulating system shutdown protocol. Standby mode initiated.';
-        actionExecuted = true;
-        actionDetail = { type: 'pc_shutdown', title: 'Shutdown Simulation' };
-        break;
-      }
+      case 'pc_shutdown':
       case 'pc_restart': {
-        spokenResponse = 'Restarting Jarvis subsystem protocols in 5 seconds.';
-        actionExecuted = true;
-        actionDetail = { type: 'pc_restart', title: 'Restart Protocol' };
+        const kind = intentData.intent === 'pc_shutdown' ? 'shutdown' : 'restart';
+        const verdict = powerVerdict(kind, hostActionCapabilities(), isEmergencyStopActive());
+        spokenResponse = powerReply(verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = {
+          type: kind === 'shutdown' ? 'pc_shutdown' : 'pc_restart',
+          title: verdict.title,
+          payload: { outcome: verdict.outcome, permissionRequired: verdict.permissionRequired },
+        };
         break;
       }
       case 'open_google': {
-        spokenResponse = 'Navigating to Google Search.';
+        spokenResponse = 'Opening the in-app Browser at Google. No external browser was launched.';
         actionExecuted = true;
-        actionDetail = { type: 'open_google', title: 'Google Search Engine', target: 'https://www.google.com' };
+        actionDetail = { type: 'open_google', title: 'In-App Browser: Google (external browser not launched)', target: 'https://www.google.com' };
         break;
       }
       case 'open_youtube': {
-        spokenResponse = 'Opening YouTube stream portal.';
+        spokenResponse = 'Opening the in-app Browser at YouTube. No external browser was launched.';
         actionExecuted = true;
-        actionDetail = { type: 'open_youtube', title: 'YouTube Stream', target: 'https://www.youtube.com' };
+        actionDetail = { type: 'open_youtube', title: 'In-App Browser: YouTube (external browser not launched)', target: 'https://www.youtube.com' };
         break;
       }
       case 'open_gmail': {
-        spokenResponse = 'Opening Gmail inbox communicator.';
+        spokenResponse = 'Opening the in-app Browser at Gmail. No external browser was launched.';
         actionExecuted = true;
-        actionDetail = { type: 'open_gmail', title: 'Gmail Inbox', target: 'https://mail.google.com' };
+        actionDetail = { type: 'open_gmail', title: 'In-App Browser: Gmail (external browser not launched)', target: 'https://mail.google.com' };
         break;
       }
       case 'open_chatgpt': {
-        spokenResponse = 'Opening ChatGPT web portal.';
+        spokenResponse = 'Opening the in-app Browser at ChatGPT. No external browser was launched.';
         actionExecuted = true;
-        actionDetail = { type: 'open_chatgpt', title: 'ChatGPT Portal', target: 'https://chatgpt.com' };
+        actionDetail = { type: 'open_chatgpt', title: 'In-App Browser: ChatGPT (external browser not launched)', target: 'https://chatgpt.com' };
         break;
       }
       case 'google_search': {
         const query = intentData.actionPayload?.query || message.replace(/^search\s+/i, '').trim();
-        spokenResponse = `Searching Google for "${query}".`;
+        spokenResponse = `Searching Google for "${query}" in the in-app Browser. No external browser was launched.`;
         actionExecuted = true;
         actionDetail = {
           type: 'google_search',
-          title: `Search: ${query}`,
+          title: `In-App Browser Search: ${query} (external browser not launched)`,
           target: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
           payload: { query },
         };

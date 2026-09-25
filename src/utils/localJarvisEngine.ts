@@ -1426,13 +1426,13 @@ export function processOfflineCommand(
     lower.includes('फोन डायलर')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'टेलीफोनी हब खोला जा रहा है।' : isHinglish ? 'Telephony Hub open ho raha hai.' : 'Opening Voice AI Telephony Hub.';
+    const reply = isHindi ? 'टेलीफोनी हब खोला जा रहा है।' : isHinglish ? 'Telephony Hub open ho raha hai.' : 'Opening the in-app Voice AI Telephony Hub. No external phone dialer is opened.';
     return {
       reply,
       spokenText: reply,
       intent: 'telephony_hub',
       actionExecuted: true,
-      actionDetail: { type: 'telephony_hub', title: 'Open Telephony Hub' },
+      actionDetail: { type: 'telephony_hub', title: 'In-App Telephony Hub (external dialer not opened)' },
       updatedMemory,
       offline: true,
     };
@@ -1446,13 +1446,13 @@ export function processOfflineCommand(
     lower.includes('कॉल हिस्ट्री')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'कॉल हिस्ट्री और लॉग्स लोड किए जा रहे हैं।' : 'Loading phone call logs and transcripts.';
+    const reply = isHindi ? 'इस ऐप में दर्ज कॉल हिस्ट्री दिखाई जा रही है।' : 'Showing the call logs and transcripts recorded in this app.';
     return {
       reply,
       spokenText: reply,
       intent: 'call_history',
       actionExecuted: true,
-      actionDetail: { type: 'call_history', title: 'Call History' },
+      actionDetail: { type: 'call_history', title: 'In-App Call Logs (no external phone records read)' },
       updatedMemory,
       offline: true,
     };
@@ -1479,14 +1479,21 @@ export function processOfflineCommand(
 
   // 8.1 Screenshot Tool
   if (lower.includes('take screenshot') || lower.includes('screenshot') || lower.includes('स्क्रीनशॉट') || lower.includes('screen capture')) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'स्क्रीनशॉट लिया जा रहा है।' : isHinglish ? 'Screenshot capture ho raha hai.' : 'Capturing screen display.';
+    // This offline path captures nothing: it has no capture backend, and the
+    // browser/desktop route is chosen by the caller. It must not speak as though
+    // a screen capture happened. The real capture lives in
+    // `captureScreenshot()` and reports NOT_AVAILABLE on a headless host.
+    const reply = isHindi
+      ? 'स्क्रीनशॉट अनुरोध दर्ज किया गया, परंतु ऑफ़लाइन मोड में कोई कैप्चर बैकएंड नहीं है — कोई छवि नहीं बनी।'
+      : isHinglish
+      ? 'Screenshot request note kar liya, lekin offline mode mein capture backend nahi hai — koi image nahi bani.'
+      : 'Screenshot request registered, but this offline path has no capture backend, so no image was captured.';
     return {
       reply,
       spokenText: reply,
       intent: 'take_screenshot',
-      actionExecuted: true,
-      actionDetail: { type: 'take_screenshot', title: 'Screen Capture Triggered' },
+      actionExecuted: false,
+      actionDetail: { type: 'take_screenshot', title: 'Screen Capture Not Available (offline path)' },
       updatedMemory,
       offline: true,
     };
@@ -1607,29 +1614,38 @@ export function processOfflineCommand(
   }
 
   // 11.3 Media / Audio Volume Controls
+  // No mixer backend is reached from here, so these branches must not speak as
+  // though the system output level moved. The honest in-app slider verdict comes
+  // from `volumeVerdict()` on the `/api/chat` path.
   if (lower.includes('volume up') || lower.includes('आवाज बढ़ाओ') || lower.includes('increase volume') || lower.includes('louder')) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'ऑडियो वॉल्यूम बढ़ाया जा रहा है।' : 'Increasing master audio volume.';
+    const reply = isHindi
+      ? 'इन-ऐप वॉइस आउटपुट बढ़ाया जा सकता है; सिस्टम वॉल्यूम मिक्सर ऑफ़लाइन मोड से नहीं बदला जाता।'
+      : isHinglish
+      ? 'In-app voice output badha sakta hoon; system volume mixer offline mode se nahi badalta.'
+      : 'The in-app voice output can be raised, but the system volume mixer is not changed from offline mode.';
     return {
       reply,
       spokenText: reply,
       intent: 'volume_up',
-      actionExecuted: true,
-      actionDetail: { type: 'volume_up', title: 'Volume Adjusted (+)' },
+      actionExecuted: false,
+      actionDetail: { type: 'volume_up', title: 'In-App Volume Only (system mixer not changed)' },
       updatedMemory,
       offline: true,
     };
   }
 
   if (lower.includes('volume down') || lower.includes('आवाज कम करो') || lower.includes('decrease volume') || lower.includes('quieter')) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'ऑडियो वॉल्यूम कम किया जा रहा है।' : 'Decreasing audio volume.';
+    const reply = isHindi
+      ? 'इन-ऐप वॉइस आउटपुट कम किया जा सकता है; सिस्टम वॉल्यूम मिक्सर ऑफ़लाइन मोड से नहीं बदला जाता।'
+      : isHinglish
+      ? 'In-app voice output kam kar sakta hoon; system volume mixer offline mode se nahi badalta.'
+      : 'The in-app voice output can be lowered, but the system volume mixer is not changed from offline mode.';
     return {
       reply,
       spokenText: reply,
       intent: 'volume_down',
-      actionExecuted: true,
-      actionDetail: { type: 'volume_down', title: 'Volume Adjusted (-)' },
+      actionExecuted: false,
+      actionDetail: { type: 'volume_down', title: 'In-App Volume Only (system mixer not changed)' },
       updatedMemory,
       offline: true,
     };
