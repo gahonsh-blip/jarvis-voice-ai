@@ -5319,3 +5319,80 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - असली OS executor के finance guard में substring मिलान का बग ठीक किया — अब "jupiter" जैसा सामान्य टेक्स्ट ब्लॉक नहीं होता, और fund transfer/NEFT/RTGS जैसे असली वित्तीय निर्देश अब सही तरीके से ब्लॉक होते हैं (26/26 टेस्ट, पूरा सूट 1312 पास)।
+
+---
+
+## WORK SLOT 4 — 2026-09-25 22:35 IST (17:05 UTC)
+
+  (`POST /api/telephony/settings`, `GET /api/telephony/status`),
+  `src/components/TelephonyHubModal.tsx`,
+  `src/tests/telephonyGatewayTruth.test.ts` (10 assertions). Observed targeted
+  run `3 files / 31 tests passed`; full suite `100 files / 1322 tests passed`.
+  Item remains `PARTIAL` (one more real fake-success path closed; more remain).
+
+In Progress:
+- #13 — remaining tool surfaces that derive a success/VERIFIED state from a
+  constant rather than a measured result (executionTruth / autonomous-goal
+  result paths, integrations-status endpoints).
+
+Remaining:
+- #13 more fake-success paths; then the Android/E2E items (#1, #2, #55, #50),
+  which need hardware; then Social/Communication/Voice items (some need provider
+  credentials). #1 and #2 are hardware-blocked and not actionable here.
+
+Bugs Found:
+- `POST /api/telephony/settings` stored the selected engine but never applied it
+  (`setActiveProvider` was never called), so the operator's Telephony Hub choice
+  was silently discarded and the boot-time `TELEPHONY_PROVIDER` kept serving calls.
+- The UI engine value `browser_webrtc_simulator` matched no registry id (the
+  simulator registers as `simulation_test_provider`), so the selector could never
+  take effect even once wired.
+- `SimulatedTestTelephonyProvider.isConfigured()` returns `true` unconditionally,
+  so naive wiring would have shown a carrier-less simulator as a green
+  `GATEWAY CONFIGURED`.
+- `TelephonyProviderRegistry.setActiveProvider()` did not self-initialize (unlike
+  `getProvider()` / `getAllProviders()`), returning `false` on a cold registry.
+  Found by the new cold-registry test.
+
+Bugs Fixed:
+- Engine selection is now mapped and applied; status reports the measured mode
+  from the provider actually serving calls, and a simulator is never reported
+  CONFIGURED. Verified by `src/tests/telephonyGatewayTruth.test.ts`.
+- `setActiveProvider()` self-initializes. Negative-validated: before the fix the
+  cold-registry case failed (`1 failed | 30 passed` across the 3 telephony test
+  files); after the fix `31/31` passed.
+
+Tests:    100 files / 1322 tests passed (`npx vitest run`); targeted 3 files /
+          31 tests passed.
+Lint:     pass — `tsc --noEmit` exit 0.
+Build:    pass — vite build exit 0; `dist/server.cjs` 876736 bytes.
+E2E:      NOT RUN — no Android handset, no bridge pairing secret, no carrier
+          credentials in this sandbox.
+Security: `git check-ignore -v .env` → `.gitignore:4:.env` (ignored); working tree
+          clean at push time; no token/key in the diff; `node_modules` and `dist`
+          not staged.
+
+Documentation: docs/COMPLETION_STATUS.md (slot 4), docs/CHANGELOG.md (slot 4).
+Branch:  feature/hermes-full-completion
+Commit:  fb36416 (fix) → 8f10de1 (docs)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #4 (existing) — not refreshed this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present; the
+            verified `dist/server.cjs` artifact is the deployment unit available.
+
+Blocked:
+- #1 / #2 / #55 / #50 — require a physical Android handset (and a Windows host
+  for #8) plus `MOBILE_BRIDGE_PAIRING_SECRET`.
+- Live social / telephony provider dispatch — requires provider credentials not
+  present in this sandbox.
+
+Human Approval Required:
+- Merge of PR #4 to `main` — an automated window must never merge; a human must
+  read the report and approve.
+
+Next Slot:
+- Continue #13. Next candidate: audit the remaining tool surfaces that derive a
+  success/`VERIFIED` state from a constant — start with `executionTruth.ts` /
+  autonomous-goal result paths, then the integrations-status endpoints. Pick
