@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-26",
   "window_started_at": "2026-09-25T18:36:20Z",
-  "last_slot_at": "2026-09-25T19:45:00Z",
-  "slots_completed": 10,
+  "last_slot_at": "2026-09-25T20:16:00Z",
+  "slots_completed": 11,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "5b0a1e3",
+  "last_commit": "dc785b1",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -20,5 +20,5 @@
     {"item": 60, "reason": "external third-party audit leg"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot closing 2026-09-25T19:45Z (01:15 IST 2026-09-26). Prior state read from origin/automation/hermes-state was slots_completed: 9; incremented to 10. Doc numbering calls this WORK SLOT 8 — drift between doc and state counter is UNKNOWN and reported honestly, not reconciled. Fix: voice security_audit reply now derives from securityMatrixPosture; commit 90952e5, docs 5b0a1e3."
+  "notes": "Slot closing 2026-09-25T20:16Z (01:46 IST 2026-09-26). Prior state read from origin/automation/hermes-state was slots_completed: 10; incremented to 11. Doc numbering calls this WORK SLOT 9 - drift between doc and state counter is UNKNOWN and reported honestly, not reconciled. Fix: HUDHeader kill-switch state now tri-state via emergencyTruth helpers; commits d9af904 (fix+test), e137561 (docs), dc785b1 (report)."
 }
