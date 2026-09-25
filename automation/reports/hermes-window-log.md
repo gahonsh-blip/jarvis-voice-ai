@@ -5742,3 +5742,67 @@ Next Slot:
 Hindi summary (one line):
 - Voice call commands no longer claim "call connected" without real carrier proof;
   10/10 new tests pass, full suite 1373 tests pass.
+
+## Slot 13 — WORK — 2026-09-26 02:35 IST (2026-09-25 21:22 UTC)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:35
+Window date: 2026-09-26   Window slots completed so far: 13
+
+Completed:
+- #13 Zero-fake-success for all tools (slice) — the offline local engine's remaining
+  app-launcher branches (Notepad, Calculator, Paint) no longer claim a desktop launch.
+  Evidence: `src/utils/localJarvisEngine.ts` replies now name the in-app view and state
+  offline mode cannot open the real desktop application; action titles read `(in-app)`.
+  New assertions in `src/tests/launchDispatchTruth.test.ts` (now 13 tests) —
+  `does not claim Notepad, Calculator or Paint launched offline` and
+  `every offline app-launch reply disclaims the real desktop application`; updated
+  `src/tests/localJarvisEngine.test.ts` Hindi calculator test to the honest reply.
+  Observed: full suite 106 files / 1386 tests passed; lint exit 0; build exit 0.
+
+In Progress:
+- #13 — further fake-success paths remain: screenshot, volume up/down, quotation,
+  social console, telephony hub/call-history titles, google-search reply.
+
+Bugs Found:
+- The offline engine still spoke unqualified launches for Notepad (`Opening Notepad.`),
+  Calculator (`Opening Calculator tool.` / Devanagari calculator-opened) and Paint
+  (`Opening Paint canvas.`) while opening only an in-app view. Found by auditing the
+  launcher branches after the prior slot fixed the same defect for VS Code/browser/terminal.
+
+Bugs Fixed:
+- All three branches now state the in-app view and the offline limitation.
+  Negative validation: reintroducing the fabricated Calculator literal fails 3 tests
+  across 2 files (`launchDispatchTruth.test.ts` x2, `localJarvisEngine.test.ts` x1);
+  restored -> 106/106 files, 1386/1386 tests pass.
+
+Tests:    106 files / 1386 tests passed (0 failed, 0 skipped)
+Lint:     `tsc --noEmit` exit 0
+Build:    `npm run build` exit 0 — dist/server.cjs 897797 bytes
+E2E:      NOT RUN — no display session, no handset
+Security: no .env staged; no token/key in diff; no node_modules/dist committed
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  5d2040d (fix+test+docs), 631013c (test)
+Push:    succeeded — origin/feature/hermes-full-completion (d528e7a..631013c)
+
+PR:         none opened this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; dist/server.cjs is the artifact
+
+Blocked:
+- #1, #2, #50, #55 — require a physical Android handset
+- #8 — requires a Windows host
+- #54 — live credential rotation requires provider credentials
+- #60 — external third-party audit leg
+
+Human Approval Required:
+- none this slot
+
+Next Slot:
+- #13 — continue closing fake-success paths in the offline engine (screenshot, volume,
+  quotation, social console, telephony hub titles).
+
+Hindi summary:
+- Offline engine no longer falsely claims Notepad/Calculator/Paint desktop launches; 106 files / 1386 tests pass, lint & build clean.
