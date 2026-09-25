@@ -5265,3 +5265,57 @@ Next Slot:
 - #13, the next un-audited zero-fake-success surface (an endpoint or modal still
   reporting unmeasured work as executed). Chosen because it is the
   highest-priority non-VERIFIED item that is not hardware/credential blocked.
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:05 (started 22:06, reported ~22:25)
+Window date: 2026-09-25   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools — the OS-executor finance guard. `PermissionGuard.permanentBlock()` in `src/utils/computerOperator/permissionGuard.ts` still matched its short finance tokens with a bare `desc.includes(kw)`, the same substring rule `isFinanceBlocked()` had already replaced in `server_tools.ts`. Evidence, measured against the live guard (tsx probe): benign `Read file jupiter_notes.txt` → `BLOCK / FINANCE_RESTRICTION` (`upi` inside "jupiter"); real instructions `Initiate fund transfer`, `Deposit via NEFT`, `Enter debit card details`, `RTGS settlement`, `IMPS transfer` → `ALLOW`. Fixed (word-boundary tokens + added signatures); 17 new assertions in `src/tests/permissionGuard.test.ts` (26 in file); negative-validated both ways.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains `PARTIAL`; more unmeasured/untruthful surfaces remain across the tool set.
+
+Remaining:
+- #13 Zero-fake-success for all tools (PARTIAL) — keep closing one real violation per slot.
+- #51 Complete security audit (PARTIAL), #54 Secret/token protection audit (PARTIAL), #60 Final documentation (PARTIAL) — external legs unexercised.
+- #1/#2 Android bridge/device E2E, #55 Real-device E2E suite, #50 Hands-free Android control — blocked on hardware.
+- Items 3-12, 48, 49, 52, 53, 56-59 are `VERIFIED`; no action needed.
+
+Bugs Found:
+- Finance-guard false positive: bare substring matching made `upi` match inside "jupiter", refusing benign local operator text with `FINANCE_RESTRICTION`.
+- Finance-guard false negatives: five real financial instructions (`fund transfer`, `NEFT`, `debit card`, `RTGS`, `IMPS`) had no signature and were `ALLOW`ed by the guard that gates the real OS executor.
+
+Bugs Fixed:
+- `permissionGuard.ts` now requires an ASCII word boundary for single tokens (multi-word and Devanagari phrases stay substring, since `\b` cannot bound Devanagari) and adds the five demonstrated missing signatures, mirroring `server_tools.ts`.
+- Verification that proves it: negative validation both directions. Restoring `desc.includes(token)` → `1 failed | 25 passed`; removing the five new signatures → `5 failed | 21 passed`; restored fix → `26 passed`.
+
+Tests:    Targeted 4 files / 53 tests passed. Full suite observed: 99 files / 1312 tests passed.
+Lint:     `npm run lint` (tsc --noEmit) exit 0.
+Build:    `npm run build` exit 0; `dist/server.cjs` 874490 bytes.
+E2E:      NOT RUN — no handset, no bridge pairing secret in this sandbox.
+Security: `git check-ignore -v .env` → `.gitignore:4:.env` (ignored). No `.env` staged; working tree clean; no secrets in the diff. Full security audit endpoint NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 evidence + repaired a malformed status cell), docs/CHANGELOG.md.
+Branch:  feature/hermes-full-completion
+Commit:  5aee43b (docs) on top of 1a3d6b4 (fix)
+Push:    succeeded → origin/feature/hermes-full-completion (fd878cf..5aee43b)
+
+PR:         #4 (existing) — not refreshed this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present; the verified `dist/server.cjs` artifact is the deployment unit available.
+
+Correction to the run's own starting assumption:
+- This run initially created a local branch off a stale `main` and re-derived a finance-guard fix that the remote branch had already solved for a different code path (`server_tools.ts`). The remote `feature/hermes-full-completion` is 217 files ahead of `main` with two prior slots already logged. The stale local branch was discarded (`git checkout -f -B` onto the real remote head) and the slot was re-run against the real tree. The finance-guard work reported above is a *different, still-live* defect in `permissionGuard.ts` that the earlier `server_tools.ts` fix did not reach. Nothing from the stale branch was pushed.
+
+Blocked:
+- #1/#2/#55/#50 — require a physical Android handset (and a Windows host for #8) plus `MOBILE_BRIDGE_PAIRING_SECRET`.
+- Live social / telephony provider dispatch — requires provider credentials not present in this sandbox.
+
+Human Approval Required:
+- Merge of PR #4 to `main` — an automated window must never merge; a human must read the report and approve.
+
+Next Slot:
+- Continue #13. Next candidate: audit the tool surfaces that still derive a success/`VERIFIED` state from a constant rather than a measured result — start with the remaining `executionTruth.ts` / autonomous-goal result paths, then the integrations-status endpoints. Pick whichever yields a reproducible fake-success before editing.
+
+हिंदी सारांश (एक पंक्ति):
+- असली OS executor के finance guard में substring मिलान का बग ठीक किया — अब "jupiter" जैसा सामान्य टेक्स्ट ब्लॉक नहीं होता, और fund transfer/NEFT/RTGS जैसे असली वित्तीय निर्देश अब सही तरीके से ब्लॉक होते हैं (26/26 टेस्ट, पूरा सूट 1312 पास)।
