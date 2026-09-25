@@ -5396,3 +5396,100 @@ Next Slot:
 - Continue #13. Next candidate: audit the remaining tool surfaces that derive a
   success/`VERIFIED` state from a constant — start with `executionTruth.ts` /
   autonomous-goal result paths, then the integrations-status endpoints. Pick
+
+---
+
+## Slot 5 — 2026-09-25 23:05 IST (WORK)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:06 (fired 23:05 IST)
+Window date: 2026-09-25   Window slots completed so far: 5
+
+Completed:
+- #13 Zero-fake-success for all tools (still PARTIAL overall) — closed one real
+  fake-success path: the `/api/chat` `youtube_status_inquiry` voice reply.
+  Evidence: `src/utils/hardening/youtubeVoiceStatusTruth.ts` (new) +
+  `src/tests/youtubeVoiceStatusTruth.test.ts` (new, 9 tests) + `server.ts`
+  (branch rewired). Observed: targeted 1 file / 9 tests passed; full suite
+  101 files / 1331 tests passed; lint exit 0; build exit 0.
+
+In Progress:
+- #13 — more tool surfaces still derive success from a constant. This slot
+  handled the YouTube voice status reply only.
+
+Remaining:
+- #13 remainder (other tool/status surfaces), then the rest of the mandated
+  order: Android Bridge, Real Android E2E, Real Screenshot, Computer Operator,
+  GitHub Automation, Social Automation, Communication, AI/Memory, Autonomous
+  Tasks, Voice, Wake Word, Production Hardening.
+
+Bugs Found:
+- The `youtube_status_inquiry` branch answered every passing
+  `ensureValidYouTubeToken()` with `YouTube Channel "<name>" is active,
+  verified, and ready. OAuth 2.0 token status is nominal.` The helper only
+  proves a stored-or-refreshed credential — it never calls `channels.list`,
+  and nothing in the repo measures API quota. Both claims were unobserved.
+- The same branch substituted the hardcoded string `'Connected Channel'` when
+  `memoryState.youTubeConnection.channelTitle` was empty, speaking a channel
+  name that was never read.
+- The Hindi branch of the reply was half-English (mixed Devanagari/English
+  clauses), found by running the new Hindi assertions.
+
+Bugs Fixed:
+- Replaced the fabricated reply with `youtubeVoiceStatusReply()`, which derives
+  the statement from the two facts the server holds (credential validity plus
+  the recorded scope grant via `publishScopeGranted()`/`describeGrantedScopes()`
+  from `socialPublishHonesty.ts`). Upload authorization is now
+  confirmed / not confirmed / unknown; the channel is named only when recorded;
+  otherwise the reply states no channel has been read. The reply contains no
+  "verified", "nominal" or "ready" in either language, and the action payload
+  now carries `tokenValid` + `channelVerified: false` instead of a boolean that
+  conflated credential validity with channel verification.
+- Made the note and upload sentences fully bilingual.
+- Verification: negative-validated — restoring the phrase "is active, verified,
+  and ready" to the reply fails 1 of 9 tests; restored, 9/9 passed.
+
+Tests:    101 files / 1331 tests passed (`npx vitest run`, exit 0)
+          targeted: 1 file / 9 tests passed (`youtubeVoiceStatusTruth.test.ts`)
+          negative validation: intentional regression -> 1 failed | 8 passed
+Lint:     exit 0 (`npm run lint` -> tsc --noEmit)
+Build:    exit 0 (`npm run build`); `dist/server.cjs` 880184 bytes
+E2E:      NOT RUN — no Google OAuth client id/secret in this sandbox; no live
+          channel to probe. No handset, no carrier credentials.
+Security: lint clean. No secret printed or committed. Item #13 is itself a
+          truthfulness/hardening item; no permission gate was weakened. The full
+          Phase-F security sweep (`git check-ignore -v .env`, diff scan) is NOT
+          RUN in this work slot, per the slot procedure.
+
+Documentation: docs/COMPLETION_STATUS.md (last-cycle entry + item 13 row),
+               docs/CHANGELOG.md (slot 5 entry)
+Branch:  feature/hermes-full-completion
+Commit:  0451f72 (docs), db19e40 (code + test)
+Push:    succeeded — origin/feature/hermes-full-completion db19e40..0451f72
+
+PR:         existing PR #4, not refreshed this slot (work slot; PR refresh is a
+            Phase-F finalization step)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; the verified `dist/server.cjs` artifact is the
+            deployment unit available.
+
+Blocked:
+- Real Android device E2E / screenshot capture — requires a physical handset
+  (and a Windows host for the bridge host side).
+- Live social / telephony / YouTube provider dispatch — requires provider
+  credentials not present in this sandbox.
+- Live bridge pairing success path — requires `MOBILE_BRIDGE_PAIRING_SECRET`.
+
+Human Approval Required:
+- Merge of the completion branch to `main` — an automated window never merges;
+  a human must read the final verification report and approve.
+
+Next Slot:
+- Continue #13. Next candidate: the autonomous-goal / execution-truth result
+  paths (`executionTruth.ts`) and the integrations-status endpoints, looking for
+  a `VERIFIED`/success state derived from a constant rather than a measurement.
+
+हिंदी सारांश (एक पंक्ति):
+- YouTube स्टेटस वॉइस जवाब अब सत्यापित चैनल/कोटा का झूठा दावा नहीं करता — वह केवल
+  क्रेडेंशियल और रिकॉर्ड किए गए स्कोप बताता है; 9/9 टेस्ट और पूरा सूट 1331 टेस्ट पास।
