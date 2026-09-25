@@ -4,6 +4,30 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 21:50 IST (2026-09-25 16:20 UTC) — work slot 2: Telegram gateway send truth
+
+### Fixed
+- **`POST /api/telegram/send` no longer reports every send as delivered.** It
+  answered `success: true` unconditionally, and `processMobileCommand` fired the
+  outbound Telegram call fire-and-forget (`sendRealTelegramMessage(...).catch(...)`),
+  so a blocked or failed send still rendered as delivered and
+  `TelegramGatewayModal` spoke the reply aloud. The processor now awaits
+  `deliverTelegramMessage` and returns its `DeliveryInterpretation`; the route
+  derives `success`/`delivered` from `delivery.delivered` and returns the
+  outcome, `messageId` and a plain notice; the echoed bubble is annotated
+  *delivered* or *NOT DELIVERED*; the modal gates `onSpeak` and its success flag
+  on `delivered === true`. Helper: `src/utils/hardening/telegramSendTruth.ts`.
+
+### Tests
+- `src/tests/telegramSendTruth.test.ts` — 10 assertions (5 pure-logic +
+  5 route/modal source guards, since `server.ts` binds a port on import).
+  Negative-validated: marking `NOT_CONFIGURED` delivered fails exactly 1 test.
+
+### Verified
+- `npm run lint` (`tsc --noEmit`) exit 0; targeted **2 files / 20 tests passed**;
+  `npx vitest run` **99 files / 1300 tests passed**; `npm run build` exit 0,
+  `dist/server.cjs` 874122 bytes.
+
 ## [Unreleased] - 2026-09-25 21:20 IST (2026-09-25 15:50 UTC) — work slot 1: audit-trail truth fields
 
 ### Fixed

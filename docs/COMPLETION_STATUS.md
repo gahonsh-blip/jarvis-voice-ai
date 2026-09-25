@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-25 15:50 UTC (21:20 IST 2026-09-25) — **WORK SLOT 1** of the
+Last cycle: 2026-09-25 16:20 UTC (21:50 IST 2026-09-25) — **WORK SLOT 2** of the
+2026-09-25 window, the 21:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **Telegram gateway send path**.
+
+**The web gateway reported every send as delivered.** `POST /api/telegram/send`
+answered `success: true` unconditionally. `processMobileCommand` fired the
+outbound `sendRealTelegramMessage(...).catch(...)` without awaiting it, so a
+blocked or failed send still returned as a sent message, the gateway rendered
+the echoed reply as delivered, and `TelegramGatewayModal` spoke the reply aloud
+via `onSpeak` as though it reached the phone. Two consequences: an honest human
+could read/spoken-word a message Telegram never accepted, and the `success`
+field carried no delivery fact. Fixed: `processMobileCommand` now awaits
+`deliverTelegramMessage` and returns its `DeliveryInterpretation` (a
+non-delivery is logged, never assumed sent); the route derives
+`success`/`delivered` from `delivery.delivered` and returns the outcome,
+`messageId` and a plain notice; the echoed bubble is annotated *delivered* or
+*NOT DELIVERED*; the modal gates `onSpeak` and its success flag on
+`delivered === true`. New helper
+`src/utils/hardening/telegramSendTruth.ts`; guarded by 10 assertions in
+`src/tests/telegramSendTruth.test.ts` (5 pure-logic + 5 route/modal source
+guards). Negative-validated — 'NOT_CONFIGURED' delivered set true fails exactly
+1 test (`1 failed | 9 passed`), restored → 10/10. Gates observed: lint exit 0;
+targeted **2 files / 20 tests passed**; full suite **99 files / 1300 tests
+passed**; build exit 0 (`dist/server.cjs` 874122 bytes). E2E: NOT RUN — no
+handset, no bot token. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — one
+more real violation closed, more remain.
+
+Last cycle (previous): 2026-09-25 15:50 UTC (21:20 IST 2026-09-25) — **WORK SLOT 1** of the
 2026-09-25 window, the 21:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **audit-trail truth fields**.
 
