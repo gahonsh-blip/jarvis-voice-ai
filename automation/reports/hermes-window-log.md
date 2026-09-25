@@ -5536,3 +5536,45 @@ Next Slot:
 - E2E: NOT RUN (no handset, no bridge pairing secret). Deploy: NOT_CONFIGURED.
 - Note: state file said `slots_completed: 6` while the doc already recorded a 23:42 IST
   cycle; numbering reported as 8 with the exact count marked UNKNOWN. Flagged for a later slot.
+
+## 2026-09-26 00:35 IST — WORK SLOT (window 2026-09-26)
+
+Slot:        WORK  |  IST time: 00:35–00:49
+Window date: 2026-09-26. The state branch `automation/hermes-state` was NOT found
+(`git show origin/automation/hermes-state` returned nothing), so slots_completed is reported
+from this log rather than from a state file.
+
+Item: #13 `Zero-fake-success for all tools` — remains `PARTIAL`. No item advanced.
+
+What happened this slot, honestly:
+- The ScreenObserver built-in illustrative view (`isAmbiguous: false`) was investigated as a
+  candidate fake-success and a fix was pushed (`bfff5a5`), but the fix regressed documented
+  engine behaviour: `computerOperatorTaskStatus.test.ts` failed 3 tests
+  (`expected 'BLOCKED' to be 'NEEDS_APPROVAL'`), because forcing `isAmbiguous: true` halts a
+  built-in-view task before the approval stage. The fix was reverted (`099391b`).
+- The candidate was then re-assessed as NOT an operating fake-success: `computerOperatorEngine.ts`
+  labels any built-in-view run `SIMULATION_ONLY` and refuses to claim visual verification, and
+  `server.ts` installs a real host-backed source via `ScreenObserver.setSource(describeHostScreen)`.
+  Forcing the built-in view ambiguous would be a redesign, not a fix.
+- Conclusion: no genuine violation was found and none was fabricated to make the item move.
+
+Gates observed this run on `099391b`:
+- `npm run lint` (`tsc --noEmit`) exit 0.
+- `npx vitest run` **103 files / 1355 tests passed** (20.12 s).
+- `npm run build` exit 0; `dist/server.cjs` 885023 bytes (864.3 kb); `dist/` removed after measuring.
+- Security: `git check-ignore -v .env` → `.gitignore:4`, `.env` untracked, `git status --short`
+  clean. `npm audit` NOT RUN (no audit script in package.json).
+- E2E: NOT RUN — no handset, no bridge pairing secret in this sandbox.
+- Deploy: NOT_CONFIGURED — no deployment target in this environment.
+
+Bugs found: none (one candidate investigated and dismissed with evidence).
+Bugs fixed: none net (fix reverted).
+
+Commits: `bfff5a5` (fix, later reverted) → `099391b` (revert), both on
+`feature/hermes-full-completion` and pushed.
+
+Next slot: #13 — target the offline engine desktop-op intents (`operate_vscode` /
+`operate_browser` in `src/utils/localJarvisEngine.ts`) that narrate a window launch while
+`HostActionExecutor.launchApp` is never invoked on that path. Verify the wording is honest or
+route it through the host gate. Prefer a slice that can be finished and pushed inside one slot.
+
