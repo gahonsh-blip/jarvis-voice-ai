@@ -108,8 +108,12 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     it('should trigger Screenshot tool on "take screenshot"', () => {
       const result = processOfflineCommand('take screenshot', initialMemory, 'en-US');
       expect(result.intent).toBe('take_screenshot');
-      expect(result.actionExecuted).toBe(true);
+      // The offline path has no capture backend, so it must not report an
+      // executed action nor speak as though an image was captured.
+      expect(result.actionExecuted).toBe(false);
       expect(result.actionDetail?.type).toBe('take_screenshot');
+      expect(result.reply).toMatch(/no capture backend|no image was captured/i);
+      expect(result.reply).not.toMatch(/capturing screen|captured the screen/i);
     });
   });
 
@@ -224,11 +228,15 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     it('should handle volume up and volume down controls', () => {
       const up = processOfflineCommand('volume up', initialMemory, 'en-US');
       expect(up.intent).toBe('volume_up');
-      expect(up.actionExecuted).toBe(true);
+      // Offline there is no mixer backend, so the host output level is not
+      // changed and the reply must say so.
+      expect(up.actionExecuted).toBe(false);
+      expect(up.reply).toMatch(/system volume mixer is not changed/i);
 
       const down = processOfflineCommand('volume down', initialMemory, 'en-US');
       expect(down.intent).toBe('volume_down');
-      expect(down.actionExecuted).toBe(true);
+      expect(down.actionExecuted).toBe(false);
+      expect(down.reply).toMatch(/system volume mixer is not changed/i);
     });
   });
 
