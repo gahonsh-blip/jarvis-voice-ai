@@ -625,14 +625,14 @@ export function processOfflineCommand(
   ) {
     updatedMemory.stats.actionsExecuted += 1;
     const reply = isHindi
-      ? 'Visual Studio Code सक्रिय किया जा रहा है। स्क्रीन स्थिति को VS Code वर्कस्पेस पर लाया जा रहा है।'
+      ? 'कंप्यूटर ऑपरेटर कंसोल खुल रहा है। ऑफ़लाइन मोड में ब्राउज़र से OS ऐप लॉन्च नहीं हो सकता, इसलिए VS Code खुलने की पुष्टि नहीं हुई।'
       : isHinglish
-      ? 'Visual Studio Code open kar raha hoon, Sir.'
-      : 'Visual Studio Code window brought to active foreground.';
+      ? 'Computer Operator console khol raha hoon, Sir. Offline mode mein browser se VS Code launch nahi ho sakta — confirm nahi hua.'
+      : 'Opening the Computer Operator console. Offline mode cannot launch OS applications from the browser, so VS Code was not confirmed as opened.';
 
     return {
       reply,
-      spokenText: isHindi ? 'Visual Studio Code खोला जा रहा है।' : 'Switching to Visual Studio Code.',
+      spokenText: isHindi ? 'कंप्यूटर ऑपरेटर कंसोल खोला जा रहा है।' : 'Opening the Computer Operator console.',
       intent: 'operate_vscode',
       actionExecuted: true,
       actionDetail: {
@@ -682,14 +682,14 @@ export function processOfflineCommand(
   ) {
     updatedMemory.stats.actionsExecuted += 1;
     const reply = isHindi
-      ? 'Google Chrome ब्राउज़र विंडो खोली जा रही है।'
+      ? 'ब्राउज़र टैब अंदर खुल रहा है। ऑफ़लाइन मोड Chrome को OS विंडो के रूप में नहीं खोल सकता।'
       : isHinglish
-      ? 'Browser window open kar raha hoon, Sir.'
-      : 'Opening web browser window.';
+      ? 'Browser tab HUD khol raha hoon, Sir. Offline mode OS Chrome window nahi khol sakta.'
+      : 'Opening the in-app browser view. Offline mode cannot launch a real Chrome OS window.';
 
     return {
       reply,
-      spokenText: isHindi ? 'ब्राउज़र खोला जा रहा है।' : 'Opening browser.',
+      spokenText: isHindi ? 'ब्राउज़र दृश्य खोला जा रहा है।' : 'Opening the browser view.',
       intent: 'operate_browser',
       actionExecuted: true,
       actionDetail: {
@@ -712,14 +712,14 @@ export function processOfflineCommand(
   ) {
     updatedMemory.stats.actionsExecuted += 1;
     const reply = isHindi
-      ? 'Windows Terminal / PowerShell कंसोल सक्रिय किया जा रहा है।'
+      ? 'टर्मिनल कंसोल HUD खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक PowerShell विंडो नहीं खुलती।'
       : isHinglish
-      ? 'Terminal console open kar raha hoon, Sir.'
-      : 'Windows Terminal / PowerShell console activated.';
+      ? 'Terminal console HUD khol raha hoon, Sir. Offline mode mein asli PowerShell window nahi khulti.'
+      : 'Opening the in-app terminal console view. Offline mode does not open a real PowerShell window.';
 
     return {
       reply,
-      spokenText: isHindi ? 'टर्मिनल खोला जा रहा है।' : 'Opening terminal.',
+      spokenText: isHindi ? 'टर्मिनल कंसोल दृश्य खोला जा रहा है।' : 'Opening the terminal console view.',
       intent: 'operate_terminal',
       actionExecuted: true,
       actionDetail: {

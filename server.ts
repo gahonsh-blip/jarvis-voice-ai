@@ -76,6 +76,10 @@ import {
   TelephonyDispatchPhase,
 } from './src/utils/telephonyDispatchTruth';
 import {
+  launchVerdict,
+  launchReply,
+} from './src/utils/computerOperator/launchDispatchTruth';
+import {
   loadPhonePermissions,
   savePhonePermissions,
   maskPhoneNumber,
@@ -8476,6 +8480,29 @@ function evaluateTelephonyDispatch(phase: TelephonyDispatchPhase) {
   return telephonyDispatchVerdict(phase, engineMode, activeSession?.state ?? null);
 }
 
+// Launch intents in `/api/chat` used to speak unqualified success ("Visual
+// Studio Code brought to active foreground") and set `actionExecuted = true`
+// without touching the host. This reaches the real executor and derives the
+// verdict from observable evidence: the host capability map and the `LAUNCH_APP`
+// receipt, which is VERIFIED only when the app was seen in the foreground.
+async function evaluateLaunchDispatch(appName: string, targetApp: string) {
+  const caps = hostActionCapabilities();
+  const capability = caps.LAUNCH_APP || caps.INSPECT_SCREEN;
+  if (!capability?.available) {
+    return launchVerdict(appName, caps, null);
+  }
+  const action: ComputerAction = {
+    id: `launch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type: 'LAUNCH_APP',
+    targetApp,
+    description: `Launch ${targetApp}`,
+    securityLevel: 2,
+    requiresHumanApproval: false,
+  };
+  const result = await hostActionExecutor.execute(action);
+  return launchVerdict(appName, caps, result.receipt);
+}
+
 // Jarvis Main Chat & AI Reasoning API
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
@@ -8545,27 +8572,24 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'operate_vscode': {
-        spokenResponse = language.startsWith('hi')
-          ? 'Visual Studio Code सक्रिय किया जा रहा है।'
-          : 'Visual Studio Code brought to active foreground.';
-        actionExecuted = true;
-        actionDetail = { type: 'operate_vscode', title: 'Open VS Code', target: 'VS Code' };
+        const verdict = await evaluateLaunchDispatch('Visual Studio Code', 'code');
+        spokenResponse = launchReply('Visual Studio Code', verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'operate_vscode', title: verdict.title, target: 'VS Code', payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_browser': {
-        spokenResponse = language.startsWith('hi')
-          ? 'Google Chrome ब्राउज़र विंडो खोली जा रही है।'
-          : 'Opening web browser window.';
-        actionExecuted = true;
-        actionDetail = { type: 'operate_browser', title: 'Open Browser', target: 'Chrome' };
+        const verdict = await evaluateLaunchDispatch('Chrome browser', 'google-chrome');
+        spokenResponse = launchReply('Chrome browser', verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'operate_browser', title: verdict.title, target: 'Chrome', payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_terminal': {
-        spokenResponse = language.startsWith('hi')
-          ? 'Windows Terminal / PowerShell सक्रिय किया जा रहा है।'
-          : 'Windows Terminal / PowerShell console activated.';
-        actionExecuted = true;
-        actionDetail = { type: 'operate_terminal', title: 'Open Terminal', target: 'Terminal' };
+        const verdict = await evaluateLaunchDispatch('Terminal', 'x-terminal-emulator');
+        spokenResponse = launchReply('Terminal', verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'operate_terminal', title: verdict.title, target: 'Terminal', payload: { outcome: verdict.outcome } };
         break;
       }
       case 'open_computer_operator': {
