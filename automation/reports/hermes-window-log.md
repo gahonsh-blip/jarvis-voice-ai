@@ -5806,3 +5806,80 @@ Next Slot:
 
 Hindi summary:
 - Offline engine no longer falsely claims Notepad/Calculator/Paint desktop launches; 106 files / 1386 tests pass, lint & build clean.
+
+--- appended 2026-09-26 03:58 IST ---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:35 (fire 03:35)
+Window date: 2026-09-26   Window slots completed so far: 14 (13 prior + this one)
+
+Completed:
+- #13 Zero-fake-success for all tools — closed the screenshot, volume and power intents.
+  Evidence: `src/utils/computerOperator/screenshotDispatchTruth.ts`, `audioDispatchTruth.ts`,
+  `powerDispatchTruth.ts`; `server.ts` and `src/utils/localJarvisEngine.ts` rewired; guarded by
+  `src/tests/remainingFakeSuccess.test.ts` (24 tests, observed 24/24 pass).
+- #13 regression fix — two pre-existing tests in `src/tests/localJarvisEngine.test.ts` asserted the
+  old fake-success contract (`actionExecuted === true` for offline screenshot and volume). They now
+  assert `actionExecuted === false` plus an honest reply. Observed: targeted 2 files / 56 tests pass.
+
+In Progress:
+- #13 — `PARTIAL`. Three more real fake-success paths are closed; the sweep is not exhausted. No
+  claim is made that every tool is now truthful.
+
+Remaining:
+- #13 continued: the next un-audited intent families in `server.ts` / the offline engine.
+- Hardware/credential-bound items (Real Android E2E, Real Screenshot capture, telephony provider
+  calls) — BLOCKED / NOT_AVAILABLE, unchanged this slot.
+
+Bugs Found:
+- `/api/chat` `take_screenshot` spoke "Capturing screen display right now." and set
+  `actionExecuted = true` with no capture backend on a headless host; `volume_up`/`volume_down`
+  spoke "Increasing master audio output level." without touching a mixer; `pc_shutdown`/`pc_restart`
+  spoke "Simulating system shutdown protocol." without a power transition.
+- The offline engine repeated all three claims.
+- Found by reading the branches against the host capability map; the Security Matrix counted all
+  three as performed work.
+
+Bugs Fixed:
+- All three intents now derive their verdict from observable facts (executor receipt + on-disk file
+  verification for screenshot; in-app level for volume; capability + emergency-stop state for power).
+- `open_notepad` now routes through the real `evaluateLaunchDispatch()` executor path.
+- Verification: negative-validated — reverting the two source files fails 10 of 24 in
+  `remainingFakeSuccess.test.ts`; restored → 24/24. Full suite observed 107 files / 1410 tests pass.
+
+Tests:    107 files / 1410 tests passed (observed, `npx vitest run`)
+Lint:     PASS — `tsc --noEmit` exit 0 (observed)
+Build:    PASS — exit 0, `dist/server.cjs` 909349 bytes (observed)
+E2E:      NOT RUN — no display session, no handset
+Security: `git check-ignore -v .env` → ignored via `.gitignore:4`. No `.env` staged, no
+          `node_modules`/`dist` staged, working tree clean. Secret-pattern scan of the branch diff
+          vs `main`: hits are all synthetic test fixtures / `redactSecrets` pattern documentation —
+          no real credential present (verified by eye).
+
+Documentation: `docs/COMPLETION_STATUS.md`, `docs/CHANGELOG.md`
+Branch:  feature/hermes-full-completion
+Commit:  fa60208 (test commit) + docs commit (see below)
+Push:    succeeded — 4cb4be3..fa60208 to origin/feature/hermes-full-completion
+
+PR:         see PR link in final message
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this environment;
+            `dist/server.cjs` is the verified artifact
+
+Blocked:
+- Real Android E2E / Real Screenshot capture — requires a paired handset and a display session
+  (NOT_AVAILABLE in this sandbox).
+- Telephony provider calls — requires Twilio/provider credentials (NOT_AVAILABLE).
+- `origin/automation/hermes-state` could not be fetched (`fatal: invalid object name`) — state
+  branch absent on the remote this run; slot count derived from the report log instead.
+
+Human Approval Required:
+- None this slot. No external action, publish, message, call or credential change was performed.
+
+Next Slot:
+- #13 continuation: audit the next intent family in `server.ts` that still sets `actionExecuted =
+  true` without a measured outcome, starting with the remaining Computer Operator / browser routes.
+- Next fire is 04:05 IST (work slot, pick a slice finishable in ~17 min); 04:35 is the finalization slot.
+
+हिंदी सारांश (एक पंक्ति):
+- स्क्रीनशॉट, वॉल्यूम और पावर इंटेंट अब झूठी सफलता नहीं बोलते; 107 फ़ाइलों में 1410 टेस्ट पास, लिंट और बिल्ड साफ़।

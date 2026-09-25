@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-26 03:55 IST (2026-09-25 22:25 UTC) — work slot 12: screenshot, volume and power dispatch truth
+
+### Fixed
+- **Three more `/api/chat` intents reported work that never happened.** `take_screenshot`, `volume_up`/`volume_down` and `pc_shutdown`/`pc_restart` each set `actionExecuted = true` and spoke an unqualified success ("Capturing screen display right now.", "Increasing master audio output level.", "Simulating system shutdown protocol.") while reaching no capture backend, no audio mixer and no power transition. The offline `src/utils/localJarvisEngine.ts` repeated the same three claims.
+  - Added `src/utils/computerOperator/screenshotDispatchTruth.ts` (`screenshotVerdict()` / `screenshotReply()`): a capture is `VERIFIED` only when the executor receipt is `VERIFIED` **and** the file was verified on disk — a missing file downgrades a `VERIFIED` receipt to `UNVERIFIED`, and a headless host reports `NOT_AVAILABLE`.
+  - Added `src/utils/computerOperator/audioDispatchTruth.ts` (`volumeVerdict()` / `volumeReply()`): reports the in-app voice-output level the UI slider actually uses and states the system output level was not changed. `actionExecuted` stays `false` in every case — the in-app slider is not a host action.
+  - Added `src/utils/computerOperator/powerDispatchTruth.ts` (`powerVerdict()` / `powerReply()`): a power transition is never executed from this path — `NOT_IMPLEMENTED` with `permissionRequired`, `BLOCKED` when the emergency stop is engaged, `NOT_AVAILABLE` without a display session.
+  - `open_notepad` now routes through the real `evaluateLaunchDispatch()` executor path like the other launch intents. The intents that genuinely only open an in-app view (telephony hub, call history, calculator, paint, chrome, browser navigation) keep `actionExecuted = true` but disclose that no external application or phone dialer was opened.
+- **Two pre-existing tests encoded the old fake-success contract.** `src/tests/localJarvisEngine.test.ts` asserted `actionExecuted === true` for the offline screenshot and volume branches, which capture nothing and never touch a mixer; they passed only because the source lied. They now require `actionExecuted === false` and an honest reply, so the suite fails if the fabricated wording returns.
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts` (24 tests) guards the three verdicts; negative-validated — reverting both source files fails **10 of 24**, restored → 24/24.
+- Full suite observed: **107 files / 1410 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 909349 bytes).
+
 ## [Unreleased] - 2026-09-26 02:45 IST (2026-09-25 21:15 UTC) — work slot 11: launch dispatch truth
 
 ### Fixed
