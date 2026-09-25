@@ -1,21 +1,24 @@
 {
-  "window_date": "2026-09-25",
-  "window_started_at": "2026-09-25T15:35:00Z",
-  "last_slot_at": "2026-09-25T18:23:00Z",
-  "slots_completed": 8,
+  "window_date": "2026-09-26",
+  "window_started_at": "2026-09-25T18:36:20Z",
+  "last_slot_at": "2026-09-25T19:06:20Z",
+  "slots_completed": 9,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "dca287f",
+  "last_commit": "d76083e",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    "Real Android device E2E - no handset in sandbox",
-    "Real screenshot capture - no display/hardware in sandbox",
-    "Live social/telephony provider dispatch - no provider credentials in sandbox",
-    "Live bridge pairing success path - requires MOBILE_BRIDGE_PAIRING_SECRET"
+    {"item": 1, "reason": "requires a physical Android handset"},
+    {"item": 2, "reason": "requires a physical Android handset"},
+    {"item": 8, "reason": "requires a Windows host"},
+    {"item": 50, "reason": "requires a physical Android handset"},
+    {"item": 55, "reason": "requires a physical Android handset / Windows host"},
+    {"item": 54, "reason": "live credential rotation requires provider credentials"},
+    {"item": 60, "reason": "external third-party audit leg"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "slots_completed=8 inferred: state read 6 + one uncounted 23:42/23:48 IST cycle documented in docs/COMPLETION_STATUS.md + this run. Exact count UNKNOWN; state file and report log disagree."
+  "notes": "slots_completed computed as previous log-reported 8 + 1; no prior state file existed on automation/hermes-state, so the exact previous counter was UNKNOWN."
 }
