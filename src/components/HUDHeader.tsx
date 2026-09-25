@@ -23,6 +23,12 @@ import {
 } from 'lucide-react';
 import { getLanguageOption } from '../utils/languages';
 import { locationFixBadge, type CoordsSource } from '../utils/locationService';
+import {
+  emergencyLiveness,
+  emergencyStatusKnown,
+  emergencyLivenessLabel,
+  type EmergencyStatusShape,
+} from '../utils/emergencyTruth';
 import { syncStatusLabel, type SyncLiveness } from '../utils/syncTruth';
 import { billingBadgeLabel } from '../utils/hardening/billingEntitlementTruth';
 import {
@@ -84,7 +90,11 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   const [telemetry, setTelemetry] = useState<HudTelemetrySnapshot>(UNAVAILABLE_HUD_TELEMETRY);
   const [telegramLive, setTelegramLive] = useState<boolean | null>(null);
   const [securityLevel, setSecurityLevel] = useState<number | null>(null);
-  const [isKillSwitchActive, setIsKillSwitchActive] = useState<boolean>(false);
+  // Kill-switch state starts UNKNOWN, never "released". The previous seed of
+  // `false` plus the swallowed fetch error meant a header that could not reach
+  // /api/emergency/status rendered a normal, non-emergency control surface —
+  // an unqueried state presented as a safe one.
+  const [emergency, setEmergency] = useState<EmergencyStatusShape | null>(null);
   const [killSwitchReason, setKillSwitchReason] = useState<string>('');
   const [showKillModal, setShowKillModal] = useState<boolean>(false);
   const [killNotice, setKillNotice] = useState<string | null>(null);
@@ -95,16 +105,27 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   // only a live fix may render as a live link.
   const gpsFix = locationFixBadge(locationSource);
 
+  // Derived from the observed emergency status, never from a local default.
+  // UNKNOWN renders as its own state so an unanswered probe is never drawn as
+  // an armed-AND-released switch.
+  const liveness = emergencyLiveness(emergency);
+  const statusKnown = emergencyStatusKnown(emergency);
+  const isKillSwitchActive = liveness === 'ENGAGED';
+  const killSwitchUnknown = !statusKnown;
+
   const fetchEmergencyStatus = async () => {
     try {
       const res = await fetch('/api/emergency/status');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data && typeof data.emergencyPaused === 'boolean') {
-        setIsKillSwitchActive(data.emergencyPaused);
+        setEmergency(data);
         setKillSwitchReason(data.reason || '');
+      } else {
+        setEmergency(null);
       }
     } catch {
-      // Offline fallback
+      setEmergency(null);
     }
   };
 
@@ -124,7 +145,10 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        setIsKillSwitchActive(true);
+        // Only adopt a state the response actually confirmed; otherwise the
+        // next poll decides, so we never assert a switch position from a
+        // success flag alone.
+        setEmergency(emergencyStatusKnown(data.emergencyState) ? data.emergencyState : null);
         setKillNotice(`🚨 KILL SWITCH ENGAGED: Terminated all background tasks and cleared ${data.clearedTasksCount || 0} queue item(s).`);
         setShowKillModal(false);
       }
@@ -146,7 +170,7 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        setIsKillSwitchActive(false);
+        setEmergency(emergencyStatusKnown(data.emergencyState) ? data.emergencyState : null);
         setKillNotice('🟢 System resumed safely. Normal level 1-4 permission gating active.');
         setShowKillModal(false);
       }
@@ -239,6 +263,15 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             <RotateCcw className="w-3 h-3" />
             Resume System
           </button>
+        </div>
+      )}
+
+      {/* The status endpoint did not answer. Say so, and do not offer the
+          resume control whose effect we cannot predict. */}
+      {killSwitchUnknown && (
+        <div className="mb-2 p-2 rounded-xl bg-slate-900 border border-slate-600 text-slate-300 text-xs font-mono flex items-center gap-2">
+          <AlertOctagon className="w-4 h-4 text-slate-400 shrink-0" />
+          <span>⚠️ EMERGENCY STOP STATUS UNKNOWN — /api/emergency/status did not answer. Not asserting a switch position.</span>
         </div>
       )}
 
@@ -388,6 +421,16 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
               >
                 <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="hidden sm:inline">RESUME SYSTEM</span>
+              </button>
+            ) : killSwitchUnknown ? (
+              <button
+                onClick={fetchEmergencyStatus}
+                disabled={isOperatingKillSwitch}
+                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-600 text-slate-300 text-xs font-mono font-bold flex items-center gap-1.5 transition-all"
+                title={`Emergency stop status ${emergencyLivenessLabel(liveness)} — click to retry the status probe`}
+              >
+                <Power className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline">{emergencyLivenessLabel(liveness)}</span>
               </button>
             ) : (
               <button
