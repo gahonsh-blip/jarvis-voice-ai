@@ -4,7 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-25 18:52 UTC (00:22 IST 2026-09-26) — **WORK SLOT 7** of the
+Last cycle: 2026-09-25 19:45 UTC (01:15 IST 2026-09-26) — **WORK SLOT 8** of the
+2026-09-26 window, the 01:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **voice `security_audit` reply**.
+
+**The spoken security audit claimed a human-approval gate that may be off.** The `/api/chat`
+`security_audit` intent in `server.ts` answered `Security protocol active at Level
+${securityMatrixState.currentLevel}. Human confirmation required for external actions.`
+unconditionally. The `humanApprovalForExternal` flag is operator-flippable through
+`/api/security/matrix`; a process with that gate turned off still told the user, out loud, that
+external actions required confirmation. The same slot-7 class already closed for the Telegram
+`security_audit` reply and the proactive-briefing insight, but this voice path was missed and
+would have passed the existing guards, which read the server source for those two specific
+phrases only.
+
+Fixed: the intent now derives its line from `securityMatrixPosture(securityMatrixState)` — the
+same helper the Telegram and briefing paths use — reporting `posture.levelLabel`,
+`posture.humanApproval` and `posture.secretMasking`, so an unobserved or disabled flag is spoken
+as `UNKNOWN` / `DISABLED` rather than as an enforced gate. The action title follows `levelLabel`
+instead of a numeric level literal.
+
+Guarded by 3 new assertions in `src/tests/hardening/securityMatrixTruth.test.ts`
+("the voice security_audit reply derives its posture"): the hardcoded phrase is absent, the
+numeric-level literal is absent, and the spoken line is built from
+`posture.levelLabel` / `posture.humanApproval`. Negative-validated: reverting the voice branch to
+its hardcoded form fails exactly those 3 assertions (`3 failed | 12 passed`), restored →
+**15/15**. Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted 1 file / 15 tests
+passed; full suite **103 files / 1358 tests passed**; build exit 0 (`dist/server.cjs` 885079
+bytes). E2E: NOT RUN — no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. Item 13
+remains `PARTIAL` — another real fake-success path closed; more remain.
+
+Last cycle (previous): 2026-09-25 18:52 UTC (00:22 IST 2026-09-26) — **WORK SLOT 7** of the
 2026-09-25 window, the 00:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **receipt evidence guard itself**.
 

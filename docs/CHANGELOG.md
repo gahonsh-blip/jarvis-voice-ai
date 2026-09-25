@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-26 01:15 IST (2026-09-25 19:45 UTC) — work slot 8: voice security_audit posture truth
+
+### Fixed
+- **The spoken `security_audit` reply claimed a human-approval gate that may be off.** The `/api/chat` `security_audit` intent in `server.ts` answered `Security protocol active at Level ${securityMatrixState.currentLevel}. Human confirmation required for external actions.` unconditionally. `humanApprovalForExternal` is operator-flippable through `/api/security/matrix`, so a process with the gate off still told the user, out loud, that external actions required confirmation. The same fake-success class was already closed for the Telegram `security_audit` reply and the proactive-briefing insight, but this voice path was missed and would have passed the existing guards, which read the server source for those two phrases only.
+  - The intent now derives its line from `securityMatrixPosture(securityMatrixState)` — the same helper the Telegram and briefing paths use — reporting `posture.levelLabel`, `posture.humanApproval` and `posture.secretMasking`. An unobserved or disabled flag is spoken as `UNKNOWN` / `DISABLED` rather than as an enforced gate. The action title follows `levelLabel` instead of a numeric level literal.
+
+### Tests
+- `src/tests/hardening/securityMatrixTruth.test.ts` — 3 new assertions ("the voice security_audit reply derives its posture"): the hardcoded phrase is absent, the numeric-level literal is absent, and the spoken line is built from `posture.levelLabel` / `posture.humanApproval`. Negative-validated: reverting the voice branch to its hardcoded form fails exactly those 3 assertions (`3 failed | 12 passed`), restored → 15/15.
+
+### Docs
+- `docs/COMPLETION_STATUS.md` — item 13 evidence and last-cycle entry updated for slot 8. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-09-25 23:15 IST (2026-09-25 17:45 UTC) — work slot 5: YouTube voice status reply truth
 
 ### Fixed

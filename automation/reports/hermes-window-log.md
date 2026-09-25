@@ -5578,3 +5578,47 @@ Next slot: #13 — target the offline engine desktop-op intents (`operate_vscode
 `HostActionExecutor.launchApp` is never invoked on that path. Verify the wording is honest or
 route it through the host gate. Prefer a slice that can be finished and pushed inside one slot.
 
+
+## 2026-09-26 01:15 IST — WORK SLOT (window 2026-09-26)
+
+Slot:        WORK  |  IST time: 01:05–01:20
+Window date: 2026-09-26. State branch `automation/hermes-state` read at 01:06 IST:
+`slots_completed: 9`, `finalized: false`, `current_item: 13`. Numbering note: the doc numbers this
+WORK SLOT 8 while the state counter reads 9 (previous slots flagged the same drift); the slot
+identity is unambiguous, the counter is not — treated as UNKNOWN and reported honestly.
+
+Item: #13 `Zero-fake-success for all tools` — remains `PARTIAL`. Advanced one more real path.
+
+What was advanced, honestly:
+- The voice `security_audit` intent in `server.ts` answered
+  `Security protocol active at Level <n>. Human confirmation required for external actions.`
+  unconditionally. `humanApprovalForExternal` is flippable via `/api/security/matrix`, so a
+  process with the gate OFF still spoke an enforced gate. This is the same item-13 class slot 7
+  closed for the Telegram reply and proactive briefing; the voice path was missed and passed the
+  existing guards (which read the server source for those two specific phrases only).
+- Fix: the intent now derives its line from `securityMatrixPosture(securityMatrixState)` —
+  `posture.levelLabel`, `posture.humanApproval`, `posture.secretMasking`. Disabled/unobserved is
+  spoken as DISABLED/UNKNOWN, never as enforced.
+
+Gates observed this slot (commit 90952e5):
+- `npm run lint` (`tsc --noEmit`) exit 0.
+- Targeted `npx vitest run src/tests/hardening/securityMatrixTruth.test.ts` → **15/15 passed**.
+- Negative validation: reverting the voice branch to its hardcoded form fails exactly the 3 new
+  assertions (`3 failed | 12 passed`); restored → 15/15.
+- Full suite `npx vitest run` → **103 files / 1358 tests passed** (23.76 s).
+- `npm run build` exit 0; `dist/server.cjs` 885079 bytes (864.3 kb).
+- Security: `git status --short` shows only the intended files; `.env` not tracked. `npm audit`
+  NOT RUN (no audit script in package.json).
+- E2E: NOT RUN — no handset, no bridge pairing secret in this sandbox.
+- Deploy: NOT_CONFIGURED — no deployment target in this environment.
+
+Bugs found: 1 (voice security_audit hardcoded approval claim).
+Bugs fixed: 1 (same), proven by the negative validation above.
+
+Commits: `90952e5` (fix(voice) + test), `docs(hermes)` follow-up. Both on
+`feature/hermes-full-completion` and pushed.
+
+Next slot: continue #13. Recommended target — the remaining spoken/UI status literals that can
+claim state without an observation (rotate the grep: security/telephony/oracle/mobile status
+strings in `server.ts` and `src/utils/localJarvisEngine.ts`). Prefer a slice finishable and
+pushable inside one slot.
