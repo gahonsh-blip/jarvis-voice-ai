@@ -95,6 +95,11 @@ import {
 } from './src/utils/hardening/telegramHostClaim';
 import { aiEngineProviderLabel, aiEngineModelName } from './src/utils/hardening/aiEngineTruth';
 import {
+  gatewaySendResult,
+  telegramGatewayBubble,
+  telegramGatewayNotice,
+} from './src/utils/hardening/telegramSendTruth';
+import {
   buildDeliveryReceipt,
   classifyTelegramError,
   interpretTelegramSend,
@@ -3327,15 +3332,20 @@ User message: "${clean}".`,
   telegramMessages.push(botMsg);
   if (telegramMessages.length > 80) telegramMessages.shift();
 
-  // Send message to real Telegram if configured
+  // Send to real Telegram and record whether it actually landed. The previous
+  // fire-and-forget call meant a failed or blocked send still looked delivered
+  // to every caller (and the web gateway spoke the reply aloud regardless).
+  // `deliverTelegramMessage` never throws; it classifies the outcome.
+  let delivery: DeliveryInterpretation | undefined;
   if (chatId && getCleanTelegramToken()) {
-    sendRealTelegramMessage(chatId, botReplyText, inlineKeyboard).catch((e) => {
-      console.warn('[Telegram Bot] Send message async note:', e.message);
-    });
+    delivery = await deliverTelegramMessage(chatId, botReplyText, inlineKeyboard);
+    if (!delivery.delivered) {
+      console.warn(`[Telegram Bot] Reply not delivered to ${chatId}: ${delivery.errorReason}`);
+    }
   }
 
   persistMemory();
-  return { userMsg, botMsg, inlineKeyboard };
+  return { userMsg, botMsg, inlineKeyboard, delivery };
 }
 
 async function handleTelegramCallback(callbackQuery: any) {
@@ -4141,7 +4151,20 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
     if (!text) return res.status(400).json({ error: 'Text command is required' });
 
     const result = await processMobileCommand(text, 'web_client', activeTelegramChatId || undefined);
-    res.json({ success: true, userMessage: result.userMsg, botMessage: result.botMsg });
+    const delivery = gatewaySendResult(result.delivery);
+    const notice = telegramGatewayNotice(delivery);
+    res.json({
+      // Success means Telegram confirmed the outbound reply. A local echo with
+      // no delivery is reported as undelivered, not as a sent message.
+      success: delivery.delivered,
+      delivered: delivery.delivered,
+      deliveryOutcome: delivery.outcome,
+      messageId: delivery.messageId,
+      errorReason: delivery.errorReason,
+      userMessage: result.userMsg,
+      botMessage: { ...result.botMsg, text: telegramGatewayBubble(result.botMsg.text, delivery) },
+      message: notice.message,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

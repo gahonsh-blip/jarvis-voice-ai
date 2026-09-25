@@ -131,13 +131,17 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
         body: JSON.stringify({ text }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.userMessage && data.botMessage) {
         setMessages((prev) => [...prev, data.userMessage, data.botMessage]);
-        if (data.botMessage?.text) {
-          // Clean markdown before speaking
-          const cleanSpeech = data.botMessage.text.replace(/[*_`#]/g, '');
-          onSpeak(cleanSpeech);
-        }
+      }
+      // Only speak a reply that Telegram actually delivered. A local echo of an
+      // undelivered reply must not be voiced as though it reached the phone.
+      if (data.delivered === true && data.botMessage?.text) {
+        const cleanSpeech = data.botMessage.text.replace(/[*_`#]/g, '');
+        onSpeak(cleanSpeech);
+      }
+      if (data.message) {
+        setTestResult({ success: data.delivered === true, message: data.message });
       }
     } catch (err) {
       console.warn('Telegram send failed:', err);
