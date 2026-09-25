@@ -5883,3 +5883,85 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - स्क्रीनशॉट, वॉल्यूम और पावर इंटेंट अब झूठी सफलता नहीं बोलते; 107 फ़ाइलों में 1410 टेस्ट पास, लिंट और बिल्ड साफ़।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:21
+Window date: 2026-09-26   Window slots completed so far: 15
+
+Completed:
+- #54 Secret/token protection audit — the filesystem tools could still read and
+  write the project's own credentials. `realFsRead`/`realFsWrite`/`realFsDelete`
+  in `server_tools.ts` now resolve every path through a hardened
+  `safeResolvePath`: non-string/blank and NUL-containing paths are rejected, and
+  `isProtectedPath()` denies `.git`/`.ssh`/`.gnupg`/`.aws` segments plus `.env*`,
+  `.npmrc`, `.pypirc`, `.netrc`, `.yarnrc(.yml)`, `.git-credentials`, SSH private
+  keys and `*.pem|key|p12|pfx|keystore|jks`. `.gitignore` gains `.env.local` /
+  `.env.*.local`. Evidence: `server_tools.ts` (`safeResolvePath`,
+  `isProtectedPath`), `src/tests/workspaceFsSecurity.test.ts` (7 tests),
+  `.gitignore`; full suite observed 108 files / 1417 tests passed.
+
+In Progress:
+- #54 remains PARTIAL by design — this closes one exfiltration surface; the audit
+  is a pattern-and-guard review, not a proof of absence.
+
+Remaining:
+- #1/#50/#55 are hardware-blocked (see Blocked). #26/#30/#31/#33/#46/#48/#51/#60
+  stay PARTIAL — each needs a live provider, a handset, or a human decision.
+
+Bugs Found:
+- The workspace root was confined, but nothing *inside* it was protected from the
+  tools. Probed on this head: `.git/config` read back 315 bytes and `.env` was
+  writable — `.git/config` echoes any credential embedded in a remote URL.
+- `path.resolve()` silently truncates on a NUL byte, so a NUL-containing path was
+  neither rejected nor resolved to what it appeared to name.
+
+Bugs Fixed:
+- Both, in `safeResolvePath` + `isProtectedPath`. Negative-validated: disabling
+  `isProtectedPath` fails 2 of 7 tests (`2 failed | 5 passed`); restored -> 7/7.
+  Without the guard the tests are not vacuous, so the guard is what makes them pass.
+
+Tests:    108 files / 1417 tests passed (vitest, observed this run on bed67ea).
+          Targeted: src/tests/workspaceFsSecurity.test.ts 7/7.
+Lint:     exit 0 — `tsc --noEmit` (observed, LINT_EXIT=0).
+Build:    exit 0 — dist/server.cjs 910590 bytes, dist/assets/index-*.js 1,015 kB.
+E2E:      NOT RUN — no display session, no Android handset in this sandbox.
+Security: `git check-ignore -v .env` confirms `.env` is ignored; no `.env` staged,
+          no token/key in the diff, no node_modules/dist staged. A stray `.env`
+          created during negative-validation was removed.
+
+Documentation: docs/COMPLETION_STATUS.md (slot 13 block + item 54 row),
+          docs/CHANGELOG.md (work slot 13), docs/SECURITY.md (section 7 filesystem
+          tool confinement).
+Branch:  feature/hermes-full-completion
+Commit:  6e37618 (docs) on top of bed67ea (the security fix)
+Push:    succeeded — origin/feature/hermes-full-completion = 6e37618 (fast-forward,
+          no force-push; prior commit ef44c65 preserved)
+State:   pushed to automation/hermes-state (db14c04), slots_completed=15
+
+PR:         #4 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present
+            in this environment; the verified artifact is the deployment unit
+            available.
+
+Blocked:
+- #1 Real Android Mobile Bridge connection — requires a physical Android device.
+- #50 Hands-free Android control — NOT_AVAILABLE, no Android device attached.
+- #55 Real-device E2E suite — NOT_AVAILABLE, no Android device or Windows host.
+
+Human Approval Required:
+- Merge of PR #4 to `main`. The owner's instruction is explicit: a human reads the
+  final verification report and approves before any merge.
+- Whether `.git/config` should be denied outright or selectively (read-only) for
+  legitimate git-status tooling — the current guard denies it entirely.
+
+Next Slot:
+- Finalization (04:35 IST): run the full lint + vitest + build gate, the repo's own
+  security checks, refresh the PR #4 body with exact observed results, and leave the
+  PR one-click mergeable. No new development.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में फ़ाइल-टूल्स को रोका गया कि वे प्रोजेक्ट की अपनी क्रेडेंशियल फ़ाइलें
+  (.env, .git/config) पढ़ या लिख न सकें — 7 टेस्ट, नेगेटिव-वैलिडेटेड, सभी गेट हरे।
