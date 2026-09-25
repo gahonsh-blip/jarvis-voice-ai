@@ -71,6 +71,22 @@ describe('the Telegram security audit reply derives its posture', () => {
   });
 });
 
+describe('the voice security_audit reply derives its posture', () => {
+  it('no longer hardcodes the human confirmation claim', () => {
+    expect(serverFlat).not.toContain('Human confirmation required for external actions');
+  });
+
+  it('no longer hardcodes a numeric level in the voice reply', () => {
+    expect(serverFlat).not.toContain('Security protocol active at Level ${securityMatrixState.currentLevel}');
+  });
+
+  it('builds the voice reply from the posture helper', () => {
+    expect(serverFlat).toContain(
+      'Security protocol active at ${posture.levelLabel}. External-action approval: ${posture.humanApproval}',
+    );
+  });
+});
+
 describe('the proactive briefing insights derive the approval posture', () => {
   it('no longer hardcodes the approval enforcement claim in a briefing', () => {
     expect(serverFlat).not.toContain('Human Approval Enforced');

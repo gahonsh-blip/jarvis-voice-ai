@@ -8779,9 +8779,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'security_audit': {
-        spokenResponse = `Security protocol active at Level ${securityMatrixState.currentLevel}. Human confirmation required for external actions.`;
+        const posture = securityMatrixPosture(securityMatrixState);
+        spokenResponse = `Security protocol active at ${posture.levelLabel}. External-action approval: ${posture.humanApproval}. ${posture.secretMasking}.`;
         actionExecuted = true;
-        actionDetail = { type: 'security_audit', title: `Security Matrix Level ${securityMatrixState.currentLevel}` };
+        actionDetail = { type: 'security_audit', title: `Security Matrix ${posture.levelLabel}` };
         break;
       }
       case 'set_name': {
