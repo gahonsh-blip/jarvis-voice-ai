@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-25",
   "window_started_at": "2026-09-25T15:35:00Z",
-  "last_slot_at": "2026-09-25T18:15:00Z",
-  "slots_completed": 6,
+  "last_slot_at": "2026-09-25T18:23:00Z",
+  "slots_completed": 8,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "0485593",
+  "last_commit": "dca287f",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -16,5 +16,6 @@
     "Live social/telephony provider dispatch - no provider credentials in sandbox",
     "Live bridge pairing success path - requires MOBILE_BRIDGE_PAIRING_SECRET"
   ],
-  "last_report_path": "/tmp/hermes-window-report.md"
+  "last_report_path": "/tmp/hermes-window-report.md",
+  "notes": "slots_completed=8 inferred: state read 6 + one uncounted 23:42/23:48 IST cycle documented in docs/COMPLETION_STATUS.md + this run. Exact count UNKNOWN; state file and report log disagree."
 }
