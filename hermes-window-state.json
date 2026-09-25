@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-26",
   "window_started_at": "2026-09-25T18:36:20Z",
-  "last_slot_at": "2026-09-25T19:06:20Z",
-  "slots_completed": 9,
+  "last_slot_at": "2026-09-25T19:45:00Z",
+  "slots_completed": 10,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "d76083e",
+  "last_commit": "5b0a1e3",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -20,5 +20,5 @@
     {"item": 60, "reason": "external third-party audit leg"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "slots_completed computed as previous log-reported 8 + 1; no prior state file existed on automation/hermes-state, so the exact previous counter was UNKNOWN."
+  "notes": "Slot closing 2026-09-25T19:45Z (01:15 IST 2026-09-26). Prior state read from origin/automation/hermes-state was slots_completed: 9; incremented to 10. Doc numbering calls this WORK SLOT 8 — drift between doc and state counter is UNKNOWN and reported honestly, not reconciled. Fix: voice security_audit reply now derives from securityMatrixPosture; commit 90952e5, docs 5b0a1e3."
 }
