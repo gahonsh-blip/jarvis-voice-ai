@@ -60,6 +60,13 @@ import {
   TelephonyProviderRegistry,
 } from './src/utils/telephonyAdapters';
 import {
+  telephonyEngineProviderId,
+  telephonyEngineMode,
+  telephonyEngineLabel,
+  telephonySelectionApplied,
+  SIMULATION_PROVIDER_ID,
+} from './src/utils/telephonyGatewayTruth';
+import {
   runTelephonyTestSuite,
 } from './src/utils/telephonyTestRunner';
 import {
@@ -7979,7 +7986,32 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
       ...telephonySettingsState,
       ...updates,
     };
-    res.json({ success: true, settings: telephonySettingsState });
+
+    // Apply the selected engine to the live registry. Without this the
+    // selector was decorative: the status endpoint kept reporting whatever
+    // TELEPHONY_PROVIDER had set at boot. The result is reported honestly so
+    // the UI never claims a selection took effect when it did not.
+    let engineApplied: boolean | null = null;
+    if (typeof updates?.provider === 'string') {
+      const providerId = telephonyEngineProviderId(updates.provider);
+      engineApplied = providerId !== null
+        && TelephonyProviderRegistry.setActiveProvider(providerId);
+      if (!engineApplied) {
+        telephonySettingsState.engineApplyError =
+          `ENGINE_NOT_APPLIED: ${updates.provider}`;
+      } else {
+        delete telephonySettingsState.engineApplyError;
+      }
+    }
+
+    res.json({
+      success: true,
+      settings: {
+        ...telephonySettingsState,
+        twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',
+      },
+      engineApplied,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -8143,18 +8175,29 @@ function validateTelephonyWebhook(req: Request, provider: string): boolean {
 // 6.1 Telephony Status Endpoint (Section V & E)
 app.get('/api/telephony/status', (req: Request, res: Response) => {
   const provider = TelephonyProviderRegistry.getProvider();
-  const isConfigured = provider.isConfigured();
   const allProviders = TelephonyProviderRegistry.getAllProviders();
   const activeSessions = TelephonySessionManager.getCallHistory();
   const currentActive = activeSessions.find((s) => s.state !== 'ENDED' && s.state !== 'FAILED');
 
+  // The simulator's isConfigured() is unconditionally true by design (it is a
+  // test adapter, not a carrier), so it must never surface as a configured
+  // gateway. Compute the honest mode from the id that is actually active.
+  const rawConfigured = provider.isConfigured();
+  const engineMode = telephonyEngineMode(provider.id, rawConfigured);
+  const isConfigured = engineMode === 'LIVE_GATEWAY';
+
   res.json({
     success: true,
-    status: isConfigured ? 'READY' : 'TELEPHONY_NOT_CONFIGURED',
+    status: telephonyEngineLabel(engineMode),
     isConfigured,
+    engineMode,
+    engineLabel: telephonyEngineLabel(engineMode),
+    engineApplied: telephonySelectionApplied(telephonySettingsState?.provider, provider.id),
+    engineApplyError: telephonySettingsState?.engineApplyError ?? null,
     provider: {
       id: provider.id,
       name: provider.name,
+      isSimulationOnly: provider.id === SIMULATION_PROVIDER_ID,
     },
     availableProviders: allProviders,
     currentCall: currentActive ? {

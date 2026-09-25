@@ -515,6 +515,9 @@ export class TelephonyProviderRegistry {
   }
 
   static setActiveProvider(id: string): boolean {
+    if (this.providers.size === 0) {
+      this.initialize();
+    }
     if (this.providers.has(id)) {
       this.activeProviderId = id;
       return true;

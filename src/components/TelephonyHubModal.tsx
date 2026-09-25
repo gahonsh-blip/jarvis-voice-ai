@@ -114,11 +114,16 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   const [providerStatus, setProviderStatus] = useState<{
     status: string;
     isConfigured: boolean;
-    provider?: { id: string; name: string };
+    engineMode?: string;
+    engineLabel?: string;
+    engineApplied?: boolean;
+    engineApplyError?: string | null;
+    provider?: { id: string; name: string; isSimulationOnly?: boolean };
   } | null>(null);
+  const [settingsSaveResult, setSettingsSaveResult] = useState<string | null>(null);
   const [geminiConfigured, setGeminiConfigured] = useState<boolean | undefined>(undefined);
 
-  React.useEffect(() => {
+  const loadProviderStatus = React.useCallback(() => {
     fetch('/api/telephony/status')
       .then((res) => res.json())
       .then((data) => {
@@ -127,6 +132,10 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
         }
       })
       .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    loadProviderStatus();
 
     // The Gemini reasoning path is only "ready" if the key is actually present;
     // /api/health reports that directly, so readiness is measured, not assumed.
@@ -151,7 +160,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
         }
       })
       .catch(() => {});
-  }, []);
+  }, [loadProviderStatus]);
 
   const handleRunTests = async () => {
     setIsRunningTests(true);
@@ -260,8 +269,30 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     });
   };
 
-  const handleSaveSettings = () => {
+  // Persist to the server so the selected engine is actually applied to the
+  // live registry, then re-read the measured status. Reporting `Saved` without
+  // observing the server's answer would be exactly the fake success this
+  // hardening pass exists to remove.
+  const handleSaveSettings = async () => {
     onUpdateSettings(tempSettings);
+    try {
+      const res = await fetch('/api/telephony/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tempSettings),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.success !== true) {
+        setSettingsSaveResult('SAVE FAILED — server rejected the settings');
+      } else if (data.engineApplied === false) {
+        setSettingsSaveResult('SAVED BUT ENGINE NOT APPLIED — this engine is not routable in this build');
+      } else {
+        setSettingsSaveResult('SAVED — engine applied to live gateway');
+      }
+    } catch {
+      setSettingsSaveResult('SAVE FAILED — could not reach the server');
+    }
+    loadProviderStatus();
   };
 
   const handleTestGreeting = () => {
@@ -312,6 +343,20 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
       ? 'bg-amber-400'
       : 'bg-slate-400';
 
+  // The gateway badge reflects the engine actually serving calls, not the one
+  // merely selected in settings. A mismatch is surfaced, never hidden behind a
+  // green pill.
+  const engineIsLive = providerStatus?.engineMode === 'LIVE_GATEWAY';
+  const engineMismatch = providerStatus?.engineApplied === false;
+  const gatewayBadgeText = settingsSaveResult
+    ?? providerStatus?.engineLabel
+    ?? 'TELEPHONY STATUS UNKNOWN';
+  const gatewayBadgeClass = engineIsLive
+    ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+    : engineMismatch
+    ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+    : 'bg-amber-950/60 border-amber-500/40 text-amber-300';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
       <div className="relative flex flex-col h-[90vh] max-h-[820px] w-full max-w-5xl rounded-2xl border border-cyan-500/30 bg-slate-950 shadow-2xl shadow-cyan-950/40 overflow-hidden">
@@ -346,14 +391,10 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
               <span>Export Call History</span>
             </button>
             <span
-              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${
-                providerStatus?.isConfigured
-                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
-              }`}
+              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${gatewayBadgeClass}`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${providerStatus?.isConfigured ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
-              {providerStatus?.isConfigured ? 'GATEWAY CONFIGURED' : 'TELEPHONY_NOT_CONFIGURED'}
+              <span className={`h-1.5 w-1.5 rounded-full ${engineIsLive ? 'bg-emerald-400' : engineMismatch ? 'bg-rose-400' : 'bg-amber-400 animate-ping'}`} />
+              {gatewayBadgeText}
             </span>
             {activeCall && (
               <span className="rounded-lg bg-cyan-950 px-2.5 py-1 text-xs font-mono text-cyan-300 border border-cyan-800">
@@ -1253,6 +1294,34 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                         <div className="text-xs font-bold text-white">Twilio Telephony Trunk</div>
                         <div className="text-[10px] mt-0.5">Real worldwide PSTN cellular and landline connectivity.</div>
                       </div>
+                    </div>
+
+                    {/* Measured engine truth. The selector is only applied to the
+                        live registry when Save persists to the server, so a
+                        mismatch between the saved choice and the serving engine
+                        is stated here rather than glossed over. */}
+                    <div className="mt-3 rounded-xl bg-slate-950 border border-slate-800 p-3 text-[11px] font-mono">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Selected engine</span>
+                        <span className="text-slate-200">{tempSettings.provider}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-slate-400">Serving engine</span>
+                        <span className={engineIsLive ? 'text-emerald-300' : engineMismatch ? 'text-rose-300' : 'text-amber-300'}>
+                          {providerStatus?.provider?.id ?? 'UNKNOWN'}
+                        </span>
+                      </div>
+                      {engineMismatch && (
+                        <div className="mt-2 flex items-start gap-1.5 text-rose-300">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span>Engine selection not applied — save again or choose a routable engine.</span>
+                        </div>
+                      )}
+                      {providerStatus?.provider?.isSimulationOnly && (
+                        <div className="mt-2 text-amber-300">
+                          SIMULATION_ONLY — no PSTN carrier is attached; calls stay in-process.
+                        </div>
+                      )}
                     </div>
                   </div>
 
