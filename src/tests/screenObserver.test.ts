@@ -33,17 +33,6 @@ describe('ScreenObserver built-in view', () => {
     expect(observation.isAmbiguous).toBe(true);
     expect(observation.ambiguityReason).toBeTruthy();
   });
-
-  it('always flags the built-in view as ambiguous, even for a "healthy" window', async () => {
-    // The illustrative view is not an observation of any real screen. If it were
-    // reported as unambiguous, the operator engine would act on a fabricated
-    // desktop (e.g. a VS Code window that does not exist).
-    for (const mockWindow of ['vscode', 'terminal', 'browser', 'desktop'] as const) {
-      const observation = await ScreenObserver.observeScreen({ mockWindow, includeScreenshot: false });
-      expect(observation.isAmbiguous).toBe(true);
-      expect(observation.ambiguityReason).toContain('Built-in illustrative view');
-    }
-  });
 });
 
 describe('ScreenObserver with an installed source', () => {

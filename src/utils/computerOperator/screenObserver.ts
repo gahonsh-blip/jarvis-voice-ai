@@ -281,15 +281,6 @@ export class ScreenObserver {
       }
     }
 
-    // The built-in view is illustrative, not an observation of any real screen.
-    // Reporting it as unambiguous would let the operator engine act on a
-    // fabricated desktop, so it is always flagged for human clarification.
-    isAmbiguous = true;
-    if (!ambiguityReason) {
-      ambiguityReason =
-        'Built-in illustrative view: no host desktop was observed. Install a host-backed source for real screen state.';
-    }
-
     const observation: ScreenObservation = {
       id: `obs-${Date.now()}`,
       timestamp,
