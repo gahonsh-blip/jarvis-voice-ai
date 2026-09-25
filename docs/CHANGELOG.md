@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 22:15 IST (2026-09-25 16:45 UTC) — work slot 3: OS-executor finance guard truth
+
+### Fixed
+- **The finance exclusion on the real host-executor path matched by substring.** `PermissionGuard.permanentBlock()` in `src/utils/computerOperator/permissionGuard.ts` — the gate the OS executor consults — still used a bare `desc.includes(kw)` for its short finance tokens, the same rule `isFinanceBlocked()` had already replaced in `server_tools.ts`. Measured against the live guard, this was wrong in both directions:
+  - **false positive:** `Read file jupiter_notes.txt` → `BLOCK / FINANCE_RESTRICTION`, because `upi` occurs inside "jupiter". Benign local operator work was refused as a financial operation.
+  - **false negatives:** `Initiate fund transfer`, `Deposit via NEFT`, `Enter debit card details`, `RTGS settlement` and `IMPS transfer` all returned `ALLOW` — real financial instructions the guard had no signature for.
+  Single tokens now require an ASCII word boundary. Multi-word and Devanagari phrases stay substring matches, since `\b` cannot bound Devanagari. The five demonstrated misses were added as signatures, mirroring `server_tools.ts` so the two guards cannot drift.
+
+### Tests
+- `src/tests/permissionGuard.test.ts` — 17 new assertions (26 in file) covering the benign-substring cases, the retained exact-word blocks, and the five previously-missed financial instructions. Negative-validated both ways: restoring substring matching fails exactly the false-positive case (`1 failed | 25 passed`); removing the new signatures fails exactly the five false-negative cases (`5 failed | 21 passed`); restored → 26/26.
+
+### Docs
+- `docs/COMPLETION_STATUS.md` — item 13 evidence updated; repaired a malformed extra status cell in that row. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-09-25 21:50 IST (2026-09-25 16:20 UTC) — work slot 2: Telegram gateway send truth
 
 ### Fixed
