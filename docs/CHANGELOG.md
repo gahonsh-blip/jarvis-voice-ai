@@ -4,6 +4,23 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-25 22:35 IST (2026-09-25 17:05 UTC) — work slot 4: telephony engine-selection gateway truth
+
+### Fixed
+- **The Telephony Hub engine selector was a dead control, and wiring it naively would have created a fake green badge.** `POST /api/telephony/settings` in `server.ts` stored `telephonySettingsState.provider` but never called `TelephonyProviderRegistry.setActiveProvider()`, so whatever `TELEPHONY_PROVIDER` set at boot kept serving calls — the operator's selection was silently discarded. The UI value `browser_webrtc_simulator` also matched no registry id (the simulator registers as `simulation_test_provider`). And `SimulatedTestTelephonyProvider.isConfigured()` returns `true` unconditionally, so the direct wiring would have promoted a carrier-less test adapter to a green `GATEWAY CONFIGURED`.
+  - New `src/utils/telephonyGatewayTruth.ts`: `telephonyEngineProviderId()` maps engine → registry id (`null` for unroutable engines), `telephonyEngineMode()` derives the measured mode (`LIVE_GATEWAY` / `SIMULATION_ONLY` / `NOT_CONFIGURED` / `UNSUPPORTED_ENGINE`) so a simulator is never reported CONFIGURED, `telephonyEngineLabel()` renders it honestly, and `telephonySelectionApplied()` is a measured id comparison rather than an assumption.
+  - `POST /api/telephony/settings` now applies the engine and returns `engineApplied`; `GET /api/telephony/status` reports `engineMode` / `engineLabel` / `engineApplied` / `isSimulationOnly` from the provider actually serving calls.
+  - `src/components/TelephonyHubModal.tsx` saves settings through the server, states the save result, and shows selected vs serving engine instead of an unconditional badge.
+- **`TelephonyProviderRegistry.setActiveProvider()` did not self-initialize.** Unlike `getProvider()` and `getAllProviders()`, it returned `false` when the registry map was still empty. Found by the new cold-registry test; fixed to call `initialize()` first.
+
+### Tests
+- `src/tests/telephonyGatewayTruth.test.ts` — 10 assertions pinning the engine mapping, the simulator-never-CONFIGURED rule, and selection-applied as a measured comparison. Negative-validated on the `setActiveProvider` fix: the cold-registry case failed before (`1 failed | 30 passed` across the 3 telephony files) and passes after (`31/31`).
+
+### Docs
+- `docs/COMPLETION_STATUS.md` — item 13 evidence updated for slot 4. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-09-25 22:15 IST (2026-09-25 16:45 UTC) — work slot 3: OS-executor finance guard truth
 
 ### Fixed

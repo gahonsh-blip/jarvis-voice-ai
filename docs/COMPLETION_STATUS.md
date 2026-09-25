@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-25 16:45 UTC (22:15 IST 2026-09-25) — **WORK SLOT 3** of the
+Last cycle: 2026-09-25 17:05 UTC (22:35 IST 2026-09-25) — **WORK SLOT 4** of the
+2026-09-25 window, the 22:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **telephony engine-selection gateway truth**.
+
+**The Telephony Hub engine selector was a dead control that could have become a fake green badge.**
+Measured against the server: `POST /api/telephony/settings` wrote `telephonySettingsState.provider`
+and never called `TelephonyProviderRegistry.setActiveProvider()`, so the provider serving calls
+stayed whatever `TELEPHONY_PROVIDER` set at boot — the operator's choice was silently discarded.
+The UI value `browser_webrtc_simulator` also matched no registry id (the simulator registers as
+`simulation_test_provider`), so it could never take effect even once wired. And the simulator's
+`isConfigured()` returns `true` unconditionally, so the obvious wiring would have flipped a
+carrier-less test adapter to a green `GATEWAY CONFIGURED` — a fresh fake success. Fixed:
+`src/utils/telephonyGatewayTruth.ts` maps engine → registry id, derives a measured `engineMode`
+(`LIVE_GATEWAY` / `SIMULATION_ONLY` / `NOT_CONFIGURED` / `UNSUPPORTED_ENGINE`) that never marks a
+simulator CONFIGURED, labels it honestly, and treats "selection applied" as a measured id
+comparison; the settings route applies the engine and reports `engineApplied`; the status route
+reports `engineMode`/`engineLabel`/`engineApplied`/`isSimulationOnly` from the provider actually
+serving calls; `TelephonyHubModal.tsx` saves through the server, states the save result, and shows
+selected vs serving engine instead of an unconditional badge. A latent bug found by the new test:
+`setActiveProvider()` did not self-initialize like `getProvider()`/`getAllProviders()`, so it
+returned `false` on a cold registry — fixed. Guarded by `src/tests/telephonyGatewayTruth.test.ts`
+(10 assertions); negative-validated — before the `setActiveProvider` fix the cold-registry case
+failed (`1 failed | 30 passed` in the 3-file telephony run), after it `31/31` passed. Gates
+observed: lint exit 0; targeted **3 files / 31 tests passed**; full suite **100 files / 1322 tests
+passed**; build exit 0 (`dist/server.cjs` 876736 bytes). E2E: NOT RUN — no handset, no carrier
+credentials. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — this closes one more real
+fake-success path; more remain.
+
+Last cycle (previous): 2026-09-25 16:45 UTC (22:15 IST 2026-09-25) — **WORK SLOT 3** of the
 2026-09-25 window, the 22:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **OS-executor finance guard**.
 
