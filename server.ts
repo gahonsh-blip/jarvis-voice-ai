@@ -21,6 +21,7 @@ import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth } from './src/utils/hardening/mobileTelemetryTruth';
+import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -8625,20 +8626,21 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'youtube_status_inquiry': {
         const ytConn = memoryState.youTubeConnection;
-        const isYtConnected = ytConn?.connected && ytConn.channelTitle;
         const ytTokenCheck = await ensureValidYouTubeToken();
-        if (isYtConnected || ytTokenCheck.valid) {
-          const channelName = ytConn?.channelTitle || 'Connected Channel';
-          spokenResponse = language.startsWith('hi')
-            ? `YouTube चैनल "${channelName}" सक्रिय रूप से कनेक्टेड और सत्यापित है। API कोटा और टोकन स्टेटस सामान्य है।`
-            : `YouTube Channel "${channelName}" is active, verified, and ready. OAuth 2.0 token status is nominal.`;
-        } else {
-          spokenResponse = language.startsWith('hi')
-            ? 'YouTube चैनल अभी कनेक्टेड नहीं है। Settings में Google OAuth क्रेडेंशियल्स दर्ज करके "Connect YouTube" पर क्लिक करें।'
-            : 'YouTube is not currently connected. Please configure Google OAuth credentials in Settings and click "Connect YouTube".';
-        }
+        // The reply may only state what the token check and the recorded scope
+        // grant prove. It previously asserted a verified channel and a nominal
+        // quota that nothing measured, and named a hardcoded 'Connected Channel'
+        // when no channel had ever been read.
+        spokenResponse = youtubeVoiceStatusReply(
+          {
+            tokenValid: ytTokenCheck.valid,
+            channelTitle: ytConn?.channelTitle,
+            scopes: ytConn?.scopes,
+          },
+          language.startsWith('hi')
+        );
         actionExecuted = true;
-        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status', payload: { connected: Boolean(isYtConnected || ytTokenCheck.valid), channel: ytConn?.channelTitle } };
+        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status', payload: { tokenValid: ytTokenCheck.valid, channelVerified: false, channel: ytConn?.channelTitle } };
         break;
       }
       case 'youtube_upload_request': {
