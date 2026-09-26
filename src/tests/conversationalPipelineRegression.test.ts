@@ -61,7 +61,9 @@ describe('HERMES JARVIS - Conversational Pipeline Regression Test Suite', () => 
       const input = 'YouTube की स्थिति क्या है?';
       const result = processOfflineCommand(input, initialMemory, 'hi-IN');
       expect(result.intent).toBe('youtube_status_inquiry');
-      expect(result.actionExecuted).toBe(true);
+      // Reading the stored YouTube record is not an executed action; the counter
+      // must not advance for a status answer.
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).not.toContain(CANNED_GREETING_SUBSTRING);
       expect(result.reply).toMatch(/YouTube|यूट्यूब/);
     });
@@ -70,7 +72,8 @@ describe('HERMES JARVIS - Conversational Pipeline Regression Test Suite', () => 
       const input = 'JARVIS क्या कर सकता है?';
       const result = processOfflineCommand(input, initialMemory, 'hi-IN');
       expect(result.intent).toBe('capabilities_inquiry');
-      expect(result.actionExecuted).toBe(true);
+      // Listing capabilities is informational; no action is executed.
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).not.toContain(CANNED_GREETING_SUBSTRING);
       expect(result.reply).toMatch(/HERMES JARVIS|क्षमताएं|Capabilities/i);
     });

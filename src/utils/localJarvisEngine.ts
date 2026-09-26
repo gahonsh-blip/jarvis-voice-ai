@@ -510,7 +510,9 @@ export function processOfflineCommand(
     (lower.includes('youtube') || lower.includes('यूट्यूब')) &&
     (lower.includes('status') || lower.includes('update') || lower.includes('क्या') || lower.includes('kya status') || lower.includes('connected') || lower.includes('channel') || lower.includes('अपडेट') || lower.includes('स्थिति') || lower.includes('stats') || lower.includes('चैनल') || lower.includes('जुड़ा'))
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
+    // Reading the stored YouTube record is not an executed action: no provider
+    // call, no side effect, and the caller has no case for this intent, so the
+    // user-visible "Autonomous Actions Executed" counter must not advance.
     const yt = currentMemory.youTubeConnection;
     const isConnected = Boolean(yt && yt.connected && (yt.channelTitle || yt.channelId));
     const mode: YouTubeVoiceMode = isHindi ? 'hi' : isHinglish ? 'hinglish' : 'en';
@@ -533,7 +535,7 @@ export function processOfflineCommand(
       reply,
       spokenText: reply,
       intent: 'youtube_status_inquiry',
-      actionExecuted: true,
+      actionExecuted: false,
       actionDetail: {
         type: 'youtube_status_inquiry',
         title: isConnected
@@ -1309,7 +1311,9 @@ export function processOfflineCommand(
     lower.includes('when does the clinic open') ||
     lower.includes('what time does the clinic open')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
+    // Answering a fixed-hours question performs no action: nothing is looked up,
+    // booked or called, and the caller has no case for this intent. It must not
+    // advance the user-visible "Autonomous Actions Executed" counter.
     const reply = isHindi
       ? `क्लिनिक सोमवार से शुक्रवार सुबह 9:00 बजे से शाम 6:00 बजे तक और शनिवार को सुबह 9:00 बजे से दोपहर 2:00 बजे तक खुला रहता है।`
       : `The clinic is open Monday through Friday from 9:00 AM to 6:00 PM, and Saturday from 9:00 AM to 2:00 PM.`;
@@ -1317,8 +1321,8 @@ export function processOfflineCommand(
       reply,
       spokenText: reply,
       intent: 'clinic_hours',
-      actionExecuted: true,
-      actionDetail: { type: 'clinic_hours', title: 'Clinic Hours Telemetry' },
+      actionExecuted: false,
+      actionDetail: { type: 'clinic_hours', title: 'Clinic Hours (informational, no action taken)' },
       updatedMemory,
       offline: true,
     };
@@ -1333,7 +1337,8 @@ export function processOfflineCommand(
     lower.includes('book appointment') ||
     lower.includes('appointment process')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
+    // Explaining how to book is not booking. No appointment was created, so the
+    // counter stays unchanged and the reply is reported as informational.
     const reply = isHindi
       ? DEFAULT_CLINIC_CONFIG.appointmentProcess.hi
       : DEFAULT_CLINIC_CONFIG.appointmentProcess.en;
@@ -1341,8 +1346,8 @@ export function processOfflineCommand(
       reply,
       spokenText: reply,
       intent: 'appointment_process',
-      actionExecuted: true,
-      actionDetail: { type: 'appointment_process', title: 'Appointment Booking Process' },
+      actionExecuted: false,
+      actionDetail: { type: 'appointment_process', title: 'Appointment Process (informational, no booking made)' },
       updatedMemory,
       offline: true,
     };
@@ -1720,8 +1725,10 @@ export function processOfflineCommand(
       reply,
       spokenText: reply,
       intent: 'system_diagnostic',
-      actionExecuted: true,
-      actionDetail: { type: 'system_diagnostic', title: 'Clock reported (no diagnostics run)' },
+      // No subsystem probe runs here, so no action was executed — the reply only
+      // reports the clock. The caller has no case for this intent.
+      actionExecuted: false,
+      actionDetail: { type: 'system_diagnostic', title: 'System Diagnostic Not Run (clock reported only)' },
       updatedMemory,
       offline: true,
     };
@@ -1786,8 +1793,9 @@ export function processOfflineCommand(
         ? `मैं हरमीस जार्विस हूँ। मैं मोबाइल स्टेटस, मौसम, सुरक्षा गेटवे, फ्रीलांस कोटेशन, सोशल मीडिया और गिट टूल्स में आपकी सहायता कर सकता हूँ।`
         : reply,
       intent: 'capabilities_inquiry',
-      actionExecuted: true,
-      actionDetail: { type: 'capabilities_inquiry', title: 'JARVIS Capabilities Matrix' },
+      // Listing capabilities is informational; nothing was opened or run.
+      actionExecuted: false,
+      actionDetail: { type: 'capabilities_inquiry', title: 'JARVIS Capabilities (informational, no action taken)' },
       updatedMemory,
       offline: true,
     };

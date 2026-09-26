@@ -147,7 +147,8 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
     it('should return truthful YouTube channel status based on real connection state', () => {
       const result = processOfflineCommand('Jarvis, aaj YouTube ka kya status hai?', initialMemory, 'hi-IN');
       expect(result.intent).toBe('youtube_status_inquiry');
-      expect(result.actionExecuted).toBe(true);
+      // A status read is not an executed action; the counter must not advance.
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).toContain('YouTube');
     });
 
