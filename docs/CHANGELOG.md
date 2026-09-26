@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 01:20 IST (2026-09-26 19:50 UTC) — work slot 2: offline engine operator truth
+
+### Fixed
+- **The offline Local JARVIS Engine narrated and counted host work the tab never performed.** `src/utils/localJarvisEngine.ts` is the no-backend fallback used when `/api/chat` is unreachable (and driven directly by `telephonyTestRunner.ts`). Seven operator branches set `actionExecuted: true` and incremented the user-visible "Autonomous Actions Executed" counter in `MemoryModal.tsx`: `fix_project_error` spoke *"Opening Visual Studio Code, inspecting screen for project errors, and applying surgical fix with test verification"*, `inspect_screen` spoke *"Analyzing active window, open dialogs, and visible errors"*, and `operate_vscode`/`operate_browser`/`operate_terminal`/`cancel_computer_task` made equivalent host claims. The browser tab cannot open VS Code, observe the host desktop, apply a code fix, or cancel a host task — the counter was inflated by actions that never left the page.
+  - Added `src/utils/computerOperator/offlineOperatorTruth.ts` — a single verdict map (`offlineOperatorVerdict`, `offlineOperatorReply`, `offlineOperatorCountsAsHostWork`) backing all seven branches, so the claim and the counter cannot drift apart. Six report `actionExecuted: false` with `payload.offlineHostWork: false`; only `open_computer_operator` (opening the in-app HUD) is a genuine page-local action and keeps its increment.
+  - Replies honour the existing `operatorLang` selection, so Hindi, Hinglish and English each state the offline limitation instead of asserting success.
+
+### Tests
+- `src/tests/localJarvisEngine.test.ts` (13 new tests, file now 46): each of the six fake-host intents asserts `actionExecuted === false`, `payload.offlineHostWork === false`, a zero `actionsExecuted` counter, and the absence of the old success phrases; plus the genuine-HUD counter case and the Hindi reply.
+- Negative-validated: forcing `actionExecuted: true` in the `inspect_screen` branch fails exactly the truth assertion (`1 failed | 1 passed | 44 skipped`); restored → **46/46**.
+- Full suite observed: **109 files / 1447 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 914923 bytes).
+
 ## [Unreleased] - 2026-09-26 04:21 IST (2026-09-25 22:51 UTC) — work slot 13: filesystem-tool credential confinement
 
 ### Fixed
