@@ -39,7 +39,7 @@ assertions in `src/tests/localJarvisEngine.test.ts`.
 Negative-validated — reintroducing `acquired orbital positioning telemetry` in the
 location branch fails the disclosure test (`1 failed | 31 skipped`), restored → green.
 Gates observed this slot on `46eb0a6`: lint (`tsc --noEmit`) exit 0; full suite
-**110 files / 1467 tests passed**; build exit 0 (`dist/server.cjs` 924390 bytes).
+**110 files / 1467 tests passed**; build exit 0 (`dist/server.cjs` 924348 bytes).
 E2E: NOT RUN — no display session, no handset. Deploy: NOT_CONFIGURED. Item 13
 remains `PARTIAL` — another real fake-success path closed; more remain. The other
 `actionExecuted: true` claims in `localJarvisEngine.ts` are still **not**
