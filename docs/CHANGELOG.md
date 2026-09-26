@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 02:56 IST (2026-09-26 21:26 UTC) — work slot 5: offline emergency-stop truth
+
+### Fixed
+- **The offline Local JARVIS Engine faked the emergency stop itself.** `src/utils/localJarvisEngine.ts` is the no-backend fallback used when `/api/chat` is unreachable. Its `emergency_stop` branch replied *"Emergency Stop is now active. All autonomous modifications, drafts, and external publishing are frozen."* and its `emergency_resume` branch replied *"Emergency Stop deactivated. All subsystems resumed under normal Level 1-4 permission gating."* — both with `actionExecuted: true` and both incrementing the user-visible "Autonomous Actions Executed" counter, while touching no emergency state at all. The live kill switch lives on the server (`toggleEmergencyStop` in `server.ts`, read by `isEmergencyStopActive()` in `src/utils/hardening/emergencyStop.ts`); the browser tab has no client-side emergency store to flip. A false success in the *unsafe* direction is the worst kind: the operator believes autonomy is frozen when it is not.
+  - Added `src/utils/computerOperator/offlineEmergencyTruth.ts`. Both branches now report `actionExecuted: false` with the observed reason — the stop was **not** engaged / the resume was **not** released, this offline path cannot reach the server kill switch, and the request must be re-sent once the backend is reachable — in English, Hindi and Hinglish. `actionsExecuted` is no longer incremented for either branch.
+
+### Tests
+- `src/tests/offlineEmergencyTruth.test.ts` (new, 4 tests): verdict `actionExecuted === false` for stop and resume, honest titles, reply text in all three languages, and the offline engine end-to-end asserting `actionExecuted === false` **and** `actionsExecuted === 0`.
+- `src/tests/voiceAndHindiModes.test.ts`: the two emergency contract tests now assert `actionExecuted === false` with the honest reply text.
+- Negative-validated: forcing `actionExecuted: true` in `offlineEmergencyTruth.ts` fails exactly the four truth assertions (`4 failed | 18 passed` of the two files); restored → green.
+- Full suite observed: **111 files / 1471 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 926807 bytes).
+
 ## [Unreleased] - 2026-09-27 02:26 IST (2026-09-26 20:56 UTC) — work slot 4: offline surface-intent truth
 
 ### Fixed
