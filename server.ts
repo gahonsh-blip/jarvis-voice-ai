@@ -83,6 +83,12 @@ import { screenshotVerdict, screenshotReply } from './src/utils/computerOperator
 import { volumeVerdict, volumeReply } from './src/utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from './src/utils/computerOperator/powerDispatchTruth';
 import {
+  fixProjectErrorReply,
+  operatorTaskExecuted,
+  screenInspectionExecuted,
+  screenInspectionReply,
+} from './src/utils/computerOperator/operatorReplyTruth';
+import {
   loadPhonePermissions,
   savePhonePermissions,
   maskPhoneNumber,
@@ -8563,20 +8569,23 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       case 'fix_project_error': {
         const curEmergencyState = getEmergencyState();
         const task = await ComputerOperatorEngine.executeTask(message, 'hybrid', curEmergencyState.emergencyPaused);
-        spokenResponse = language.startsWith('hi')
-          ? (task.resultSummaryHi || 'VS Code में स्क्रीन का विश्लेषण करके समस्या का समाधान कर दिया गया है।')
-          : (task.resultSummary || 'Screen-Research loop executed: Inspected VS Code, identified error, applied surgical fix, and verified test suite.');
-        actionExecuted = true;
+        // Only a COMPLETED task may be spoken as a fix. The engine itself marks
+        // illustrative runs SIMULATION_ONLY and failures FAILED, so the reply is
+        // derived from the returned status instead of a hardcoded success line.
+        spokenResponse = fixProjectErrorReply(task, language.startsWith('hi'));
+        actionExecuted = operatorTaskExecuted(task);
         actionDetail = { type: 'fix_project_error', title: 'Fix Project Error in VS Code', payload: task };
         break;
       }
       case 'inspect_screen': {
         const observation = await ScreenObserver.observeScreen({ preferredApp: message });
         const interpretation = ScreenInterpreter.interpret(observation, message);
-        spokenResponse = language.startsWith('hi')
-          ? interpretation.summaryHi
-          : interpretation.summary;
-        actionExecuted = true;
+        // The interpreter always produces a confident "Screen showing ..."
+        // summary, so it is withheld unless a host-backed observer returned a
+        // non-ambiguous observation.
+        const hostBacked = ScreenObserver.isHostBacked();
+        spokenResponse = screenInspectionReply(observation, interpretation, language.startsWith('hi'), hostBacked);
+        actionExecuted = screenInspectionExecuted(observation, hostBacked);
         actionDetail = { type: 'inspect_screen', title: 'Screen Inspection', payload: { observation, interpretation } };
         break;
       }
