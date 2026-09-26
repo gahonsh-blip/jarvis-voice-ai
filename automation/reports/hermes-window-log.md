@@ -6589,3 +6589,45 @@ Blocked:
 
 Next Slot:
 - Continue #13: audit remaining `actionExecuted: true` claims for fabricated success.
+
+---
+
+## Slot 8 — WORK — 2026-09-27 04:05 IST (2026-09-26 22:45 UTC)
+
+**Item #13 — Zero-fake-success for all tools — PARTIAL (continued sweep, offline Local JARVIS Engine informational branches).**
+
+Completed:
+- Removed `actionExecuted: true` and the counter increments from five
+  question-answering branches in `src/utils/localJarvisEngine.ts`
+  (`youtube_status_inquiry`, `system_diagnostic`, `capabilities_inquiry`,
+  `clinic_hours`, `appointment_process`). All now `actionExecuted: false` with
+  explicitly informational titles. The caller `handleExecuteAction`
+  (`src/App.tsx` line 928; calls at 1261/1303) has no case for any of them, so no
+  side effect was ever possible.
+- New `src/tests/engineInformationalTruth.test.ts` (13 tests). Updated
+  `src/tests/conversationalPipelineRegression.test.ts` and
+  `src/tests/voiceAndHindiModes.test.ts` YouTube/capabilities expectations.
+- Negative-validated: reverting only the engine file fails 10/13 in the new file
+  (`10 failed | 3 passed`); restored → 13/13.
+
+Gates observed on `cb0f80a`:
+- Lint (`tsc --noEmit`): exit 0.
+- Targeted: 5 files / 105 tests passed.
+- Full suite: 113 files / 1504 tests passed.
+- Build: exit 0; `dist/server.cjs` 928823 bytes.
+- E2E: NOT RUN — no handset, no display session.
+- Deploy: NOT_CONFIGURED — no deployment target present.
+
+Bugs found: questions (status / diagnostics / capabilities / clinic hours /
+appointment process) were recorded as executed actions and narrated as
+"Telemetry" / "Booking Process" work that never ran.
+
+Bugs fixed: all five now report `actionExecuted: false`, counter unchanged.
+
+Human approval required: none for this change (internal honesty fix, no external
+action, no permission-gate change).
+
+Next Slot:
+- Continue #13: audit remaining `actionExecuted: true` branches (`language_switch`,
+  `emergency_stop`/`emergency_resume`, `answer_call`, `telephony_hub`, Google
+  Search Extraction) against their real callers.

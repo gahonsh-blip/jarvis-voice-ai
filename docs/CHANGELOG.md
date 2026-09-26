@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 04:15 IST (2026-09-26 22:45 UTC) — work slot 8: informational intents are not executed actions
+
+### Fixed
+- **The offline engine counted questions as executed work.** `src/utils/localJarvisEngine.ts` returned `actionExecuted: true` and advanced the user-visible "Autonomous Actions Executed" counter for five question-answering branches — YouTube status (`youtube_status_inquiry`), system diagnostic (`system_diagnostic`), capabilities (`capabilities_inquiry`), clinic hours (`clinic_hours`) and appointment process (`appointment_process`). None performs a provider call, opens a view, or creates a booking, and `handleExecuteAction` in `src/App.tsx` has no case for any of them, so no side effect was ever possible. All five now return `actionExecuted: false`, leave the counter unchanged, and carry an explicitly informational title (`Clinic Hours Telemetry` → `Clinic Hours (informational, no action taken)`, `Appointment Booking Process` → `Appointment Process (informational, no booking made)`, `Clock reported (no diagnostics run)` → `System Diagnostic Not Run (clock reported only)`).
+
+### Tests
+- `src/tests/engineInformationalTruth.test.ts` — new, 13 tests: per-intent `actionExecuted: false` and a static `actionsExecuted`, a run of all five leaving the counter at zero while `totalCommands` advances, an anti-narration title check, and a control proving a genuine page-local action (`set_name`) still counts.
+- `src/tests/conversationalPipelineRegression.test.ts` and `src/tests/voiceAndHindiModes.test.ts` — YouTube status and capabilities expectations updated to `actionExecuted: false`.
+- Negative-validated: reverting only `src/utils/localJarvisEngine.ts` fails 10 of 13 in the new file (`10 failed | 3 passed`); restored → 13/13.
+- Full suite observed: **113 files / 1504 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 928823 bytes).
+
 ## [Unreleased] - 2026-09-27 03:52 IST (2026-09-26 22:22 UTC) — work slot 7: offline upload truth
 
 ### Fixed
