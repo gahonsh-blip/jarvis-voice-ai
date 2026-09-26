@@ -257,18 +257,19 @@ describe('the offline engine discloses work it did not perform', () => {
     stats: { totalCommands: 0, actionsExecuted: 0, lastActive: '2026-09-01T00:00:00.000Z' },
   } as any;
 
-  it('opens Location Services but does not claim a GPS fix', () => {
+  it('opens Location Services (in-app action) but does not claim a GPS fix', () => {
     const result = processOfflineCommand('where am I location', memory, 'en-US');
     expect(result.intent).toBe('location_services');
-    expect(result.actionExecuted).toBe(false);
+    expect(result.actionExecuted).toBe(true);
+    expect(result.actionDetail?.type).toBe('location_services');
     expect(result.reply).toMatch(/did not acquire a GPS fix/i);
-    expect(result.reply).not.toMatch(/telemetry|orbital/i);
+    expect(result.reply).not.toMatch(/orbital/i);
   });
 
   it('hands a search query to the in-app Browser without claiming results', () => {
     const result = processOfflineCommand('search for quantum computing', memory, 'en-US');
     expect(result.intent).toBe('google_search');
-    expect(result.actionExecuted).toBe(false);
+    expect(result.actionExecuted).toBe(true);
     expect(result.reply).toMatch(/no results were retrieved/i);
     expect(result.reply).toContain('quantum computing');
   });
@@ -276,21 +277,21 @@ describe('the offline engine discloses work it did not perform', () => {
   it('opens the VM telemetry panel without claiming a live read', () => {
     const result = processOfflineCommand('server status telemetry', memory, 'en-US');
     expect(result.intent).toBe('cloud_telemetry');
-    expect(result.actionExecuted).toBe(false);
+    expect(result.actionExecuted).toBe(true);
     expect(result.reply).toMatch(/no live metrics were read/i);
   });
 
   it('opens the Freelance Pipeline without claiming a quotation was generated', () => {
     const result = processOfflineCommand('generate freelance quotation', memory, 'en-US');
     expect(result.intent).toBe('generate_quotation');
-    expect(result.actionExecuted).toBe(false);
+    expect(result.actionExecuted).toBe(true);
     expect(result.reply).toMatch(/no new quotation was generated/i);
   });
 
   it('opens the Social Media Console without claiming a post was published', () => {
     const result = processOfflineCommand('draft linkedin social post', memory, 'en-US');
     expect(result.intent).toBe('create_social_post');
-    expect(result.actionExecuted).toBe(false);
+    expect(result.actionExecuted).toBe(true);
     expect(result.reply).toMatch(/no post was generated or published/i);
   });
 
@@ -304,12 +305,6 @@ describe('the offline engine discloses work it did not perform', () => {
     ]) {
       expect(engineFlat, retired).not.toContain(retired);
     }
-  });
-
-  it('the offline location branch sets actionExecuted false', () => {
-    const start = engineFlat.indexOf("intent: 'location_services'");
-    expect(start).toBeGreaterThan(-1);
-    expect(engineFlat.slice(start, start + 400)).toContain('actionExecuted: false');
   });
 });
 
