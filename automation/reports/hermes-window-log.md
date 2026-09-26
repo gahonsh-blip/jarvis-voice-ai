@@ -6392,3 +6392,79 @@ Next Slot:
 
 
 Correction (same slot, after push): slot head is `0ec4441` on feature/hermes-full-completion; `621a99d` carried the window-report log, `0ec4441` the negative-validation doc correction. State branch head `3dd2ec6` (slots_completed=4).
+
+---
+
+## Slot 5 — WORK — 2026-09-27 02:35 IST fire (2026-09-26 21:26 UTC)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:35
+Window date: 2026-09-27   Window slots completed so far: 5
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL, slice) — the offline Local JARVIS
+  Engine emergency stop / resume branches. `src/utils/localJarvisEngine.ts` replied
+  "Emergency Stop is now active… are frozen." / "Emergency Stop deactivated… resumed
+  under normal Level 1-4 permission gating." with `actionExecuted: true` and an
+  incremented user-visible counter, while touching no emergency state. The live kill
+  switch is server-side (`toggleEmergencyStop` / `isEmergencyStopActive()`); the tab
+  has no client-side emergency store. Fixed via
+  `src/utils/computerOperator/offlineEmergencyTruth.ts` — both branches report
+  `actionExecuted: false` with the observed reason (stop not engaged / resume not
+  released; this offline path cannot reach the server kill switch) in
+  English/Hindi/Hinglish; no counter increment.
+  Evidence: `src/tests/offlineEmergencyTruth.test.ts` (new, 4 tests) + the two
+  updated contract tests in `src/tests/voiceAndHindiModes.test.ts`; negative-validated
+  — forcing `actionExecuted: true` fails exactly 4 (`4 failed | 18 passed` of the two
+  files), restored → green.
+
+In Progress:
+- #13 remains PARTIAL — other `actionExecuted: true` claims in `localJarvisEngine.ts`
+  (call/dial, security_audit, cloud telemetry, etc.) are still not individually
+  audited → UNKNOWN.
+
+Remaining:
+- #13 (PARTIAL, more fake-success paths), plus the rest of the 60-item backlog that
+  is not VERIFIED (Items 1 and 55 are blocked on hardware/credentials).
+
+Bugs Found:
+- Offline `emergency_stop` / `emergency_resume` faked a safety-critical success in
+  the unsafe direction: the operator was told autonomy was frozen when it was not.
+
+Bugs Fixed:
+- Both branches now route through `offlineEmergencyTruth` and report
+  `actionExecuted: false`; proven by the new dedicated test and the negative
+  validation above.
+
+Tests:    111 files / 1471 tests passed (observed `npx vitest run`)
+Lint:     exit 0 (observed `npm run lint` → `tsc --noEmit`)
+Build:    exit 0 (observed `npm run build`; `dist/server.cjs` 926807 bytes)
+E2E:      NOT RUN — no handset, no display session
+Security: no new external action surface; the fix removes a false safety claim.
+          `git check-ignore -v .env` not re-run this slot (NOT RUN)
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  97cf304 (fix 91a2d20, docs 97cf304)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         NONE opened this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+
+Blocked:
+- #1 Real Android E2E — requires a physical Android device
+- #55 — requires hardware/credentials not present
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13 — continue the `actionExecuted: true` audit in `localJarvisEngine.ts` (next
+  unaudited branch, e.g. `security_audit` or the remaining call/dial narration), or
+  another unaudited truth surface.
+
+हिंदी सारांश (एक पंक्ति):
+- ऑफ़लाइन इंजन अब इमरजेंसी स्टॉप/रिज़्यूम का नकली सफलता नहीं दिखाता — दोनों
+  ब्रांच `actionExecuted: false` रिपोर्ट करती हैं; पूरी सूट 1471 टेस्ट पास, लिंट
+  और बिल्ड क्लीन।
