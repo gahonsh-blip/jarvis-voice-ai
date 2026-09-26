@@ -89,6 +89,11 @@ import {
   screenInspectionReply,
 } from './src/utils/computerOperator/operatorReplyTruth';
 import {
+  toolActionExecuted,
+  toolActionResultReply,
+  countedItems,
+} from './src/utils/toolDispatchTruth';
+import {
   loadPhonePermissions,
   savePhonePermissions,
   maskPhoneNumber,
@@ -8637,33 +8642,41 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const ghStatus = await realGithubStatus();
         if (ghStatus.connected) {
           const repos = await realGithubRepos();
-          spokenResponse = `Authenticated as GitHub user @${ghStatus.username}. Located ${repos.repos?.length || 0} active repositories.`;
-          actionExecuted = true;
-          actionDetail = { type: 'github_repos', title: `GitHub @${ghStatus.username}`, payload: repos };
+          // A status check that authenticated but whose repo listing failed is
+          // not an executed tool action.
+          actionExecuted = toolActionExecuted(repos);
+          spokenResponse = repos.success
+            ? `Authenticated as GitHub user @${ghStatus.username}. Located ${repos.repos?.length || 0} active repositories.`
+            : toolActionResultReply(repos, '', 'GitHub repository listing', language);
+          actionDetail = { type: 'github_repos', title: repos.success ? `GitHub @${ghStatus.username}` : 'GitHub Repo Listing Failed', payload: repos };
         } else {
+          // Nothing external was queried: the check itself did not run.
           spokenResponse = ghStatus.message || 'GitHub is not configured. Provide GITHUB_TOKEN in environment settings.';
-          actionExecuted = true;
+          actionExecuted = false;
           actionDetail = { type: 'github_status', title: 'GitHub Not Configured', payload: ghStatus };
         }
         break;
       }
       case 'list_files_tool': {
         const fsResult = realFsList('.');
+        const fileCount = countedItems({ items: fsResult.files });
         spokenResponse = fsResult.success
-          ? `Workspace file index loaded: ${fsResult.files?.length || 0} items found.`
-          : `Failed to list files: ${fsResult.error}`;
-        actionExecuted = true;
-        actionDetail = { type: 'list_files', title: 'Workspace Files', payload: fsResult };
+          ? `Workspace file index loaded: ${fileCount} items found.`
+          : toolActionResultReply(fsResult, '', 'Workspace file listing', language);
+        actionExecuted = toolActionExecuted(fsResult);
+        actionDetail = { type: 'list_files', title: fsResult.success ? 'Workspace Files' : 'File Listing Failed', payload: fsResult };
         break;
       }
       case 'web_research_tool': {
         const target = intentData.actionPayload?.target || 'https://news.ycombinator.com';
         const webRes = await realWebFetch(target);
+        // A fetch that failed retrieved nothing; it must not be spoken as a
+        // completed "Web analysis".
+        actionExecuted = toolActionExecuted(webRes);
         spokenResponse = webRes.success
           ? `Web analysis complete for "${webRes.title}".`
-          : `Web fetch notice: ${webRes.error}`;
-        actionExecuted = true;
-        actionDetail = { type: 'web_research', title: `Web: ${webRes.title || target}`, payload: webRes };
+          : toolActionResultReply(webRes, '', 'Web fetch', language);
+        actionDetail = { type: 'web_research', title: webRes.success ? `Web: ${webRes.title || target}` : 'Web Fetch Failed', payload: webRes };
         break;
       }
       case 'summarize_youtube_video': {
@@ -8683,7 +8696,8 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           };
         } else {
           spokenResponse = `YouTube summarizer notice: ${summaryRes.success ? 'Failed to extract video content. Please verify the URL.' : summaryRes.error}`;
-          actionExecuted = true;
+          // No video content was retrieved, so no summarization work happened.
+          actionExecuted = false;
           actionDetail = { type: 'youtube_summary_error', title: 'YouTube Error', payload: summaryRes };
         }
         break;
@@ -8703,15 +8717,20 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           },
           language.startsWith('hi')
         );
-        actionExecuted = true;
+        // The status reply is derived from the token check, so an invalid token
+        // means the inquiry could not read a connection and executed nothing.
+        actionExecuted = toolActionExecuted({ success: ytTokenCheck.valid });
         actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status', payload: { tokenValid: ytTokenCheck.valid, channelVerified: false, channel: ytConn?.channelTitle } };
         break;
       }
       case 'youtube_upload_request': {
+        // The upload is staged but not performed: it is gated on Level-4 human
+        // authorization and no video file is uploaded or even verified here, so
+        // this request must not be counted as an executed action.
         spokenResponse = language.startsWith('hi')
-          ? 'वीडियो तैयार है। Public upload के लिए Level-4 human approval आवश्यक है। क्या मैं इसे अधिकृत करूँ?'
-          : 'Video is staged. Public upload requires Level-4 human authorization. Would you like me to proceed with publishing?';
-        actionExecuted = true;
+          ? 'Level-4 मानव अनुमोदन आवश्यक है। इस अनुरोध से कोई वीडियो अपलोड नहीं हुआ।'
+          : 'Level-4 human authorization is required. No video was uploaded by this request.';
+        actionExecuted = false;
         actionDetail = {
           type: 'level4_gate_required',
           title: 'Level 4 Authorization Required: YouTube Upload',
@@ -9132,13 +9151,16 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           spokenResponse = isHi
             ? `${rawExpr} का मान ${evalResult} होता है, सर।`
             : `${rawExpr} = ${evalResult}, Sir.`;
+          actionExecuted = true;
+          actionDetail = { type: 'open_calculator', title: `Math: ${rawExpr} = ${evalResult}`, payload: { expression: rawExpr, result: evalResult } };
         } else {
+          // No arithmetic was computed, so this is not an executed action.
           spokenResponse = isHi
             ? `गणना पूरी नहीं हो सकी। कृपया वैध संख्यात्मक अभिव्यक्ति दें।`
             : `Unable to compute expression. Please provide a valid arithmetic formula.`;
+          actionExecuted = false;
+          actionDetail = { type: 'math_error', title: 'Computation Failed', payload: { expression: rawExpr, result: null } };
         }
-        actionExecuted = true;
-        actionDetail = { type: 'open_calculator', title: `Math: ${rawExpr} = ${evalResult}`, payload: { expression: rawExpr, result: evalResult } };
         break;
       }
       default: {
