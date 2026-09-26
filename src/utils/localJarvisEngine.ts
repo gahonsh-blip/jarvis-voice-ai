@@ -22,6 +22,7 @@ import {
   offlineCallVerdict,
   offlineHumanHandoffReply,
 } from './computerOperator/offlineCallTruth';
+import { offlineEmergencyVerdict, offlineEmergencyReply } from './computerOperator/offlineEmergencyTruth';
 import { telephonyEngineMode, type TelephonyEngineMode } from './telephonyGatewayTruth';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
@@ -192,16 +193,16 @@ export function processOfflineCommand(
     lower === '/stop' ||
     lower === '/emergency_stop'
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = 'Emergency Stop is now active. All autonomous modifications, drafts, and external publishing are frozen.';
+    // The offline tab holds no client-side emergency store: it cannot engage
+    // the server kill switch. Never report the freeze as executed.
+    const verdict = offlineEmergencyVerdict('stop', isHindi ? 'hi' : 'en');
+    const reply = offlineEmergencyReply(verdict, isHindi ? 'hi' : 'en');
     return {
       reply,
-      spokenText: isHindi
-        ? 'इमरजेंसी स्टॉप सक्रिय कर दिया गया है। सभी बाहरी क्रियाएं रोक दी गई हैं।'
-        : reply,
+      spokenText: reply,
       intent: 'emergency_stop',
-      actionExecuted: true,
-      actionDetail: { type: 'emergency_stop', title: 'Emergency Stop Activated' },
+      actionExecuted: verdict.actionExecuted,
+      actionDetail: { type: 'emergency_stop', title: verdict.title },
       updatedMemory,
       offline: true,
     };
@@ -216,16 +217,16 @@ export function processOfflineCommand(
     lower.includes('क्रियाएं पुनः शुरू करो') ||
     lower === '/resume'
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = 'Emergency Stop deactivated. All subsystems resumed under normal Level 1-4 permission gating.';
+    // The offline tab cannot reach the server kill switch, so it changed no
+    // emergency state. Never report the release as executed.
+    const verdict = offlineEmergencyVerdict('resume', isHindi ? 'hi' : 'en');
+    const reply = offlineEmergencyReply(verdict, isHindi ? 'hi' : 'en');
     return {
       reply,
-      spokenText: isHindi
-        ? 'इमरजेंसी स्टॉप हटा दिया गया है। सभी सिस्टम सामान्य रूप से सक्रिय हैं।'
-        : reply,
+      spokenText: reply,
       intent: 'emergency_resume',
-      actionExecuted: true,
-      actionDetail: { type: 'emergency_resume', title: 'Emergency Stop Released' },
+      actionExecuted: verdict.actionExecuted,
+      actionDetail: { type: 'emergency_resume', title: verdict.title },
       updatedMemory,
       offline: true,
     };

@@ -163,22 +163,24 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
   });
 
   describe('6. Emergency Kill Switch and Resumption', () => {
-    it('should recognize emergency stop commands in English and Hindi', () => {
+    it('should recognize emergency stop commands in English and Hindi without faking the freeze', () => {
       const stopEn = processOfflineCommand('emergency stop jarvis', initialMemory, 'en-US');
       expect(stopEn.intent).toBe('emergency_stop');
-      expect(stopEn.actionExecuted).toBe(true);
-      expect(stopEn.reply).toContain('Emergency Stop is now active');
+      // The offline tab cannot reach the server kill switch, so it must not
+      // claim the freeze happened.
+      expect(stopEn.actionExecuted).toBe(false);
+      expect(stopEn.reply).toContain('NOT engaged');
 
       const stopHi = processOfflineCommand('जार्विस तुरंत सब बंद करो', initialMemory, 'hi-IN');
       expect(stopHi.intent).toBe('emergency_stop');
-      expect(stopHi.actionExecuted).toBe(true);
+      expect(stopHi.actionExecuted).toBe(false);
     });
 
-    it('should recognize emergency resume commands', () => {
+    it('should recognize emergency resume commands without faking the release', () => {
       const resume = processOfflineCommand('emergency resume actions', initialMemory, 'en-US');
       expect(resume.intent).toBe('emergency_resume');
-      expect(resume.actionExecuted).toBe(true);
-      expect(resume.reply).toContain('Emergency Stop deactivated');
+      expect(resume.actionExecuted).toBe(false);
+      expect(resume.reply).toContain('NOT released');
     });
   });
 });
