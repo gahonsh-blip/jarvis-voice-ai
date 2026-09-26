@@ -4,7 +4,55 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-26 20:25 UTC (01:55 IST 2026-09-27) — **WORK SLOT 3** of the
+Last cycle: 2026-09-26 20:56 UTC (02:26 IST 2026-09-27) — **WORK SLOT 4** of the
+2026-09-27 window, the 02:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **offline Local JARVIS Engine surface
+intents and the `/api/chat` cloud_telemetry case**.
+
+**The offline engine narrated external work it never performed.** In
+`src/utils/localJarvisEngine.ts` the no-backend fallback spoke and displayed work
+that the browser tab has no way to do: `location_services` claimed *"Accessing
+Geolocation API and orbital positioning telemetry"*; `google_search` claimed
+*"Searching Google for <query>"* with no search backend; `cloud_telemetry` claimed
+*"Displaying Oracle Cloud Always Free ARM VM Telemetry"* with no metrics source;
+`generate_quotation` claimed *"Generating freelance quotation proposal"*; and
+`create_social_post` claimed *"Launching Social Media Generator & Approval
+Matrix"*. The `/api/chat` `cloud_telemetry` case asserted the Always Free plan as
+fact and printed a live-read sentence whenever metrics were present in memory.
+
+Fixed: each offline branch still opens the same in-app surface — that is a genuine
+in-app action, so `actionExecuted` stays `true` and `App.tsx`
+`handleExecuteAction` navigation still fires — but the reply now discloses what
+was *not* done: *"did not acquire a GPS fix"*, *"no results were retrieved"*,
+*"no live metrics were read"*, *"no new quotation was generated"*, *"no post was
+generated or published"*. The `/api/chat` case gates the live-read sentence on
+`oracleCloudState.metricsSource === 'live_host'` and derives the cost line from
+`describeBillingCost(oracleCloudState.billingEntitlement)` instead of asserting
+the plan.
+
+Guarded by `src/tests/remainingFakeSuccess.test.ts` (behavioral cases for all five
+offline intents — intent, `actionExecuted`, the disclosure text, and the absence of
+`orbital`) plus source guards pinning the five retired fake-success strings are
+gone and the server case no longer contains `Oracle Always Free ARM VM` /
+`Metrics are read live from the daemon host.`; and by the updated contract
+assertions in `src/tests/localJarvisEngine.test.ts`.
+Negative-validated — reintroducing `acquired orbital positioning telemetry` in the
+location branch fails the disclosure test (`1 failed | 31 skipped`), restored → green.
+Gates observed this slot on `46eb0a6`: lint (`tsc --noEmit`) exit 0; full suite
+**110 files / 1467 tests passed**; build exit 0 (`dist/server.cjs` 924390 bytes).
+E2E: NOT RUN — no display session, no handset. Deploy: NOT_CONFIGURED. Item 13
+remains `PARTIAL` — another real fake-success path closed; more remain. The other
+`actionExecuted: true` claims in `localJarvisEngine.ts` are still **not**
+individually audited, so their truthfulness is `UNKNOWN`, not confirmed.
+
+**Regression caught and fixed inside this slot.** The first attempt set
+`actionExecuted: false` on these five branches. The full suite then failed
+`voiceAndHindiModes.test.ts:138` (the Level-4 social-gate test expects the in-app
+console to open), which exposed that `actionExecuted` is the signal `App.tsx` uses
+to navigate. The fix keeps the in-app action and moves the honesty into the reply
+text. Full suite re-run: **110 files / 1467 tests passed**.
+
+Last cycle (previous): 2026-09-26 20:25 UTC (01:55 IST 2026-09-27) — **WORK SLOT 3** of the
 2026-09-27 window, the 01:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **offline Local JARVIS Engine telephony
 call intents**.

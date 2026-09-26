@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 02:26 IST (2026-09-26 20:56 UTC) — work slot 4: offline surface-intent truth
+
+### Fixed
+- **The offline Local JARVIS Engine narrated external work it never performed.** `src/utils/localJarvisEngine.ts` (the no-backend fallback when `/api/chat` is unreachable) spoke and displayed: `location_services` — *"Accessing Geolocation API and orbital positioning telemetry"* with no GPS fix; `google_search` — *"Searching Google for <query>"* with no search backend; `cloud_telemetry` — *"Displaying Oracle Cloud Always Free ARM VM Telemetry"* with no metrics source; `generate_quotation` — *"Generating freelance quotation proposal"*; `create_social_post` — *"Launching Social Media Generator & Approval Matrix"*.
+  - Each branch still opens the same in-app surface (a genuine in-app action, so `actionExecuted` stays `true` and `App.tsx` `handleExecuteAction` navigation still fires), but the reply now discloses what was **not** done: *"did not acquire a GPS fix"*, *"no results were retrieved"*, *"no live metrics were read"*, *"no new quotation was generated"*, *"no post was generated or published"*.
+- **`/api/chat` `cloud_telemetry` asserted the Always Free plan as fact.** The live-read sentence is now gated on `oracleCloudState.metricsSource === 'live_host'`, and the cost line is derived from `describeBillingCost(oracleCloudState.billingEntitlement)` instead of hard-coding the plan.
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts`: behavioral cases for all five offline intents (intent, `actionExecuted`, the disclosure text, absence of `orbital`) plus source guards pinning the five retired fake-success strings are gone and the server case no longer contains `Oracle Always Free ARM VM` / `Metrics are read live from the daemon host.`
+- `src/tests/localJarvisEngine.test.ts`: contract assertions updated to the corrected semantics.
+- Negative-validated: reintroducing `acquired orbital positioning telemetry` in the location branch fails the disclosure test (`1 failed | 31 skipped`); restored → green.
+- **Regression caught and fixed in-slot:** the first attempt set `actionExecuted: false`, which broke `voiceAndHindiModes.test.ts:138` (the Level-4 social-gate test needs the in-app console to open). `actionExecuted` is the navigation signal `App.tsx` uses; honesty belongs in the reply text, not in suppressing the real in-app action.
+- Full suite observed: **110 files / 1467 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 924348 bytes).
+
 ## [Unreleased] - 2026-09-27 01:55 IST (2026-09-26 20:25 UTC) — work slot 3: offline engine telephony call truth
 
 ### Fixed
