@@ -120,7 +120,11 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
     it('should enforce Level-4 gate on public video upload requests', () => {
       const result = processOfflineCommand('Jarvis, upload this video publicly', initialMemory, 'en-US');
       expect(result.intent).toBe('youtube_upload_request');
-      expect(result.actionExecuted).toBe(true);
+      // Nothing is staged on the offline path (no staged-upload state, and the
+      // action handler has no youtube_upload_request case), so reporting the
+      // action as executed would be a fake success.
+      expect(result.actionExecuted).toBe(false);
+      expect(result.actionDetail?.payload?.staged).toBe(false);
       expect(result.reply).toContain('Level-4');
       expect(result.actionDetail?.payload?.requiresConfirmation).toBe(true);
     });
@@ -128,7 +132,7 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
     it('should enforce Level-4 gate on Hindi public video upload requests', () => {
       const result = processOfflineCommand('जार्विस, यूट्यूब पर वीडियो अपलोड करो', initialMemory, 'hi-IN');
       expect(result.intent).toBe('youtube_upload_request');
-      expect(result.actionExecuted).toBe(true);
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).toContain('Level-4');
     });
 
