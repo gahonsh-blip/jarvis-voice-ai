@@ -4,6 +4,7 @@ import path from 'path';
 import { screenshotVerdict, screenshotReply } from '../utils/computerOperator/screenshotDispatchTruth';
 import { volumeVerdict, volumeReply } from '../utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from '../utils/computerOperator/powerDispatchTruth';
+import { processOfflineCommand } from '../utils/localJarvisEngine';
 
 // server.ts binds a port on import, so the route assertions read the source
 // text, matching the convention in launchDispatchTruth.test.ts.
@@ -245,5 +246,79 @@ describe('the UI slider mirrors the in-app level the server reports', () => {
   it('App.tsx keeps the same +/- 0.2 step and [0.1, 1.0] clamp', () => {
     expect(appFlat).toContain('volume: Math.min(1.0, prev.volume + 0.2)');
     expect(appFlat).toContain('volume: Math.max(0.1, prev.volume - 0.2)');
+  });
+});
+
+describe('the offline engine discloses work it did not perform', () => {
+  const memory = {
+    name: '',
+    notes: [],
+    customKeyValues: {},
+    stats: { totalCommands: 0, actionsExecuted: 0, lastActive: '2026-09-01T00:00:00.000Z' },
+  } as any;
+
+  it('opens Location Services but does not claim a GPS fix', () => {
+    const result = processOfflineCommand('where am I location', memory, 'en-US');
+    expect(result.intent).toBe('location_services');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.reply).toMatch(/did not acquire a GPS fix/i);
+    expect(result.reply).not.toMatch(/telemetry|orbital/i);
+  });
+
+  it('hands a search query to the in-app Browser without claiming results', () => {
+    const result = processOfflineCommand('search for quantum computing', memory, 'en-US');
+    expect(result.intent).toBe('google_search');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.reply).toMatch(/no results were retrieved/i);
+    expect(result.reply).toContain('quantum computing');
+  });
+
+  it('opens the VM telemetry panel without claiming a live read', () => {
+    const result = processOfflineCommand('server status telemetry', memory, 'en-US');
+    expect(result.intent).toBe('cloud_telemetry');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.reply).toMatch(/no live metrics were read/i);
+  });
+
+  it('opens the Freelance Pipeline without claiming a quotation was generated', () => {
+    const result = processOfflineCommand('generate freelance quotation', memory, 'en-US');
+    expect(result.intent).toBe('generate_quotation');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.reply).toMatch(/no new quotation was generated/i);
+  });
+
+  it('opens the Social Media Console without claiming a post was published', () => {
+    const result = processOfflineCommand('draft linkedin social post', memory, 'en-US');
+    expect(result.intent).toBe('create_social_post');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.reply).toMatch(/no post was generated or published/i);
+  });
+
+  it('no longer contains the retired fake-success strings', () => {
+    for (const retired of [
+      'Searching Google for',
+      'Accessing Geolocation API and orbital positioning telemetry',
+      'Displaying Oracle Cloud Always Free ARM VM Telemetry',
+      'Generating freelance quotation proposal',
+      'Launching Social Media Generator & Approval Matrix',
+    ]) {
+      expect(engineFlat, retired).not.toContain(retired);
+    }
+  });
+
+  it('the offline location branch sets actionExecuted false', () => {
+    const start = engineFlat.indexOf("intent: 'location_services'");
+    expect(start).toBeGreaterThan(-1);
+    expect(engineFlat.slice(start, start + 400)).toContain('actionExecuted: false');
+  });
+});
+
+describe('the /api/chat cloud_telemetry case asserts neither a plan nor a live read it did not make', () => {
+  it('gates the live-read sentence on an actual live metrics source', () => {
+    const body = caseBody('cloud_telemetry');
+    expect(body).toContain('No live host metrics source is connected');
+    expect(body).toContain('describeBillingCost(oracleCloudState.billingEntitlement)');
+    expect(body).not.toContain('Oracle Always Free ARM VM');
+    expect(body).not.toContain('Metrics are read live from the daemon host.');
   });
 });

@@ -1044,24 +1044,28 @@ export function processOfflineCommand(
     lower.includes('लोकेशन बताओ')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
+    // Opening the map is a real in-app navigation, but this offline path reads
+    // no geolocation, so it must not speak as though a GPS fix was acquired.
+    // Real coordinates come from the browser Geolocation API in
+    // `LocationServicesModal`, which labels a non-live point as SIMULATED.
     const reply = isHindi
-      ? 'जियोलोकेशन और टैक्टिकल मैप मोड्यूल खोला जा रहा है। आपके जीपीएस निर्देशांक प्राप्त किए जा रहे हैं।'
+      ? 'लोकेशन सर्विसेज और टैक्टिकल मैप खोला जा रहा है। ऑफ़लाइन मोड में कोई जीपीएस फिक्स नहीं लिया गया; निर्देशांक तभी दिखेंगे जब ब्राउज़र जियोलोकेशन फिक्स देगा।'
       : isHinglish
-      ? 'Location Services & Tactical Map open ho raha hai. Real-time GPS telemetry acquire ki ja rahi hai.'
-      : 'Accessing Geolocation API and orbital positioning telemetry. Opening Tactical Location Services.';
+      ? 'Location Services aur Tactical Map open ho raha hai. Offline mode me koi GPS fix nahi liya gaya; coordinates tabhi dikhenge jab browser geolocation fix dega.'
+      : 'Opening Location Services & Tactical Map. This offline path did not acquire a GPS fix — coordinates appear only when the browser Geolocation API returns one.';
 
     return {
       reply,
       spokenText: isHindi
-        ? 'लोकेशन सर्विसेज और जीपीएस मैप खोला जा रहा है।'
+        ? 'लोकेशन सर्विसेज खोली जा रही है, पर ऑफ़लाइन मोड में कोई जीपीएस फिक्स नहीं लिया गया।'
         : isHinglish
-        ? 'Opening Location Services and tactical GPS map.'
-        : 'Accessing orbital telemetry. Opening Geolocation HUD.',
+        ? 'Location Services khul rahi hai, par offline mode me koi GPS fix nahi liya gaya.'
+        : 'Opening Location Services. No GPS fix was acquired offline.',
       intent: 'location_services',
-      actionExecuted: true,
+      actionExecuted: false,
       actionDetail: {
         type: 'location_services',
-        title: 'Launch Location Services & Tactical Map',
+        title: 'Location Services (no GPS fix acquired offline)',
       },
       updatedMemory,
       offline: true,
@@ -1515,16 +1519,16 @@ export function processOfflineCommand(
   if (lower.includes('quotation') || lower.includes('कोटेशन') || lower.includes('freelance') || lower.includes('proposal') || lower.includes('client lead')) {
     updatedMemory.stats.actionsExecuted += 1;
     const reply = isHindi
-      ? 'फ्रीलांस कोटेशन जनरेटर खोला जा रहा है।'
+      ? 'फ्रीलांस पाइपलाइन खोली जा रही है। ऑफ़लाइन मोड में कोई नया कोटेशन नहीं बनाया गया।'
       : isHinglish
-      ? 'Freelance quotation generator open ho raha hai.'
-      : 'Generating freelance quotation proposal.';
+      ? 'Freelance pipeline open ho rahi hai. Offline mode me koi naya quotation nahi banaya gaya.'
+      : 'Opening the Freelance Pipeline. No new quotation was generated on this offline path.';
     return {
       reply,
       spokenText: reply,
       intent: 'generate_quotation',
-      actionExecuted: true,
-      actionDetail: { type: 'generate_quotation', title: 'Generate Client Quotation' },
+      actionExecuted: false,
+      actionDetail: { type: 'generate_quotation', title: 'Freelance Pipeline (no quotation generated offline)' },
       updatedMemory,
       offline: true,
     };
@@ -1534,16 +1538,16 @@ export function processOfflineCommand(
   if (lower.includes('social') || lower.includes('linkedin') || lower.includes('twitter') || lower.includes('पोस्ट') || lower.includes('सोशल') || lower.includes('draft post')) {
     updatedMemory.stats.actionsExecuted += 1;
     const reply = isHindi
-      ? 'सोशल मीडिया कंसोल खोला जा रहा है।'
+      ? 'सोशल मीडिया कंसोल खोला जा रहा है। ऑफ़लाइन मोड में कोई पोस्ट नहीं बनाई या प्रकाशित की गई।'
       : isHinglish
-      ? 'Social Media console open ho raha hai.'
-      : 'Launching Social Media Generator & Approval Matrix.';
+      ? 'Social Media console open ho raha hai. Offline mode me koi post nahi banayi ya publish ki gayi.'
+      : 'Opening the Social Media Console. No post was generated or published on this offline path.';
     return {
       reply,
       spokenText: reply,
       intent: 'create_social_post',
-      actionExecuted: true,
-      actionDetail: { type: 'create_social_post', title: 'Open Social Media Console' },
+      actionExecuted: false,
+      actionDetail: { type: 'create_social_post', title: 'Social Media Console (no post generated offline)' },
       updatedMemory,
       offline: true,
     };
@@ -1571,17 +1575,19 @@ export function processOfflineCommand(
   // 11.1 Cloud Telemetry (Oracle VM)
   if (lower.includes('oracle') || lower.includes('cloud') || lower.includes('vm status') || lower.includes('telemetry') || lower.includes('server status')) {
     updatedMemory.stats.actionsExecuted += 1;
+    // No VM telemetry source is reachable offline, so no metrics exist. The
+    // earlier "telemetry load ho rahi hai" presented a live read as in flight.
     const reply = isHindi
-      ? 'ओरेकल क्लाउड ARM VM टेलीमेट्री लोड हो रही है।'
+      ? 'ओरेकल क्लाउड ARM VM टेलीमेट्री पैनल खोला जा रहा है। ऑफ़लाइन मोड में कोई VM टेलीमेट्री स्रोत कनेक्टेड नहीं है, इसलिए कोई लाइव मेट्रिक्स नहीं पढ़ी गई।'
       : isHinglish
-      ? 'Oracle Cloud ARM VM telemetry load ho rahi hai.'
-      : 'Displaying Oracle Cloud Always Free ARM VM Telemetry.';
+      ? 'Oracle Cloud ARM VM telemetry panel open ho raha hai. Offline mode me koi VM telemetry source connected nahi hai, isliye koi live metrics nahi padhi gayi.'
+      : 'Opening the Oracle Cloud ARM VM telemetry panel. This offline path has no VM telemetry source connected, so no live metrics were read.';
     return {
       reply,
       spokenText: reply,
       intent: 'cloud_telemetry',
-      actionExecuted: true,
-      actionDetail: { type: 'cloud_telemetry', title: 'Oracle Cloud VM Telemetry' },
+      actionExecuted: false,
+      actionDetail: { type: 'cloud_telemetry', title: 'Oracle VM Telemetry (no source connected offline)' },
       updatedMemory,
       offline: true,
     };
@@ -1653,15 +1659,22 @@ export function processOfflineCommand(
       .replace(/(?:सर्च करो|खोजो)\s*/i, '')
       .trim();
 
-    const reply = isHindi ? `गूगल पर "${query}" खोजा जा रहा है।` : `Searching Google for "${query}".`;
+    // Offline there is no search backend, so no results exist. Saying only
+    // "Searching Google..." presented a request as a completed lookup; the
+    // query is handed to the in-app Browser instead.
+    const reply = isHindi
+      ? `इन-ऐप ब्राउज़र के लिए "${query}" क्वेरी तैयार है। ऑफ़लाइन मोड में कोई सर्च बैकएंड नहीं है, इसलिए कोई परिणाम नहीं लाया गया।`
+      : isHinglish
+      ? `In-app Browser ke liye "${query}" query taiyar hai. Offline mode me koi search backend nahi hai, isliye koi result nahi laaya gaya.`
+      : `Prepared the query "${query}" for the in-app Browser. This offline path has no search backend, so no results were retrieved.`;
     return {
       reply,
       spokenText: reply,
       intent: 'google_search',
-      actionExecuted: true,
+      actionExecuted: false,
       actionDetail: {
         type: 'google_search',
-        title: `Search: ${query}`,
+        title: `In-App Browser Query: ${query} (no results retrieved offline)`,
         payload: { query },
       },
       updatedMemory,

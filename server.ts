@@ -8830,9 +8830,25 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
         const cpuPart = live?.cpuUsage != null ? `${live.cpuUsage}% CPU` : 'CPU usage unavailable';
         const ramPart = live?.ramUsedGb != null ? `${live.ramUsedGb} GB RAM` : 'RAM usage unavailable';
-        spokenResponse = `Oracle Always Free ARM VM host telemetry: ${cpuPart}, ${ramPart}. Metrics are read live from the daemon host.`;
-        actionExecuted = true;
-        actionDetail = { type: 'cloud_telemetry', title: 'Oracle VM Telemetry', payload: oracleCloudState.metrics };
+        // The plan is not an observation. "Always Free" used to be spoken as a
+        // bare fact next to telemetry; this process queries no OCI billing API,
+        // so the cost line names the entitlement as unprobed.
+        const costPart = describeBillingCost(oracleCloudState.billingEntitlement);
+        spokenResponse = `Oracle Cloud ARM VM host telemetry: ${cpuPart}, ${ramPart}. ${
+          live
+            ? 'Metrics are read live from this daemon host.'
+            : 'No live host metrics source is connected, so no readings were available.'
+        } Cost: ${costPart}.`;
+        actionExecuted = live !== null;
+        actionDetail = {
+          type: 'cloud_telemetry',
+          title: 'Oracle VM Telemetry',
+          payload: {
+            ...oracleCloudState.metrics,
+            metricsSource: oracleCloudState.metricsSource,
+            billingEntitlement: oracleCloudState.billingEntitlement,
+          },
+        };
         break;
       }
       case 'security_audit': {

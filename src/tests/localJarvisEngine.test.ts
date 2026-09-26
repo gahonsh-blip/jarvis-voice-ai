@@ -124,16 +124,18 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       expect(result.actionExecuted).toBe(true);
     });
 
-    it('should open Freelance Pipeline on "freelance proposal quotation"', () => {
+    it('should open Freelance Pipeline on "freelance proposal quotation" without claiming a quotation was generated', () => {
       const result = processOfflineCommand('generate freelance quotation', initialMemory, 'en-US');
       expect(result.intent).toBe('generate_quotation');
-      expect(result.actionExecuted).toBe(true);
+      expect(result.actionExecuted).toBe(false);
+      expect(result.reply).toMatch(/no new quotation was generated/i);
     });
 
-    it('should open Social Media Console on "create social post"', () => {
+    it('should open Social Media Console on "create social post" without claiming a post was published', () => {
       const result = processOfflineCommand('draft a linkedin social post', initialMemory, 'en-US');
       expect(result.intent).toBe('create_social_post');
-      expect(result.actionExecuted).toBe(true);
+      expect(result.actionExecuted).toBe(false);
+      expect(result.reply).toMatch(/no post was generated or published/i);
     });
   });
 
@@ -191,10 +193,11 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       expect(result.actionExecuted).toBe(true);
     });
 
-    it('should open Oracle Cloud telemetry on "oracle cloud vm"', () => {
+    it('should open Oracle Cloud telemetry on "oracle cloud vm" without claiming a live read', () => {
       const result = processOfflineCommand('show oracle cloud server status', initialMemory, 'en-US');
       expect(result.intent).toBe('cloud_telemetry');
-      expect(result.actionExecuted).toBe(true);
+      expect(result.actionExecuted).toBe(false);
+      expect(result.reply).toMatch(/no live metrics were read/i);
     });
 
     it('should open Security Matrix on "security level policy"', () => {
@@ -241,12 +244,13 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
   });
 
   describe('7. Web Search and Browser Queries', () => {
-    it('should extract search query string for Google search requests', () => {
+    it('should extract search query string for Google search requests without claiming a completed lookup', () => {
       const result = processOfflineCommand('search for latest TypeScript releases', initialMemory, 'en-US');
       expect(result.intent).toBe('google_search');
-      expect(result.actionExecuted).toBe(true);
+      expect(result.actionExecuted).toBe(false);
       expect(result.actionDetail?.payload?.query).toBe('latest TypeScript releases');
       expect(result.reply).toContain('latest TypeScript releases');
+      expect(result.reply).toMatch(/no results were retrieved/i);
     });
 
     it('should handle Hindi search requests', () => {
