@@ -6666,3 +6666,26 @@ social publish, security audit, cloud telemetry, project build, quotation):
 Each must be checked against `handleExecuteAction` (`src/App.tsx` line 928; calls
 at 1261/1303) before any status change - the presence of a case there is what
 distinguishes a real action from a narrated one. NOT audited this slot.
+
+### Slot 8 — final gate evidence (observed this run, 2026-09-27 ~04:24 IST)
+
+Run at head `ceb8fe0` in a fresh sandbox with `node_modules` present
+(node v24.21.0, npm 11.19.1):
+
+- `npm run lint` (`tsc --noEmit`) -> **exit 0**, no diagnostics.
+- `npx vitest run` -> **113 test files passed (113)**, **1504 tests passed
+  (1504)**, 0 failed. Duration 20.29s.
+- `npm run build` -> **exit 0**, built in 2.63s; `dist/server.cjs` 928,823 bytes
+  (907.1 kb) plus sourcemap. Pre-existing Vite >500 kB chunk warning only.
+- Security: `git check-ignore -v .env` -> `.gitignore:4:.env`. `git status
+  --short` -> clean. `git ls-files | grep -cE '^(node_modules|dist)/'` -> **0**
+  tracked. Secret-pattern scan of `git diff origin/main` -> 6 hits, all
+  `redactSecrets` documentation/test fixtures and `app-password-placeholder`
+  values; no real credential.
+
+Branch `feature/hermes-full-completion` remote head = `ceb8fe0` (ls-remote).
+PR #4 open, non-draft, `mergeable: true`, `mergeable_state: clean`, head
+`ceb8fe0`. Main merge NOT performed — awaiting human approval.
+
+DEPLOYMENT: NOT_CONFIGURED — no `DEPLOY_URL` or hosting integration present in
+this sandbox; `dist/server.cjs` is the verified artifact available.
