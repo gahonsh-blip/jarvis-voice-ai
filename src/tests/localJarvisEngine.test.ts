@@ -298,3 +298,71 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     });
   });
 });
+
+describe('Local Jarvis Offline Engine - Operator intents do not fake host success', () => {
+  let initialMemory: MemoryStore;
+
+  beforeEach(() => {
+    initialMemory = {
+      name: '',
+      notes: [],
+      customKeyValues: {},
+      stats: {
+        totalCommands: 0,
+        actionsExecuted: 0,
+        lastActive: '2026-09-01T00:00:00.000Z',
+      },
+    };
+  });
+
+  // The browser tab cannot open VS Code, inspect the host desktop, or apply a
+  // code fix. Each of these intents used to report `actionExecuted: true` and
+  // increment the "Autonomous Actions Executed" counter, so an action that
+  // never left the tab was recorded as performed host work.
+  const fakeHostIntents: Array<{ label: string; command: string; intent: string }> = [
+    {
+      label: 'fix_project_error',
+      command: 'Open VS Code and fix the project error',
+      intent: 'fix_project_error',
+    },
+    {
+      label: 'inspect_screen',
+      command: 'inspect screen and tell me what the problem is',
+      intent: 'inspect_screen',
+    },
+    { label: 'operate_vscode', command: 'open vs code', intent: 'operate_vscode' },
+    { label: 'operate_browser', command: 'open browser', intent: 'operate_browser' },
+    { label: 'operate_terminal', command: 'open terminal', intent: 'operate_terminal' },
+    { label: 'cancel_computer_task', command: 'cancel task', intent: 'cancel_computer_task' },
+  ];
+
+  for (const { label, command, intent } of fakeHostIntents) {
+    it(`does not report host work as executed for ${label}`, () => {
+      const result = processOfflineCommand(command, initialMemory, 'en-US');
+      expect(result.intent).toBe(intent);
+      expect(result.actionExecuted).toBe(false);
+      expect(result.actionDetail?.payload?.offlineHostWork).toBe(false);
+      expect(result.updatedMemory?.stats.actionsExecuted).toBe(0);
+    });
+
+    it(`never claims a host action succeeded for ${label}`, () => {
+      const result = processOfflineCommand(command, initialMemory, 'en-US');
+      expect(result.reply).not.toMatch(/surgical fix|test verification|underway|has been immediately cancelled/i);
+    });
+  }
+
+  it('still counts opening the in-app Computer Operator HUD as a page-local action', () => {
+    const result = processOfflineCommand('computer operator kholo', initialMemory, 'en-US');
+    expect(result.intent).toBe('open_computer_operator');
+    expect(result.actionExecuted).toBe(true);
+    expect(result.updatedMemory?.stats.actionsExecuted).toBe(1);
+  });
+
+  it('speaks the honest fix-not-executed reply in Hindi', () => {
+    const result = processOfflineCommand('VS Code खोलकर इस error को ठीक करो', initialMemory, 'hi-IN');
+    expect(result.intent).toBe('fix_project_error');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.reply).toContain('ऑफ़लाइन मोड');
+  });
+});
+

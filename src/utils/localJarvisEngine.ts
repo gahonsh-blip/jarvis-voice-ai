@@ -13,6 +13,11 @@ import {
   offlineTokenFreshness,
   type YouTubeVoiceMode,
 } from './hardening/youtubeVoiceStatusTruth';
+import {
+  offlineOperatorVerdict,
+  offlineOperatorReply,
+  offlineOperatorCountsAsHostWork,
+} from './computerOperator/offlineOperatorTruth';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
@@ -104,6 +109,11 @@ export function processOfflineCommand(
 
   const isHindi = detectedLang === 'hindi' || detectedLang === 'hi-IN';
   const isHinglish = detectedLang === 'hinglish';
+  const operatorLang: 'hindi' | 'hinglish' | 'english' = isHindi
+    ? 'hindi'
+    : isHinglish
+    ? 'hinglish'
+    : 'english';
 
   let updatedMemory: MemoryStore = {
     ...currentMemory,
@@ -533,22 +543,18 @@ export function processOfflineCommand(
     lower.includes('cancel operator') ||
     lower.includes('stop operator')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'कंप्यूटर ऑपरेटर कार्य तुरंत रोक दिया गया है। स्क्रीन लूप सुरक्षित रूप से बंद है।'
-      : isHinglish
-      ? 'Computer operator task turant rok diya gaya hai, Sir.'
-      : 'Computer operator task has been immediately cancelled. The Screen-Research loop is safely halted.';
+    const verdict = offlineOperatorVerdict('cancel_computer_task');
+    const reply = offlineOperatorReply('cancel_computer_task', operatorLang);
 
     return {
       reply,
       spokenText: reply,
       intent: 'cancel_computer_task',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('cancel_computer_task'),
       actionDetail: {
         type: 'cancel_computer_task',
-        title: 'Cancel Computer Operator Task',
-        payload: { objective: clean },
+        title: verdict.title,
+        payload: { objective: clean, offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -560,25 +566,19 @@ export function processOfflineCommand(
     (lower.includes('vs code') || lower.includes('vscode') || lower.includes('project')) &&
     (lower.includes('error') || lower.includes('fix') || lower.includes('समस्या') || lower.includes('ठीक करो') || lower.includes('ठीक कर'))
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'स्क्रीन-रिसर्च लूप प्रारंभ: मैं Visual Studio Code खोल रहा हूँ, स्क्रीन का विश्लेषण करके समस्या की पहचान करूँगा और कोड को ठीक करूँगा।'
-      : isHinglish
-      ? 'Screen-Research loop initiate kar raha hoon: VS Code open karke error identify karunga aur surgical fix apply karunga, Sir.'
-      : 'Screen-Research loop initiated: Opening Visual Studio Code, inspecting screen for project errors, and applying surgical fix with test verification.';
+    const verdict = offlineOperatorVerdict('fix_project_error');
+    const reply = offlineOperatorReply('fix_project_error', operatorLang);
 
     return {
       reply,
-      spokenText: isHindi
-        ? 'VS Code खोलकर स्क्रीन का विश्लेषण और समस्या का समाधान शुरू कर रहा हूँ।'
-        : 'Initiating Screen-Research loop in VS Code to locate and resolve project errors.',
+      spokenText: reply,
       intent: 'fix_project_error',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('fix_project_error'),
       actionDetail: {
         type: 'fix_project_error',
-        title: 'Screen-Research: Open VS Code & Fix Error',
+        title: verdict.title,
         target: 'VS Code',
-        payload: { objective: clean, app: 'VS Code', mode: 'hybrid' },
+        payload: { objective: clean, app: 'VS Code', mode: 'hybrid', offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -595,22 +595,18 @@ export function processOfflineCommand(
     lower.includes('what is on the screen') ||
     (lower.includes('screen') && lower.includes('error'))
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'स्क्रीन का विश्लेषण प्रारंभ कर दिया गया है। सक्रिय विंडो, खुले हुए डायलॉग और त्रुटियों का निरीक्षण किया जा रहा है।'
-      : isHinglish
-      ? 'Screen inspection start ho gaya hai. Active window, dialogs aur errors ka analysis kar raha hoon, Sir.'
-      : 'Screen inspection underway. Analyzing active window, open dialogs, and visible errors.';
+    const verdict = offlineOperatorVerdict('inspect_screen');
+    const reply = offlineOperatorReply('inspect_screen', operatorLang);
 
     return {
       reply,
       spokenText: reply,
       intent: 'inspect_screen',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('inspect_screen'),
       actionDetail: {
         type: 'inspect_screen',
-        title: 'Screen Researcher: Inspect Desktop & Errors',
-        payload: { objective: clean },
+        title: verdict.title,
+        payload: { objective: clean, offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -623,23 +619,19 @@ export function processOfflineCommand(
     lower.includes('vscode') ||
     (lower.includes('visual studio') && lower.includes('code'))
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'कंप्यूटर ऑपरेटर कंसोल खुल रहा है। ऑफ़लाइन मोड में ब्राउज़र से OS ऐप लॉन्च नहीं हो सकता, इसलिए VS Code खुलने की पुष्टि नहीं हुई।'
-      : isHinglish
-      ? 'Computer Operator console khol raha hoon, Sir. Offline mode mein browser se VS Code launch nahi ho sakta — confirm nahi hua.'
-      : 'Opening the Computer Operator console. Offline mode cannot launch OS applications from the browser, so VS Code was not confirmed as opened.';
+    const verdict = offlineOperatorVerdict('operate_vscode');
+    const reply = offlineOperatorReply('operate_vscode', operatorLang);
 
     return {
       reply,
-      spokenText: isHindi ? 'कंप्यूटर ऑपरेटर कंसोल खोला जा रहा है।' : 'Opening the Computer Operator console.',
+      spokenText: reply,
       intent: 'operate_vscode',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('operate_vscode'),
       actionDetail: {
         type: 'operate_vscode',
-        title: 'Computer Operator: Launch VS Code',
+        title: verdict.title,
         target: 'VS Code',
-        payload: { app: 'VS Code' },
+        payload: { app: 'VS Code', offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -652,21 +644,19 @@ export function processOfflineCommand(
     lower.includes('कंप्यूटर ऑपरेटर') ||
     lower.includes('स्क्रीन ऑपरेटर')
   ) {
+    const verdict = offlineOperatorVerdict('open_computer_operator');
+    const reply = offlineOperatorReply('open_computer_operator', operatorLang);
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'कंप्यूटर ऑपरेटर और स्क्रीन रिसर्चर कंसोल खोल दिया गया है। आप स्क्रीन विश्लेषण और ऑटोमेशन देख सकते हैं।'
-      : isHinglish
-      ? 'Computer Operator HUD open kar diya gaya hai, Sir.'
-      : 'Computer Operator and Screen Researcher HUD activated.';
 
     return {
       reply,
       spokenText: reply,
       intent: 'open_computer_operator',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('open_computer_operator'),
       actionDetail: {
         type: 'open_computer_operator',
-        title: 'Open Computer Operator HUD',
+        title: verdict.title,
+        payload: { offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -680,22 +670,19 @@ export function processOfflineCommand(
     lower.includes('open browser') ||
     lower.includes('chrome खोलो')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'ब्राउज़र टैब अंदर खुल रहा है। ऑफ़लाइन मोड Chrome को OS विंडो के रूप में नहीं खोल सकता।'
-      : isHinglish
-      ? 'Browser tab HUD khol raha hoon, Sir. Offline mode OS Chrome window nahi khol sakta.'
-      : 'Opening the in-app browser view. Offline mode cannot launch a real Chrome OS window.';
+    const verdict = offlineOperatorVerdict('operate_browser');
+    const reply = offlineOperatorReply('operate_browser', operatorLang);
 
     return {
       reply,
-      spokenText: isHindi ? 'ब्राउज़र दृश्य खोला जा रहा है।' : 'Opening the browser view.',
+      spokenText: reply,
       intent: 'operate_browser',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('operate_browser'),
       actionDetail: {
         type: 'operate_browser',
-        title: 'Computer Operator: Open Browser',
+        title: verdict.title,
         target: 'Chrome',
+        payload: { offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -710,22 +697,19 @@ export function processOfflineCommand(
     lower.includes('open powershell') ||
     lower.includes('powershell खोलो')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'टर्मिनल कंसोल HUD खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक PowerShell विंडो नहीं खुलती।'
-      : isHinglish
-      ? 'Terminal console HUD khol raha hoon, Sir. Offline mode mein asli PowerShell window nahi khulti.'
-      : 'Opening the in-app terminal console view. Offline mode does not open a real PowerShell window.';
+    const verdict = offlineOperatorVerdict('operate_terminal');
+    const reply = offlineOperatorReply('operate_terminal', operatorLang);
 
     return {
       reply,
-      spokenText: isHindi ? 'टर्मिनल कंसोल दृश्य खोला जा रहा है।' : 'Opening the terminal console view.',
+      spokenText: reply,
       intent: 'operate_terminal',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('operate_terminal'),
       actionDetail: {
         type: 'operate_terminal',
-        title: 'Computer Operator: Open Terminal',
+        title: verdict.title,
         target: 'Terminal',
+        payload: { offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
