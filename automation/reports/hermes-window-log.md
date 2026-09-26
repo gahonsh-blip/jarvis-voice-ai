@@ -6202,3 +6202,103 @@ re-derived before editing:
 Suggested next-slot slice: the `outbound_call_authorization` / `make_call` cluster, because
 placing a call is an irreversible outside-world action and is gated by the permission
 gateway — a false success there is the most damaging. Status for all of the above: `UNKNOWN`.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:35
+Window date: 2026-09-27   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools (offline Local JARVIS Engine telephony call
+  intents) — `src/utils/computerOperator/offlineCallTruth.ts` (new) + wiring in
+  `src/utils/localJarvisEngine.ts` (telephony section 7.1–7.4); evidence
+  `src/tests/offlineCallTruth.test.ts` 13/13 passed; negative-validation observed:
+  reintroducing `title: 'Call Ended'` fails exactly the source guard
+  (`1 failed | 12 passed`), restored → 13/13.
+
+  What was broken (observed at HEAD before the fix): the offline engine spoke and
+  counted carrier call work it never performed —
+    make_call   -> "Placing outbound call to <number> through carrier gateway",
+                   title 'Calling <number>', actionExecuted: true, counter++
+    answer_call -> "Connecting call with caller", title 'Call Connected',
+                   actionExecuted: true, counter++
+    hangup_call -> "Terminating active phone call", title 'Call Ended',
+                   actionExecuted: true, counter++
+    human_handoff -> promised a transfer to clinic staff whenever a provider was
+                   merely configured; incremented actionsExecuted while reporting
+                   actionExecuted: false.
+  Fix: the verdict is derived from the telephony engine mode actually active
+  (`activeTelephonyEngineMode()`, read from `TelephonyProviderRegistry`). Offline
+  mode holds no gateway session, so it never confirms a carrier action; every
+  phase (dial/schedule/answer/hangup/reject) reports `actionExecuted: false` in
+  every engine mode, the fabricated titles are gone, and the human_handoff counter
+  inconsistency is corrected.
+
+In Progress:
+- #13 Zero-fake-success for all tools — still `PARTIAL`. Remaining
+  `actionExecuted: true` claims in `localJarvisEngine.ts` were NOT individually
+  audited this slot; their truthfulness is `UNKNOWN`. The previous slot's report
+  nominated the `outbound_call_authorization` / `make_call` cluster in server.ts
+  as the next slice.
+
+Remaining:
+- #1 Android Bridge and #55 (device-dependent) — blocked, no handset.
+- Items 14+ (Real Android E2E, Real Screenshot, Computer Operator, GitHub/Social
+  automation, Communication, AI/Memory, Autonomous Tasks, Voice, Wake Word,
+  Production Hardening) — see docs/COMPLETION_STATUS.md, which is authoritative.
+
+Bugs Found:
+- The offline Local JARVIS Engine confirmed carrier call actions
+  (make/answer/hangup) with no gateway session, returned `actionExecuted: true`,
+  and incremented the user-visible "Autonomous Actions Executed" counter. Found by
+  reading the telephony section of `src/utils/localJarvisEngine.ts` while auditing
+  item 13's remaining `actionExecuted: true` claims.
+- The `human_handoff` branch incremented `actionsExecuted` while returning
+  `actionExecuted: false` — an internal contradiction in the same file.
+
+Bugs Fixed:
+- Both above. Verified by `src/tests/offlineCallTruth.test.ts` (13 tests: phase ×
+  mode verdict matrix, banned titles, reply text, language selection, offline
+  engine branches end-to-end with the simulator active, and a source guard scoped
+  to telephony section 7.1–7.4) and negative-validated by reintroducing
+  `title: 'Call Ended'`, which fails exactly the source guard.
+
+Tests:    110 files / 1460 tests passed (full `npx vitest run`). Targeted
+          `src/tests/offlineCallTruth.test.ts`: 13 passed.
+Lint:     pass — `npm run lint` (`tsc --noEmit`) exit 0.
+Build:    pass — `npm run build` exit 0; `dist/server.cjs` 921146 bytes.
+E2E:      NOT RUN — no handset, no carrier gateway, no display session.
+Security: NOT RUN this slot (no `npm audit` invocation). Observed: no `.env`
+          staged; the diff contains no token/key and no `node_modules`.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle header + item 13 table row),
+               docs/CHANGELOG.md (new slot 3 entry).
+Branch:  feature/hermes-full-completion
+Commit:  8fb9f1d (fix) · c360d88 (docs) · state branch e7fc99a
+Push:    succeeded — origin/feature/hermes-full-completion, origin/automation/hermes-state
+
+PR:         none opened this slot (no PR action taken)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present
+            in this environment; `dist/server.cjs` is the verified artifact.
+
+Blocked:
+- #1 Android Bridge — requires a real Android device/handset.
+- #55 — requires a real handset.
+- Carrier-gateway telephony verification — requires Twilio/Telnyx/Plivo credentials
+  and a real phone line; not available in this sandbox.
+
+Human Approval Required:
+- None this slot. (No external-world action, publish, merge or deploy was attempted.)
+
+Next Slot:
+- #13, next slice: audit the `outbound_call_authorization` / `make_call` cluster in
+  `server.ts` for `actionExecuted: true` claims that do not correspond to an
+  observed carrier/gateway result. Rationale: placing a call is an irreversible
+  outside-world action gated by the permission gateway, so a false success there
+  is the most damaging remaining path, and the previous slot's report nominated it.
+
+हिंदी सारांश (एक पंक्ति):
+- ऑफ़लाइन Local JARVIS Engine अब make_call/answer_call/hangup_call को "सफल" बताकर
+  काउंटर नहीं बढ़ाता — 13 टेस्ट पास, नेगेटिव-वैलिडेशन किया गया; लिंट/बिल्ड/फुल सूट हरे।
