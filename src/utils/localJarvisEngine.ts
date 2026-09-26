@@ -18,8 +18,19 @@ import {
   offlineOperatorReply,
   offlineOperatorCountsAsHostWork,
 } from './computerOperator/offlineOperatorTruth';
+import {
+  offlineCallVerdict,
+  offlineHumanHandoffReply,
+} from './computerOperator/offlineCallTruth';
+import { telephonyEngineMode, type TelephonyEngineMode } from './telephonyGatewayTruth';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
+
+/** Engine mode of the telephony provider actually active, read from the registry. */
+function activeTelephonyEngineMode(): TelephonyEngineMode {
+  const provider = TelephonyProviderRegistry.getProvider();
+  return telephonyEngineMode(provider.id, provider.isConfigured());
+}
 
 export interface LocalProcessingResult {
   reply: string;
@@ -1146,15 +1157,16 @@ export function processOfflineCommand(
     const target = targetMatch && targetMatch[1].trim() ? targetMatch[1].trim() : '+91 9876543210';
     const masked = maskPhoneNumber(target);
     stagedOutboundCall = { destination: target, masked, isScheduled: true };
+    const verdict = offlineCallVerdict('schedule', activeTelephonyEngineMode());
     const reply = isHindi
-      ? `कल के लिए ${masked} पर आउटबाउंड कॉल रिक्वेस्ट दर्ज कर ली गई है।`
-      : `Scheduled pending outbound call request for tomorrow to ${masked}.`;
+      ? `कल के लिए ${masked} पर आउटबाउंड कॉल अनुरोध दर्ज कर लिया गया है। ${verdict.replyHi}`
+      : `Scheduled pending outbound call request for tomorrow to ${masked}. ${verdict.replyEn}`;
     return {
       reply,
       spokenText: reply,
       intent: 'outbound_call_authorization',
-      actionExecuted: true,
-      actionDetail: { type: 'outbound_call_authorization', title: `Scheduled Call: ${masked}`, payload: { target, masked, scheduled: true } },
+      actionExecuted: verdict.actionExecuted,
+      actionDetail: { type: 'outbound_call_authorization', title: verdict.title, payload: { target, masked, scheduled: true } },
       updatedMemory,
       offline: true,
     };
@@ -1194,15 +1206,16 @@ export function processOfflineCommand(
     }
 
     stagedOutboundCall = null;
+    const verdict = offlineCallVerdict('dial', activeTelephonyEngineMode());
     const reply = isHindi
-      ? `कॉल अधिकृत हो गई है। ${masked} पर आउटबाउंड कॉल शुरू की जा रही है।`
-      : `Call authorized. Placing outbound call to ${masked} through carrier gateway.`;
+      ? `कॉल अधिकृत है। ${masked} के लिए: ${verdict.replyHi}`
+      : `Call authorized for ${masked}. ${verdict.replyEn}`;
     return {
       reply,
       spokenText: reply,
       intent: 'make_call',
-      actionExecuted: true,
-      actionDetail: { type: 'make_call', title: `Calling ${masked}`, payload: { destination, autoDial: true } },
+      actionExecuted: verdict.actionExecuted,
+      actionDetail: { type: 'make_call', title: verdict.title, payload: { destination, autoDial: true } },
       updatedMemory,
       offline: true,
     };
@@ -1248,17 +1261,18 @@ export function processOfflineCommand(
     // Stage for Level-4 Authorization
     stagedOutboundCall = { destination: target, masked };
 
+    const verdict = offlineCallVerdict('dial', activeTelephonyEngineMode());
     const reply = isHindi
-      ? `सर, मैं इस नंबर पर कॉल करने वाला हूँ: ${masked}। क्या आप अनुमति देते हैं?`
-      : `Sir, I am about to call: ${masked}. Do you authorize this outbound call?`;
+      ? `सर, मैं इस नंबर पर कॉल करने वाला हूँ: ${masked}। क्या आप अनुमति देते हैं? ${verdict.replyHi}`
+      : `Sir, I am about to call: ${masked}. Do you authorize this outbound call? ${verdict.replyEn}`;
     return {
       reply,
       spokenText: reply,
       intent: 'outbound_call_authorization',
-      actionExecuted: true,
+      actionExecuted: verdict.actionExecuted,
       actionDetail: {
         type: 'outbound_call_authorization',
-        title: `Authorization Required: ${masked}`,
+        title: verdict.title,
         payload: { target, masked, requiresApproval: true },
       },
       updatedMemory,
@@ -1316,24 +1330,16 @@ export function processOfflineCommand(
 
   // 7.4 Human Handoff Intent (Section G & X)
   if (checkHumanHandoffIntent(clean)) {
-    updatedMemory.stats.actionsExecuted += 1;
     const provider = TelephonyProviderRegistry.getProvider();
-    let reply = '';
-    if (provider.isConfigured()) {
-      reply = isHindi
-        ? 'मैं आपकी कॉल क्लिनिक कर्मचारी को ट्रांसफर कर रहा हूँ, कृपया प्रतीक्षा करें।'
-        : 'Attempting to transfer your call to our human clinic staff, please hold.';
-    } else {
-      reply = isHindi
-        ? 'माफ़ कीजिए, अभी क्लिनिक स्टाफ सीधे उपलब्ध नहीं है। क्या मैं आपका कोई संदेश नोट कर सकता हूँ?'
-        : 'I apologize, our human staff is not directly reachable on this line right now. Would you like to leave a message?';
-    }
+    const handoffLang = isHindi ? 'hindi' : isHinglish ? 'hinglish' : 'english';
+    const reply = offlineHumanHandoffReply(provider.isConfigured(), handoffLang);
     return {
       reply,
       spokenText: reply,
       intent: 'human_handoff',
-      actionExecuted: true,
-      actionDetail: { type: 'human_handoff', title: 'Human Staff Handoff' },
+      // A transfer is external telephony work; offline mode cannot perform it.
+      actionExecuted: false,
+      actionDetail: { type: 'human_handoff', title: 'Human Staff Handoff Not Performed (offline)' },
       updatedMemory,
       offline: true,
     };
@@ -1348,13 +1354,14 @@ export function processOfflineCommand(
     lower.includes('phone uthao')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'कॉल कनेक्ट किया जा रहा है।' : 'Connecting call with caller.';
+    const verdict = offlineCallVerdict('answer', activeTelephonyEngineMode());
+    const reply = isHindi ? verdict.replyHi : verdict.replyEn;
     return {
       reply,
       spokenText: reply,
       intent: 'answer_call',
-      actionExecuted: true,
-      actionDetail: { type: 'answer_call', title: 'Call Connected' },
+      actionExecuted: verdict.actionExecuted,
+      actionDetail: { type: 'answer_call', title: verdict.title },
       updatedMemory,
       offline: true,
     };
@@ -1370,13 +1377,14 @@ export function processOfflineCommand(
     lower.includes('call kato')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'फोन कॉल समाप्त कर दिया गया है।' : 'Terminating active phone call.';
+    const verdict = offlineCallVerdict('hangup', activeTelephonyEngineMode());
+    const reply = isHindi ? verdict.replyHi : verdict.replyEn;
     return {
       reply,
       spokenText: reply,
       intent: 'hangup_call',
-      actionExecuted: true,
-      actionDetail: { type: 'hangup_call', title: 'Call Ended' },
+      actionExecuted: verdict.actionExecuted,
+      actionDetail: { type: 'hangup_call', title: verdict.title },
       updatedMemory,
       offline: true,
     };
@@ -1388,13 +1396,14 @@ export function processOfflineCommand(
     lower.includes('कॉल रिजेक्ट करो')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'कॉल रिजेक्ट कर दिया गया है।' : 'Declining incoming call.';
+    const verdict = offlineCallVerdict('reject', activeTelephonyEngineMode());
+    const reply = isHindi ? verdict.replyHi : verdict.replyEn;
     return {
       reply,
       spokenText: reply,
       intent: 'reject_call',
-      actionExecuted: true,
-      actionDetail: { type: 'reject_call', title: 'Call Declined' },
+      actionExecuted: verdict.actionExecuted,
+      actionDetail: { type: 'reject_call', title: verdict.title },
       updatedMemory,
       offline: true,
     };
