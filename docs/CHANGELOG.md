@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 01:55 IST (2026-09-26 20:25 UTC) — work slot 3: offline engine telephony call truth
+
+### Fixed
+- **The offline Local JARVIS Engine narrated carrier call work the browser tab never performed.** `src/utils/localJarvisEngine.ts` is the no-backend fallback used when `/api/chat` is unreachable (and the path `telephonyTestRunner.ts` drives). With no gateway session it still spoke and counted call actions: `make_call` spoke *"Placing outbound call to `<number>` through carrier gateway"* with title `Calling <number>`, `hangup_call` spoke *"Terminating active phone call"* with title `Call Ended`, `answer_call` spoke *"Connecting call with caller"* with title `Call Connected` — all three returned `actionExecuted: true` and incremented the user-visible "Autonomous Actions Executed" counter. The `human_handoff` branch promised a transfer to clinic staff whenever a provider was merely configured, and incremented `actionsExecuted` while reporting `actionExecuted: false`.
+  - Added `src/utils/computerOperator/offlineCallTruth.ts`. The verdict is derived from the telephony engine mode actually active (`activeTelephonyEngineMode()`, read from `TelephonyProviderRegistry`), not from whether a provider is configured. Offline mode holds no gateway session, so it never confirms a carrier action: every phase (`dial`/`schedule`/`answer`/`hangup`/`reject`) reports `actionExecuted: false` in every engine mode, and the fabricated titles are gone from the offline engine.
+  - The `human_handoff` branch no longer increments `actionsExecuted` while reporting `actionExecuted: false`.
+
+### Tests
+- `src/tests/offlineCallTruth.test.ts` (13 tests): the verdict matrix across five phases × four engine modes, the banned titles (`Calling `, `Call Connected`, `Call Ended`), the reply text, language selection, the offline engine branches end-to-end with the simulator active, and a source guard scoped to the telephony section (7.1–7.4) pinning that the fake titles and narration no longer appear.
+- Negative-validated: reintroducing `title: 'Call Ended'` in the telephony section fails exactly the source guard (`1 failed | 12 passed`); restored → **13/13**.
+- Full suite observed: **110 files / 1460 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 921146 bytes).
+
 ## [Unreleased] - 2026-09-27 01:20 IST (2026-09-26 19:50 UTC) — work slot 2: offline engine operator truth
 
 ### Fixed
