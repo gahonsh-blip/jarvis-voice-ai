@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { processOfflineCommand, LocalProcessingResult } from '../utils/localJarvisEngine';
-import { MemoryStore } from '../types';
+import { MemoryStore, MobileStatusData } from '../types';
+import { DEFAULT_MOBILE_PERMISSIONS } from '../utils/mobileStatusEngine';
 
 describe('Local Jarvis Offline Engine - Core Command Processing', () => {
   let initialMemory: MemoryStore;
@@ -84,7 +85,8 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     it('should support Hindi calculator commands', () => {
       const result = processOfflineCommand('कैलकुलेटर खोलो', initialMemory, 'hi-IN');
       expect(result.intent).toBe('open_calculator');
-      expect(result.reply).toContain('कैलकुलेटर खोला जा रहा है');
+      expect(result.reply).toContain('इन-ऐप कैलकुलेटर दृश्य खोला जा रहा है');
+      expect(result.reply).toContain('ऑफ़लाइन मोड में कोई वास्तविक डेस्कटॉप कैलकुलेटर ऐप नहीं खुलता');
     });
   });
 
@@ -106,8 +108,12 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     it('should trigger Screenshot tool on "take screenshot"', () => {
       const result = processOfflineCommand('take screenshot', initialMemory, 'en-US');
       expect(result.intent).toBe('take_screenshot');
-      expect(result.actionExecuted).toBe(true);
+      // The offline path has no capture backend, so it must not report an
+      // executed action nor speak as though an image was captured.
+      expect(result.actionExecuted).toBe(false);
       expect(result.actionDetail?.type).toBe('take_screenshot');
+      expect(result.reply).toMatch(/no capture backend|no image was captured/i);
+      expect(result.reply).not.toMatch(/capturing screen|captured the screen/i);
     });
   });
 
@@ -156,6 +162,26 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       const resultStatus = processOfflineCommand('mobile status', initialMemory, 'en-US');
       expect(resultStatus.intent).toBe('mobile_personal_status');
     });
+
+    it('should not speak sample fixture telemetry as measured readings', () => {
+      const sampleStatus = {
+        lastUpdated: new Date().toISOString(),
+        battery: { level: 91, charging: false, temperatureC: 33, powerMode: 'Normal', statusText: 'SAMPLE', available: true, isSample: true },
+        weather: { location: 'New Delhi', temperatureC: 27, condition: 'SAMPLE', conditionHi: 'नमूना', humidity: 48, windKmh: 9, feelsLikeC: 28, available: true, isSample: true },
+        notifications: { totalCount: 7, criticalCount: 2, items: [], available: true, isSample: true },
+        calendar: { todayEventsCount: 4, events: [], available: true, isSample: true },
+        email: { unreadCount: 9, importantCount: 3, summaries: [], available: true, isSample: true },
+        deviceHealth: { ramUsageMb: 0, ramTotalMb: 8192, storageFreeGb: 0, storageTotalGb: 128, deviceModel: 'SAMPLE', osVersion: 'SAMPLE', networkType: 'Offline', available: false, isSample: true },
+        permissions: { ...DEFAULT_MOBILE_PERMISSIONS },
+      } as MobileStatusData;
+
+      const result = processOfflineCommand('mobile status', initialMemory, 'en-US', sampleStatus);
+      expect(result.actionExecuted).toBe(true);
+      expect(result.reply).not.toMatch(/91%|27°C|7 priority|4 events|9 unread/);
+      expect(result.reply).toMatch(/No battery reading is available/);
+      expect(result.reply).toMatch(/no weather source is connected/i);
+      expect(result.reply).toMatch(/Notifications could not be read/);
+    });
   });
 
   describe('6. Infrastructure, Security, Routines, and System Diagnostics', () => {
@@ -183,14 +209,34 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       expect(result.reply).toContain('current system time');
     });
 
+    it('should not claim systems are healthy when only a clock value was produced', () => {
+      const diagnostic = processOfflineCommand('what is the current time and date', initialMemory, 'en-US');
+      const timeOnly = processOfflineCommand('what time is it', initialMemory, 'en-US');
+
+      for (const result of [diagnostic, timeOnly]) {
+        expect(result.reply ?? '').not.toMatch(/operational/i);
+        expect(result.reply ?? '').not.toMatch(/nominal/i);
+        expect(result.reply ?? '').not.toMatch(/सामान्य हैं/);
+        expect(result.spokenText ?? '').not.toMatch(/operational/i);
+      }
+
+      expect(diagnostic.reply).toMatch(/not run any system diagnostics/i);
+      expect(timeOnly.reply).toMatch(/^The current system time is/);
+      expect(timeOnly.actionDetail?.title).not.toMatch(/Diag/i);
+    });
+
     it('should handle volume up and volume down controls', () => {
       const up = processOfflineCommand('volume up', initialMemory, 'en-US');
       expect(up.intent).toBe('volume_up');
-      expect(up.actionExecuted).toBe(true);
+      // Offline there is no mixer backend, so the host output level is not
+      // changed and the reply must say so.
+      expect(up.actionExecuted).toBe(false);
+      expect(up.reply).toMatch(/system volume mixer is not changed/i);
 
       const down = processOfflineCommand('volume down', initialMemory, 'en-US');
       expect(down.intent).toBe('volume_down');
-      expect(down.actionExecuted).toBe(true);
+      expect(down.actionExecuted).toBe(false);
+      expect(down.reply).toMatch(/system volume mixer is not changed/i);
     });
   });
 
@@ -223,10 +269,13 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       expect(result.reply).toContain('HERMES JARVIS');
     });
 
-    it('should respond to system status question "how are you"', () => {
+    it('should respond to system status question "how are you" without claiming unmeasured health', () => {
       const result = processOfflineCommand('how are you', initialMemory, 'en-US');
       expect(result.intent).toBe('chat');
-      expect(result.reply).toContain('All systems nominal');
+      // This handler used to answer "All systems nominal." It performs no
+      // health check, so it must say so instead of asserting health.
+      expect(result.reply).not.toContain('All systems nominal');
+      expect(result.reply).toContain('cannot health-check');
     });
 
     it('should handle unmapped queries gracefully using offline fallback response', () => {
@@ -249,3 +298,71 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     });
   });
 });
+
+describe('Local Jarvis Offline Engine - Operator intents do not fake host success', () => {
+  let initialMemory: MemoryStore;
+
+  beforeEach(() => {
+    initialMemory = {
+      name: '',
+      notes: [],
+      customKeyValues: {},
+      stats: {
+        totalCommands: 0,
+        actionsExecuted: 0,
+        lastActive: '2026-09-01T00:00:00.000Z',
+      },
+    };
+  });
+
+  // The browser tab cannot open VS Code, inspect the host desktop, or apply a
+  // code fix. Each of these intents used to report `actionExecuted: true` and
+  // increment the "Autonomous Actions Executed" counter, so an action that
+  // never left the tab was recorded as performed host work.
+  const fakeHostIntents: Array<{ label: string; command: string; intent: string }> = [
+    {
+      label: 'fix_project_error',
+      command: 'Open VS Code and fix the project error',
+      intent: 'fix_project_error',
+    },
+    {
+      label: 'inspect_screen',
+      command: 'inspect screen and tell me what the problem is',
+      intent: 'inspect_screen',
+    },
+    { label: 'operate_vscode', command: 'open vs code', intent: 'operate_vscode' },
+    { label: 'operate_browser', command: 'open browser', intent: 'operate_browser' },
+    { label: 'operate_terminal', command: 'open terminal', intent: 'operate_terminal' },
+    { label: 'cancel_computer_task', command: 'cancel task', intent: 'cancel_computer_task' },
+  ];
+
+  for (const { label, command, intent } of fakeHostIntents) {
+    it(`does not report host work as executed for ${label}`, () => {
+      const result = processOfflineCommand(command, initialMemory, 'en-US');
+      expect(result.intent).toBe(intent);
+      expect(result.actionExecuted).toBe(false);
+      expect(result.actionDetail?.payload?.offlineHostWork).toBe(false);
+      expect(result.updatedMemory?.stats.actionsExecuted).toBe(0);
+    });
+
+    it(`never claims a host action succeeded for ${label}`, () => {
+      const result = processOfflineCommand(command, initialMemory, 'en-US');
+      expect(result.reply).not.toMatch(/surgical fix|test verification|underway|has been immediately cancelled/i);
+    });
+  }
+
+  it('still counts opening the in-app Computer Operator HUD as a page-local action', () => {
+    const result = processOfflineCommand('computer operator kholo', initialMemory, 'en-US');
+    expect(result.intent).toBe('open_computer_operator');
+    expect(result.actionExecuted).toBe(true);
+    expect(result.updatedMemory?.stats.actionsExecuted).toBe(1);
+  });
+
+  it('speaks the honest fix-not-executed reply in Hindi', () => {
+    const result = processOfflineCommand('VS Code खोलकर इस error को ठीक करो', initialMemory, 'hi-IN');
+    expect(result.intent).toBe('fix_project_error');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.reply).toContain('ऑफ़लाइन मोड');
+  });
+});
+

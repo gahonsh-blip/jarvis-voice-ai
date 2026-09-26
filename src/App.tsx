@@ -43,6 +43,7 @@ import {
   loadCachedLocation,
   saveCachedLocation,
   reverseGeocodeCoordinates,
+  type CoordsSource,
 } from './utils/locationService';
 import { telephonyAudio } from './utils/telephonyAudio';
 import {
@@ -85,13 +86,18 @@ import {
   determineTtsLocale,
   findBestVoiceForLocale,
   buildSpeechDiagnostics,
+  applySpeechErrorToDiagnostics,
   SpeechDiagnostics,
 } from './utils/speechTtsEngine';
 import { isSpeechInterruptionCommand } from './utils/languages';
+import { syncLiveness, syncStatusLabel, reconnectStatusText } from './utils/syncTruth';
+import { micInputLevel } from './utils/hardening/micInputTruth';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
 import { androidBridgeEngine } from './utils/androidBridgeEngine';
 import { AndroidPendingEvent } from './types/mobileBridge';
+import { detectWakeWord } from './utils/voice/wakeWord';
+import { VoiceSession } from './utils/voice/voiceSession';
 
 export default function App() {
   // State with offline-first localStorage hydration
@@ -106,6 +112,9 @@ export default function App() {
   const [statusText, setStatusText] = useState<string>('SYSTEM READY • OFFLINE-FIRST STORAGE ACTIVE');
   const [geminiConnected, setGeminiConnected] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  // The backend's reachability is a separate observation from the browser's
+  // network state; it stays null until a probe has actually answered.
+  const [serverReachable, setServerReachable] = useState<boolean | null>(null);
   const [notepadInitialContent, setNotepadInitialContent] = useState<string>('');
   const [browserSearchQuery, setBrowserSearchQuery] = useState<string>('');
   const [speechDiagnostics, setSpeechDiagnostics] = useState<SpeechDiagnostics | null>(null);
@@ -173,6 +182,11 @@ export default function App() {
   const [userAddress, setUserAddress] = useState<LocationAddress | null>(() => {
     return loadCachedLocation()?.address || null;
   });
+  // Provenance of `userCoords`: only 'live' is a hardware GPS reading. Anything
+  // loaded from cache / applied as a preset / typed manually must stay labelled.
+  const [userCoordsSource, setUserCoordsSource] = useState<CoordsSource | null>(() => {
+    return loadCachedLocation()?.coords ? 'cache' : null;
+  });
   const [isLocationLoading, setIsLocationLoading] = useState<boolean>(false);
 
   const handleRefreshLocation = useCallback(() => {
@@ -191,6 +205,7 @@ export default function App() {
           timestamp: pos.timestamp,
         };
         setUserCoords(c);
+        setUserCoordsSource('live');
         setIsLocationLoading(false);
         const addr = await reverseGeocodeCoordinates(c.latitude, c.longitude);
         setUserAddress(addr);
@@ -212,6 +227,10 @@ export default function App() {
 
   // Audio Context & Recognition References
   const recognitionRef = useRef<any>(null);
+  // Hands-free state machine (items 46-49). The recogniser events drive it; the
+  // decisions live in VoiceSession so they are testable without a microphone.
+  const voiceSessionRef = useRef<VoiceSession>(new VoiceSession());
+  const [pendingVoiceConfirm, setPendingVoiceConfirm] = useState<string | null>(null);
 
   // Synchronize state changes to localStorage
   useEffect(() => {
@@ -233,15 +252,24 @@ export default function App() {
 
     console.log(`[OfflineStorage] Flushing ${queue.length} pending updates to server...`);
     try {
-      // Send current complete local memory to keep server in sync
+      // Reconcile rather than overwrite. The server reports what conflicted so
+      // the user can be told, instead of one side silently winning.
       const currentMem = loadLocalMemory();
-      const res = await fetch('/api/memory', {
+      const res = await fetch('/api/memory/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentMem),
+        body: JSON.stringify({ local: currentMem }),
       });
       if (res.ok) {
+        const data = await res.json();
         clearPendingSyncQueue();
+        if (data.requiresAttention) {
+          const count = (data.conflicts || []).filter((c: any) => c.resolution === 'flagged').length;
+          setStatusText(`SYNCED • ${count} MEMORY CONFLICT${count === 1 ? '' : 'S'} NEED REVIEW`);
+          console.warn('[OfflineStorage] Memory conflicts need review:', data.conflicts);
+        } else {
+          setStatusText('BACKEND RECONNECTED • MEMORY SYNCED');
+        }
         console.log('[OfflineStorage] Pending sync queue flushed successfully.');
       }
     } catch (err) {
@@ -249,14 +277,46 @@ export default function App() {
     }
   }, []);
 
+  // Probing the backend is the only way to distinguish "network restored" from
+  // "backend reachable". A browser `online` event proves only the former.
+  const probeBackend = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/health');
+      if (!res.ok) {
+        setServerReachable(false);
+        return false;
+      }
+      const data = await res.json();
+      setServerReachable(true);
+      if (data?.geminiEnabled) setGeminiConnected(true);
+      return true;
+    } catch {
+      setServerReachable(false);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
-    const handleOnline = () => {
+    const handleOnline = async () => {
       setIsOnline(true);
+      const reachable = await probeBackend();
+      if (!reachable) {
+        // Regaining a network path is not evidence the backend is back.
+        setStatusText(reconnectStatusText(false));
+        return;
+      }
+      // Only show the syncing state when there is actually something to flush;
+      // otherwise the label would sit on "SYNCING" with nothing in flight.
+      if (getPendingSyncQueue().length === 0) {
+        setStatusText(reconnectStatusText(true));
+        return;
+      }
       setStatusText('BACKEND RECONNECTED • SYNCING MEMORY');
       flushPendingSyncQueue();
     };
     const handleOffline = () => {
       setIsOnline(false);
+      setServerReachable(false);
       setStatusText('OFFLINE MODE ACTIVE • LOCAL PERSISTENCE RUNNING');
     };
 
@@ -267,7 +327,7 @@ export default function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [flushPendingSyncQueue]);
+  }, [flushPendingSyncQueue, probeBackend]);
 
   // Initialize Voices with Android Chrome resilience and asynchronous voiceschanged event listener
   useEffect(() => {
@@ -321,13 +381,23 @@ export default function App() {
     fetch('/api/memory')
       .then((res) => res.json())
       .then((serverData) => {
+        // React may defer the state updater, so record what needs pushing up and
+        // flush on the next tick rather than racing the commit.
+        let localOnlyCount = 0;
+
         setMemory((prevLocal) => {
           // Merge server data with any existing local memory
+          // Union notes by id instead of falling back to local notes when the
+          // server list is empty — that fallback resurrected notes the user had
+          // deliberately deleted, and local notes never reached the server.
+          const noteIds = new Set((serverData.notes || []).map((n: any) => n.id));
+          const localOnlyNotes = (prevLocal.notes || []).filter((n: any) => !noteIds.has(n.id));
+          localOnlyCount = localOnlyNotes.length;
           const merged: MemoryStore = {
             ...prevLocal,
             ...serverData,
             name: serverData.name || prevLocal.name || '',
-            notes: (serverData.notes && serverData.notes.length > 0) ? serverData.notes : prevLocal.notes,
+            notes: [...(serverData.notes || []), ...localOnlyNotes],
             customKeyValues: {
               ...prevLocal.customKeyValues,
               ...(serverData.customKeyValues || {}),
@@ -338,22 +408,37 @@ export default function App() {
               lastActive: serverData.stats?.lastActive || prevLocal.stats?.lastActive || new Date().toISOString(),
             },
           };
+          // Local-only notes exist nowhere on the server, so push them up on the
+          // next sync. Without this they would stay local forever and reappear
+          // on every reload as if the server had lost them.
+          if (localOnlyNotes.length > 0) {
+            queuePendingSync('memory_sync', merged);
+          }
           saveLocalMemory(merged);
           return merged;
         });
-        // Flush any offline queued mutations
-        flushPendingSyncQueue();
+        // Flush after the updater has committed; flushing inside the same tick
+        // would read the pre-update local memory.
+        setTimeout(() => {
+          if (localOnlyCount > 0) {
+            setStatusText(`SYNCING ${localOnlyCount} LOCAL NOTE${localOnlyCount === 1 ? '' : 'S'} TO SERVER`);
+          }
+          flushPendingSyncQueue();
+        }, 0);
       })
       .catch((err) => {
+        setServerReachable(false);
         console.warn('[OfflineStorage] Server fetch failed, running seamlessly from local offline memory:', err);
       });
 
     fetch('/api/health')
       .then((res) => res.json())
       .then((data) => {
+        setServerReachable(true);
         if (data.geminiEnabled) setGeminiConnected(true);
       })
       .catch(() => {
+        setServerReachable(false);
         setGeminiConnected(false);
       });
   }, [flushPendingSyncQueue]);
@@ -433,7 +518,7 @@ export default function App() {
           setIsSpeaking(false);
           const errType = event.error || 'unknown_error';
           console.warn('[HERMES JARVIS TTS] Speech error event:', errType);
-          setSpeechDiagnostics((prev) => (prev ? { ...prev, ttsErrorState: String(errType) } : null));
+          setSpeechDiagnostics((prev) => applySpeechErrorToDiagnostics(prev, String(errType)));
           setStatusText('SYSTEM READY');
         };
 
@@ -446,7 +531,7 @@ export default function App() {
         activeUtteranceRef.current = null;
         setIsSpeaking(false);
         setSpeechDiagnostics((prev) =>
-          prev ? { ...prev, ttsErrorState: err?.message || 'exception' } : null
+          applySpeechErrorToDiagnostics(prev, err?.message || 'exception')
         );
       }
     },
@@ -490,11 +575,12 @@ export default function App() {
 
   const handleOpenMobileApp = useCallback((pkg?: string) => {
     if (pkg) {
-      androidBridgeEngine.openApplication(pkg);
+      const res = androidBridgeEngine.openApplication(pkg);
+      speakText(res.success ? `सर, ${pkg} खोल दिया गया है।` : `सर, ${res.message}`);
     }
     androidBridgeEngine.clearPendingEvent();
     setPendingMobileEvent(null);
-  }, []);
+  }, [speakText]);
 
   const handleDismissMobileMessage = useCallback(() => {
     androidBridgeEngine.clearPendingEvent();
@@ -1246,8 +1332,15 @@ export default function App() {
         recognitionRef.current.abort();
       }
 
+      const handsFree = voiceSettings.wakeWordEnabled;
+      const session = voiceSessionRef.current;
+      if (handsFree) session.awaitWakeWord();
+      else session.wakeDetected();
+
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      // In hands-free mode the recogniser must stay open across wake word and
+      // command, otherwise the wake word would end the session immediately.
+      recognition.continuous = handsFree;
       recognition.interimResults = false;
       recognition.lang =
         voiceSettings.language === 'hinglish' || voiceSettings.language === 'auto'
@@ -1256,46 +1349,132 @@ export default function App() {
 
       recognition.onstart = () => {
         setIsListening(true);
-        setStatusText(`LISTENING (${recognition.lang})... SPEAK NOW`);
+        setStatusText(
+          handsFree
+            ? `HANDS-FREE ACTIVE • SAY "${voiceSettings.wakeWord.toUpperCase()}"`
+            : `LISTENING (${recognition.lang})... SPEAK NOW`
+        );
       };
 
       recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setIsListening(false);
-        if (transcript) {
-          handleSendCommand(transcript);
+        // With continuous recognition every result is delivered as it arrives;
+        // only the latest transcript is acted on.
+        const last = event.results[event.results.length - 1];
+        const transcript = String(last?.[0]?.transcript || '').trim();
+        if (!transcript) return;
+
+        const pending = session.snapshot.pendingCommand;
+        if (pending) {
+          // A confirmation is outstanding: this transcript is the answer.
+          const { verdict, command } = session.confirmationHeard(transcript);
+          if (verdict === 'CONFIRMED' && command) {
+            setPendingVoiceConfirm(null);
+            setStatusText('VOICE CONFIRMED • EXECUTING');
+            handleSendCommand(command);
+          } else if (verdict === 'DECLINED') {
+            setPendingVoiceConfirm(null);
+            setStatusText('VOICE ACTION CANCELLED BY OPERATOR');
+            speakText('Cancelled.', voiceSettings.language);
+          } else {
+            setStatusText('CONFIRMATION NOT UNDERSTOOD • SAY YES OR NO');
+          }
+          return;
         }
+
+        if (handsFree) {
+          const match = detectWakeWord(transcript, voiceSettings.wakeWord);
+          if (!match.detected) return;
+
+          if (!match.command) {
+            session.wakeDetected();
+            setStatusText('WAKE WORD HEARD • LISTENING FOR COMMAND');
+            return;
+          }
+          setStatusText(`WAKE WORD + COMMAND DETECTED`);
+          routeVoiceCommand(match.command);
+          return;
+        }
+
+        if (!handsFree) stopListeningInternal();
+        routeVoiceCommand(transcript);
       };
 
+      /**
+       * Decides whether a spoken command may run immediately or needs a spoken
+       * confirmation first. Sensitive commands are never dispatched on the
+       * strength of being heard.
+       */
+      function routeVoiceCommand(command: string) {
+        const decision = session.commandHeard(command);
+
+        if (decision.action === 'EXECUTE') {
+          if (!handsFree) setIsListening(false);
+          handleSendCommand(command);
+          return;
+        }
+
+        // Confirmation required. Ask out loud and wait for the reply.
+        setPendingVoiceConfirm(command);
+        setStatusText('SPOKEN CONFIRMATION REQUIRED • SAY YES OR NO');
+        const hasHindi = /[\u0900-\u097F]/.test(command);
+        speakText(
+          hasHindi
+            ? `क्या मैं "${command}" चलाऊँ? हाँ या नहीं कहें।`
+            : `Should I ${command}? Say yes or no.`,
+          voiceSettings.language
+        );
+      }
+
       recognition.onerror = (event: any) => {
+        // "no-speech" is routine in a continuous session, not a failure.
+        if (event.error === 'no-speech') return;
         console.warn('Speech recognition error:', event.error);
         setIsListening(false);
-        setStatusText('VOICE CAPTURE TIMED OUT • CLICK TO TRY AGAIN');
+        voiceSessionRef.current.reset();
+        setPendingVoiceConfirm(null);
+        setStatusText(
+          event.error === 'not-allowed'
+            ? 'MICROPHONE PERMISSION REQUIRED • GRANT ACCESS IN BROWSER'
+            : 'VOICE CAPTURE TIMED OUT • CLICK TO TRY AGAIN'
+        );
       };
 
       recognition.onend = () => {
+        // A continuous session restarts itself unless the user stopped it.
+        if (handsFree && voiceSessionRef.current.snapshot.state !== 'IDLE') {
+          try {
+            recognition.start();
+            return;
+          } catch {
+            // fall through to stopped state
+          }
+        }
         setIsListening(false);
       };
 
       recognitionRef.current = recognition;
       recognition.start();
 
-      // Simulated visualizer pulse
-      const simPulse = setInterval(() => {
-        setVolumeLevel(Math.floor(20 + Math.random() * 60));
-      }, 100);
-
-      setTimeout(() => clearInterval(simPulse), 5000);
+      // No audio analyser is wired into this path, so there is no measured
+      // input level to render. The orb's ring stays neutral rather than
+      // pulsing from a random number that would read as live audio.
+      setVolumeLevel(micInputLevel(null));
     } catch (err) {
       console.warn('Recognition start failed:', err);
       setIsListening(false);
     }
-  }, [voiceSettings.language, handleSendCommand]);
+  }, [voiceSettings.language, voiceSettings.wakeWordEnabled, voiceSettings.wakeWord, voiceSettings, handleSendCommand, speakText]);
+
+  const stopListeningInternal = useCallback(() => {
+    if (recognitionRef.current) recognitionRef.current.stop();
+  }, []);
 
   const stopListening = useCallback(() => {
+    voiceSessionRef.current.reset();
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
+    setPendingVoiceConfirm(null);
     setIsListening(false);
     setStatusText('VOICE CAPTURE STOPPED');
   }, []);
@@ -1453,7 +1632,7 @@ export default function App() {
       <HUDHeader
         userName={memory.name}
         geminiConnected={geminiConnected}
-        isOnline={isOnline}
+        syncLiveness={syncLiveness({ browserOnline: isOnline, serverReachable })}
         language={voiceSettings.language}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenMemory={() => setActiveApp('memory')}
@@ -1468,6 +1647,7 @@ export default function App() {
         onOpenPermissionGateway={() => setActiveApp('permission_gateway')}
         onOpenMobileStatus={() => setActiveApp('mobile_personal_status')}
         onOpenLocation={() => setActiveApp('location')}
+        locationSource={userCoordsSource}
       />
 
       {/* Main Sci-Fi Dashboard */}
@@ -1538,6 +1718,7 @@ export default function App() {
             <DashboardMapSnippet
               coords={userCoords}
               address={userAddress}
+              source={userCoordsSource}
               isLoading={isLocationLoading}
               onOpenModal={() => setActiveApp('location')}
               onRefresh={handleRefreshLocation}
@@ -1566,6 +1747,26 @@ export default function App() {
 
       {/* Public Legal Compliance & Application Presentation Footer */}
       <PublicInfoFooter />
+
+      {/* Spoken-confirmation HUD. The command is held here and is only sent
+          when the operator says yes. */}
+      {pendingVoiceConfirm && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,32rem)] rounded-2xl border border-amber-500/50 bg-slate-950/95 backdrop-blur-md p-4 shadow-2xl">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-mono text-xs text-amber-400 mb-1">
+                SPOKEN CONFIRMATION REQUIRED
+              </p>
+              <p className="text-sm text-slate-200 break-words">"{pendingVoiceConfirm}"</p>
+              <p className="font-mono text-[11px] text-slate-500 mt-2">
+                Say "yes" to run, or "no" to cancel. Timed out or unclear replies are
+                treated as not confirmed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Android Mobile Assistant Level-4 Approval Card HUD */}
       <MobileActionApprovalCard
@@ -1641,6 +1842,8 @@ export default function App() {
         onSpeak={speakText}
         onOpenPermissionGateway={() => setActiveApp('permission_gateway')}
         userName={memory.name || 'Sir'}
+        speechDiagnostics={speechDiagnostics}
+        isSpeaking={isSpeaking}
       />
 
       {/* Tool Modals */}
@@ -1731,9 +1934,10 @@ export default function App() {
         isOpen={activeApp === 'location'}
         onClose={() => setActiveApp(null)}
         onSpeak={speakText}
-        onCoordinatesUpdated={(c, a) => {
+        onCoordinatesUpdated={(c, a, source) => {
           setUserCoords(c);
           setUserAddress(a);
+          setUserCoordsSource(source);
         }}
       />
     </div>

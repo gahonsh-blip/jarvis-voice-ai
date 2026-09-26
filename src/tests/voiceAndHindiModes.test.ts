@@ -92,14 +92,17 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
       expect(sirCount).toBeLessThanOrEqual(2);
     });
 
-    it('should respond to "how are you" respectfully in Hinglish and Hindi', () => {
+    it('should answer "how are you" without asserting an unmeasured system health', () => {
       const resHinglish = processOfflineCommand('kaise ho jarvis', initialMemory, 'hi-IN');
       expect(resHinglish.intent).toBe('chat');
-      expect(resHinglish.reply).toContain('सुचारू');
+      // These used to assert सुचारू / कार्यरत ("all smooth" / "operational"),
+      // which the handler never measured.
+      expect(resHinglish.reply).not.toMatch(/सुचारू|कार्यरत/);
 
       const resHindi = processOfflineCommand('आप कैसे हैं', initialMemory, 'hi-IN');
       expect(resHindi.intent).toBe('chat');
-      expect(resHindi.reply).toContain('कार्यरत');
+      expect(resHindi.reply).not.toMatch(/सुचारू|कार्यरत/);
+      expect(resHindi.reply).toContain('स्वास्थ्य जाँच');
     });
 
     it('should respond to gratitude naturally in Hindi and English', () => {

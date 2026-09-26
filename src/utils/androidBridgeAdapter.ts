@@ -4,6 +4,7 @@ import {
   AndroidNotificationPayload,
   AndroidPendingEvent,
   AndroidBridgeStatus,
+  MobilePermissionMatrix,
 } from '../types/mobileBridge';
 import { androidBridgeEngine } from './androidBridgeEngine';
 
@@ -13,8 +14,12 @@ export interface AndroidBridgeAdapter {
   disconnect(): Promise<void>;
   getStatus(): AndroidBridgeStatus;
   getCapabilities(): AndroidDeviceCapabilities | null;
-  answerCall(callId: string): Promise<{ success: boolean; status: string; message: string }>;
-  sendReply(notificationId: string, replyText: string): Promise<{ success: boolean; status: string; message: string }>;
+  answerCall(callId: string, approved?: boolean): Promise<{ success: boolean; status: string; message: string }>;
+  sendReply(
+    notificationId: string,
+    replyText: string,
+    approved?: boolean
+  ): Promise<{ success: boolean; status: string; message: string }>;
   openApp(packageName: string): Promise<{ success: boolean; message: string }>;
 }
 
@@ -26,11 +31,26 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
   public readonly isSimulation = false;
   private endpoint = '/api/mobile/bridge';
   private authToken: string | null = null;
+  private reportedCapabilities: AndroidDeviceCapabilities | null = null;
+  private reportedPermissions: Partial<MobilePermissionMatrix> | null = null;
 
   constructor(authToken?: string) {
     if (authToken) {
       this.authToken = authToken;
     }
+  }
+
+  /**
+   * Register the capabilities that the out-of-process Android bridge daemon
+   * reports for this device. The server requires this payload at connect time,
+   * so a real connection cannot be established without it.
+   */
+  public setReportedCapabilities(caps: AndroidDeviceCapabilities): void {
+    this.reportedCapabilities = caps;
+  }
+
+  public setReportedPermissions(permissions: Partial<MobilePermissionMatrix>): void {
+    this.reportedPermissions = permissions;
   }
 
   public async connect(authToken?: string): Promise<{ success: boolean; status: AndroidBridgeStatus; message: string }> {
@@ -43,27 +63,40 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
           'Content-Type': 'application/json',
           ...(this.authToken ? { 'X-JARVIS-AUTH-TOKEN': this.authToken } : {}),
         },
+        body: JSON.stringify({
+          device: this.reportedCapabilities ?? undefined,
+          permissions: this.reportedPermissions ?? undefined,
+        }),
       });
 
       if (!res.ok) {
+        let detail = `Bridge returned status ${res.status}`;
+        try {
+          const errBody = await res.json();
+          if (errBody?.error) detail = errBody.error;
+        } catch {}
         return {
           success: false,
           status: 'ERROR',
-          message: `Bridge returned status ${res.status}`,
+          message: detail,
         };
       }
 
       const data = await res.json();
-      if (data.capabilities) {
-        androidBridgeEngine.connectDevice({
-          ...data.capabilities,
-          isSimulation: false,
-        });
+      const capabilities = data.device ?? data.capabilities;
+      if (capabilities) {
+        androidBridgeEngine.connectDevice(
+          {
+            ...capabilities,
+            isSimulation: Boolean(capabilities.isSimulation),
+          },
+          this.reportedPermissions ?? undefined
+        );
       }
 
       return {
         success: true,
-        status: androidBridgeEngine.getStatus(),
+        status: data.status || androidBridgeEngine.getStatus(),
         message: 'Real Android Bridge connected successfully.',
       };
     } catch (err: any) {
@@ -96,7 +129,21 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
     return androidBridgeEngine.getCapabilities();
   }
 
-  public async answerCall(callId: string): Promise<{ success: boolean; status: string; message: string }> {
+  public async answerCall(
+    callId: string,
+    approved: boolean = false
+  ): Promise<{ success: boolean; status: string; message: string }> {
+    // Answering a live call is an outward, irreversible action. The server
+    // already rejects an unapproved dispatch, so refuse locally and report the
+    // authorization outcome truthfully instead of a generic FAILED round-trip.
+    if (approved !== true) {
+      return {
+        success: false,
+        status: 'AUTHORIZATION_REQUIRED',
+        message:
+          'Explicit human approval (approved: true) is required before answering a call on the device.',
+      };
+    }
     try {
       const res = await fetch(`${this.endpoint}/call/answer`, {
         method: 'POST',
@@ -104,13 +151,15 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
           'Content-Type': 'application/json',
           ...(this.authToken ? { 'X-JARVIS-AUTH-TOKEN': this.authToken } : {}),
         },
-        body: JSON.stringify({ callId }),
+        body: JSON.stringify({ callId, approved: true }),
       });
       const data = await res.json();
       return {
         success: data.success || false,
-        status: data.status || 'FAILED',
-        message: data.message || 'Call answer executed',
+        // The gateway reports its verdict as `outcome`; keep that vocabulary so a
+        // BLOCKED/NOT_CONFIGURED/DISPATCHED result is not flattened into FAILED.
+        status: data.status || data.outcome || 'FAILED',
+        message: data.message || data.error || 'Call answer executed',
       };
     } catch (err: any) {
       return {
@@ -123,8 +172,18 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
 
   public async sendReply(
     notificationId: string,
-    replyText: string
+    replyText: string,
+    approved: boolean = false
   ): Promise<{ success: boolean; status: string; message: string }> {
+    // Sending a reply is an outward action. Refuse locally when unapproved so the
+    // caller gets a clear authorization verdict rather than a server round-trip.
+    if (!approved) {
+      return {
+        success: false,
+        status: 'AUTHORIZATION_REQUIRED',
+        message: 'Explicit human approval (approved: true) is required to send a message reply.',
+      };
+    }
     try {
       const res = await fetch(`${this.endpoint}/message/reply`, {
         method: 'POST',
@@ -132,13 +191,13 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
           'Content-Type': 'application/json',
           ...(this.authToken ? { 'X-JARVIS-AUTH-TOKEN': this.authToken } : {}),
         },
-        body: JSON.stringify({ notificationId, replyText }),
+        body: JSON.stringify({ notificationId, replyText, approved }),
       });
       const data = await res.json();
       return {
         success: data.success || false,
-        status: data.status || 'FAILED',
-        message: data.message || 'Reply executed',
+        status: data.status || data.outcome || 'FAILED',
+        message: data.message || data.error || 'Reply executed',
       };
     } catch (err: any) {
       return {
@@ -230,8 +289,16 @@ export class SimulatedAndroidBridgeAdapter implements AndroidBridgeAdapter {
 
   public async sendReply(
     notificationId: string,
-    replyText: string
+    replyText: string,
+    approved: boolean = false
   ): Promise<{ success: boolean; status: string; message: string }> {
+    if (!approved) {
+      return {
+        success: false,
+        status: 'AUTHORIZATION_REQUIRED',
+        message: 'Explicit human approval required to send message reply.',
+      };
+    }
     const res = androidBridgeEngine.executeMessageReply(replyText);
     return {
       success: res.success,
@@ -241,9 +308,12 @@ export class SimulatedAndroidBridgeAdapter implements AndroidBridgeAdapter {
   }
 
   public async openApp(packageName: string): Promise<{ success: boolean; message: string }> {
+    // Delegate to the engine so the simulation cannot report a success the
+    // bridge gates would have refused.
+    const res = androidBridgeEngine.openApplication(packageName);
     return {
-      success: true,
-      message: `[SIMULATION_ONLY] Launch intent triggered for ${packageName}`,
+      success: res.success,
+      message: `[SIMULATION_ONLY] ${res.message}`,
     };
   }
 

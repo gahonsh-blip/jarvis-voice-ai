@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   androidBridgeEngine,
   AndroidBridgeManager,
+  maskPhoneNumber,
 } from '../utils/androidBridgeEngine';
 import { simulatedAndroidAdapter } from '../utils/androidBridgeAdapter';
 import { processOfflineCommand } from '../utils/localJarvisEngine';
@@ -129,10 +130,48 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     expect(evalResult.decision).toBe('APPROVE');
     expect(evalResult.targetType).toBe('CALL');
 
+    // The answer is dispatched, not claimed as done: the device has not confirmed.
     const execResult = engine.executeCallAnswer();
-    expect(execResult.success).toBe(true);
-    expect(execResult.status).toBe('ANSWERED');
+    expect(execResult.success).toBe(false);
+    expect(execResult.status).toBe('ANSWER_DISPATCHED');
+    expect(execResult.messageEn).toContain('confirmation pending');
     expect(engine.getPendingEvent()).toBeNull();
+
+    const receipt = engine.getLastReceipt();
+    expect(receipt?.outcome).toBe('DISPATCHED');
+    expect(receipt?.verified).toBe(false);
+
+    // Only the device's own confirmation may promote this to VERIFIED.
+    const confirmed = engine.confirmCallAnswer('call_1', true);
+    expect(confirmed.outcome).toBe('VERIFIED');
+    expect(confirmed.verified).toBe(true);
+    expect(confirmed.evidence?.kind).toBe('device_ack');
+  });
+
+  it('Scenario 4b: Device-reported answer failure is never converted into success', () => {
+    engine.connectDevice({
+      deviceId: 'test_phone_fail',
+      deviceName: 'Android Device',
+      model: 'Android Phone',
+      osVersion: 'Android 14',
+      bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: true,
+      canAnswerCalls: true,
+      telecomRoleDialer: true,
+      answerCallsPermission: true,
+      canReadNotifications: true,
+      canInlineReply: true,
+      canOpenApp: true,
+      canLookupContacts: true,
+      isSimulation: false,
+    });
+
+    engine.handleIncomingCall({ callerName: 'Rohit' });
+    engine.executeCallAnswer();
+
+    const failed = engine.confirmCallAnswer('call_1', false);
+    expect(failed.outcome).toBe('FAILED');
+    expect(failed.verified).toBe(false);
   });
 
   it('Scenario 5: Call answer returns truthful limitation notice if Android capability or role is missing', () => {
@@ -363,8 +402,13 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     // Test answering via Hindi speech command
     const res = processOfflineCommand('हाँ, उठा लो', mockMemory);
     expect(res.intent).toBe('answer_call');
-    expect(res.spokenText).toBe('सर, कॉल उठा ली गई है।');
-    expect(res.actionExecuted).toBe(true);
+    // The reply must not claim the call was answered — only that it was dispatched.
+    expect(res.spokenText).toBe(
+      'सर, कॉल उठाने का निर्देश डिवाइस को भेज दिया गया है। डिवाइस की पुष्टि आते ही बताऊँगा।'
+    );
+    expect(res.spokenText).not.toContain('उठा ली गई');
+    expect(res.actionExecuted).toBe(false);
+    expect((res.actionDetail as any)?.title).toBe('Call Answer Dispatched (unconfirmed)');
   });
 
   it('Scenario 13: addListener receives notifications on new event and clearPendingEvent', () => {
@@ -411,6 +455,32 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     expect(activeRes.spokenText).toContain('Slack');
   });
 
+  it('Scenario 21: Call with a missing caller number produces a truthful unknown-caller announcement', () => {
+    engine.connectDevice({
+      deviceId: 'phone_unknown',
+      deviceName: 'Phone',
+      model: 'Phone',
+      osVersion: 'Android 14',
+      bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: true,
+      canAnswerCalls: true,
+      telecomRoleDialer: true,
+      answerCallsPermission: true,
+      canReadNotifications: true,
+      canInlineReply: true,
+      canOpenApp: true,
+      canLookupContacts: true,
+      isSimulation: false,
+    });
+
+    const event = engine.handleIncomingCall({});
+    expect(event.announced).toBe(true);
+    expect(event.senderNumber).toBe('Unknown Number');
+    expect(event.spokenAnnouncement).toBe('सर, अज्ञात नंबर से कॉल आया है। क्या मैं कॉल उठा दूँ?');
+    expect(event.spokenAnnouncement).not.toContain('******');
+    expect(event.spokenAnnouncement).not.toContain('nown');
+  });
+
   it('Scenario 16: Required Android permissions matrix (Notification, Call, Contacts, Reply) can be queried and updated', () => {
     // Check initial permissions retrieval
     const initialPerms = androidBridgeEngine.getPermissions();
@@ -444,5 +514,169 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     expect(androidBridgeEngine.getPermissions().message_reply).toBe('DENIED');
     androidBridgeEngine.updatePermission('message_reply', 'GRANTED');
     expect(androidBridgeEngine.getPermissions().message_reply).toBe('GRANTED');
+  });
+
+  describe('Owner approval parsing — negation must never grant consent', () => {
+    const capabilities = {
+      deviceId: 'pixel_8_pro',
+      deviceName: 'Pixel 8 Pro',
+      model: 'Pixel 8 Pro',
+      osVersion: 'Android 14',
+      bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: true,
+      canAnswerCalls: true,
+      telecomRoleDialer: true,
+      answerCallsPermission: true,
+      canReadNotifications: true,
+      canInlineReply: true,
+      canOpenApp: true,
+      canLookupContacts: true,
+      isSimulation: false,
+    };
+
+    beforeEach(() => {
+      engine.connectDevice(capabilities);
+      engine.handleIncomingCall({
+        callerName: 'Rahul Verma',
+        callerNumber: '+91 9876543210',
+      });
+    });
+
+    // Regression: these phrases previously parsed as APPROVE. The Devanagari
+    // verb stem "उठा" occurs inside refusals such as "नहीं उठा", and the old
+    // matcher accepted it as an approval keyword — satisfying the Level-4 human
+    // authorization gate with a refusal.
+    it.each([
+      'नहीं उठाओ',
+      'कॉल मत उठाओ',
+      'नहीं उठा',
+      'मत उठा',
+      'कॉल नहीं उठाना',
+    ])('treats call refusal "%s" as REJECT, never APPROVE', (phrase) => {
+      const result = engine.evaluateOwnerApproval(phrase);
+      expect(result.decision).toBe('REJECT');
+      expect(result.targetType).toBe('CALL');
+    });
+
+    it.each(['हाँ', 'हाँ, कॉल उठा लो', 'उठा लो', 'कॉल उठा', 'answer', 'yes'])(
+      'still treats genuine approval "%s" as APPROVE',
+      (phrase) => {
+        expect(engine.evaluateOwnerApproval(phrase).decision).toBe('APPROVE');
+      }
+    );
+
+    it.each(['नहीं', 'नहीं, मत करो', 'cancel', 'no', 'काट दो'])(
+      'still treats genuine rejection "%s" as REJECT',
+      (phrase) => {
+        expect(engine.evaluateOwnerApproval(phrase).decision).toBe('REJECT');
+      }
+    );
+
+    it('treats message negation as REJECT and message consent as APPROVE', () => {
+      const msgEngine = new AndroidBridgeManager();
+      msgEngine.connectDevice(capabilities);
+      msgEngine.handleIncomingNotification({
+        packageName: 'com.whatsapp',
+        appName: 'WhatsApp',
+        title: 'Rahul Verma',
+        text: 'Kal milte hain',
+      });
+
+      expect(msgEngine.evaluateOwnerApproval('मत भेजो').decision).toBe('REJECT');
+      expect(msgEngine.evaluateOwnerApproval('नहीं भेजना').decision).toBe('REJECT');
+      expect(msgEngine.evaluateOwnerApproval('भेज दो').decision).toBe('APPROVE');
+    });
+
+    it('leaves the call awaiting approval when the owner said not to answer', () => {
+      const evalResult = engine.evaluateOwnerApproval('कॉल मत उठाओ');
+      expect(evalResult.decision).toBe('REJECT');
+      expect(engine.getPendingEvent()?.status).toBe('AWAITING_APPROVAL');
+      expect(engine.getPendingEvent()?.type).toBe('CALL');
+    });
+  });
+
+  it('Scenario 17: openApplication gates truthfully — disconnected, emergency stop, unsupported, denied', () => {
+    const caps = {
+      deviceId: 'phone_open_app',
+      deviceName: 'Phone',
+      model: 'Phone',
+      osVersion: 'Android 14',
+      bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+      canDetectCalls: true,
+      canAnswerCalls: true,
+      telecomRoleDialer: true,
+      answerCallsPermission: true,
+      canReadNotifications: true,
+      canInlineReply: true,
+      canOpenApp: true,
+      canLookupContacts: true,
+      isSimulation: false,
+    };
+
+    // 1. Disconnected bridge must refuse and audit the refusal
+    const disconnected = engine.openApplication('com.whatsapp');
+    expect(disconnected.success).toBe(false);
+    expect(disconnected.blockedReason).toBe('MOBILE_NOT_CONNECTED');
+    expect(engine.getAuditLogs()[0].result).toBe('REJECTED');
+
+    // 2. Emergency stop must block even with a capable device
+    engine.connectDevice(caps);
+    engine.setEmergencyStop(true);
+    const killed = engine.openApplication('com.whatsapp');
+    expect(killed.success).toBe(false);
+    expect(killed.blockedReason).toBe('BLOCKED_EMERGENCY_STOP');
+    expect(engine.getAuditLogs()[0].result).toBe('BLOCKED_EMERGENCY_STOP');
+    engine.setEmergencyStop(false);
+
+    // 3. Device without launch capability reports UNSUPPORTED
+    engine.connectDevice({ ...caps, canOpenApp: false });
+    const unsupported = engine.openApplication('com.whatsapp');
+    expect(unsupported.success).toBe(false);
+    expect(unsupported.blockedReason).toBe('OPEN_APP_UNSUPPORTED');
+
+    // 4. Privacy-denied app (banking default DENY) must be refused
+    engine.connectDevice(caps);
+    const denied = engine.openApplication('com.phonepe.app');
+    expect(denied.success).toBe(false);
+    expect(denied.blockedReason).toBe('APP_DENIED');
+
+    // 5. Gates pass -> dispatched, but the launch itself is never claimed as done
+    const dispatched = engine.openApplication('com.whatsapp');
+    expect(dispatched.success).toBe(false);
+    expect(dispatched.message).toContain('awaiting device confirmation');
+    const audit = engine.getAuditLogs()[0];
+    expect(audit.eventType).toBe('APP_OPENED');
+    expect(audit.result).toBe('UNSUPPORTED');
+  });
+
+  it('Scenario 18: Simulated adapter openApp propagates the engine gate instead of hardcoding success', async () => {
+    androidBridgeEngine.disconnectDevice();
+    const offline = await simulatedAndroidAdapter.openApp('com.whatsapp');
+    expect(offline.success).toBe(false);
+    expect(offline.message).toContain('[SIMULATION_ONLY]');
+    expect(offline.message).toContain('No Android device is connected');
+
+    await simulatedAndroidAdapter.connect();
+    const online = await simulatedAndroidAdapter.openApp('com.whatsapp');
+    expect(online.success).toBe(false);
+    expect(online.message).toContain('awaiting device confirmation');
+  });
+
+  it('Scenario 19: maskPhoneNumber reports non-numeric identifiers honestly instead of leaking a mangled slice', () => {
+    // Regression: "Unknown" previously produced "******nown", a mangled fragment
+    // of the input that leaked characters and read as a phone number.
+    expect(maskPhoneNumber('Unknown')).toBe('Unknown Number');
+    expect(maskPhoneNumber('UNKNOWN')).toBe('Unknown Number');
+    expect(maskPhoneNumber('N/A')).toBe('Unknown Number');
+    expect(maskPhoneNumber('private')).toBe('Unknown Number');
+    expect(maskPhoneNumber('   ')).toBe('Unknown Number');
+    expect(maskPhoneNumber('')).toBe('Unknown Number');
+  });
+
+  it('Scenario 20: maskPhoneNumber preserves the country prefix and last four digits of real numbers', () => {
+    expect(maskPhoneNumber('+91 9876543210')).toBe('+91 ******3210');
+    expect(maskPhoneNumber('9876543210')).toBe('******3210');
+    expect(maskPhoneNumber('+1 415 890 2134')).toBe('+1 ******2134');
+    expect(maskPhoneNumber('+91-9876543210')).toBe('+91 ******3210');
   });
 });

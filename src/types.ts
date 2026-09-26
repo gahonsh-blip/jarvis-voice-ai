@@ -97,6 +97,11 @@ export interface MemoryStore {
     channelTitle?: string;
     subscriberCount?: string;
     videoCount?: string;
+    // Recorded by the server when the OAuth grant is stored. Optional: an
+    // older record may carry neither, and an absent value is the absence of an
+    // observation — never "still valid" or "all scopes granted".
+    expiresAt?: string;
+    scopes?: string[];
   };
   notes: {
     id: string;
@@ -235,6 +240,8 @@ export interface MobileStatusData {
     powerMode: 'Normal' | 'Power Saving' | 'Performance';
     statusText: string;
     available: boolean;
+    /** True when these values are illustrative fixtures, not a measurement. */
+    isSample?: boolean;
   };
   weather: {
     location: string;
@@ -245,23 +252,31 @@ export interface MobileStatusData {
     windKmh: number;
     feelsLikeC: number;
     available: boolean;
+    /** True when these values are illustrative fixtures, not a measurement. */
+    isSample?: boolean;
   };
   notifications: {
     totalCount: number;
     criticalCount: number;
     items: MobileNotificationItem[];
     available: boolean;
+    /** True when these items are sample fixtures, not this device's notifications. */
+    isSample?: boolean;
   };
   calendar: {
     todayEventsCount: number;
     events: MobileCalendarEventItem[];
     available: boolean;
+    /** True when these items are sample fixtures, not this device's calendar. */
+    isSample?: boolean;
   };
   email: {
     unreadCount: number;
     importantCount: number;
     summaries: MobileEmailSummaryItem[];
     available: boolean;
+    /** True when these items are sample fixtures, not this device's inbox. */
+    isSample?: boolean;
   };
   deviceHealth: {
     ramUsageMb: number;
@@ -272,9 +287,13 @@ export interface MobileStatusData {
     osVersion: string;
     networkType: 'WiFi' | '5G' | '4G' | 'Offline';
     available: boolean;
+    /** True when these values are illustrative fixtures, not a measurement. */
+    isSample?: boolean;
   };
   lastUpdated: string;
   permissions: Record<MobilePermissionCategory, boolean>;
+  /** True when any section above is fixture data rather than a real reading. */
+  isSample?: boolean;
 }
 
 export interface MorningBriefingPayload {
@@ -309,6 +328,9 @@ export interface BlueprintPhase {
 }
 
 export interface OracleVMStatus {
+  // The fields below the plan comment are the *declared* configuration/plan.
+  // Nothing in this process queries the OCI control plane, so they are not
+  // readings: the UI labels them as declared.
   provider: 'Oracle Cloud Always Free';
   tier: 'Always Free (₹0 / month)';
   instanceType: 'Ampere A1 Compute (ARM64)';
@@ -317,18 +339,41 @@ export interface OracleVMStatus {
   ramGb: number;
   bootVolumeGb: number;
   os: 'Ubuntu 24.04 LTS (Minimal ARM)';
-  publicIp: string;
+  // `publicIp` and `status` are OCI control-plane observations. Both are null
+  // until something actually observes them; the server never seeds them with a
+  // plausible value. See src/utils/hardening/ociInstanceTruth.ts.
+  publicIp: string | null;
   sshPort: number;
-  status: 'RUNNING' | 'PROVISIONING' | 'STOPPED';
+  status: 'RUNNING' | 'PROVISIONING' | 'STOPPED' | null;
+  /** ISO8601 of the observation that produced `status`, or null if never observed. */
+  statusObservedAt?: string | null;
+  // Measured lifetime of *this JARVIS process* (`Date.now() - DAEMON_BOOT_TIME`),
+  // NOT the instance's cloud uptime. The instance uptime is an OCI control-plane
+  // fact this server does not measure. See
+  // src/utils/hardening/processUptimeTruth.ts — surfaces must name it as the
+  // process uptime.
   uptimeHours: number;
   metrics: {
-    cpuUsage: number;
-    ramUsage: number;
-    diskUsage: number;
-    bandwidthUsedMb: number;
-    tempCelsius: number;
+    cpuUsage: number | null;
+    ramUsedGb: number | null;
+    ramTotalGb: number | null;
+    ramUsage: number | null;
+    diskUsage: number | null;
+    bandwidthUsedMb: number | null;
+    tempCelsius: number | null;
   };
-  firewallRules: { port: number; proto: 'tcp' | 'udp'; label: string; active: boolean }[];
+  metricsSource?: 'live_host' | 'unavailable';
+  metricsSampledAt?: string | null;
+  // Billing entitlement is an OCI billing-API fact. It is null until a billing
+  // observation exists; null must never be rendered as "free". See
+  // src/utils/hardening/billingEntitlementTruth.ts.
+  billingEntitlement?: 'FREE' | 'BILLED' | null;
+  billingObservedAt?: string | null;
+  // `active` is a tri-state observation, not a configuration echo: `true`/`false`
+  // mean a port was actually observed open/closed, `null` means it was never
+  // probed. The server sets `null` for every rule because nothing here contacts
+  // the Oracle VCN, so the UI must not render an unverified rule as a pass.
+  firewallRules: { port: number; proto: 'tcp' | 'udp'; label: string; active: boolean | null }[];
 }
 
 export interface TelegramBotMessage {
@@ -387,6 +432,11 @@ export interface SecurityMatrixState {
     errorReason?: string;
     providerUrn?: string;
     finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED' | string;
+    /**
+     * Provenance marker. Absent on seeds and legacy rows, which are therefore
+     * never rendered as executed or verified.
+     */
+    source?: string;
   }[];
 }
 
@@ -529,7 +579,9 @@ export interface ProactiveReportItem {
   contentHi: string;
   keyInsights: string[];
   systemHealth: {
-    serverStatus: 'Nominal' | 'Warning' | 'Critical';
+    // 'NOT_MEASURED' is the honest default: the routines are built by the very
+    // process they would assess, so they carry no independent health verdict.
+    serverStatus: 'NOT_MEASURED' | 'Nominal' | 'Warning' | 'Critical';
     activeWebsitesMonitored: number;
     pendingTasksCount: number;
     socialPostsPublished: number;
@@ -567,7 +619,7 @@ export interface IntegrationAuditItem {
   id: string;
   name: string;
   service: string;
-  status: 'REAL_WORKING' | 'NOT_CONNECTED';
+  status: 'REAL_WORKING' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
   reason?: string;
   requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean; placeholder: string }[];
   scopesOrPermissions: string[];
@@ -609,7 +661,8 @@ export interface DaemonTelemetry {
   aiEngine: {
     provider: string;
     geminiConfigured: boolean;
-    model: string;
+    /** The cloud model that will answer, or null when the offline engine is in use. */
+    model: string | null;
     fallbackActive: boolean;
     bilingualSupport: boolean;
   };

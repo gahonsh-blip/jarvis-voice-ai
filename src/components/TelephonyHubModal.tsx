@@ -47,7 +47,17 @@ import {
   getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
+import { resolveDisplayNumber } from '../utils/telephonyPrivacyDisplay';
+import {
+  telephonyEndpointLabel,
+  telephonyBrainLabel,
+  telephonyReadiness,
+  voiceAgentLabel,
+  receptionistLabel,
+} from '../utils/telephonyEndpointTruth';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
+import { ACOUSTIC_FILTER_STATUS, ACOUSTIC_FILTER_SPEC } from '../utils/hardening/acousticFilterTruth';
+import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
 import {
   downloadCallHistoryCsv,
   filterCallRecords,
@@ -104,15 +114,36 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   const [providerStatus, setProviderStatus] = useState<{
     status: string;
     isConfigured: boolean;
-    provider?: { id: string; name: string };
+    engineMode?: string;
+    engineLabel?: string;
+    engineApplied?: boolean;
+    engineApplyError?: string | null;
+    provider?: { id: string; name: string; isSimulationOnly?: boolean };
   } | null>(null);
+  const [settingsSaveResult, setSettingsSaveResult] = useState<string | null>(null);
+  const [geminiConfigured, setGeminiConfigured] = useState<boolean | undefined>(undefined);
 
-  React.useEffect(() => {
+  const loadProviderStatus = React.useCallback(() => {
     fetch('/api/telephony/status')
       .then((res) => res.json())
       .then((data) => {
         if (data && data.success) {
           setProviderStatus(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    loadProviderStatus();
+
+    // The Gemini reasoning path is only "ready" if the key is actually present;
+    // /api/health reports that directly, so readiness is measured, not assumed.
+    fetch('/api/health')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.geminiEnabled === 'boolean') {
+          setGeminiConfigured(data.geminiEnabled);
         }
       })
       .catch(() => {});
@@ -129,7 +160,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
         }
       })
       .catch(() => {});
-  }, []);
+  }, [loadProviderStatus]);
 
   const handleRunTests = async () => {
     setIsRunningTests(true);
@@ -238,8 +269,30 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     });
   };
 
-  const handleSaveSettings = () => {
+  // Persist to the server so the selected engine is actually applied to the
+  // live registry, then re-read the measured status. Reporting `Saved` without
+  // observing the server's answer would be exactly the fake success this
+  // hardening pass exists to remove.
+  const handleSaveSettings = async () => {
     onUpdateSettings(tempSettings);
+    try {
+      const res = await fetch('/api/telephony/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tempSettings),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.success !== true) {
+        setSettingsSaveResult('SAVE FAILED — server rejected the settings');
+      } else if (data.engineApplied === false) {
+        setSettingsSaveResult('SAVED BUT ENGINE NOT APPLIED — this engine is not routable in this build');
+      } else {
+        setSettingsSaveResult('SAVED — engine applied to live gateway');
+      }
+    } catch {
+      setSettingsSaveResult('SAVE FAILED — could not reach the server');
+    }
+    loadProviderStatus();
   };
 
   const handleTestGreeting = () => {
@@ -276,6 +329,34 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     dlAnchorElem.click();
   };
 
+  const readiness = telephonyReadiness(providerStatus);
+  const readinessBadgeClass =
+    readiness === 'CONFIGURED'
+      ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
+      : readiness === 'NOT_CONFIGURED'
+      ? 'bg-amber-950/80 border-amber-500/40 text-amber-300'
+      : 'bg-slate-900 border-slate-600/60 text-slate-300';
+  const readinessDotClass =
+    readiness === 'CONFIGURED'
+      ? 'bg-emerald-400'
+      : readiness === 'NOT_CONFIGURED'
+      ? 'bg-amber-400'
+      : 'bg-slate-400';
+
+  // The gateway badge reflects the engine actually serving calls, not the one
+  // merely selected in settings. A mismatch is surfaced, never hidden behind a
+  // green pill.
+  const engineIsLive = providerStatus?.engineMode === 'LIVE_GATEWAY';
+  const engineMismatch = providerStatus?.engineApplied === false;
+  const gatewayBadgeText = settingsSaveResult
+    ?? providerStatus?.engineLabel
+    ?? 'TELEPHONY STATUS UNKNOWN';
+  const gatewayBadgeClass = engineIsLive
+    ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+    : engineMismatch
+    ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+    : 'bg-amber-950/60 border-amber-500/40 text-amber-300';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
       <div className="relative flex flex-col h-[90vh] max-h-[820px] w-full max-w-5xl rounded-2xl border border-cyan-500/30 bg-slate-950 shadow-2xl shadow-cyan-950/40 overflow-hidden">
@@ -288,9 +369,9 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold tracking-wide text-white">HERMES JARVIS • Telephony & Call Hub</h2>
-                <span className="flex items-center gap-1 rounded-full bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-mono text-emerald-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  VOICE AGENT ACTIVE
+                <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-mono ${readinessBadgeClass}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${readinessDotClass}${readiness === 'CONFIGURED' ? ' animate-pulse' : ''}`} />
+                  {voiceAgentLabel(providerStatus)}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -310,14 +391,10 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
               <span>Export Call History</span>
             </button>
             <span
-              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${
-                providerStatus?.isConfigured
-                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
-              }`}
+              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${gatewayBadgeClass}`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${providerStatus?.isConfigured ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
-              {providerStatus?.isConfigured ? 'GATEWAY CONFIGURED' : 'TELEPHONY_NOT_CONFIGURED'}
+              <span className={`h-1.5 w-1.5 rounded-full ${engineIsLive ? 'bg-emerald-400' : engineMismatch ? 'bg-rose-400' : 'bg-amber-400 animate-ping'}`} />
+              {gatewayBadgeText}
             </span>
             {activeCall && (
               <span className="rounded-lg bg-cyan-950 px-2.5 py-1 text-xs font-mono text-cyan-300 border border-cyan-800">
@@ -568,7 +645,9 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                       <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Acoustic Simulation</label>
                       <div className="mt-1 flex items-center justify-between rounded-xl bg-slate-950 border border-slate-700 p-2 text-xs text-slate-300">
                         <span>PSTN / Cellular Bandpass</span>
-                        <span className="text-cyan-400 font-mono text-[10px]">300-3400Hz ON</span>
+                        <span className="text-slate-400 font-mono text-[10px]" title={ACOUSTIC_FILTER_SPEC}>
+                          {ACOUSTIC_FILTER_STATUS}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -588,8 +667,14 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                       <Bot className="h-5 w-5 text-cyan-400" />
                       <h3 className="text-sm font-bold text-white">AI Autonomous Receptionist</h3>
                     </div>
-                    <span className="rounded bg-emerald-950 px-2 py-0.5 text-[10px] font-mono text-emerald-300 border border-emerald-800">
-                      READY TO ANSWER
+                    <span className={`rounded px-2 py-0.5 text-[10px] font-mono border ${
+                      readiness === 'CONFIGURED'
+                        ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                        : readiness === 'NOT_CONFIGURED'
+                        ? 'bg-amber-950 text-amber-300 border-amber-800'
+                        : 'bg-slate-900 text-slate-300 border-slate-700'
+                    }`}>
+                      {receptionistLabel(providerStatus)}
                     </span>
                   </div>
 
@@ -1077,7 +1162,9 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                             )}
                         </div>
                         <p className="text-xs text-slate-400 font-mono">
-                          {selectedLog.direction === 'outbound' ? selectedLog.recipientNumber : selectedLog.callerNumber}
+                          {selectedLog.direction === 'outbound'
+                            ? selectedLog.recipientNumber
+                            : resolveDisplayNumber(selectedLog.callerNumber, effectiveContacts, maskUnknownEnabled)}
                         </p>
                       </div>
 
@@ -1103,12 +1190,13 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     {selectedLog.followUpActions && selectedLog.followUpActions.length > 0 && (
                       <div className="mt-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40 p-3">
                         <div className="text-[11px] font-mono text-emerald-400 uppercase mb-1.5 font-bold">
-                          Assigned Action Items & Next Steps
+                          Recorded Action Items & Next Steps
                         </div>
+                        <p className="text-[10px] text-emerald-300/80 mb-1.5">{ACTION_ITEM_LIST_NOTE}</p>
                         <ul className="space-y-1">
                           {selectedLog.followUpActions.map((act, i) => (
-                            <li key={i} className="flex items-center gap-2 text-xs text-emerald-200">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
+                            <li key={i} className="flex items-start gap-2 text-xs text-emerald-200">
+                              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
                               <span>{act}</span>
                             </li>
                           ))}
@@ -1207,6 +1295,34 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                         <div className="text-[10px] mt-0.5">Real worldwide PSTN cellular and landline connectivity.</div>
                       </div>
                     </div>
+
+                    {/* Measured engine truth. The selector is only applied to the
+                        live registry when Save persists to the server, so a
+                        mismatch between the saved choice and the serving engine
+                        is stated here rather than glossed over. */}
+                    <div className="mt-3 rounded-xl bg-slate-950 border border-slate-800 p-3 text-[11px] font-mono">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Selected engine</span>
+                        <span className="text-slate-200">{tempSettings.provider}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-slate-400">Serving engine</span>
+                        <span className={engineIsLive ? 'text-emerald-300' : engineMismatch ? 'text-rose-300' : 'text-amber-300'}>
+                          {providerStatus?.provider?.id ?? 'UNKNOWN'}
+                        </span>
+                      </div>
+                      {engineMismatch && (
+                        <div className="mt-2 flex items-start gap-1.5 text-rose-300">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span>Engine selection not applied — save again or choose a routable engine.</span>
+                        </div>
+                      )}
+                      {providerStatus?.provider?.isSimulationOnly && (
+                        <div className="mt-2 text-amber-300">
+                          SIMULATION_ONLY — no PSTN carrier is attached; calls stay in-process.
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Twilio Credentials */}
@@ -1245,21 +1361,30 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     </div>
                   )}
 
-                  {/* Webhook Endpoints */}
+                  {/* Webhook Endpoints — inventory and every badge are derived
+                      from routes actually registered in server.ts, not asserted.
+                      The readiness flag is the measured status, so an
+                      unanswered /api/telephony/status holds the badge at UNKNOWN. */}
                   <div className="rounded-xl bg-slate-950 border border-slate-800 p-3">
                     <div className="text-[11px] font-mono text-cyan-400 uppercase mb-2">Live Webhook Endpoints</div>
                     <div className="space-y-1 text-xs font-mono text-slate-300">
                       <div className="flex items-center justify-between">
                         <span>POST /api/telephony/incoming</span>
-                        <span className="text-emerald-400 text-[10px]">LIVE & READY</span>
+                        <span className={`text-[10px] ${readiness !== 'UNKNOWN' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {telephonyEndpointLabel('/api/telephony/incoming', readiness !== 'UNKNOWN')}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span>POST /api/telephony/twiml/voice</span>
-                        <span className="text-emerald-400 text-[10px]">TwiML ACTIVE</span>
+                        <span>POST /api/telephony/twiml/turn</span>
+                        <span className={`text-[10px] ${readiness !== 'UNKNOWN' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {telephonyEndpointLabel('/api/telephony/twiml/turn', readiness !== 'UNKNOWN')}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span>POST /api/telephony/handle-turn</span>
-                        <span className="text-emerald-400 text-[10px]">GEMINI BRAIN READY</span>
+                        <span className="text-cyan-300 text-[10px]">
+                          {telephonyBrainLabel(providerStatus?.isConfigured, geminiConfigured)}
+                        </span>
                       </div>
                     </div>
                   </div>

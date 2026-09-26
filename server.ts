@@ -7,7 +7,21 @@ import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
+import { freelanceLeadsReply } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
+import {
+  AUDIT_LOG_SOURCE_RECORDED,
+  auditTrailCounts,
+  describeAuditTrail,
+  deriveAuditFinalTruthState,
+  deriveAuditVerificationStatus,
+} from './src/utils/hardening/auditTrailTruth';
+import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
+import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
+import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
+import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
+import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
+import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -20,6 +34,7 @@ import {
   updateActionRequestStatus,
   realFsList,
   realFsRead,
+  realFsSearch,
   realFsWrite,
   realFsDelete,
   realGitStatus,
@@ -33,9 +48,11 @@ import {
   getIntegrationsAuditReport,
   extractYouTubeVideoId,
   fetchYouTubeTranscriptData,
-  heuristicTranscriptSummarize,
+  buildYouTubeSummary,
+  YouTubeSummaryResult,
   YouTubeVideoInfo,
   YouTubeTranscriptSegment,
+  runFinanceGuardSelfCheck,
 } from './server_tools';
 import {
   TelephonySessionManager,
@@ -44,8 +61,33 @@ import {
   TelephonyProviderRegistry,
 } from './src/utils/telephonyAdapters';
 import {
+  telephonyEngineProviderId,
+  telephonyEngineMode,
+  telephonyEngineLabel,
+  telephonySelectionApplied,
+  SIMULATION_PROVIDER_ID,
+} from './src/utils/telephonyGatewayTruth';
+import {
   runTelephonyTestSuite,
 } from './src/utils/telephonyTestRunner';
+import {
+  telephonyDispatchVerdict,
+  telephonyDispatchReply,
+  TelephonyDispatchPhase,
+} from './src/utils/telephonyDispatchTruth';
+import {
+  launchVerdict,
+  launchReply,
+} from './src/utils/computerOperator/launchDispatchTruth';
+import { screenshotVerdict, screenshotReply } from './src/utils/computerOperator/screenshotDispatchTruth';
+import { volumeVerdict, volumeReply } from './src/utils/computerOperator/audioDispatchTruth';
+import { powerVerdict, powerReply } from './src/utils/computerOperator/powerDispatchTruth';
+import {
+  fixProjectErrorReply,
+  operatorTaskExecuted,
+  screenInspectionExecuted,
+  screenInspectionReply,
+} from './src/utils/computerOperator/operatorReplyTruth';
 import {
   loadPhonePermissions,
   savePhonePermissions,
@@ -61,6 +103,115 @@ import {
   ScreenInterpreter,
   TaskTracker,
 } from './src/utils/computerOperator';
+import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/androidBridgeGateway';
+import { maskAndroidCallerNumber } from './src/utils/androidBridgePrivacy';
+import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
+import { classifyApprovalOutcome, formatUnconfirmedMobileApprovalReply } from './src/utils/hardening/approvalResolution';
+import {
+  observeInstanceFromHost,
+  describeRunState,
+  describePublicIp,
+} from './src/utils/hardening/ociInstanceTruth';
+import { describeBillingCost, describeDeclaredCost, declaredCostCell } from './src/utils/hardening/billingEntitlementTruth';
+import { processUptimeLabel } from './src/utils/hardening/processUptimeTruth';
+import { assessedServerStatus, describeServerHealthClaim } from './src/utils/hardening/serverHealthTruth';
+import {
+  telegramHostClaim,
+  telegramSeedMessages,
+} from './src/utils/hardening/telegramHostClaim';
+import { aiEngineProviderLabel, aiEngineModelName } from './src/utils/hardening/aiEngineTruth';
+import {
+  gatewaySendResult,
+  telegramGatewayBubble,
+  telegramGatewayNotice,
+} from './src/utils/hardening/telegramSendTruth';
+import {
+  buildDeliveryReceipt,
+  classifyTelegramError,
+  interpretTelegramSend,
+  type DeliveryInterpretation,
+} from './src/utils/communication/telegramDelivery';
+import { assembleAiContext } from './src/utils/memory/aiContext';
+import { auditSecrets } from './src/utils/computerOperator/credentialRedactor';
+import { mergeMemorySnapshots } from './src/utils/memory/memoryConflict';
+import {
+  evaluatePermission,
+  isBlockedByKillSwitch,
+  PERMISSION_MATRIX,
+  UNKNOWN_ACTION_DECISION,
+} from './src/utils/hardening/permissionMatrix';
+import {
+  grantedScopesFromTokenResponse,
+  scopeGranted,
+  publishScopeGranted,
+  PLATFORM_PUBLISH_SCOPES,
+} from './src/utils/socialPublishHonesty';
+import {
+  createBackup,
+  restoreBackup,
+  verifyBackup,
+} from './src/utils/hardening/backupRestore';
+import {
+  runSecurityAudit,
+  isAuditClean,
+  summariseAudit,
+} from './src/utils/hardening/securityAudit';
+import {
+  verifyDeployment,
+  deploymentBlockers,
+} from './src/utils/hardening/deploymentVerification';
+import {
+  sampleHostTelemetry,
+  type HostTelemetry,
+} from './src/utils/hardening/hostTelemetry';
+import { AutonomousGoalRunner } from './src/utils/autonomous/goalRunner';
+import type { StepDescriptor } from './src/utils/autonomous/stepLibrary';
+import {
+  dueGoals,
+  nextScheduledOccurrence,
+  type ScheduledGoal,
+  type ScheduledGoalRecord,
+} from './src/utils/autonomous/schedule';
+import { publishWithRetry } from './src/utils/social/publishRetry';
+import {
+  captureScreenshot,
+  getCaptureAvailability,
+  resolveScreenshotRoot,
+} from './src/utils/computerOperator/screenshotStore';
+import { hostActionCapabilities, HostActionExecutor } from './src/utils/computerOperator/actionExecutorHost';
+import { describeHost, describeHostScreen } from './src/utils/computerOperator/hostProbe';
+import type { ComputerAction } from './src/types/computerOperator';
+import {
+  githubTokenStatus,
+  listRepositories,
+  scanRepository,
+  scanAllRepositories,
+} from './src/utils/github/repoScanner';
+import { runHealthChecks, type CheckKind } from './src/utils/github/localHealth';
+import { buildFixPlan } from './src/utils/github/fixPlanner';
+import {
+  runNightlyCheck,
+  nightlyHistory,
+  nextRunAt,
+  DEFAULT_NIGHTLY_CONFIG,
+  type NightlyRunRecord,
+} from './src/utils/github/nightlyScheduler';
+import { ApprovalQueue } from './src/utils/github/approvalQueue';
+import { PROTECTED_BRANCH_NAMES } from './src/utils/github/automationWorkflow';
+
+/** Real host action executor, used by the operator endpoints. */
+const hostActionExecutor = new HostActionExecutor({ workspaceRoot: process.cwd() });
+
+// Install the real executor and a real screen observer so the operator engine
+// performs (and verifies) actions against the actual host instead of narrating
+// them. Without this the engine would fall back to the browser-routing client.
+ComputerOperatorEngine.setExecutor(hostActionExecutor);
+
+// Point the screen observer at the real host desktop instead of its built-in
+// illustrative view, so observations reflect the machine JARVIS is running on.
+ScreenObserver.setSource((options) =>
+  describeHostScreen(process.cwd(), { includeScreenshot: options.includeScreenshot })
+);
 
 // ==============================================================================
 // 1. PROCESS SUPERVISION & GLOBAL SAFETY GUARDS (24/7 DAEMON RESILIENCE)
@@ -90,15 +241,38 @@ process.on('SIGINT', () => {
 });
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
 // ==============================================================================
 // 2. SECURE SERVER-SIDE TOKEN VAULT (AES-256-GCM ENCRYPTION)
 // ==============================================================================
-const VAULT_SECRET = process.env.APP_SECRET || process.env.SESSION_SECRET || 'hermes_jarvis_oracle_arm_vault_key_2026';
-const VAULT_KEY = crypto.scryptSync(VAULT_SECRET, 'hermes_salt_vault_2026', 32);
+// The token vault key must come from the environment. A hardcoded fallback was
+// committed here previously, which means anyone with the source could decrypt
+// the vault. When no secret is configured we generate a random per-process key
+// instead: tokens then cannot be decrypted after a restart, but they are never
+// protected by a publicly-known key. Vault status is reported as NOT_CONFIGURED.
+const VAULT_SECRET = process.env.APP_SECRET || process.env.SESSION_SECRET || '';
+export const VAULT_CONFIGURED = VAULT_SECRET.length > 0;
+
+if (!VAULT_CONFIGURED) {
+  console.warn(
+    '[Vault] Neither APP_SECRET nor SESSION_SECRET is set. The token vault is NOT_CONFIGURED ' +
+      'and is using a random per-process key; stored tokens will not survive a restart.'
+  );
+}
+
+const VAULT_KEY = VAULT_CONFIGURED
+  ? crypto.scryptSync(VAULT_SECRET, 'hermes_salt_vault_2026', 32)
+  : crypto.randomBytes(32);
+
+// Number of bugs that block a production deployment. Kept as an explicit count
+// rather than a bare `false` so that a newly discovered blocking bug has an
+// obvious place to be recorded, and the deployment check reports it honestly.
+// Update this whenever a blocking bug is found or fixed; see
+// docs/COMPLETION_STATUS.md for the current list.
+const KNOWN_BLOCKING_BUGS = Number(process.env.HERMES_KNOWN_BLOCKING_BUGS ?? '0');
 
 interface EncryptedVaultData {
   iv: string;
@@ -138,7 +312,8 @@ function decryptToken(encrypted: EncryptedVaultData | string): string {
 // ==============================================================================
 // 3. DURABLE PERSISTENT STATE ENGINE & MULTI-TIER MEMORY
 // ==============================================================================
-const MEMORY_FILE_PATH = path.join(process.cwd(), 'jarvis_memory.json');
+const MEMORY_FILE_PATH =
+  process.env.JARVIS_MEMORY_FILE || path.join(process.cwd(), 'jarvis_memory.json');
 
 export interface AuditLogEntry {
   id: string;
@@ -153,6 +328,11 @@ export interface AuditLogEntry {
   providerUrn?: string;
   finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED' | string;
   actionId?: string;
+  /**
+   * Provenance. Present only on entries this process appended itself; seeds and
+   * legacy persisted rows lack it and are never presented as executed work.
+   */
+  source?: string;
 }
 
 export interface ServerSocialPost {
@@ -166,12 +346,12 @@ export interface ServerSocialPost {
   status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'not_published' | 'failed' | string;
   scheduledTime?: string;
   likesSimulated?: number;
-  executionStatus?: 'DRAFT' | 'PENDING_APPROVAL' | 'QUEUED' | 'EXECUTING' | 'SUCCESS' | 'FAILED' | 'VERIFIED' | 'NOT_PUBLISHED';
+  executionStatus?: 'DRAFT' | 'PENDING_APPROVAL' | 'QUEUED' | 'EXECUTING' | 'SUCCESS' | 'FAILED' | 'VERIFIED' | 'NOT_PUBLISHED' | 'UNVERIFIED';
   verificationStatus?: 'VERIFIED' | 'UNVERIFIED' | 'MISSING_CREDENTIALS' | 'PROVIDER_ERROR' | 'STANDBY';
   errorReason?: string;
   providerUrn?: string;
   verifiedAt?: string;
-  finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED';
+  finalTruthState?: 'VERIFIED' | 'FAILED' | 'DRAFT' | 'REJECTED' | 'NOT_PUBLISHED' | 'UNVERIFIED';
   videoTitle?: string;
   videoDescription?: string;
   privacyStatus?: 'private' | 'unlisted' | 'public';
@@ -255,6 +435,12 @@ interface MemoryData {
     lastEveningRunDate?: string;
     lastNightRunDate?: string;
   };
+  /** Recent conversation turns, kept server-side so context survives a client reset. */
+  conversationHistory?: {
+    role: 'user' | 'jarvis';
+    content: string;
+    timestamp: string;
+  }[];
 }
 
 const defaultSocialPosts: ServerSocialPost[] = [
@@ -290,38 +476,27 @@ const defaultSocialPosts: ServerSocialPost[] = [
   },
 ];
 
-const defaultAuditLogs: AuditLogEntry[] = [
-  {
-    id: 'log-1',
-    timestamp: new Date(Date.now() - 7200000).toISOString(),
-    action: 'Read Git Repository Status (Level 1)',
-    levelRequired: 1,
-    approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  },
-  {
-    id: 'log-2',
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    action: 'Draft Social Media Post for LinkedIn (Level 2)',
-    levelRequired: 2,
-    approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  },
-  {
-    id: 'log-3',
-    timestamp: new Date(Date.now() - 900000).toISOString(),
-    action: 'Generate Client Quotation ₹45,000 (Level 2)',
-    levelRequired: 2,
-    approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  },
-];
+// A cold start begins with an empty audit trail. This array previously seeded
+// three fabricated records — a Level 1 repository read, a Level 2 LinkedIn
+// draft and a Level 2 client quotation — each stamped 'EXECUTED' and
+// /VERIFIED, none of which this process had performed. The Security Matrix
+// rendered them as "Real-Time Execution Logs", so the operator saw invented
+// external work presented as executed and verified.
+const defaultAuditLogs: AuditLogEntry[] = [];
+
+/**
+ * Append an audit entry and stamp its provenance. Every write to
+ * `memoryState.auditLogs` must go through here so the trail can distinguish
+ * events this process really recorded from seeds and legacy rows.
+ */
+function pushAuditEntry(entry: AuditLogEntry): AuditLogEntry {
+  entry.source = AUDIT_LOG_SOURCE_RECORDED;
+  memoryState.auditLogs.unshift(entry);
+  if (memoryState.auditLogs.length > 100) {
+    memoryState.auditLogs = memoryState.auditLogs.slice(0, 100);
+  }
+  return entry;
+}
 
 const defaultFreelanceLeads: ServerFreelanceLead[] = [
   {
@@ -389,16 +564,30 @@ try {
   if (fs.existsSync(MEMORY_FILE_PATH)) {
     const raw = fs.readFileSync(MEMORY_FILE_PATH, 'utf-8');
     const parsed = JSON.parse(raw);
+    // Prefer whatever is on disk — including an intentionally empty array. The
+    // previous `length > 0` guards silently restored seed data, so deleting every
+    // note or lead and restarting brought them all back.
+    const coerceArray = <T,>(value: unknown, fallback: T[]): T[] =>
+      Array.isArray(value) ? (value as T[]) : fallback;
+    const coerceKeyValues = (
+      value: unknown,
+      fallback: Record<string, string>,
+    ): Record<string, string> =>
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, string>)
+        : fallback;
+
     memoryState = {
       ...memoryState,
       ...parsed,
-      notes: Array.isArray(parsed.notes) && parsed.notes.length > 0 ? parsed.notes : memoryState.notes,
-      customKeyValues: { ...memoryState.customKeyValues, ...(parsed.customKeyValues || {}) },
+      notes: coerceArray(parsed.notes, memoryState.notes),
+      customKeyValues: coerceKeyValues(parsed.customKeyValues, memoryState.customKeyValues),
       stats: { ...memoryState.stats, ...(parsed.stats || {}) },
-      processedTelegramUpdates: Array.isArray(parsed.processedTelegramUpdates) ? parsed.processedTelegramUpdates : [],
-      socialPosts: Array.isArray(parsed.socialPosts) && parsed.socialPosts.length > 0 ? parsed.socialPosts : memoryState.socialPosts,
-      auditLogs: Array.isArray(parsed.auditLogs) && parsed.auditLogs.length > 0 ? parsed.auditLogs : memoryState.auditLogs,
-      freelanceLeads: Array.isArray(parsed.freelanceLeads) && parsed.freelanceLeads.length > 0 ? parsed.freelanceLeads : memoryState.freelanceLeads,
+      processedTelegramUpdates: coerceArray(parsed.processedTelegramUpdates, []),
+      socialPosts: coerceArray(parsed.socialPosts, memoryState.socialPosts),
+      auditLogs: coerceArray(parsed.auditLogs, memoryState.auditLogs),
+      freelanceLeads: coerceArray(parsed.freelanceLeads, memoryState.freelanceLeads),
+      conversationHistory: coerceArray(parsed.conversationHistory, []),
       schedulerState: parsed.schedulerState || {},
       linkedInConnection: parsed.linkedInConnection ? {
         ...parsed.linkedInConnection,
@@ -570,7 +759,20 @@ function persistMemory() {
       };
     }
 
-    fs.writeFileSync(MEMORY_FILE_PATH, JSON.stringify(diskState, null, 2), 'utf-8');
+    // Re-encrypting on every boot rewrites identical tokens into new ciphertext,
+    // which churns the committed memory file for no benefit. Only write when the
+    // serialized state actually changed.
+    const serialized = JSON.stringify(diskState, null, 2);
+    try {
+      if (fs.existsSync(MEMORY_FILE_PATH) && fs.readFileSync(MEMORY_FILE_PATH, 'utf-8') === serialized) {
+        lastPersistedTimestamp = new Date().toISOString();
+        return;
+      }
+    } catch {
+      // Fall through and write.
+    }
+
+    fs.writeFileSync(MEMORY_FILE_PATH, serialized, 'utf-8');
     lastPersistedTimestamp = new Date().toISOString();
   } catch (err: any) {
     console.warn('[Storage] Error writing to jarvis_memory.json:', err?.message);
@@ -590,13 +792,13 @@ export function addAuditLog(
     levelRequired,
     approvedBy,
     status,
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    // Derive the truth fields from the caller's own outcome. Previously both
+    // were hardcoded to 'VERIFIED', so a row logged as FAILED/PENDING/BLOCKED
+    // still rendered a green "confirmed" badge in the Security Matrix.
+    verificationStatus: deriveAuditVerificationStatus(status),
+    finalTruthState: deriveAuditFinalTruthState(status),
   };
-  memoryState.auditLogs.unshift(entry);
-  if (memoryState.auditLogs.length > 100) {
-    memoryState.auditLogs = memoryState.auditLogs.slice(0, 100);
-  }
+  pushAuditEntry(entry);
   persistMemory();
 }
 
@@ -1088,7 +1290,7 @@ const BLUEPRINT_PHASES = [
     titleHi: 'Phase 1 — फ्री क्लाउड सर्वर (Oracle Always Free)',
     status: 'completed',
     icon: 'Cloud',
-    cost: '₹0 Always Free Guaranteed',
+    cost: '₹0 Always Free (declared plan, entitlement NOT_PROBED)',
     description: 'Provision an Ampere A1 ARM compute VM (4 OCPUs, 24 GB RAM, 200 GB Storage) on Oracle Cloud Always Free tier with strict zero-cost checklist verification.',
     deliverables: [
       { text: 'Oracle Cloud Always Free account setup verified', done: true },
@@ -1240,6 +1442,11 @@ const BLUEPRINT_PHASES = [
 
 let oracleCloudState = {
   provider: 'Oracle Cloud Always Free' as const,
+  // Shape/OCPU/RAM/boot-volume/OS below are the *plan* the owner intends to run
+  // on, not readings from an instance. Nothing in this process queries the OCI
+  // control plane, so none of them is an observation; the UI header labels them
+  // as declared configuration and the panel labels the Always Free figures as
+  // programme limits. They are kept only as the declared plan.
   tier: 'Always Free (₹0 / month)' as const,
   instanceType: 'Ampere A1 Compute (ARM64)' as const,
   shape: 'VM.Standard.A1.Flex' as const,
@@ -1247,25 +1454,116 @@ let oracleCloudState = {
   ramGb: 24,
   bootVolumeGb: 200,
   os: 'Ubuntu 24.04 LTS (Minimal ARM)' as const,
-  publicIp: '129.154.42.108',
+  // `publicIp` and `status` are OCI control-plane facts. The previous seed
+  // asserted a literal address and a constant `RUNNING`, and because a supplied
+  // value passes through the UI normalisers it rendered — and was copied to the
+  // clipboard as an `ssh` target — as an observed address. The literal is
+  // deliberately not repeated here so it cannot re-enter this file; see
+  // src/utils/hardening/ociInstanceTruth.ts and the guard in
+  // src/tests/toolSurfaceTruthfulness.test.ts.
+  // Both are null until something actually observes them (see the observation
+  // block below this state).
+  publicIp: null as string | null,
   sshPort: 22,
-  status: 'RUNNING' as const,
-  uptimeHours: Math.floor((Date.now() - new Date(DAEMON_BOOT_TIME).getTime()) / 3600000) + 342,
+  status: null as 'RUNNING' | 'PROVISIONING' | 'STOPPED' | null,
+  // When `status` was observed, or null when it was never observed.
+  statusObservedAt: null as string | null,
+  // Billing entitlement is an OCI billing-API fact and nothing in this process
+  // queries that API, so it stays null (never "FREE") until something actually
+  // observes it. The Telegram cloud reply and the blueprint report derive their
+  // cost line from this rather than asserting a fixed ₹0 guarantee.
+  // See src/utils/hardening/billingEntitlementTruth.ts.
+  billingEntitlement: null as 'FREE' | 'BILLED' | null,
+  billingObservedAt: null as string | null,
+  // Hours this *process* has been up, measured. The previous version added a
+  // hardcoded +342 offset, so JARVIS always claimed 342+ hours of uptime that
+  // nobody had measured.
+  uptimeHours: Math.floor((Date.now() - new Date(DAEMON_BOOT_TIME).getTime()) / 3600000),
+  // Live host measurements. The previous version jittered around hardcoded
+  // constants (14.8% CPU, 3.4 GB RAM) with Math.random(), so the UI and the
+  // spoken responses reported invented numbers as if they were real telemetry.
   metrics: {
-    cpuUsage: 14.8,
-    ramUsage: 3.4,
-    diskUsage: 18.2,
-    bandwidthUsedMb: 1240,
-    tempCelsius: 38.5,
+    cpuUsage: null as number | null,
+    ramUsedGb: null as number | null,
+    ramTotalGb: null as number | null,
+    ramUsage: null as number | null,
+    diskUsage: null as number | null,
+    bandwidthUsedMb: null as number | null,
+    tempCelsius: null as number | null,
   },
+  metricsSource: 'unavailable' as 'live_host' | 'unavailable',
+  metricsSampledAt: null as string | null,
+  // This list is the *declared* VCN ingress configuration. It is not a
+  // measurement: nothing in this process contacts the Oracle VCN, opens an
+  // inbound socket, or can observe whether a port is reachable from the
+  // internet, so `active` is null for every rule (never probed). The previous
+  // version set `active: true` on all five, which the modal rendered as five
+  // green checkmarks under a "Zero Accidental Ingress" heading — an
+  // unconditional security claim about ports that were never tested.
   firewallRules: [
-    { port: 22, proto: 'tcp' as const, label: 'SSH Remote Terminal (Restricted IP)', active: true },
-    { port: 80, proto: 'tcp' as const, label: 'HTTP Web Panel (Nginx Proxy)', active: true },
-    { port: 443, proto: 'tcp' as const, label: 'HTTPS SSL Encrypted Panel', active: true },
-    { port: 3000, proto: 'tcp' as const, label: 'JARVIS Applet Core Engine', active: true },
-    { port: 8443, proto: 'tcp' as const, label: 'Telegram Webhook Ingress Gateway', active: true },
+    { port: 22, proto: 'tcp' as const, label: 'SSH Remote Terminal (Restricted IP)', active: null },
+    { port: 80, proto: 'tcp' as const, label: 'HTTP Web Panel (Nginx Proxy)', active: null },
+    { port: 443, proto: 'tcp' as const, label: 'HTTPS SSL Encrypted Panel', active: null },
+    { port: 3000, proto: 'tcp' as const, label: 'JARVIS Applet Core Engine', active: null },
+    { port: 8443, proto: 'tcp' as const, label: 'Telegram Webhook Ingress Gateway', active: null },
   ],
 };
+
+// Re-sample the live host metrics into the shared Oracle state. Called at boot
+// and on every /api/oracle-cloud request so Telegram and voice replies quote the
+// same real values as the modal, never a stale or invented number.
+function refreshOracleMetrics(): void {
+  const sample: HostTelemetry = sampleHostTelemetry();
+  oracleCloudState.metrics = {
+    cpuUsage: sample.cpuUsage,
+    ramUsedGb: sample.ramUsedGb,
+    ramTotalGb: sample.ramTotalGb,
+    ramUsage: sample.ramUsage,
+    diskUsage: sample.diskUsage,
+    // Bandwidth and temperature are not measurable from Node on this host.
+    bandwidthUsedMb: null,
+    tempCelsius: null,
+  };
+  oracleCloudState.metricsSource = 'live_host';
+  oracleCloudState.metricsSampledAt = sample.sampledAt;
+}
+
+refreshOracleMetrics();
+
+// Oracle VM instance observation.
+//
+// `status` and `publicIp` are OCI control-plane facts and this process never
+// calls that control plane, so neither can be *measured* here. One weaker fact
+// is provable: if the daemon host is the Oracle ARM instance (a real hostname
+// match), the instance must be running — this process is executing on it. That
+// is recorded as an observation of the hosting instance, and the public address
+// stays unobserved because a host interface address is not the instance's
+// cloud-assigned IP.
+function observeOciInstance(): void {
+  const { isOracleLike } = getLocalHostIdentity();
+  const observation = observeInstanceFromHost(
+    isOracleLike,
+    oracleCloudState.metricsSampledAt,
+  );
+  oracleCloudState.status = observation.status;
+  oracleCloudState.publicIp = observation.publicIp;
+  oracleCloudState.statusObservedAt = observation.observedAt;
+}
+
+/** Identity of the machine this process actually runs on. Used to avoid
+ *  asserting which cloud provider hosts us when nothing verified that. */
+function getLocalHostIdentity(): { hostname: string; isOracleLike: boolean } {
+  const hostname = (() => {
+    try {
+      return os.hostname();
+    } catch {
+      return 'unknown';
+    }
+  })();
+  return { hostname, isOracleLike: /oracle|oci|ampere/i.test(hostname) };
+}
+
+observeOciInstance();
 
 // Security Matrix State
 let securityMatrixState = {
@@ -1312,94 +1610,137 @@ let securityMatrixState = {
   },
 };
 
-// Proactive Daily Reports
-let proactiveReports = [
-  {
-    id: 'rep-morning',
-    timeSlot: 'morning' as const,
-    titleEn: '🌅 Morning Briefing (09:00 AM)',
-    titleHi: '🌅 सुबह की ब्रीफिंग (09:00 AM)',
-    timestamp: new Date().toISOString(),
-    contentEn: 'Good morning, Sir. All cloud systems are nominal on your Oracle ARM instance. Today you have 2 pending client quotations to review, 1 social media draft awaiting approval, and your git repository is up-to-date. Have a productive day.',
-    contentHi: 'शुभ प्रभात, सर। आपके ओरेकल क्लाउड सर्वर पर सभी सिस्टम सुचारू रूप से चल रहे हैं। आज आपके पास समीक्षा के लिए 2 क्लाइंट कोटेशन और 1 सोशल मीडिया पोस्ट पेंडिंग है। आपका दिन शुभ और सफल रहे।',
-    keyInsights: [
-      'Oracle VM Uptime: 342+ hrs continuous • 0 errors',
-      'Pending Client Quotation: Aarav Tech Solutions (₹65,000)',
-      'Social Post Ready: LinkedIn Autonomous Agents Article (Awaiting Level 4 Confirmation)',
-      'System Security Level: Level 2 (Create Mode with Human Approval Enforced)',
-    ],
-    systemHealth: {
-      serverStatus: 'Nominal' as const,
-      activeWebsitesMonitored: 3,
-      pendingTasksCount: 4,
-      socialPostsPublished: 2,
+// Proactive Daily Reports.
+//
+// These are *plans*, not results: the times are real (the scheduler in
+// checkAndRunSchedulerJobs fires the 09:00 IST briefing), but no website probe,
+// HTTP status code or cloud uptime number is measured for this preview. Earlier
+// revisions hardcoded "All 3 monitored web properties returned HTTP 200 OK within
+// 180ms", "Oracle VM Uptime: 342+ hrs", invented quotation/draft counts and a
+// "Memory consumption 14%" figure that nothing ever sampled. The builder below
+// substitutes the values that *are* known (real counts, real security level, real
+// live-host telemetry when it was sampled) and says "not measured" for the rest.
+const NOT_MEASURED = 'not measured';
+
+function buildProactiveReports(): any[] {
+  const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+  const cpuText = live?.cpuUsage != null ? `${live.cpuUsage}%` : NOT_MEASURED;
+  const ramText = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : NOT_MEASURED;
+  const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
+  const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
+  const publishedPosts = memoryState.socialPosts.filter((p) => p.status === 'published').length;
+  const level = securityMatrixState.currentLevel;
+  // The approval gate is operator-flippable, so the briefing may only state what
+  // the matrix actually holds. The previous literals asserted the gate was on
+  // even when /api/security/update had turned it off.
+  const posture = securityMatrixPosture(securityMatrixState);
+
+  return [
+    {
+      id: 'rep-morning',
+      timeSlot: 'morning' as const,
+      titleEn: '🌅 Morning Briefing (09:00 AM)',
+      titleHi: '🌅 सुबह की ब्रीफिंग (09:00 AM)',
+      timestamp: new Date().toISOString(),
+      contentEn: `Good morning, Sir. Scheduled morning briefing. Pipeline: ${pendingQuotations} lead(s) with a prepared quotation, ${pendingPosts} social draft(s) awaiting approval. Security level: ${level}. Host CPU ${cpuText}, RAM ${ramText}. Cloud node health is not probed by this server.`,
+      contentHi: `शुभ प्रभात, सर। निर्धारित सुबह की ब्रीफिंग। पाइपलाइन: ${pendingQuotations} कोटेशन तैयार, ${pendingPosts} सोशल ड्राफ्ट स्वीकृति की प्रतीक्षा में। सुरक्षा स्तर: ${level}।`,
+      keyInsights: [
+        `Prepared Quotations: ${pendingQuotations}`,
+        `Social Drafts Awaiting Approval: ${pendingPosts}`,
+        `Host CPU: ${cpuText} • RAM: ${ramText}`,
+        `System Security Level: Level ${level}`,
+        `External-action approval: ${posture.humanApproval}`,
+        'Cloud node uptime: not probed by this server',
+        describeServerHealthClaim(assessedServerStatus()),
+      ],
+      systemHealth: {
+        serverStatus: assessedServerStatus(),
+        activeWebsitesMonitored: 0,
+        pendingTasksCount: pendingQuotations + pendingPosts,
+        socialPostsPublished: publishedPosts,
+      },
     },
-  },
-  {
-    id: 'rep-midday',
-    timeSlot: 'midday' as const,
-    titleEn: '☀️ Midday Health & Site Audit (02:00 PM)',
-    titleHi: '☀️ दोपहर की वेबसाइट और सिस्टम जांच (02:00 PM)',
-    timestamp: new Date().toISOString(),
-    contentEn: 'Sir, midday diagnostics completed. All 3 monitored client web properties responded with HTTP 200 OK within 180ms. Memory consumption is optimal at 14% on the Oracle ARM server.',
-    contentHi: 'सर, दोपहर का सिस्टम डायग्नोस्टिक पूरा हुआ। सभी 3 क्लाइंट वेबसाइटें सक्रिय हैं और प्रतिक्रिया समय 180ms है। सर्वर मेमोरी उपयोग 14% पर पूर्ण सुरक्षित है।',
-    keyInsights: [
-      'Website Uptime: 100% (Response avg: 180ms)',
-      'CPU Load: 14.8% • RAM: 3.4 GB / 24 GB',
-      'No security anomalies or unauthorized access attempts detected.',
-    ],
-    systemHealth: {
-      serverStatus: 'Nominal' as const,
-      activeWebsitesMonitored: 3,
-      pendingTasksCount: 2,
-      socialPostsPublished: 1,
+    {
+      id: 'rep-midday',
+      timeSlot: 'midday' as const,
+      titleEn: '☀️ Midday Health & Site Audit (02:00 PM)',
+      titleHi: '☀️ दोपहर की वेबसाइट और सिस्टम जांच (02:00 PM)',
+      timestamp: new Date().toISOString(),
+      contentEn: `Sir, midday plan. No client website is configured for monitoring on this server, so no HTTP status or response-time probe was performed. Host CPU ${cpuText}, RAM ${ramText}.`,
+      contentHi: `सर, दोपहर की योजना। इस सर्वर पर कोई क्लाइंट वेबसाइट मॉनिटरिंग के लिए कॉन्फ़िगर नहीं है, इसलिए कोई HTTP जांच नहीं की गई।`,
+      keyInsights: [
+        'Website uptime: not measured (no site configured)',
+        `Host CPU: ${cpuText} • RAM: ${ramText}`,
+        'Security anomaly scan: not performed',
+        describeServerHealthClaim(assessedServerStatus()),
+      ],
+      systemHealth: {
+        serverStatus: assessedServerStatus(),
+        activeWebsitesMonitored: 0,
+        pendingTasksCount: 0,
+        socialPostsPublished: publishedPosts,
+      },
     },
-  },
-  {
-    id: 'rep-evening',
-    timeSlot: 'evening' as const,
-    titleEn: '🌇 Evening Social & Growth Pulse (06:30 PM)',
-    titleHi: '🌇 शाम की सोशल मीडिया और ग्रोथ रिपोर्ट (06:30 PM)',
-    timestamp: new Date().toISOString(),
-    contentEn: 'Sir, evening audit complete. Social media drafts verified against Level-4 security gate. Telegram mobile controller active and polling.',
-    contentHi: 'सर, शाम का ऑडिट पूर्ण हुआ। सोशल मीडिया ड्राफ्ट्स लेवल-4 सुरक्षा गेट द्वारा सुरक्षित हैं। टेलीग्राम मोबाइल कंट्रोलर सक्रिय है।',
-    keyInsights: [
-      'Human-in-the-loop gate active',
-      'Targeted Reach: LinkedIn & Twitter/X Developer Audiences',
-      'Next briefing scheduled for tomorrow morning.',
-    ],
-    systemHealth: {
-      serverStatus: 'Nominal' as const,
-      activeWebsitesMonitored: 3,
-      pendingTasksCount: 1,
-      socialPostsPublished: 2,
+    {
+      id: 'rep-evening',
+      timeSlot: 'evening' as const,
+      titleEn: '🌇 Evening Social & Growth Pulse (06:30 PM)',
+      titleHi: '🌇 शाम की सोशल मीडिया और ग्रोथ रिपोर्ट (06:30 PM)',
+      timestamp: new Date().toISOString(),
+      contentEn: `Sir, evening plan. ${publishedPosts} post(s) published, ${pendingPosts} draft(s) still behind the Level-4 approval gate. Reach and impression metrics are not collected by this server.`,
+      contentHi: `सर, शाम की योजना। ${publishedPosts} पोस्ट प्रकाशित, ${pendingPosts} ड्राफ्ट लेवल-4 स्वीकृति गेट पर।`,
+      keyInsights: [
+        `External-action approval: ${posture.humanApproval}`,
+        `Published posts: ${publishedPosts} • Awaiting approval: ${pendingPosts}`,
+        'Reach/impression metrics: not collected',
+        describeServerHealthClaim(assessedServerStatus()),
+      ],
+      systemHealth: {
+        serverStatus: assessedServerStatus(),
+        activeWebsitesMonitored: 0,
+        pendingTasksCount: pendingPosts,
+        socialPostsPublished: publishedPosts,
+      },
     },
-  },
-  {
-    id: 'rep-night',
-    timeSlot: 'night' as const,
-    titleEn: '🌙 Nightly Work Summary & Backup (10:30 PM)',
-    titleHi: '🌙 रात का कार्य सारांश और बैकअप (10:30 PM)',
-    timestamp: new Date().toISOString(),
-    contentEn: 'Sir, today\'s daily work report is complete. Commands executed, memory store synchronized to disk, and daily incremental backup verified. Low-power watchful daemon mode active.',
-    contentHi: 'सर, आज का संपूर्ण कार्य सारांश तैयार है। कमांड्स निष्पादित हुए, मेमोरी स्टोर डिस्क पर सुरक्षित रूप से सिंक हुआ। सिस्टम वॉचफुल मोड में सक्रिय रहेगा।',
-    keyInsights: [
-      'Total Commands Executed: ' + memoryState.stats.totalCommands,
-      'Database & Memory Backup: Saved to jarvis_memory.json',
-      'Scheduled Morning Briefing for 09:00 AM Tomorrow.',
-    ],
-    systemHealth: {
-      serverStatus: 'Nominal' as const,
-      activeWebsitesMonitored: 3,
-      pendingTasksCount: 0,
-      socialPostsPublished: 2,
+    {
+      id: 'rep-night',
+      timeSlot: 'night' as const,
+      titleEn: '🌙 Nightly Work Summary & Backup (10:30 PM)',
+      titleHi: '🌙 रात का कार्य सारांश और बैकअप (10:30 PM)',
+      timestamp: new Date().toISOString(),
+      contentEn: `Sir, nightly plan. ${memoryState.stats.totalCommands} command(s) recorded this session; memory persists to jarvis_memory.json on write. No off-host incremental backup is configured.`,
+      contentHi: `सर, रात की योजना। इस सत्र में ${memoryState.stats.totalCommands} कमांड दर्ज। मेमोरी jarvis_memory.json में सुरक्षित होती है।`,
+      keyInsights: [
+        'Total Commands Executed: ' + memoryState.stats.totalCommands,
+        'Memory store: jarvis_memory.json (local write)',
+        'Off-host backup: not configured',
+        describeServerHealthClaim(assessedServerStatus()),
+      ],
+      systemHealth: {
+        serverStatus: assessedServerStatus(),
+        activeWebsitesMonitored: 0,
+        pendingTasksCount: 0,
+        socialPostsPublished: publishedPosts,
+      },
     },
-  },
-];
+  ];
+}
+
+let proactiveReports = buildProactiveReports();
 
 // ==============================================================================
 // 5. STRICT TRUTH-IN-EXECUTION & REAL MULTI-SOCIAL VERIFICATION ENGINE
 // ==============================================================================
+
+/**
+ * Base URL for the LinkedIn REST API.
+ *
+ * Overridable so the real publish path can be exercised end-to-end against a
+ * local server. Defaults to the live API.
+ */
+function getLinkedInApiBaseUrl(): string {
+  return (process.env.LINKEDIN_API_BASE_URL || 'https://api.linkedin.com').replace(/\/+$/, '');
+}
 
 /**
  * 1. LINKEDIN VERIFICATION & PUBLISHING ENGINE (Official REST Posts API - Personal Member Profile)
@@ -1448,7 +1789,7 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
   try {
     let targetAuthor = configuredUrn;
     if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
-      const meRes = await fetch('https://api.linkedin.com/v2/userinfo', {
+      const meRes = await fetch(`${getLinkedInApiBaseUrl()}/v2/userinfo`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (meRes.ok) {
@@ -1499,56 +1840,121 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
       isReshareDisabledByAuthor: false,
     };
 
-    const res = await fetch('https://api.linkedin.com/rest/posts', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'LinkedIn-Version': '202501',
-        'X-Restli-Protocol-Version': '2.0.0',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(postPayload),
+    // The POST to LinkedIn is retried only for failures that are safe to repeat.
+    // A timeout after the request was sent is ambiguous: the retry helper stops
+    // and reports UNVERIFIED rather than risking a duplicate post.
+    const publishAttempt = async (): Promise<
+      { ok: true; providerId: string } | { ok: false; status?: number; message: string; error?: unknown }
+    > => {
+      // `globalThis.Response` because the bare name refers to Express's type here.
+      let res: globalThis.Response;
+      try {
+        res = await fetch(`${getLinkedInApiBaseUrl()}/rest/posts`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'LinkedIn-Version': '202501',
+            'X-Restli-Protocol-Version': '2.0.0',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(postPayload),
+        });
+      } catch (netErr) {
+        return {
+          ok: false,
+          message: netErr instanceof Error ? netErr.message : 'network error',
+          error: netErr,
+        };
+      }
+
+      const xRestliId = res.headers.get('x-restli-id') || res.headers.get('location') || '';
+      const resData: any = await res.json().catch(() => null);
+
+      // LinkedIn returns the created post's URN in x-restli-id. A 2xx without a
+      // URN is not evidence of a post, so it is reported as unverified rather
+      // than being handed a fabricated identifier.
+      const confirmedUrn = res.status === 201
+        ? (xRestliId || resData?.id || '').trim()
+        : res.ok
+          ? String(resData?.id ?? '').trim()
+          : '';
+
+      if (confirmedUrn) return { ok: true, providerId: confirmedUrn };
+
+      if (res.ok) {
+        // Signal the caller that the request succeeded without an identifier.
+        return { ok: true, providerId: '' };
+      }
+
+      // Treat any other non-ok response as a typed failure so the retry helper can
+      // classify it from the status code.
+      return { ok: false, status: res.status, message: resData?.message || `HTTP ${res.status}` };
+    };
+
+    const { result: publishOutcome, receipt: publishReceipt } = await publishWithRetry({
+      label: 'linkedin',
+      attempt: publishAttempt,
     });
 
-    const xRestliId = res.headers.get('x-restli-id') || res.headers.get('location') || '';
-    const resData: any = await res.json().catch(() => null);
-
-    if (res.status === 201 || (res.ok && (xRestliId || resData?.id))) {
-      const postId = xRestliId || resData?.id || `urn:li:share:${Date.now()}`;
+    if (publishOutcome.published) {
+      // LinkedIn answers 201 with the post URN — proof the post exists — but it
+      // does not report the post's visibility back, so the confirmation states
+      // what was requested (PUBLIC) rather than asserting a confirmed audience.
       return {
         success: true,
         executionStatus: 'SUCCESS',
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
-        providerUrn: postId,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on LinkedIn personal member profile! Post URN: ${postId}`,
-      };
-    } else if (res.status === 401 || res.status === 403) {
-      if (oauthConn) {
-        oauthConn.connected = false;
-        oauthConn.errorReason = 'OAuth token rejected or missing w_member_social scope. Please reconnect.';
-        persistMemory();
-      }
-      const errDetail = resData?.message || `HTTP ${res.status}`;
-      return {
-        success: false,
-        executionStatus: 'FAILED',
-        verificationStatus: 'PROVIDER_ERROR',
-        finalTruthState: 'FAILED',
-        errorReason: `LinkedIn Auth/Permission Error: ${errDetail}`,
-        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Please ensure 'w_member_social' permission is approved and reconnect.`,
-      };
-    } else {
-      const errDetail = resData?.message || (resData?.serviceErrorCode ? `Code ${resData.serviceErrorCode}: ${resData.message}` : `HTTP status ${res.status}`);
-      return {
-        success: false,
-        executionStatus: 'FAILED',
-        verificationStatus: 'PROVIDER_ERROR',
-        finalTruthState: 'FAILED',
-        errorReason: `LinkedIn API error: ${errDetail}`,
-        userMessage: `❌ PUBLISHING FAILED: LinkedIn returned error (${errDetail}). Post saved as DRAFT.`,
+        providerUrn: publishOutcome.providerId,
+        userMessage: `✅ VERIFIED UPLOAD: LinkedIn accepted the post with URN ${publishOutcome.providerId} (requested visibility PUBLIC). LinkedIn does not echo per-post visibility, so the audience is taken as requested, not independently measured.`,
       };
     }
+
+    // A rejected token must clear the connection so the UI asks for a reconnect.
+    if (publishOutcome.failureKind === 'AUTH' || publishOutcome.failureKind === 'PERMISSION') {
+      if (oauthConn) {
+        oauthConn.connected = false;
+        oauthConn.errorReason =
+          publishOutcome.failureKind === 'AUTH'
+            ? 'OAuth token rejected. Please reconnect.'
+            : 'OAuth token rejected or missing w_member_social scope. Please reconnect.';
+        persistMemory();
+      }
+    }
+
+    const attempts = publishOutcome.attempts.length;
+    const errDetail = publishOutcome.errorReason || 'unknown error';
+
+    if (publishReceipt.outcome === 'UNVERIFIED') {
+      return {
+        success: false,
+        executionStatus: 'UNVERIFIED',
+        verificationStatus: 'UNVERIFIED',
+        finalTruthState: 'UNVERIFIED',
+        errorReason: errDetail,
+        userMessage: `⚠️ UNVERIFIED: ${errDetail} Check LinkedIn manually before retrying, to avoid posting twice.`,
+      };
+    }
+
+    if (publishOutcome.failureKind === 'AUTH' || publishOutcome.failureKind === 'PERMISSION') {
+      return {
+        success: false,
+        executionStatus: 'FAILED',
+        verificationStatus: 'PROVIDER_ERROR',
+        finalTruthState: 'FAILED',
+        errorReason: `LinkedIn auth/permission error: ${errDetail}`,
+        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Ensure 'w_member_social' is approved, then reconnect.`,
+      };
+    }
+
+    return {
+      success: false,
+      executionStatus: 'FAILED',
+      verificationStatus: 'PROVIDER_ERROR',
+      finalTruthState: 'FAILED',
+      errorReason: `LinkedIn publish failed after ${attempts} attempt(s): ${errDetail}`,
+      userMessage: `❌ PUBLISHING FAILED: ${errDetail} (${attempts} attempt(s)). Post saved as DRAFT.`,
+    };
   } catch (netErr: any) {
     return {
       success: false,
@@ -1607,7 +2013,7 @@ async function verifyAndPublishToFacebook(post: ServerSocialPost): Promise<{
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: resData.id,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on Facebook Page! Post ID: ${resData.id}`,
+        userMessage: `✅ VERIFIED UPLOAD: Published to the Facebook Page feed — Graph API returned post ID ${resData.id}. This confirms feed creation, not the post's reach or impressions.`,
       };
     } else {
       const errDetail = resData?.error?.message || `HTTP status ${res.status}`;
@@ -1706,7 +2112,7 @@ async function verifyAndPublishToInstagram(post: ServerSocialPost): Promise<{
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: publishData.id,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on Instagram! Media ID: ${publishData.id}`,
+        userMessage: `✅ VERIFIED UPLOAD: Instagram media container published — Graph API returned media ID ${publishData.id}. This confirms the media object exists, not its engagement.`,
       };
     } else {
       const errDetail = publishData?.error?.message || `HTTP status ${publishRes.status}`;
@@ -1799,6 +2205,25 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
     };
   }
   const bearerToken = tokenCheck.token;
+
+  // 2b. Pre-flight scope check. A token can authenticate and still be missing
+  // youtube.upload — the OAuth grant may have skipped the scope. The stored
+  // scope list is authoritative; when it was never recorded we proceed and let
+  // the provider decide, but we never assert the scope is present.
+  const grantedScopes = memoryState.youTubeConnection?.scopes;
+  if (Array.isArray(grantedScopes)) {
+    const requiredScope = PLATFORM_PUBLISH_SCOPES.youtube;
+    if (!scopeGranted(grantedScopes, requiredScope)) {
+      return {
+        success: false,
+        executionStatus: 'NOT_PUBLISHED',
+        verificationStatus: 'MISSING_CREDENTIALS',
+        finalTruthState: 'DRAFT',
+        errorReason: `The stored YouTube credential was granted without the upload scope (${requiredScope}). Granted scopes: ${grantedScopes.length > 0 ? grantedScopes.join(' ') : 'none recorded'}.`,
+        userMessage: `⚠️ NOT PUBLISHED: This YouTube connection was authorized without the upload scope (${requiredScope}). Reconnect with "1-Click YouTube OAuth" and approve upload access. Post held in DRAFT.`,
+      };
+    }
+  }
 
   // 3. Verify Channel Status
   let channelTitle = memoryState.youTubeConnection?.channelTitle || 'YouTube Channel';
@@ -1937,13 +2362,20 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
       post.privacyStatus = finalPrivacy;
       post.targetChannel = uploadedChannel;
 
+      // A 2xx with an id proves the upload was accepted, but not that the video
+      // is publicly watchable: a PRIVATE or UNLISTED upload is not visible to
+      // anyone but the owner. The message must state the privacy actually
+      // applied rather than a blanket "Live".
+      const isPubliclyVisible = finalPrivacy === 'public';
       return {
         success: true,
         executionStatus: 'SUCCESS',
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: videoId,
-        userMessage: `✅ VERIFIED & BROADCASTED: Live on YouTube Channel "${uploadedChannel}"!\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}\n• Privacy Mode: ${finalPrivacy.toUpperCase()}`,
+        userMessage: isPubliclyVisible
+          ? `✅ VERIFIED & PUBLIC: Live on YouTube Channel "${uploadedChannel}"!\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}\n• Privacy Mode: ${finalPrivacy.toUpperCase()} — publicly watchable`
+          : `✅ VERIFIED UPLOAD: Accepted by YouTube Data API on channel "${uploadedChannel}" as ${finalPrivacy.toUpperCase()} — ${finalPrivacy === 'private' ? 'visible only to the channel owner' : 'visible only with the direct link, not publicly listed'}.\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}`,
       };
     } else {
       const errDetail = uploadData?.error?.message || `HTTP ${uploadRes.status}: ${uploadRes.statusText}`;
@@ -2015,7 +2447,7 @@ async function verifyAndPublishToTwitter(post: ServerSocialPost): Promise<{
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
         providerUrn: data.data.id,
-        userMessage: `✅ VERIFIED & PUBLISHED: Live on X/Twitter! Tweet ID: ${data.data.id}`,
+        userMessage: `✅ VERIFIED UPLOAD: X/Twitter accepted the tweet — API v2 returned tweet ID ${data.data.id}. This confirms creation, not delivery to any follower's timeline.`,
       };
     } else {
       const errDetail = data?.detail || data?.title || `HTTP status ${res.status}`;
@@ -2331,7 +2763,7 @@ async function executeApprovedAction(
       errorReason: 'Target post not found in memory registry',
       finalTruthState: 'FAILED',
     };
-    memoryState.auditLogs.unshift(fallbackAudit);
+    pushAuditEntry(fallbackAudit);
     persistMemory();
     return {
       success: false,
@@ -2379,7 +2811,7 @@ async function executeApprovedAction(
       verificationStatus: 'STANDBY',
       finalTruthState: 'REJECTED',
     };
-    memoryState.auditLogs.unshift(rejectAudit);
+    pushAuditEntry(rejectAudit);
     persistMemory();
 
     return {
@@ -2404,7 +2836,7 @@ async function executeApprovedAction(
       finalTruthState: 'FAILED',
       errorReason: 'Operation blocked: Global Kill Switch / Emergency Stop is active.',
     };
-    memoryState.auditLogs.unshift(killAudit);
+    pushAuditEntry(killAudit);
     persistMemory();
     return {
       success: false,
@@ -2437,13 +2869,15 @@ async function executeApprovedAction(
   } else if (platLower.includes('twitter') || platLower.includes('x')) {
     result = await verifyAndPublishToTwitter(post);
   } else {
-    // Internal Telegram Channel or local channel
-    post.status = 'published';
-    post.executionStatus = 'SUCCESS';
-    post.verificationStatus = 'VERIFIED';
-    post.finalTruthState = 'VERIFIED';
-    post.likesSimulated = Math.floor(25 + Math.random() * 40);
-    post.verifiedAt = new Date().toISOString();
+    // Internal channel with no external provider to confirm against. The
+    // broadcast is recorded as dispatched, not verified: there is no platform
+    // response to verify it with. Engagement counts are deliberately omitted
+    // rather than generated, since invented numbers read as real metrics.
+    post.status = 'not_published';
+    post.executionStatus = 'NOT_PUBLISHED';
+    post.verificationStatus = 'STANDBY';
+    post.finalTruthState = 'NOT_PUBLISHED';
+    post.verifiedAt = undefined;
 
     const internalAudit: AuditLogEntry = {
       id: actionLogId,
@@ -2451,19 +2885,21 @@ async function executeApprovedAction(
       action: `Execute Level 4 ${post.platform} Broadcast (${post.id})`,
       levelRequired: 4,
       approvedBy,
-      status: 'VERIFIED',
+      status: 'NOT_PUBLISHED',
       targetPlatform: post.platform,
-      verificationStatus: 'VERIFIED',
-      finalTruthState: 'VERIFIED',
+      verificationStatus: 'STANDBY',
+      finalTruthState: 'NOT_PUBLISHED',
+      errorReason:
+        'No external provider is configured for this channel, so the broadcast could not be verified. No engagement metrics are reported.',
     };
-    memoryState.auditLogs.unshift(internalAudit);
+    pushAuditEntry(internalAudit);
     persistMemory();
 
     return {
-      success: true,
+      success: false,
       post,
       auditEntry: internalAudit,
-      userMessage: `✅ Verified and broadcasted to ${post.platform} channel.`,
+      userMessage: `⚠️ NOT_VERIFIED: ${post.platform} has no configured provider to confirm against. Nothing was reported as published, and no engagement metrics are shown.`,
     };
   }
 
@@ -2488,7 +2924,7 @@ async function executeApprovedAction(
     providerUrn: result.providerUrn,
     finalTruthState: result.finalTruthState,
   };
-  memoryState.auditLogs.unshift(auditEntry);
+  pushAuditEntry(auditEntry);
   persistMemory();
 
   return {
@@ -2502,29 +2938,7 @@ async function executeApprovedAction(
 // ==============================================================================
 // 6. REAL TELEGRAM BOT MOBILE CONTROLLER ENGINE
 // ==============================================================================
-let telegramMessages = [
-  {
-    id: 'tg-1',
-    sender: 'jarvis_bot' as const,
-    text: '🤖 *HERMES JARVIS MOBILE GATEWAY ONLINE*\nGood day, Sir! Connected to your Oracle Always Free ARM VM. What task would you like to assign today?',
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    type: 'text' as const,
-  },
-  {
-    id: 'tg-2',
-    sender: 'user' as const,
-    text: 'JARVIS, project check करो।',
-    timestamp: new Date(Date.now() - 1800000).toISOString(),
-    type: 'text' as const,
-  },
-  {
-    id: 'tg-3',
-    sender: 'jarvis_bot' as const,
-    text: '📊 *PROJECT AUDIT REPORT*\n\n✅ *Active Repositories*: 2\n• `ai-freelance-portal` — Branch main: clean, 0 open issues\n• `jarvis-hermes-core` — Oracle VM deployment sync complete\n\n🎯 *Next Step*: Would you like me to run unit tests or create today\'s social post?',
-    timestamp: new Date(Date.now() - 1790000).toISOString(),
-    type: 'report' as const,
-  },
-];
+let telegramMessages = telegramSeedMessages(getLocalHostIdentity());
 
 function getCleanTelegramToken(): string | null {
   const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim().replace(/^["']|["']$/g, '');
@@ -2539,12 +2953,22 @@ function getCleanAdminChatId(): string | null {
   return raw.length > 0 ? raw : null;
 }
 
+/**
+ * Telegram API host. Overridable so the real send path can be pointed at a
+ * local server in tests; production leaves it unset and uses Telegram.
+ */
+function getTelegramApiBase(): string {
+  const override = (process.env.TELEGRAM_API_BASE_URL || '').trim().replace(/\/+$/, '');
+  return override.length > 0 ? override : 'https://api.telegram.org';
+}
+
 const initialTelegramToken = getCleanTelegramToken();
 const initialAdminChatId = getCleanAdminChatId();
 
 let telegramConfig = {
   botName: 'Hermes JARVIS Mobile Controller',
   botUsername: '@HermesJarvisAssistantBot',
+  botUsernameReported: false,
   botTokenMasked: initialTelegramToken
     ? `${initialTelegramToken.substring(0, Math.min(6, initialTelegramToken.length))}...${initialTelegramToken.slice(-4)}`
     : 'Not Configured (Add TELEGRAM_BOT_TOKEN)',
@@ -2557,7 +2981,9 @@ let telegramConfig = {
   humanApprovalRequired: true,
   notificationsEnabled: true,
   adminChatIdConfigured: Boolean(initialAdminChatId),
-  totalMessagesReceived: 3,
+  // Counts this process has actually handled, never a plausible seed. The old
+  // literal 3 was a fabricated baseline.
+  totalMessagesReceived: 0,
   lastActivity: new Date().toISOString(),
   errorMessage: undefined as string | undefined,
 };
@@ -2582,7 +3008,7 @@ async function callTelegramApi(method: string, body?: any, timeoutMs = 8000) {
   }, timeoutMs);
 
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    const res = await fetch(`${getTelegramApiBase()}/bot${token}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -2645,36 +3071,71 @@ function formatTelegramReplyMarkup(rawMarkup?: any): Record<string, any> | undef
   return undefined;
 }
 
-async function sendRealTelegramMessage(chatId: string | number, text: string, replyMarkup?: any) {
-  if (!getCleanTelegramToken() || !chatId) return null;
-  const formattedMarkup = formatTelegramReplyMarkup(replyMarkup);
-  const payload: Record<string, any> = {
-    chat_id: chatId,
-    text,
-    parse_mode: 'Markdown',
-  };
-  if (formattedMarkup) {
-    payload.reply_markup = formattedMarkup;
+/**
+ * Send a message and report exactly what can be confirmed about it.
+ *
+ * Uses the strict sender so real failures (a blocked bot, a bad token) surface
+ * and are classified, rather than being collapsed into "nothing to send".
+ */
+async function deliverTelegramMessage(
+  chatId: string | number | null | undefined,
+  text: string,
+  replyMarkup?: any,
+): Promise<DeliveryInterpretation> {
+  if (!getCleanTelegramToken() || !chatId) {
+    return interpretTelegramSend(null);
   }
+  try {
+    return interpretTelegramSend(await sendTelegramMessageStrict(chatId, text, replyMarkup));
+  } catch (err) {
+    return classifyTelegramError(err);
+  }
+}
+
+
+/**
+ * Send a Telegram message, throwing on failure.
+ *
+ * Markdown is attempted first. The plain-text fallback runs only when the first
+ * failure looks like a formatting/parse error — retrying plain text after a 403
+ * or 401 is pointless, and swallowing those errors is how a blocked bot came to
+ * look like a successful send.
+ */
+async function sendTelegramMessageStrict(
+  chatId: string | number,
+  text: string,
+  replyMarkup?: any,
+): Promise<any> {
+  const formattedMarkup = formatTelegramReplyMarkup(replyMarkup);
+  const payload: Record<string, any> = { chat_id: chatId, text, parse_mode: 'Markdown' };
+  if (formattedMarkup) payload.reply_markup = formattedMarkup;
 
   try {
-    const result = await callTelegramApi('sendMessage', payload, 6000);
-    return result;
+    return await callTelegramApi('sendMessage', payload, 6000);
   } catch (err: any) {
-    // If Markdown parsing fails or any other formatting error, fallback to plain text
-    try {
-      const fallbackPayload: Record<string, any> = {
-        chat_id: chatId,
-        text: text.replace(/[*_`#]/g, ''),
-      };
-      if (formattedMarkup) {
-        fallbackPayload.reply_markup = formattedMarkup;
-      }
-      return await callTelegramApi('sendMessage', fallbackPayload, 6000);
-    } catch (fallbackErr: any) {
-      console.warn(`[Telegram Bot] Failed to send message to ${chatId}:`, fallbackErr.message);
-      return null;
-    }
+    const isParseError = /parse|entities|markdown/i.test(String(err?.message ?? ''));
+    if (!isParseError) throw err;
+
+    const fallbackPayload: Record<string, any> = {
+      chat_id: chatId,
+      text: text.replace(/[*_`#]/g, ''),
+    };
+    if (formattedMarkup) fallbackPayload.reply_markup = formattedMarkup;
+    return await callTelegramApi('sendMessage', fallbackPayload, 6000);
+  }
+}
+
+/**
+ * Legacy send helper. Returns `null` on any failure so existing fire-and-forget
+ * callers never throw. Use `deliverTelegramMessage` when the outcome matters.
+ */
+async function sendRealTelegramMessage(chatId: string | number, text: string, replyMarkup?: any) {
+  if (!getCleanTelegramToken() || !chatId) return null;
+  try {
+    return await sendTelegramMessageStrict(chatId, text, replyMarkup);
+  } catch (err: any) {
+    console.warn(`[Telegram Bot] Failed to send message to ${chatId}:`, err?.message);
+    return null;
   }
 }
 
@@ -2706,7 +3167,7 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
 
   // 1. /start or Hello/Hi greeting
   if (clean === '/start' || lower === 'start' || lower === 'hi' || lower === 'hello' || lower === 'नमस्ते' || lower === 'kaisa hai' || lower === 'kaise ho') {
-    botReplyText = `🤖 *HERMES JARVIS ONLINE MOBILE CONTROLLER*\n\nGreetings, ${memoryState.name || 'Sir'}! Connected to your Oracle Always Free ARM VM (24/7 Daemon Active).\n\n*Quick Mobile Commands:*\n• \`JARVIS, project check करो\` — Codebase & Git Audit\n• \`JARVIS, आज की LinkedIn post बनाओ\` — Social Draft & Level 4 Approval\n• \`JARVIS, client lead quotation बनाओ\` — Freelance Proposal\n• \`JARVIS, server status बताओ\` — Cloud & Telemetry\n• \`JARVIS, कल सुबह 9 बजे report देना\` — Schedule Daily Briefing\n\n🛡️ *Security Matrix*: Level ${securityMatrixState.currentLevel} active. Level 4 actions strictly require your mobile confirmation.`;
+    botReplyText = `🤖 *HERMES JARVIS ONLINE MOBILE CONTROLLER*\n\nGreetings, ${memoryState.name || 'Sir'}! ${telegramHostClaim(getLocalHostIdentity())} (no 24/7 uptime has been measured here).\n\n*Quick Mobile Commands:*\n• \`JARVIS, project check करो\` — Codebase & Git Audit\n• \`JARVIS, आज की LinkedIn post बनाओ\` — Social Draft & Level 4 Approval\n• \`JARVIS, client lead quotation बनाओ\` — Freelance Proposal\n• \`JARVIS, server status बताओ\` — Cloud & Telemetry\n• \`JARVIS, कल सुबह 9 बजे report देना\` — Schedule Daily Briefing\n\n🛡️ *Security Matrix*: ${securityMatrixPosture(securityMatrixState).levelLabel} active. Human approval: ${securityMatrixPosture(securityMatrixState).humanApproval}.`;
     inlineKeyboard = {
       inline_keyboard: [
         [
@@ -2737,15 +3198,27 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
         const takeaways = summaryResult.keyTakeaways && summaryResult.keyTakeaways.length > 0
           ? `\n\n💡 *Key Takeaways*:\n${summaryResult.keyTakeaways.slice(0, 5).join('\n')}`
           : '';
-        botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})\n\n${summaryResult.summary}${takeaways}`;
+        const notice = summaryResult.notice ? `\n\n⚠️ _${summaryResult.notice}_` : '';
+        botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})${notice}\n\n${summaryResult.summary}${takeaways}`;
         actionData = { type: 'youtube_summary', videoInfo: info, source: summaryResult.source };
       } else {
-        botReplyText = `❌ *YouTube Summarizer Notice*:\n${summaryResult.error || 'Failed to extract video content. Ensure the video is public and accessible.'}`;
+        botReplyText = `❌ *YouTube Summarizer Notice*:\n${summaryResult.success ? 'Failed to extract video content. Ensure the video is public and accessible.' : summaryResult.error}`;
       }
     }
   } else if (intentData.intent === 'check_project') {
-    botReplyText = `📊 *HERMES PROJECT AUDIT*\n\n✅ *Status*: All active repositories inspected.\n• \`ai-freelance-portal\` — Branch main: Clean, 0 uncommitted changes.\n• \`jarvis-hermes-core\` — Oracle VM daemon active, uptime ${oracleCloudState.uptimeHours} hrs.\n\n⚡ All tests green. No blocking regressions found.`;
-    actionData = { type: 'check_project', status: 'clean' };
+    // Report the real working tree. The previous reply asserted a completed
+    // multi-repository audit, a fixed clean branch, a cloud-VM uptime and a
+    // green test suite — none of which this handler ever measured.
+    const git = realGitStatus();
+    if (git.success) {
+      botReplyText = git.clean
+        ? `📊 *HERMES PROJECT AUDIT*\n\n*Repository*: this JARVIS working tree.\n• Branch: \`${git.branch ?? 'detached HEAD'}\`\n• Working tree: clean (${git.statusText || 'no changes'})\n\nNote: this checks the local working tree only. Other repositories, the cloud VM and the test suite are not inspected by this command.`
+        : `📊 *HERMES PROJECT AUDIT*\n\n*Repository*: this JARVIS working tree.\n• Branch: \`${git.branch ?? 'detached HEAD'}\`\n• Working tree: *uncommitted changes present*\n\n\`\`\`\n${(git.statusText || '').slice(0, 500)}\n\`\`\``;
+      actionData = { type: 'check_project', status: git.clean ? 'clean' : 'dirty', branch: git.branch };
+    } else {
+      botReplyText = `📊 *HERMES PROJECT AUDIT*\n\n⚠️ Audit unavailable: git could not be queried in this environment.\nReason: ${git.error ?? 'unknown'}`;
+      actionData = { type: 'check_project', status: 'unavailable', error: git.error };
+    }
     inlineKeyboard = {
       inline_keyboard: [
         [{ text: '📝 Create Today\'s Post', callback_data: 'cmd_draft_post' }],
@@ -2765,28 +3238,57 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       ],
     };
   } else if (intentData.intent === 'find_document') {
-    const doc = intentData.actionPayload?.query || 'Document';
-    botReplyText = `🔍 *FILE SEARCH RESULT*\n\nFound matching file in memory storage:\n📄 \`${doc}\`\n• *Path*: \`/workspace/storage/documents/${doc}\`\n• *Size*: 42.5 KB\n• *Summary*: Specification brief for client project milestone.`;
-    actionData = { type: 'file_found', query: doc };
+    const doc = intentData.actionPayload?.query || '';
+    const search = realFsSearch(doc);
+    if (search.success && search.matches && search.matches.length > 0) {
+      const listing = search.matches
+        .map((m) => `• \`${m.path}\` (${(m.sizeBytes / 1024).toFixed(1)} KB)`)
+        .join('\n');
+      botReplyText = `🔍 *FILE SEARCH RESULT*\n\nSearched the workspace for "${doc}". ${search.matches.length} match(es):\n${listing}`;
+      actionData = { type: 'file_found', query: doc, matches: search.matches };
+    } else if (search.success) {
+      botReplyText = `🔍 *FILE SEARCH RESULT*\n\nNo file matching "${doc}" exists in the workspace. I did not find a document to report.`;
+      actionData = { type: 'file_not_found', query: doc };
+    } else {
+      botReplyText = `🔍 *FILE SEARCH UNAVAILABLE*\n\nCould not search the workspace: ${search.error}`;
+      actionData = { type: 'file_search_unavailable', error: search.error };
+    }
   } else if (intentData.intent === 'schedule_morning_report') {
-    botReplyText = `⏰ *SCHEDULE CONFIRMED*\n\nSir, I have scheduled your proactive Morning Briefing for *09:00 AM IST*.\n\nI will push the task checklist and server health directly to your phone.`;
-    actionData = { type: 'scheduled', time: '09:00 AM' };
+    const telegramLinked = !!activeTelegramChatId && !!getCleanTelegramToken();
+    const delivery = telegramLinked
+      ? 'A Telegram chat is linked, so the briefing will be pushed there.'
+      : 'No Telegram chat is currently linked, so nothing will be delivered until you connect one.';
+    botReplyText = `⏰ *SCHEDULE ACTIVE*\n\nThe proactive Morning Briefing runs daily at *09:00 AM IST* on this server's scheduler. ${delivery}`;
+    actionData = { type: 'schedule_morning_report', time: '09:00 AM IST', telegramLinked };
   } else if (intentData.intent === 'generate_quotation') {
-    botReplyText = `💼 *QUOTATION GENERATED*\n\n• *Client*: Aarav Tech Solutions\n• *Total Estimate*: ₹65,000 (10 Days Delivery)\n• *Milestones*: 3 phases\n\nReady for client review. All details logged in Freelance Pipeline.`;
-    actionData = { type: 'quotation_ready', amount: 65000 };
-    inlineKeyboard = {
-      inline_keyboard: [
-        [
-          { text: '📊 View Freelance Leads', callback_data: 'cmd_view_leads' },
-          { text: '☁️ Server Telemetry', callback_data: 'cmd_cloud_telemetry' },
+    const withQuote = memoryState.freelanceLeads.filter((l) => !!l.quotation);
+    if (withQuote.length === 0) {
+      botReplyText = `💼 *NO QUOTATION FOUND*\n\nNo quotation has been generated yet — the freelance pipeline has no lead with a prepared quotation. I did not generate one.`;
+      actionData = { type: 'quotation_not_available' };
+    } else {
+      const listing = withQuote
+        .map((l) => `• *${l.clientName}* — ${l.quotation!.totalPrice} ${l.budgetEstimate.currency} (${l.quotation!.timelineDays} days)`)
+        .join('\n');
+      botReplyText = `💼 *EXISTING QUOTATIONS*\n\n${withQuote.length} lead(s) with a prepared quotation:\n${listing}\n\nThese are stored pipeline records. No new quotation was generated.`;
+      actionData = { type: 'quotation_ready', leads: withQuote.map((l) => ({ id: l.id, clientName: l.clientName, quotation: l.quotation })) };
+      inlineKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '📊 View Freelance Leads', callback_data: 'cmd_view_leads' },
+            { text: '☁️ Server Telemetry', callback_data: 'cmd_cloud_telemetry' },
+          ],
         ],
-      ],
-    };
+      };
+    }
   } else if (intentData.intent === 'cloud_telemetry') {
-    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${oracleCloudState.status} (Uptime: ${oracleCloudState.uptimeHours}h)\n• *CPU*: ${oracleCloudState.metrics.cpuUsage}% | *RAM*: ${oracleCloudState.metrics.ramUsage} GB / 24 GB\n• *Cost*: ₹0 / Always Free Guaranteed\n• *IP*: ${oracleCloudState.publicIp}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
+    const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+    const cpuLine = live?.cpuUsage != null ? `${live.cpuUsage}%` : 'unavailable';
+    const ramLine = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : 'unavailable';
+    botReplyText = `☁️ *ORACLE CLOUD ARM VM STATUS*\n\n• *Status*: ${describeRunState(oracleCloudState.status)}\n• *CPU*: ${cpuLine} | *RAM*: ${ramLine}\n• *Metrics Source*: ${live ? 'live host telemetry' : 'unavailable'}\n• *Uptime*: ${processUptimeLabel(oracleCloudState.uptimeHours)} (instance uptime is a control-plane fact this server does not measure)\n• *Cost*: ${describeBillingCost(oracleCloudState.billingEntitlement)}\n• *IP*: ${describePublicIp(oracleCloudState.publicIp)}\n• *Security Level*: Level ${securityMatrixState.currentLevel}`;
     actionData = { type: 'telemetry', metrics: oracleCloudState.metrics };
   } else if (intentData.intent === 'security_audit') {
-    botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: Level ${securityMatrixState.currentLevel} (Create Mode with Human Approval)\n• *Human Approval*: Enforced for all external actions\n• *Credential Protection*: Passwords & API tokens strictly isolated\n• *Recent Audit Logs*: ${memoryState.auditLogs.length} verified events`;
+    const posture = securityMatrixPosture(securityMatrixState);
+    botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: ${posture.levelLabel}\n• *Human Approval*: ${posture.humanApproval}\n• *Secret Masking*: ${posture.secretMasking}\n• *Credential Leak Protection*: ${posture.credentialLeakProtection}\n• *Audit Trail*: ${describeAuditTrail(memoryState.auditLogs)} (${auditTrailCounts(memoryState.auditLogs).total} total)`;
     actionData = { type: 'security_audit', level: securityMatrixState.currentLevel };
   } else if (intentData.intent === 'set_name') {
     const detectedName = intentData.actionPayload?.name || clean.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
@@ -2825,21 +3327,22 @@ User message: "${clean}".`,
             maxOutputTokens: 250,
           },
         });
-        botReplyText = result.text?.trim() || `Sir, your command "${clean}" was parsed and logged on your cloud node.`;
+        botReplyText = result.text?.trim() || `Sir, your command "${clean}" was parsed and logged by this daemon process.`;
       } catch (geminiErr: any) {
         console.warn('[Telegram Bot] Gemini fallback:', geminiErr?.message);
-        botReplyText = `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis online on Oracle ARM VM. Command "${clean}" received and recorded.`;
+        botReplyText = `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis server online. Command "${clean}" received and recorded.`;
       }
     } else {
       // Rule-based smart bilingual heuristic
       if (lower.includes('who are you') || lower.includes('तुम कौन हो') || lower.includes('aap kaun ho')) {
-        botReplyText = `I am *HERMES JARVIS*, your autonomous mobile-controlled AI assistant running 24/7 on an Oracle Cloud Always Free ARM VM.`;
+        const host = getLocalHostIdentity();
+        botReplyText = `I am *HERMES JARVIS*, your autonomous mobile-controlled AI assistant. I am running as a server process on this host (${host.hostname}).`;
       } else if (lower.includes('how are you') || lower.includes('kaise ho') || lower.includes('kaisa hai')) {
-        botReplyText = `All systems operating at nominal efficiency, ${memoryState.name || 'Sir'}. CPU load is ${oracleCloudState.metrics.cpuUsage}% and memory usage is 3.4 GB / 24 GB.`;
+        botReplyText = `All subsystems I can measure are responding, ${memoryState.name || 'Sir'}. CPU load is currently unavailable on this host.`;
       } else if (lower.includes('thank') || lower.includes('धन्यवाद') || lower.includes('shukriya')) {
         botReplyText = `Always at your service, ${memoryState.name || 'Sir'}. Let me know if you need any other tasks executed.`;
       } else {
-        botReplyText = `Command received: "${clean}". Hermes Jarvis cloud daemon standing by. You can ask me to check projects, create social posts, generate quotations, or check server health.`;
+        botReplyText = `Command received: "${clean}". Hermes Jarvis daemon standing by. You can ask me to check projects, create social posts, generate quotations, or check server health.`;
       }
     }
   }
@@ -2855,15 +3358,20 @@ User message: "${clean}".`,
   telegramMessages.push(botMsg);
   if (telegramMessages.length > 80) telegramMessages.shift();
 
-  // Send message to real Telegram if configured
+  // Send to real Telegram and record whether it actually landed. The previous
+  // fire-and-forget call meant a failed or blocked send still looked delivered
+  // to every caller (and the web gateway spoke the reply aloud regardless).
+  // `deliverTelegramMessage` never throws; it classifies the outcome.
+  let delivery: DeliveryInterpretation | undefined;
   if (chatId && getCleanTelegramToken()) {
-    sendRealTelegramMessage(chatId, botReplyText, inlineKeyboard).catch((e) => {
-      console.warn('[Telegram Bot] Send message async note:', e.message);
-    });
+    delivery = await deliverTelegramMessage(chatId, botReplyText, inlineKeyboard);
+    if (!delivery.delivered) {
+      console.warn(`[Telegram Bot] Reply not delivered to ${chatId}: ${delivery.errorReason}`);
+    }
   }
 
   persistMemory();
-  return { userMsg, botMsg, inlineKeyboard };
+  return { userMsg, botMsg, inlineKeyboard, delivery };
 }
 
 async function handleTelegramCallback(callbackQuery: any) {
@@ -2898,8 +3406,7 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data === 'cmd_morning_report') {
     await processMobileCommand('JARVIS, morning report बताओ', 'user', chatId);
   } else if (data === 'cmd_view_leads') {
-    const leadsCount = memoryState.freelanceLeads.length;
-    const reply = `💼 *ACTIVE FREELANCE LEADS (${leadsCount})*\n\n1. *Aarav Tech Solutions* — ₹65,000 (Quotation Sent)\n2. *Global Horizon Exports* — ₹85,000 (AI Requirements Extracted)`;
+    const reply = freelanceLeadsReply(memoryState.freelanceLeads);
     if (chatId) await sendRealTelegramMessage(chatId, reply);
   } else if (data.startsWith('approve_post_') || data === 'approve_publish_post_1') {
     const postId = data.startsWith('approve_post_') ? data.replace('approve_post_', '') : 'post-1';
@@ -2935,8 +3442,10 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('approve_perm_')) {
     const permId = data.replace('approve_perm_', '');
     const updated = updateActionRequestStatus(permId, 'EXECUTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
+    // This branch records the human approval only — no dispatcher runs here, so
+    // no provider can confirm the external action. Never say "executed/verified".
     const confirmText = updated
-      ? `✅ *LEVEL 4 ACTION APPROVED & EXECUTED*\n\n• *Action*: ${updated.exactAction}\n• *Target*: \`${updated.target}\`\n• *Status*: EXECUTED (Verified)`
+      ? formatUnconfirmedMobileApprovalReply(updated)
       : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired.`;
 
     const botMsg = {
@@ -2984,6 +3493,7 @@ async function startTelegramPolling() {
     telegramConfig.isLiveConnected = true;
     telegramConfig.isLiveTokenConfigured = true;
     telegramConfig.botUsername = `@${botInfo.username}`;
+    telegramConfig.botUsernameReported = true;
     telegramConfig.botName = botInfo.first_name || 'Hermes JARVIS Mobile Controller';
     telegramConfig.telegramLink = `https://t.me/${botInfo.username}`;
     telegramConfig.mode = 'live_polling';
@@ -3108,7 +3618,7 @@ function getISTCurrentHourMinute(): { hour: number; minute: number } {
 
 let schedulerRunLog: string[] = [];
 
-function checkAndRunSchedulerJobs() {
+async function checkAndRunSchedulerJobs() {
   const todayIST = getISTDateString();
   const { hour, minute } = getISTCurrentHourMinute();
 
@@ -3121,7 +3631,9 @@ function checkAndRunSchedulerJobs() {
       console.log('[Scheduler]', logEntry);
 
       if (activeTelegramChatId && getCleanTelegramToken()) {
-        const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir! Cloud nodes on Oracle Always Free ARM VM are 100% nominal.\n\n• *Pending Quotations*: 2 leads\n• *Social Posts*: 1 draft awaiting approval\n• *Security Level*: Level 2 Active\n\nHave a productive day!`;
+        const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
+        const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
+        const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
         sendRealTelegramMessage(activeTelegramChatId, morningText).catch(() => {});
       }
       persistMemory();
@@ -3165,10 +3677,144 @@ function checkAndRunSchedulerJobs() {
       persistMemory();
     }
   }
+
+  // 5. Nightly Repository Check at 03:00 AM IST (item 24).
+  // Read-only: it scans repositories and prepares a plan. It never edits, commits
+  // or pushes, so it is safe to run unattended. A scan that fails is logged as
+  // FAILED rather than recorded as a successful night.
+  if (hour === 3 && minute >= 0 && minute <= 15) {
+    const schedState = memoryState.schedulerState as unknown as {
+      lastGithubNightlyRunDate?: string;
+    };
+    if (schedState.lastGithubNightlyRunDate !== todayIST) {
+      schedState.lastGithubNightlyRunDate = todayIST;
+      const logEntry = `[${new Date().toISOString()}] Started Nightly Repository Check (03:00 AM IST)`;
+      schedulerRunLog.unshift(logEntry);
+      console.log('[Scheduler]', logEntry);
+      persistMemory();
+
+      runNightlyCheck({ github: githubFetchOptions() })
+        .then((result) => {
+          recordNightlyRun(result.record);
+          addAuditLog(
+            `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+            1,
+            'AUTOMATED_SCHEDULE',
+            result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
+          );
+          console.log('[Scheduler] Nightly repository check:', result.record.outcome);
+        })
+        .catch((err: any) => {
+          console.warn('[Scheduler] Nightly repository check failed:', err?.message);
+          addAuditLog(
+            `GitHub nightly check FAILED: ${err?.message || 'unknown error'}`,
+            1,
+            'AUTOMATED_SCHEDULE',
+            'FAILED'
+          );
+        });
+    }
+  }
+
+  // 6. Scheduled autonomous tasks (item 43). Tasks that require approval never
+  // run unattended: they are recorded as needing a human instead. A task on the
+  // list is planned and run through the same verified loop as a manual goal.
+  // Times are interpreted in IST, matching the rest of this tick.
+  if (scheduledGoals.length > 0) {
+    const schedState = memoryState.schedulerState as unknown as {
+      lastAutonomousGoalRuns?: Record<string, string>;
+    };
+    if (!schedState.lastAutonomousGoalRuns) schedState.lastAutonomousGoalRuns = {};
+
+    for (const goal of dueGoals(scheduledGoals as ScheduledGoal[], schedState.lastAutonomousGoalRuns, {
+      minuteOfDay: hour * 60 + minute,
+      date: todayIST,
+    })) {
+      const today = todayIST;
+      schedState.lastAutonomousGoalRuns[goal.id] = today;
+
+      if (goal.requiresApproval) {
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" (${goal.id}) is due but requires human approval; it was NOT run unattended.`,
+          3,
+          'AUTOMATED_SCHEDULE',
+          'PENDING'
+        );
+        scheduledGoalRuns.unshift({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: 'PERMISSION_REQUIRED',
+          verified: false,
+          stepsDone: 0,
+          stepsTotal: Array.isArray(goal.steps) ? goal.steps.length : 0,
+          at: new Date().toISOString(),
+        });
+        persistMemory();
+        continue;
+      }
+
+      const { buildGoalSteps } = await import('./src/utils/autonomous/stepLibrary');
+      const { steps, rejected } = buildGoalSteps(goal.steps as StepDescriptor[]);
+      if (rejected.length > 0) {
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" rejected: unsupported step kind(s) ${rejected.join(', ')}`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        persistMemory();
+        continue;
+      }
+
+      try {
+        const runner = new AutonomousGoalRunner();
+        const result = await runner.run(goal.name, steps);
+        scheduledGoalRuns.unshift({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: result.outcome,
+          verified: result.verified,
+          stepsDone: result.steps.filter((s) => s.status === 'DONE').length,
+          stepsTotal: result.steps.length,
+          at: new Date().toISOString(),
+        });
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          result.outcome === 'VERIFIED' ? 'VERIFIED' : 'FAILED'
+        );
+      } catch (err: any) {
+        scheduledGoalRuns.unshift({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: 'FAILED',
+          verified: false,
+          stepsDone: 0,
+          stepsTotal: steps.length,
+          at: new Date().toISOString(),
+        });
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" FAILED: ${err?.message || 'unknown error'}`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+      }
+      if (scheduledGoalRuns.length > 100) scheduledGoalRuns.length = 100;
+      persistMemory();
+    }
+  }
 }
 
-// Run scheduler tick every 30 seconds
-const schedulerInterval = setInterval(checkAndRunSchedulerJobs, 30000);
+// Run scheduler tick every 30 seconds. The tick is async now, so a rejected
+// promise would otherwise surface as an unhandled rejection and crash the
+// process; log it and keep the schedule alive.
+const schedulerInterval = setInterval(() => {
+  checkAndRunSchedulerJobs().catch((err: unknown) => {
+    console.warn('[Scheduler] Tick failed:', err instanceof Error ? err.message : err);
+  });
+}, 30000);
 schedulerInterval.unref();
 
 // ==============================================================================
@@ -3219,23 +3865,36 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
       lastHeartbeat: telegramConfig.lastActivity,
       errorMessage: telegramConfig.errorMessage,
     },
-    aiEngine: {
-      provider: process.env.GEMINI_API_KEY ? 'Google Gemini 2.5 Flash' : 'Bilingual Heuristic Engine (Offline-Safe)',
-      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
-      model: 'gemini-2.5-flash',
-      fallbackActive: !process.env.GEMINI_API_KEY,
-      bilingualSupport: true,
-    },
+    aiEngine: (() => {
+      // The provider/model describe the engine that will answer, not a
+      // hardcoded aspirational one: with no API key the offline heuristic
+      // engine serves every request and no model name is reported.
+      const geminiConfigured = Boolean(process.env.GEMINI_API_KEY);
+      return {
+        provider: aiEngineProviderLabel(geminiConfigured),
+        geminiConfigured,
+        model: aiEngineModelName(geminiConfigured),
+        fallbackActive: !geminiConfigured,
+        bilingualSupport: true,
+      };
+    })(),
     scheduler: {
-      active: true,
-      activeJobsCount: 4,
-      jobs: [
-        { id: 'morning_9am', name: 'Morning Task Briefing', cronOrTime: '09:00 AM IST', lastRun: memoryState.schedulerState.lastMorningRunDate, nextRun: '09:00 AM Tomorrow' },
-        { id: 'midday_2pm', name: 'Midday System & Site Audit', cronOrTime: '02:00 PM IST', lastRun: memoryState.schedulerState.lastMiddayRunDate, nextRun: '02:00 PM Tomorrow' },
-        { id: 'evening_630pm', name: 'Evening Social Growth Pulse', cronOrTime: '06:30 PM IST', lastRun: memoryState.schedulerState.lastEveningRunDate, nextRun: '06:30 PM Tomorrow' },
-        { id: 'night_1030pm', name: 'Nightly Work Summary & Backup', cronOrTime: '10:30 PM IST', lastRun: memoryState.schedulerState.lastNightRunDate, nextRun: '10:30 PM Tonight' },
-      ],
-      lastRunLog: schedulerRunLog.slice(0, 10),
+      // The count and the per-job labels come from the routines this process
+      // actually schedules. The previous block hardcoded a count of 4 and
+      // labelled each `nextRun` as if the next run had been observed.
+      ...(() => {
+        const recurring: RoutineSpec[] = [
+          { id: 'morning_9am', name: 'Morning Task Briefing', cronOrTime: '09:00 AM IST', lastRunDate: memoryState.schedulerState.lastMorningRunDate },
+          { id: 'midday_2pm', name: 'Midday System & Site Audit', cronOrTime: '02:00 PM IST', lastRunDate: memoryState.schedulerState.lastMiddayRunDate },
+          { id: 'evening_630pm', name: 'Evening Social Growth Pulse', cronOrTime: '06:30 PM IST', lastRunDate: memoryState.schedulerState.lastEveningRunDate },
+          { id: 'night_1030pm', name: 'Nightly Work Summary & Backup', cronOrTime: '10:30 PM IST', lastRunDate: memoryState.schedulerState.lastNightRunDate },
+          { id: 'nightly_repo_check', name: 'Nightly Repository Check', cronOrTime: '03:00 AM IST', lastRunDate: (memoryState.schedulerState as { lastGithubNightlyRunDate?: string }).lastGithubNightlyRunDate },
+        ];
+        return {
+          ...daemonSchedulerTruth(recurring, scheduledGoals.length),
+          lastRunLog: schedulerRunLog.slice(0, 10),
+        };
+      })(),
     },
     storage: {
       persistenceFile: MEMORY_FILE_PATH,
@@ -3244,24 +3903,51 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
       leadsCount: memoryState.freelanceLeads.length,
       postsCount: memoryState.socialPosts.length,
       auditLogsCount: memoryState.auditLogs.length,
+      recordedAuditLogs: auditTrailCounts(memoryState.auditLogs).recorded,
       lastPersisted: lastPersistedTimestamp,
     },
-    integrations: {
-      linkedin: {
-        configured: Boolean(process.env.LINKEDIN_ACCESS_TOKEN),
-        authorUrnConfigured: Boolean(process.env.LINKEDIN_AUTHOR_URN),
-        status: process.env.LINKEDIN_ACCESS_TOKEN ? 'CONFIGURED_LIVE' : 'STANDBY_MISSING_CREDENTIALS',
-      },
-      telegram: {
-        configured: Boolean(getCleanTelegramToken()),
-        status: telegramConfig.isLiveConnected ? 'CONNECTED' : 'STANDBY',
-      },
-      oracleCloud: {
-        tier: 'Always Free (₹0 / month)',
-        status: 'RUNNING',
-        cost: '₹0.00 Guaranteed',
-      },
-    },
+    integrations: (() => {
+      // Each entry states what was actually observed in this process. A
+      // credential being present is not evidence that the remote service is
+      // reachable, so `status` distinguishes configured from not configured and
+      // flags when reachability was not probed.
+      const linkedInToken = getDecryptedLinkedInAccessToken();
+      const telegramToken = getCleanTelegramToken();
+      const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+      const localHost = getLocalHostIdentity();
+      return {
+        linkedin: {
+          configured: Boolean(linkedInToken),
+          authorUrnConfigured: Boolean(
+            (memoryState.linkedInConnection?.connected && memoryState.linkedInConnection?.authorUrn) ||
+              process.env.LINKEDIN_AUTHOR_URN
+          ),
+          status: linkedInToken ? 'CONFIGURED_LIVE' : 'STANDBY_MISSING_CREDENTIALS',
+          reachability: 'NOT_PROBED',
+        },
+        telegram: {
+          configured: Boolean(telegramToken),
+          status: telegramConfig.isLiveConnected ? 'CONNECTED' : 'STANDBY',
+          mode: telegramConfig.mode,
+        },
+        oracleCloud: {
+          executionHost: localHost.isOracleLike ? 'Oracle Cloud ARM instance (hostname matched)' : 'unverified — hostname not matched',
+          hostname: localHost.hostname,
+          metricsSource: oracleCloudState.metricsSource,
+          // Instance run state / public address come from the OCI control plane,
+          // which this server never queries. `status` is only non-null when the
+          // hostname proved this process runs on the instance (a lower bound),
+          // and the address stays null until an operator supplies an observation.
+          instanceStatus: oracleCloudState.status,
+          instanceStatusObservedAt: oracleCloudState.statusObservedAt,
+          publicIp: oracleCloudState.publicIp,
+          cpuUsage: live?.cpuUsage ?? null,
+          ramUsedGb: live?.ramUsedGb ?? null,
+          sampledAt: oracleCloudState.metricsSampledAt,
+          note: 'Values observed from the local host. Cloud control-plane status and the instance public IP are not queried by this server.',
+        },
+      };
+    })(),
     recentAuditLogs: memoryState.auditLogs.slice(0, 15),
   });
 });
@@ -3304,7 +3990,7 @@ app.get('/api/blueprint/report', (req: Request, res: Response) => {
 **Generated By**: HERMES JARVIS Autonomous Core  
 **Timestamp**: ${new Date().toISOString()}  
 **Target Platform**: Android Phone (Telegram + Web Panel) ➔ Oracle Cloud Always Free (ARM64) ➔ HERMES Agent ➔ Projects / Web / Social / Freelancing  
-**Total Architecture Cost**: **₹0.00 / Always Free (Strict Zero-Cost Guarantee)**
+**Total Architecture Cost**: **₹0.00 declared plan (${describeBillingCost(oracleCloudState.billingEntitlement)})**
 
 ---
 
@@ -3369,18 +4055,22 @@ ${p.deliverables.map((d) => `- [${d.done ? 'x' : ' '}] ${d.text}`).join('\n')}
 
 ---
 
-## 💰 4. Strict Zero-Cost Blueprint (लागत विश्लेषण)
+## 💰 4. Declared Zero-Cost Blueprint (लागत विश्लेषण)
+
+Every figure below is the **declared plan**, not a billing observation: this
+process queries no provider billing or entitlement API, so it cannot confirm that
+a component is actually free.
 
 | Component | Target Solution | Monthly Cost |
 | :--- | :--- | :--- |
-| **Cloud Computing** | Oracle Cloud Always Free ARM Ampere A1 (4 OCPU, 24 GB) | **₹0.00** |
-| **Mobile Gateway** | Telegram Bot API (@HermesJarvisBot) | **₹0.00** |
-| **Agent Framework** | Hermes Autonomous Open-Source Agent | **₹0.00** |
-| **AI Brain** | Gemini 2.5/3.7 Flash + Smart Heuristic Fallback | **₹0.00** |
-| **Web Panel UI** | Single-page Responsive React + Tailwind Dashboard | **₹0.00** |
-| **Freelance CRM** | Integrated Quotation & Requirement Engine | **₹0.00** |
-| **Scheduler** | Server-side Crontab / NodeJS Timer Engine | **₹0.00** |
-| **Total** | **All Subsystems** | **₹0.00 / Forever Free** |
+| **Cloud Computing** | Oracle Cloud Always Free ARM Ampere A1 (4 OCPU, 24 GB) | ${declaredCostCell('₹0')} |
+| **Mobile Gateway** | Telegram Bot API (@HermesJarvisBot) | ${declaredCostCell('₹0')} |
+| **Agent Framework** | Hermes Autonomous Open-Source Agent | ${declaredCostCell('₹0')} |
+| **AI Brain** | Gemini 2.5/3.7 Flash + Smart Heuristic Fallback | ${declaredCostCell('₹0')} |
+| **Web Panel UI** | Single-page Responsive React + Tailwind Dashboard | ${declaredCostCell('₹0')} |
+| **Freelance CRM** | Integrated Quotation & Requirement Engine | ${declaredCostCell('₹0')} |
+| **Scheduler** | Server-side Crontab / NodeJS Timer Engine | ${declaredCostCell('₹0')} |
+| **Total** | **All Subsystems** | **${describeDeclaredCost('₹0', oracleCloudState.billingEntitlement)}** |
 
 ---
 *Report generated and validated by HERMES JARVIS Core.*
@@ -3456,19 +4146,25 @@ app.post('/api/telegram/test-live', async (req: Request, res: Response) => {
 
     try {
       const botInfo = await callTelegramApi('getMe', undefined, 5000);
-      let notificationSent = false;
+      const hadChatId = Boolean(activeTelegramChatId);
 
-      if (activeTelegramChatId) {
-        const testMsg = `🔔 *HERMES JARVIS TEST SIGNAL*\n\nMobile gateway is online and securely authenticated from your web control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Cloud Node*: Oracle Always Free ARM64`;
-        const sendRes = await sendRealTelegramMessage(activeTelegramChatId, testMsg);
-        notificationSent = Boolean(sendRes);
-      }
+      const delivery = await deliverTelegramMessage(
+        activeTelegramChatId,
+        `🔔 *HERMES JARVIS TEST SIGNAL*\n\nTelegram delivery test from the JARVIS control matrix.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Sent at*: ${new Date().toISOString()}\n\n_If you can read this, the bot token and chat ID are both valid._`,
+      );
 
       return res.json({
-        success: true,
+        // The bot itself is reachable, but a delivery is only a success when
+        // Telegram confirmed it.
+        success: delivery.delivered,
+        botReachable: true,
         bot: botInfo,
-        notificationSent,
+        notificationSent: delivery.delivered,
+        deliveryOutcome: delivery.outcome,
+        messageId: delivery.messageId,
+        message: delivery.errorReason,
         activeChatId: activeTelegramChatId,
+        chatIdKnown: hadChatId,
       });
     } catch (apiErr: any) {
       return res.json({
@@ -3488,7 +4184,20 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
     if (!text) return res.status(400).json({ error: 'Text command is required' });
 
     const result = await processMobileCommand(text, 'web_client', activeTelegramChatId || undefined);
-    res.json({ success: true, userMessage: result.userMsg, botMessage: result.botMsg });
+    const delivery = gatewaySendResult(result.delivery);
+    const notice = telegramGatewayNotice(delivery);
+    res.json({
+      // Success means Telegram confirmed the outbound reply. A local echo with
+      // no delivery is reported as undelivered, not as a sent message.
+      success: delivery.delivered,
+      delivered: delivery.delivered,
+      deliveryOutcome: delivery.outcome,
+      messageId: delivery.messageId,
+      errorReason: delivery.errorReason,
+      userMessage: result.userMsg,
+      botMessage: { ...result.botMsg, text: telegramGatewayBubble(result.botMsg.text, delivery) },
+      message: notice.message,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -3500,20 +4209,21 @@ app.post('/api/telegram/broadcast', async (req: Request, res: Response) => {
     if (!message) return res.status(400).json({ error: 'Message is required' });
 
     const targetChat = activeTelegramChatId || getCleanAdminChatId();
-    if (!targetChat || !getCleanTelegramToken()) {
-      return res.json({
-        success: true,
-        simulated: true,
-        message: 'Telegram simulated broadcast completed (Bot token or Chat ID in standby mode).',
-      });
-    }
+    const interpretation = await deliverTelegramMessage(targetChat, message);
 
-    const result = await sendRealTelegramMessage(targetChat, message);
+    const receipt = buildDeliveryReceipt(interpretation, String(targetChat ?? 'unconfigured'));
     return res.json({
-      success: true,
-      liveSent: Boolean(result),
+      // Only a verified delivery is a success. Anything else is reported with
+      // its true outcome so the UI cannot claim the briefing went out.
+      success: interpretation.delivered,
+      outcome: interpretation.outcome,
+      executed: true,
+      verified: receipt.verified,
+      liveSent: interpretation.delivered,
+      messageId: interpretation.messageId,
       targetChat,
-      message: 'Briefing broadcast sent to Telegram.',
+      errorReason: interpretation.errorReason,
+      message: receipt.detailEn,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message });
@@ -3521,12 +4231,11 @@ app.post('/api/telegram/broadcast', async (req: Request, res: Response) => {
 });
 
 // Oracle Cloud VM Telemetry APIs
+// Metrics are sampled from the real daemon host on every request. When a value
+// cannot be measured it stays null and is reported as unavailable — never
+// replaced with a plausible-looking constant.
 app.get('/api/oracle-cloud', (req: Request, res: Response) => {
-  const jitterCpu = Number((12 + Math.random() * 5).toFixed(1));
-  const jitterRam = Number((3.2 + Math.random() * 0.4).toFixed(1));
-  oracleCloudState.metrics.cpuUsage = jitterCpu;
-  oracleCloudState.metrics.ramUsage = jitterRam;
-
+  refreshOracleMetrics();
   res.json(oracleCloudState);
 });
 
@@ -3627,16 +4336,23 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
 
   memoryState.socialPosts.unshift(newPost);
 
-  // Add Level 2 audit log
-  memoryState.auditLogs.unshift({
+  // Level 2 audit log — this route only staged a local draft, so the entry
+  // must not claim execution or verification.
+  const stagingAudit = stagedDraftAuditEntry({
+    platform: String(platform),
+    topic: newPost.topic,
+    level: 2,
+    gate: 'Level-2 draft review',
+  });
+  pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: `Draft ${platform} Post: "${newPost.topic}" (Level 2)`,
+    action: stagingAudit.action,
     levelRequired: 2,
     approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    status: stagingAudit.status,
+    verificationStatus: stagingAudit.verificationStatus,
+    finalTruthState: stagingAudit.finalTruthState,
   });
 
   persistMemory();
@@ -3717,16 +4433,23 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     actionPayload: { postId: newPost.id, privacyStatus: validPrivacy, videoFileName: newPost.videoFileName },
   });
 
-  // Add Level 2 Audit Log for draft creation
-  memoryState.auditLogs.unshift({
+  // Staged for Level-4 authorization — nothing was published, so the audit row
+  // must not read as an executed/verified upload.
+  const stagingAudit = stagedDraftAuditEntry({
+    platform: 'YouTube',
+    topic: `${validTitle} (${validPrivacy.toUpperCase()})`,
+    level: 4,
+    gate: 'Level-4 authorization',
+  });
+  pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: `Stage YouTube Video: "${validTitle}" (${validPrivacy.toUpperCase()}) - Level 4 Gate Staged`,
+    action: stagingAudit.action,
     levelRequired: 2,
     approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    status: stagingAudit.status,
+    verificationStatus: stagingAudit.verificationStatus,
+    finalTruthState: stagingAudit.finalTruthState,
   });
 
   persistMemory();
@@ -3782,16 +4505,23 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     actionPayload: { postId: newPost.id, privacyStatus: validPrivacy },
   });
 
-  // Add Level 2 Audit Log for draft creation
-  memoryState.auditLogs.unshift({
+  // Staged for Level-4 test authorization — no upload occurred, so the audit
+  // row must not read as an executed/verified upload.
+  const stagingAudit = stagedDraftAuditEntry({
+    platform: 'YouTube',
+    topic: `${title} (test, ${validPrivacy.toUpperCase()})`,
+    level: 4,
+    gate: 'Level-4 authorization',
+  });
+  pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: `Draft YouTube Test Video: "${title}" (Privacy: ${validPrivacy.toUpperCase()}) - Level 4 Gate Staged`,
+    action: stagingAudit.action,
     levelRequired: 2,
     approvedBy: 'AUTO_RULE',
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    status: stagingAudit.status,
+    verificationStatus: stagingAudit.verificationStatus,
+    finalTruthState: stagingAudit.finalTruthState,
   });
 
   persistMemory();
@@ -3869,6 +4599,14 @@ function getYouTubeRedirectUri(req?: Request, explicitUri?: string): string {
  * Multi-Platform Social Integrations Status Engine
  */
 function getPlatformIntegrationsStatus(req?: Request): any[] {
+  // Credentials being present is not a connection. This endpoint makes no
+  // provider call, so it can never certify that a credential still works.
+  // A platform with credentials is reported CONFIGURED and a live connection is
+  // proven only by `/api/social/platforms/test`. Labelling an unmeasured
+  // credential `CONNECTED` is exactly the fabricated success this project forbids.
+  const CRED_STATUS = 'CONFIGURED';
+  const CRED_MESSAGE = 'Credentials present but not verified. Run "Test connection" to confirm the account.';
+
   const conn = memoryState.linkedInConnection;
   const isLinkedInOAuthConnected = Boolean(conn && conn.connected && conn.accessToken);
   const staticLinkedInToken = (process.env.LINKEDIN_ACCESS_TOKEN || '').trim();
@@ -3901,14 +4639,15 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'linkedin',
       name: 'LinkedIn Personal Profile (Member Posts API)',
       category: 'Professional',
-      status: isLinkedInConnected ? 'CONNECTED' : 'NOT_CONFIGURED',
+      status: isLinkedInConnected ? CRED_STATUS : 'NOT_CONFIGURED',
+      errorMessage: isLinkedInConnected ? CRED_MESSAGE : undefined,
       authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_TOKEN' : 'OAUTH_2_0',
       accountName: conn?.name || (staticLinkedInToken ? 'Configured Member (Env Token)' : undefined),
       accountIdentifier: conn?.authorUrn || process.env.LINKEDIN_AUTHOR_URN || (conn?.memberSub ? `urn:li:person:${conn.memberSub}` : undefined),
       avatarUrl: conn?.picture || undefined,
       lastVerifiedAt: conn?.connectedAt || undefined,
       oauthStatus: {
-        connected: isLinkedInConnected,
+        connected: isLinkedInOAuthConnected,
         authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_ENV_TOKEN' : undefined,
         name: conn?.name || (staticLinkedInToken ? 'Configured Personal Member' : undefined),
         memberSub: conn?.memberSub,
@@ -3917,7 +4656,9 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
         picture: conn?.picture,
         connectedAt: conn?.connectedAt,
         expiresAt: conn?.expiresAt,
-        scopes: conn?.scopes || ['w_member_social', 'openid', 'profile', 'email'],
+        // A scope list the server never recorded is reported as empty, not as
+        // the scopes the app intended to request — those are a request, not a grant.
+        scopes: conn?.scopes ?? [],
         hasClientId: Boolean(linkedInClientId),
         hasClientSecret: Boolean(linkedInClientSecret),
         redirectUri: linkedInRedirectUri,
@@ -3942,7 +4683,8 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'facebook',
       name: 'Facebook Page Graph API',
       category: 'Social',
-      status: (fbToken && fbPageId) ? 'CONNECTED' : 'NOT_CONFIGURED',
+      status: (fbToken && fbPageId) ? CRED_STATUS : 'NOT_CONFIGURED',
+      errorMessage: (fbToken && fbPageId) ? CRED_MESSAGE : undefined,
       accountName: fbPageId ? `Page ID: ${fbPageId}` : undefined,
       accountIdentifier: fbPageId || undefined,
       developerPortalUrl: 'https://developers.facebook.com',
@@ -3962,7 +4704,8 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'instagram',
       name: 'Instagram Professional / Business API',
       category: 'Visual',
-      status: (igToken && igId) ? 'CONNECTED' : 'NOT_CONFIGURED',
+      status: (igToken && igId) ? CRED_STATUS : 'NOT_CONFIGURED',
+      errorMessage: (igToken && igId) ? CRED_MESSAGE : undefined,
       accountName: igId ? `IG ID: ${igId}` : undefined,
       accountIdentifier: igId || undefined,
       developerPortalUrl: 'https://developers.facebook.com/docs/instagram-api',
@@ -3982,15 +4725,16 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'youtube',
       name: 'YouTube Data API v3 (Google Cloud OAuth 2.0)',
       category: 'Video',
-      status: hasValidYtCredentials ? 'CONNECTED' : (ytClientId || ytKey) ? 'AUTH_REQUIRED' : 'NOT_CONFIGURED',
+      status: hasValidYtCredentials ? CRED_STATUS : (ytClientId || ytKey) ? 'AUTH_REQUIRED' : 'NOT_CONFIGURED',
+      errorMessage: hasValidYtCredentials ? CRED_MESSAGE : undefined,
       authType: isYouTubeOAuthConnected ? 'OAUTH_2_0' : (ytAccess || ytRefresh) ? 'STATIC_TOKEN' : ytKey ? 'API_KEY' : 'OAUTH_2_0',
       accountName: ytConn?.channelTitle || (ytAccess || ytRefresh ? 'Configured Channel (Env Token)' : ytKey ? 'Google API Key (Metadata Only)' : undefined),
       accountIdentifier: ytConn?.channelId || process.env.YOUTUBE_CHANNEL_ID || undefined,
       avatarUrl: ytConn?.avatarUrl || undefined,
       lastVerifiedAt: ytConn?.connectedAt || undefined,
       youTubeOAuthStatus: {
-        connected: hasValidYtCredentials,
-        status: hasValidYtCredentials ? 'API_VERIFIED' : (ytClientId || ytKey) ? 'CONFIGURED' : 'NOT_CONFIGURED',
+        connected: isYouTubeOAuthConnected,
+        status: isYouTubeOAuthConnected ? 'API_VERIFIED' : 'CONFIGURED',
         authType: isYouTubeOAuthConnected ? 'OAUTH_2_0' : (ytAccess || ytRefresh) ? 'STATIC_ENV_TOKEN' : ytKey ? 'API_KEY' : undefined,
         channelTitle: ytConn?.channelTitle || (ytAccess || ytRefresh ? 'Configured Channel' : ytKey ? 'Google API Key (Metadata Only)' : undefined),
         channelId: ytConn?.channelId || process.env.YOUTUBE_CHANNEL_ID || undefined,
@@ -3998,11 +4742,13 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
         avatarUrl: ytConn?.avatarUrl || undefined,
         connectedAt: ytConn?.connectedAt || undefined,
         expiresAt: ytConn?.expiresAt || undefined,
-        scopes: ytConn?.scopes || ['https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.upload'],
+        // See LinkedIn: an unrecorded grant is unknown, so report no scopes.
+        scopes: ytConn?.scopes ?? [],
         hasClientId: Boolean(ytClientId),
         hasClientSecret: Boolean(ytClientSecret),
         hasApiKey: Boolean(ytKey),
-        canPublish: hasValidYtCredentials,
+        canPublish: false,
+        message: 'Credentials present but not verified. Run "Test connection" to confirm the channel before publishing.',
         redirectUri: ytRedirectUri,
       },
       developerPortalUrl: 'https://console.cloud.google.com/apis/credentials',
@@ -4028,7 +4774,8 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
       id: 'twitter',
       name: 'X / Twitter API v2 (Pay-per-use Tier)',
       category: 'Microblog',
-      status: (twitterBearer || twitterAccess) ? 'CONNECTED' : 'NOT_CONFIGURED',
+      status: (twitterBearer || twitterAccess) ? CRED_STATUS : 'NOT_CONFIGURED',
+      errorMessage: (twitterBearer || twitterAccess) ? CRED_MESSAGE : undefined,
       accountName: (twitterBearer || twitterAccess) ? 'Configured Dev Tier' : undefined,
       developerPortalUrl: 'https://developer.x.com',
       setupInstructions: [
@@ -4178,7 +4925,9 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
 
     const accessToken = tokenData.access_token;
     const expiresIn = tokenData.expires_in || 5184000;
-    const grantedScopes = tokenData.scope ? (typeof tokenData.scope === 'string' ? tokenData.scope.split(' ') : tokenData.scope) : ['w_member_social', 'openid', 'profile', 'email'];
+    // A token response without a scope field means the grant is unmeasured; an
+    // empty list is the honest record, not the scopes the app asked for.
+    const grantedScopes = grantedScopesFromTokenResponse(tokenData) ?? [];
 
     // Fetch authenticated member personal profile
     const userinfoRes = await fetch('https://api.linkedin.com/v2/userinfo', {
@@ -4311,7 +5060,7 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
       picture: conn.picture,
       connectedAt: conn.connectedAt,
       expiresAt: conn.expiresAt,
-      scopes: conn.scopes || ['w_member_social', 'openid', 'profile', 'email'],
+      scopes: conn.scopes ?? [],
       hasClientId: Boolean(clientId),
       hasClientSecret: Boolean(clientSecret),
       redirectUri,
@@ -4496,7 +5245,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     const accessToken = tokenData.access_token;
     const refreshToken = tokenData.refresh_token || (memoryState.youTubeConnection?.refreshToken);
     const expiresIn = tokenData.expires_in || 3600;
-    const grantedScopes = typeof tokenData.scope === 'string' ? tokenData.scope.split(' ') : [];
+    const grantedScopes = grantedScopesFromTokenResponse(tokenData) ?? [];
 
     // Query Channel Info from YouTube Data API v3
     let channelId = '';
@@ -4655,10 +5404,14 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
         }
 
         const conn = memoryState.youTubeConnection;
+        // channels.list proves read access to the channel, not the upload scope.
+        // canPublish therefore follows the recorded grant: true only when the
+        // upload scope is on record, false when it is absent or unrecorded.
+        const uploadScopeGranted = publishScopeGranted('youtube', conn?.scopes) === true;
         return res.json({
           connected: true,
           status: 'API_VERIFIED',
-          canPublish: true,
+          canPublish: uploadScopeGranted,
           authType: 'OAUTH_2_0',
           channelTitle: title,
           channelId: chId,
@@ -4666,11 +5419,14 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
           avatarUrl,
           connectedAt: conn?.connectedAt || new Date().toISOString(),
           expiresAt: conn?.expiresAt,
-          scopes: conn?.scopes || ['https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.upload'],
+          scopes: conn?.scopes ?? [],
           hasClientId: Boolean(clientId),
           hasClientSecret: Boolean(clientSecret),
           hasApiKey: Boolean(apiKey),
           redirectUri,
+          message: uploadScopeGranted
+            ? undefined
+            : `Channel confirmed read-only. The upload scope (${PLATFORM_PUBLISH_SCOPES.youtube}) is not on record for this connection, so publishing is not confirmed — reconnect to grant upload access.`,
         });
       } else {
         const is403 = probeRes.status === 403;
@@ -4707,12 +5463,13 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
     }
   }
 
-  // 2. If static env token is present
+  // 2. If static env token is present, it has not been probed against Google,
+  //    so it is configured — never a verified connection or a publishing grant.
   if (staticToken) {
     return res.json({
-      connected: true,
-      status: 'API_VERIFIED',
-      canPublish: true,
+      connected: false,
+      status: 'CONFIGURED',
+      canPublish: false,
       authType: 'STATIC_ENV_TOKEN',
       channelTitle: 'Configured Channel (Env Token)',
       channelId: staticChannelId || undefined,
@@ -4720,6 +5477,7 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
       hasClientSecret: Boolean(clientSecret),
       hasApiKey: Boolean(apiKey),
       redirectUri,
+      message: 'A static YOUTUBE_ACCESS_TOKEN is present but has not been verified against Google. Run "Test connection" to confirm the channel before publishing.',
     });
   }
 
@@ -4800,6 +5558,8 @@ app.post('/api/social/platforms/test', async (req: Request, res: Response) => {
 
 // Proactive Routines APIs
 app.get('/api/routines', (req: Request, res: Response) => {
+  // Rebuild on read so the counts reflect current memory, never a boot-time snapshot.
+  proactiveReports = buildProactiveReports();
   res.json({ routines: proactiveReports });
 });
 
@@ -4807,6 +5567,182 @@ app.post('/api/routines/trigger', (req: Request, res: Response) => {
   const { timeSlot } = req.body;
   const routine = proactiveReports.find((r) => r.timeSlot === timeSlot) || proactiveReports[0];
   res.json({ success: true, routine });
+});
+
+// ==============================================================================
+// PRODUCTION HARDENING APIs (backlog items 51, 52, 54, 59)
+// ==============================================================================
+
+/** Permission matrix as the running system applies it. */
+app.get('/api/security/permission-matrix', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    currentLevel: securityMatrixState.currentLevel,
+    emergencyPaused: getEmergencyState().emergencyPaused,
+    matrix: PERMISSION_MATRIX,
+    unknownActionPolicy: UNKNOWN_ACTION_DECISION,
+  });
+});
+
+/**
+ * Self-check of the finance-exclusion lock. Runs the real probe corpus through
+ * the two enforcement engines and reports what they actually did, so the
+ * Finance Guard panel never displays "100% EXCLUDED" from a constant.
+ */
+app.get('/api/security/finance-guard', (req: Request, res: Response) => {
+  res.json({ success: true, report: runFinanceGuardSelfCheck() });
+});
+
+/** Dry-run: classify an action and say whether it would be permitted. */
+app.post('/api/security/evaluate', (req: Request, res: Response) => {
+  const command = typeof req.body?.command === 'string' ? req.body.command : '';
+  if (!command.trim()) {
+    return res.status(400).json({ success: false, error: 'command is required.' });
+  }
+
+  // The kill switch outranks the level check: while paused, nothing autonomous
+  // runs regardless of how safe the action looks.
+  if (isBlockedByKillSwitch(getEmergencyState().emergencyPaused)) {
+    return res.json({
+      success: true,
+      decision: {
+        allowed: false,
+        requiredLevel: 4,
+        requiresApproval: true,
+        category: 'kill_switch',
+        reason: 'Emergency stop is engaged; all autonomous actions are paused.',
+      },
+    });
+  }
+
+  const decision = evaluatePermission(
+    command,
+    securityMatrixState.currentLevel,
+    req.body?.approvedBy
+  );
+  res.json({ success: true, decision });
+});
+
+/** Secret scan over this repository's own tracked files. */
+app.get('/api/security/audit-secrets', async (req: Request, res: Response) => {
+  try {
+    const { readFile } = await import('fs/promises');
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const run = promisify(execFile);
+
+    const { stdout } = await run('git', ['ls-files'], { cwd: process.cwd(), maxBuffer: 10 * 1024 * 1024 });
+    const paths = stdout.split('\n').map((p) => p.trim()).filter(Boolean);
+
+    const files = [];
+    for (const path of paths) {
+      // Only text files up to a sane size; a binary blob is not scan-worthy.
+      if (/\.(png|jpe?g|gif|ico|woff2?|ttf|eot|pdf|zip|cjs|map)$/i.test(path)) continue;
+      try {
+        const content = await readFile(path, 'utf8');
+        if (content.length > 2_000_000) continue;
+        files.push({ path, content, tracked: true });
+      } catch {
+        // Unreadable file: skip rather than fail the audit.
+      }
+    }
+
+    const report = runSecurityAudit(files);
+    const summary = summariseAudit(report);
+
+    res.json({
+      success: true,
+      clean: isAuditClean(report),
+      summary,
+      findings: report.findings.slice(0, 100),
+      scannedFiles: report.scannedFiles,
+      note: 'Scans tracked text files for credential patterns. A clean result means these patterns were absent, not that the system is proven secure.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Secret audit failed.' });
+  }
+});
+
+/** Create a validated, redacted memory backup. */
+app.get('/api/backup', (req: Request, res: Response) => {
+  const backup = createBackup(memoryState as unknown as Record<string, unknown>);
+  const integrity = verifyBackup(backup);
+  if (!integrity.ok) {
+    return res.status(500).json({
+      success: false,
+      error: 'Backup failed its own round-trip verification and was not returned.',
+      errors: integrity.errors,
+    });
+  }
+  addAuditLog(
+    `Memory backup created and round-trip verified (${backup.keyCount} keys)`,
+    3,
+    'HUMAN_OPERATOR',
+    'VERIFIED'
+  );
+  persistMemory();
+  res.json({ success: true, verified: true, backup });
+});
+
+/** Restore a previously created backup. */
+app.post('/api/restore', (req: Request, res: Response) => {
+  const result = restoreBackup(
+    memoryState as unknown as Record<string, unknown>,
+    req.body?.backup ?? req.body
+  );
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, errors: result.errors });
+  }
+
+  addAuditLog(
+    `Memory restored from backup: ${result.restoredKeys.length} keys replaced, ${result.preservedKeys.length} preserved`,
+    4,
+    'HUMAN_OPERATOR',
+    'VERIFIED'
+  );
+  persistMemory();
+  res.json({ success: true, ...result });
+});
+
+/** Deployment readiness check. Observes this process's real configuration. */
+app.get('/api/deployment/verify', async (req: Request, res: Response) => {
+  try {
+    const fsMod = await import('fs/promises');
+    const dir = path.dirname(MEMORY_FILE_PATH);
+
+    let dataDirWritable = false;
+    try {
+      const probe = path.join(dir, `.write-probe-${Date.now()}`);
+      await fsMod.writeFile(probe, 'ok');
+      await fsMod.unlink(probe);
+      dataDirWritable = true;
+    } catch {
+      dataDirWritable = false;
+    }
+
+    const backup = createBackup(memoryState as unknown as Record<string, unknown>);
+    const backupCheck = verifyBackup(backup);
+
+    const report = verifyDeployment({
+      vaultConfigured: VAULT_CONFIGURED,
+      isDevMode: process.env.NODE_ENV !== 'production',
+      port: typeof PORT === 'number' ? PORT : null,
+      dataDirWritable,
+      httpsConfigured: Boolean(process.env.HTTPS_ENABLED || process.env.TLS_CERT_PATH),
+      blockingBugs: KNOWN_BLOCKING_BUGS,
+      backupVerified: backupCheck.ok,
+    });
+
+    res.json({
+      success: true,
+      ...report,
+      blockers: deploymentBlockers(report),
+      note: 'A deployment is ready only when every check passes. UNKNOWN checks block readiness rather than being assumed good.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Deployment verification failed.' });
+  }
 });
 
 // Security Matrix APIs
@@ -4818,6 +5754,10 @@ app.get('/api/security', (req: Request, res: Response) => {
     credentialLeakProtection: securityMatrixState.credentialLeakProtection,
     levels: securityMatrixState.levels,
     auditLogs: memoryState.auditLogs,
+    // Never let a client read the raw array length as a count of confirmed work: seed
+    // and legacy rows are reported separately from real recorded events.
+    auditLogCounts: auditTrailCounts(memoryState.auditLogs),
+    auditTrailSummary: describeAuditTrail(memoryState.auditLogs),
   });
 });
 
@@ -4845,6 +5785,11 @@ app.get('/api/actions/audit', (req: Request, res: Response) => {
   res.json({
     auditLogs: memoryState.auditLogs,
     totalLogs: memoryState.auditLogs.length,
+    // `totalLogs` may include carried-over legacy rows; `recordedLogs` counts
+    // only entries this process appended, so a client never reads the array
+    // length as a count of confirmed events.
+    recordedLogs: auditTrailCounts(memoryState.auditLogs).recorded,
+    summary: describeAuditTrail(memoryState.auditLogs),
     timestamp: new Date().toISOString(),
   });
 });
@@ -4932,7 +5877,7 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
   const updated = toggleEmergencyStop(requestedBy, reason);
 
   // Add audit log
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-emerg-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: updated.emergencyPaused
@@ -4971,7 +5916,7 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
   telegramConfig.webhookStatus = 'waiting_token';
 
   // 3. Log immutable Level 4 Audit Event
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-killswitch-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killResult.clearedTasksCount} pending PermissionGateway item(s).`,
@@ -5011,7 +5956,7 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
     });
   }
 
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-resume-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `🟢 SYSTEM RESUMED by ${requestedBy}: Subsystems returned to standard Level 1-4 permission mode.`,
@@ -5108,7 +6053,7 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
 
   if (decision === 'REJECT') {
     const updated = updateActionRequestStatus(id, 'REJECTED', { resolvedBy: approver });
-    memoryState.auditLogs.unshift({
+    pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `REJECTED Action "${updated?.exactAction || id}" by ${approver}`,
@@ -5137,7 +6082,10 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
   }
 
   try {
-    let executionResult: any = { executed: true };
+    // No default "executed: true" — a request whose execution branch never runs
+    // must not be recorded as executed. An unmatched request leaves this null
+    // and resolves as UNVERIFIED.
+    let executionResult: any = null;
 
     // Execute based on platform / payload
     if (targetReq.platform === 'YouTube' || targetReq.exactAction.toLowerCase().includes('youtube')) {
@@ -5164,24 +6112,36 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       }
     }
 
-    const updated = updateActionRequestStatus(id, 'EXECUTED', {
-      resultUrn: executionResult?.post?.livePostUrl || executionResult?.issueUrl || 'urn:jarvis:executed:' + id,
+    const resolution = classifyApprovalOutcome(executionResult);
+
+    const updated = updateActionRequestStatus(id, resolution.executed ? 'EXECUTED' : 'FAILED', {
+      resultUrn: resolution.evidenceRef,
+      errorReason: resolution.executed ? undefined : resolution.errorReason,
       resolvedBy: approver,
     });
 
-    memoryState.auditLogs.unshift({
+    pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      action: `EXECUTED Approved Action: ${targetReq.exactAction} on ${targetReq.target}`,
+      action: `${resolution.executed ? 'EXECUTED' : 'UNCONFIRMED'} Approved Action: ${targetReq.exactAction} on ${targetReq.target}`,
       levelRequired: targetReq.level,
       approvedBy: approver,
-      status: 'EXECUTED',
-      verificationStatus: 'VERIFIED',
-      finalTruthState: 'VERIFIED',
+      status: resolution.outcome,
+      verificationStatus: resolution.outcome === 'VERIFIED' ? 'VERIFIED' : 'UNVERIFIED',
+      providerUrn: resolution.evidenceRef,
+      errorReason: resolution.executed ? undefined : resolution.errorReason,
+      finalTruthState: resolution.outcome,
     });
 
     persistMemory();
-    res.json({ success: true, request: updated, executionResult, message: 'Action executed successfully.' });
+    res.json({
+      success: resolution.executed,
+      request: updated,
+      executionResult,
+      outcome: resolution.outcome,
+      message: resolution.message,
+      error: resolution.executed ? undefined : resolution.errorReason,
+    });
   } catch (err: any) {
     const updated = updateActionRequestStatus(id, 'FAILED', { errorReason: err.message, resolvedBy: approver });
     res.status(500).json({ success: false, request: updated, error: err.message });
@@ -5212,7 +6172,7 @@ app.post('/api/tools/fs/write', (req: Request, res: Response) => {
   }
   const result = realFsWrite(filePath, content);
   if (result.success) {
-    memoryState.auditLogs.unshift({
+    pushAuditEntry({
       id: `log-fs-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `Modified Workspace File: "${filePath}" (${result.bytesWritten} bytes)`,
@@ -5232,7 +6192,7 @@ app.post('/api/tools/fs/delete', (req: Request, res: Response) => {
   if (!filePath) return res.status(400).json({ error: 'path is required' });
   const result = realFsDelete(filePath);
   if (result.success) {
-    memoryState.auditLogs.unshift({
+    pushAuditEntry({
       id: `log-fs-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `Deleted Workspace Resource: "${filePath}"`,
@@ -5354,26 +6314,402 @@ app.get('/api/computer-operator/tasks/:id', (req: Request, res: Response) => {
   }
 });
 
+// Real Screenshot Capture API (backlog 8/9): captures through the OS, then
+// verifies the file on disk before reporting anything.
+app.post('/api/computer-operator/screenshot', async (req: Request, res: Response) => {
+  try {
+    const { label, directory, probeOnly } = req.body || {};
+    const result = await captureScreenshot({ label, directory, probeOnly });
+
+    const statusForOutcome: Record<string, number> = {
+      VERIFIED: 200,
+      NOT_AVAILABLE: 501,
+      NOT_CONFIGURED: 503,
+      PERMISSION_REQUIRED: 403,
+      FAILED: 500,
+    };
+
+    res.status(statusForOutcome[result.receipt.outcome] || 500).json({
+      success: result.receipt.outcome === 'VERIFIED',
+      outcome: result.receipt.outcome,
+      verified: result.receipt.verified,
+      method: result.method,
+      file: result.file,
+      receipt: result.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Executes a single computer action on the real host and returns its receipt.
+app.post('/api/computer-operator/execute-action', async (req: Request, res: Response) => {
+  try {
+    const action = req.body?.action;
+    if (!action || typeof action !== 'object' || !action.type) {
+      return res.status(400).json({ success: false, outcome: 'FAILED', error: 'A computer action object is required.' });
+    }
+
+    const curEmergencyState = getEmergencyState();
+    if (curEmergencyState.emergencyPaused) {
+      return res.status(423).json({
+        success: false,
+        outcome: 'BLOCKED',
+        error: 'Global Emergency Stop is active. No computer actions will be executed.',
+      });
+    }
+
+    const execution = await hostActionExecutor.execute(action as ComputerAction);
+    const statusForOutcome: Record<string, number> = {
+      VERIFIED: 200,
+      DISPATCHED: 202,
+      BLOCKED: 403,
+      PERMISSION_REQUIRED: 403,
+      NOT_AVAILABLE: 501,
+      NOT_CONFIGURED: 503,
+      SIMULATION_ONLY: 501,
+      FAILED: 500,
+    };
+
+    res.status(statusForOutcome[execution.receipt.outcome] || 500).json({
+      success: execution.receipt.verified,
+      outcome: execution.receipt.outcome,
+      receipt: execution.receipt,
+      output: execution.output,
+      exitCode: execution.exitCode ?? null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Reports what this host can genuinely do, so the UI can disable what it cannot.
+app.get('/api/computer-operator/host-capabilities', (_req: Request, res: Response) => {
+  const host = describeHost();
+  const operatorActions = hostActionCapabilities();
+  res.json({
+    success: true,
+    host,
+    captureAvailable: getCaptureAvailability(),
+    operatorActions,
+    screenshotRoot: resolveScreenshotRoot(),
+    // Synthetic mouse/keyboard input is not wired up on any platform yet.
+    syntheticInputAvailable: false,
+  });
+});
+
+// ==============================================================================
+// 8.5. GITHUB / PROJECT AUTOMATION APIs (backlog items 14-24)
+// ==============================================================================
+
+/** Resolves the token used for repository automation. */
+function resolveGithubToken(): string {
+  return (
+    process.env.GITHUB_AUTOMATION_TOKEN ||
+    process.env.GITHUB_TOKEN ||
+    ''
+  );
+}
+
+const githubFetchOptions = () => ({ token: resolveGithubToken() });
+
+/** Approval queue backing /api/github/approvals. */
+const githubApprovalQueue = new ApprovalQueue();
+
+/** Lightweight nightly-run history, persisted in memory state. */
+function getNightlyRuns(): NightlyRunRecord[] {
+  const anyState = memoryState as unknown as { nightlyGithubRuns?: NightlyRunRecord[] };
+  return anyState.nightlyGithubRuns ?? [];
+}
+
+function recordNightlyRun(record: NightlyRunRecord) {
+  const anyState = memoryState as unknown as { nightlyGithubRuns?: NightlyRunRecord[] };
+  const runs = [record, ...(anyState.nightlyGithubRuns ?? [])].slice(0, 30);
+  anyState.nightlyGithubRuns = runs;
+  persistMemory();
+}
+
+// Reports whether GitHub automation is usable, without making a network call.
+app.get('/api/github/status', (_req: Request, res: Response) => {
+  const token = githubTokenStatus(resolveGithubToken());
+  const runs = getNightlyRuns();
+  const history = nightlyHistory(runs, DEFAULT_NIGHTLY_CONFIG);
+  res.json({
+    success: true,
+    configured: token.configured,
+    reason: token.reason,
+    nightly: {
+      schedule: `${String(DEFAULT_NIGHTLY_CONFIG.hour).padStart(2, '0')}:${String(DEFAULT_NIGHTLY_CONFIG.minute).padStart(2, '0')} local`,
+      nextRunAt: history.nextRunAt,
+      lastRunAt: history.lastRunAt,
+      missedRun: history.missedRun,
+      runCount: runs.length,
+    },
+    protectedBranches: Array.from(PROTECTED_BRANCH_NAMES),
+    // A push or PR is only ever permitted after an explicit human approval.
+    humanApprovalRequired: true,
+  });
+});
+
+// Discovers repositories the configured token can reach.
+app.get('/api/github/repositories', async (_req: Request, res: Response) => {
+  try {
+    const result = await listRepositories(githubFetchOptions());
+    const statusForOutcome: Record<string, number> = {
+      VERIFIED: 200,
+      NOT_CONFIGURED: 503,
+      FAILED: 502,
+    };
+    res.status(statusForOutcome[result.receipt.outcome] || 200).json({
+      success: result.receipt.verified,
+      outcome: result.receipt.outcome,
+      count: result.repos.length,
+      repositories: result.repos,
+      receipt: result.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Scans one repository or every reachable repository.
+app.post('/api/github/scan', async (req: Request, res: Response) => {
+  try {
+    const { repository, all } = req.body || {};
+    const options = githubFetchOptions();
+
+    if (!all && typeof repository === 'string' && repository.trim()) {
+      const scan = await scanRepository(repository.trim(), options);
+      return res.status(scan.reachable ? 200 : 502).json({
+        success: scan.reachable,
+        outcome: scan.receipt.outcome,
+        scan,
+        receipt: scan.receipt,
+      });
+    }
+
+    const result = await scanAllRepositories(options);
+    const statusForOutcome: Record<string, number> = {
+      VERIFIED: 200,
+      DISPATCHED: 200,
+      NOT_CONFIGURED: 503,
+      FAILED: 502,
+    };
+    res.status(statusForOutcome[result.receipt.outcome] || 200).json({
+      success: result.receipt.verified,
+      outcome: result.receipt.outcome,
+      reachableCount: result.reachableCount,
+      unreachableCount: result.unreachableCount,
+      reposWithFailingCi: result.reposWithFailingCi,
+      reposWithOpenPrs: result.reposWithOpenPrs,
+      scans: result.scans.map((s) => ({
+        fullName: s.fullName,
+        reachable: s.reachable,
+        reason: s.reason,
+        defaultBranch: s.defaultBranch,
+        headSha: s.headSha,
+        headCommitMessage: s.headCommitMessage,
+        headCommitAgeHours: s.headCommitAgeHours,
+        openPullRequests: s.openPullRequests,
+        failingWorkflowRuns: s.failingWorkflowRuns,
+        abortedWorkflowRuns: s.abortedWorkflowRuns,
+        ciConfigured: s.ciConfigured,
+        unmergedBranchCount: s.unmergedBranchCount,
+        outcome: s.receipt.outcome,
+      })),
+      receipt: result.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Runs the real lint/test/build checks against this checkout.
+app.post('/api/github/health-check', async (req: Request, res: Response) => {
+  try {
+    const requested = Array.isArray(req.body?.checks) ? (req.body.checks as string[]) : undefined;
+    const valid: CheckKind[] = ['lint', 'test', 'build'];
+    const checks = requested
+      ? (requested.filter((c): c is CheckKind => valid.includes(c as CheckKind)))
+      : undefined;
+
+    if (requested && (!checks || checks.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        outcome: 'FAILED',
+        error: `checks must be a non-empty subset of: ${valid.join(', ')}`,
+      });
+    }
+
+    const report = await runHealthChecks({
+      workspace: req.body?.workspace || process.cwd(),
+      checks,
+      timeoutMs: typeof req.body?.timeoutMs === 'number' ? req.body.timeoutMs : undefined,
+    });
+
+    res.status(report.receipt.outcome === 'NOT_CONFIGURED' ? 503 : 200).json({
+      success: report.allPassed,
+      outcome: report.receipt.outcome,
+      allPassed: report.allPassed,
+      checks: report.checks.map((c) => ({
+        kind: c.kind,
+        command: c.command,
+        passed: c.passed,
+        exitCode: c.exitCode,
+        durationMs: c.durationMs,
+        timedOut: c.timedOut,
+        notConfiguredReason: c.notConfiguredReason,
+        stdoutTail: c.stdoutTail,
+        stderrTail: c.stderrTail,
+      })),
+      lint: report.lint,
+      tests: report.tests,
+      buildErrors: report.buildErrors,
+      receipt: report.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Produces a reviewable fix plan from real scan and health signals.
+app.post('/api/github/fix-plan', async (req: Request, res: Response) => {
+  try {
+    const { repository, includeLocalHealth } = req.body || {};
+    const options = githubFetchOptions();
+
+    let multiRepoScan;
+    if (typeof repository === 'string' && repository.trim()) {
+      const scan = await scanRepository(repository.trim(), options);
+      multiRepoScan = {
+        scans: [scan],
+        reachableCount: scan.reachable ? 1 : 0,
+        unreachableCount: scan.reachable ? 0 : 1,
+        reposWithFailingCi: (scan.failingWorkflowRuns?.length ?? 0) > 0 ? [scan.fullName] : [],
+        reposWithOpenPrs: (scan.openPullRequests?.length ?? 0) > 0 ? [scan.fullName] : [],
+        scannedAt: scan.scannedAt,
+        receipt: scan.receipt,
+      };
+    } else {
+      multiRepoScan = await scanAllRepositories(options);
+    }
+
+    const localHealth = includeLocalHealth
+      ? await runHealthChecks({ workspace: process.cwd(), checks: ['lint', 'test'] })
+      : undefined;
+
+    const plan = buildFixPlan({ multiRepoScan, localHealth });
+
+    res.json({
+      success: true,
+      outcome: plan.receipt.outcome,
+      nothingToDo: plan.nothingToDo,
+      highestRisk: plan.highestRisk,
+      requiresCodeChange: plan.requiresCodeChange,
+      steps: plan.steps,
+      receipt: plan.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
+// Lists pending human approvals, and lets a human decide one.
+app.get('/api/github/approvals', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    pending: githubApprovalQueue.listPending(),
+    history: githubApprovalQueue.list().filter((a) => a.state !== 'PENDING').slice(0, 50),
+  });
+});
+
+app.post('/api/github/approvals/:id/decision', (req: Request, res: Response) => {
+  const { approved, decidedBy, reason } = req.body || {};
+  if (typeof approved !== 'boolean') {
+    return res.status(400).json({ success: false, error: 'approved must be a boolean.' });
+  }
+  if (!decidedBy || typeof decidedBy !== 'string' || !decidedBy.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: 'decidedBy is required: an approval must carry the name of the human who gave it.',
+    });
+  }
+
+  const updated = githubApprovalQueue.decide(req.params.id, approved, decidedBy.trim(), reason);
+  if (!updated) {
+    return res.status(404).json({ success: false, error: 'No such approval request.' });
+  }
+
+  addAuditLog(
+    `${approved ? 'APPROVED' : 'REJECTED'} GitHub automation action "${updated.summary}" (${updated.id}) by ${decidedBy}`,
+    4,
+    decidedBy.trim(),
+    approved ? 'VERIFIED' : 'BLOCKED'
+  );
+
+  res.json({ success: true, approval: updated });
+});
+
+// Reports the nightly schedule and recent runs.
+app.get('/api/github/nightly', (_req: Request, res: Response) => {
+  const runs = getNightlyRuns();
+  const history = nightlyHistory(runs, DEFAULT_NIGHTLY_CONFIG);
+  res.json({
+    success: true,
+    schedule: DEFAULT_NIGHTLY_CONFIG,
+    nextRunAt: history.nextRunAt,
+    lastRunAt: history.lastRunAt,
+    missedRun: history.missedRun,
+    runs,
+  });
+});
+
+// Runs the nightly check immediately. Read-only: it scans and plans, never edits.
+app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
+  try {
+    const result = await runNightlyCheck({ github: githubFetchOptions() });
+    recordNightlyRun(result.record);
+
+    addAuditLog(
+      `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+      1,
+      'AUTOMATED_SCHEDULE',
+      result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
+    );
+
+    res.status(result.receipt.verified || result.record.outcome === 'COMPLETED' ? 200 : 502).json({
+      success: result.record.outcome === 'COMPLETED',
+      outcome: result.receipt.outcome,
+      record: result.record,
+      plan: result.plan
+        ? {
+            stepCount: result.plan.steps.length,
+            highestRisk: result.plan.highestRisk,
+            requiresCodeChange: result.plan.requiresCodeChange,
+            steps: result.plan.steps,
+          }
+        : undefined,
+      receipt: result.receipt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, outcome: 'FAILED', error: err.message });
+  }
+});
+
 // ==============================================================================
 // 8.6. YOUTUBE TRANSCRIPT EXTRACTION & AUTONOMOUS SUMMARIZER APIs
 // ==============================================================================
+interface YouTubeSummaryFailure {
+  success: false;
+  error: string;
+}
+
 async function summarizeYouTubeVideoCore(options: {
   url?: string;
   videoId?: string;
   detailLevel?: 'concise' | 'balanced' | 'detailed';
   language?: string;
-}): Promise<{
-  success: boolean;
-  videoInfo?: YouTubeVideoInfo;
-  summary?: string;
-  executiveOverview?: string;
-  keyTakeaways?: string[];
-  actionableInsights?: string[];
-  segments?: YouTubeTranscriptSegment[];
-  transcript?: string;
-  source?: 'gemini' | 'heuristic';
-  error?: string;
-}> {
+}): Promise<YouTubeSummaryResult | YouTubeSummaryFailure> {
   const target = (options.url || options.videoId || '').trim();
   if (!target) {
     return {
@@ -5441,13 +6777,19 @@ ${transcript.slice(0, 35000)}
       });
 
       const rawSummary = response.text?.trim() || '';
+      const result = buildYouTubeSummary({
+        videoInfo,
+        segments,
+        transcript,
+        description: videoInfo.description || '',
+        geminiRawSummary: rawSummary,
+      });
+      if (!result.summary) {
+        // Generation returned nothing usable — fall through to the honest path.
+        throw new Error('Gemini returned an empty summary');
+      }
 
-      // Extract key takeaways from markdown bullets
-      const takeawayMatches = rawSummary.match(/^[•\-\*]\s+(.+)$/gm) || [];
-      const extractedTakeaways = takeawayMatches.map((t) => t.trim());
-
-      // Audit Log
-      memoryState.auditLogs.unshift({
+      pushAuditEntry({
         id: `log-yt-${Date.now()}`,
         timestamp: new Date().toISOString(),
         action: `🎥 Summarized YouTube Video: "${videoInfo.title}" (${videoInfo.channel}) via Gemini 2.5 Flash`,
@@ -5459,54 +6801,44 @@ ${transcript.slice(0, 35000)}
       });
       persistMemory();
 
-      return {
-        success: true,
-        videoInfo,
-        summary: rawSummary,
-        keyTakeaways: extractedTakeaways.length > 0 ? extractedTakeaways : undefined,
-        segments,
-        transcript,
-        source: 'gemini',
-      };
+      return result;
     } catch (geminiErr: any) {
-      console.warn('[YouTube Summarize] Gemini API notice, falling back to heuristic:', geminiErr?.message);
+      console.warn('[YouTube Summarize] Gemini API notice, falling back to extractive mode:', geminiErr?.message);
     }
   }
 
-  // Fallback heuristic summarizer
-  const heuristic = heuristicTranscriptSummarize(
-    videoInfo.title,
-    videoInfo.channel,
-    videoInfo.durationFormatted,
+  // Extractive fallback — quotes only what the transcript/description actually
+  // contains. It never invents content, and when there is nothing to quote the
+  // result reports PARTIAL with an empty summary rather than a fabricated one.
+  const geminiConfigured = Boolean(ai);
+  const result = buildYouTubeSummary({
+    videoInfo,
     segments,
-    videoInfo.description
-  );
+    transcript,
+    description: videoInfo.description || '',
+    geminiRawSummary: null,
+    geminiFailed: geminiConfigured,
+  });
 
-  const fallbackSummary = `### 📌 Executive Overview\n${heuristic.executiveSummary}\n\n### ⏱️ Key Takeaways\n${heuristic.keyTakeaways.join('\n')}\n\n### 💡 Actionable Insights\n${heuristic.actionableInsights.map((i) => `• ${i}`).join('\n')}`;
-
-  memoryState.auditLogs.unshift({
+  pushAuditEntry({
     id: `log-yt-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: `🎥 Summarized YouTube Video: "${videoInfo.title}" via Autonomous Transcript Engine`,
+    action: result.source === 'extractive'
+      ? `🎥 Extracted key lines for YouTube video: "${videoInfo.title}" (no AI synthesis applied)`
+      : `🎥 YouTube summarization for "${videoInfo.title}" produced no content (no transcript or description available)`,
     levelRequired: 2,
     approvedBy: 'JARVIS_AUTONOMOUS_RESEARCH',
     status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
+    verificationStatus: result.verificationStatus === 'VERIFIED'
+      ? 'VERIFIED'
+      : geminiConfigured
+        ? 'PROVIDER_ERROR'
+        : 'MISSING_CREDENTIALS',
+    finalTruthState: result.verificationStatus === 'VERIFIED' ? 'VERIFIED' : 'PARTIAL',
   });
   persistMemory();
 
-  return {
-    success: true,
-    videoInfo,
-    summary: fallbackSummary,
-    executiveOverview: heuristic.executiveSummary,
-    keyTakeaways: heuristic.keyTakeaways,
-    actionableInsights: heuristic.actionableInsights,
-    segments,
-    transcript,
-    source: 'heuristic',
-  };
+  return result;
 }
 
 // REST APIs for YouTube Summarizer
@@ -5563,25 +6895,307 @@ app.get('/api/memory', (req: Request, res: Response) => {
   });
 });
 
+/**
+ * Reconcile an offline snapshot with the server. Returns the merged result and
+ * every conflict that was detected, so the client can show a human what was
+ * kept from each side instead of silently overwriting.
+ */
+app.post('/api/memory/sync', (req: Request, res: Response) => {
+  try {
+    const local = req.body?.local;
+    if (!local || typeof local !== 'object') {
+      return res.status(400).json({ success: false, error: 'A local memory snapshot is required.' });
+    }
+
+    const remote = {
+      name: memoryState.name,
+      notes: memoryState.notes,
+      customKeyValues: memoryState.customKeyValues,
+    };
+
+    const result = mergeMemorySnapshots(
+      {
+        name: local.name,
+        notes: Array.isArray(local.notes) ? local.notes : [],
+        customKeyValues: local.customKeyValues || {},
+        keyTimestamps: local.keyTimestamps,
+      },
+      remote,
+    );
+
+    // Only merge what the resolver accepted. Conflicts are reported, never
+    // silently applied over the authoritative server copy.
+    memoryState.notes = result.merged.notes;
+    if (result.merged.name !== undefined) memoryState.name = result.merged.name;
+    memoryState.customKeyValues = result.merged.customKeyValues;
+    persistMemory();
+
+    res.json({
+      success: true,
+      merged: {
+        name: memoryState.name,
+        notes: memoryState.notes,
+        customKeyValues: memoryState.customKeyValues,
+      },
+      conflicts: result.conflicts,
+      requiresAttention: result.requiresAttention,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Memory sync failed' });
+  }
+});
+
+// ==============================================================================
+// AUTONOMOUS GOAL RUNNER (backlog items 40-45)
+// ==============================================================================
+
+export interface ScheduledGoalSpec {
+  id: string;
+  name: string;
+  atMinuteOfDay: number;
+  steps: Array<Record<string, unknown>>;
+  requiresApproval?: boolean;
+  enabled: boolean;
+}
+
+/**
+ * Recurring autonomous goals. Empty by default: nothing runs on a schedule
+ * until the operator registers something, so the system never acts on its own
+ * initiative without a deliberate choice.
+ */
+const scheduledGoals: ScheduledGoalSpec[] = [];
+const scheduledGoalRuns: ScheduledGoalRecord[] = [];
+
+/** Bounded in-memory audit trail of autonomous runs, newest first. */
+const goalRunHistory: Array<{
+  goal: string;
+  outcome: ExecutionOutcome;
+  verified: boolean;
+  steps: Array<{ id: string; status: string; detail: string }>;
+  audit: unknown[];
+  startedAt: string;
+  finishedAt: string;
+}> = [];
+
+app.get('/api/autonomous/goals', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    runs: goalRunHistory.slice(0, 20),
+  });
+});
+
+/**
+ * Run a goal through the plan → execute → verify loop.
+ *
+ * Steps are supplied by the caller as declarative descriptors. Only a small set
+ * of built-in, verifiable step kinds is accepted: an arbitrary code payload from
+ * the network is never executed. A step that needs approval pauses the run and
+ * reports `awaitingApproval` instead of proceeding.
+ */
+app.post('/api/autonomous/goals/run', async (req: Request, res: Response) => {
+  const goal = typeof req.body?.goal === 'string' ? req.body.goal.trim() : '';
+  if (!goal) {
+    return res.status(400).json({ success: false, error: 'A goal description is required.' });
+  }
+
+  if (emergencyActive()) {
+    bridgeGateway.recordAudit('ACTION_DENIED', 'Autonomous goal blocked by Global Kill Switch', 'BLOCKED');
+    return res.status(423).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: 'Global Kill Switch is active. Autonomous execution is frozen.',
+    });
+  }
+
+  const requestedSteps = Array.isArray(req.body?.steps) ? req.body.steps : [];
+  if (requestedSteps.length === 0) {
+    return res.status(400).json({ success: false, error: 'At least one step is required.' });
+  }
+
+  const { buildGoalSteps } = await import('./src/utils/autonomous/stepLibrary');
+  const { steps, rejected } = buildGoalSteps(requestedSteps);
+  if (rejected.length > 0) {
+    return res.status(400).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: `Unsupported step kind(s): ${rejected.join(', ')}`,
+      supported: 'See GET /api/autonomous/goals/step-kinds',
+    });
+  }
+
+  const startedAt = new Date().toISOString();
+  const runner = new AutonomousGoalRunner({
+    // Approval must arrive from the request, and must name the approver. An
+    // anonymous `approved: true` is not a human decision.
+    approve: req.body?.approver
+      ? () => req.body?.approved === true
+      : undefined,
+  });
+
+  const result = await runner.run(goal, steps);
+  const finishedAt = new Date().toISOString();
+
+  if (result.verified) {
+    memoryState.stats.actionsExecuted += 1;
+  }
+
+  goalRunHistory.unshift({
+    goal,
+    outcome: result.outcome,
+    verified: result.verified,
+    steps: result.steps.map((s) => ({ id: s.id, status: s.status, detail: s.detail })),
+    audit: result.audit,
+    startedAt,
+    finishedAt,
+  });
+  if (goalRunHistory.length > 50) goalRunHistory.length = 50;
+
+  addAuditLog(
+    `Autonomous goal "${goal}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
+    2,
+    req.body?.approver ? `HUMAN:${String(req.body.approver).slice(0, 40)}` : 'AUTONOMOUS',
+    result.outcome === 'VERIFIED' ? 'VERIFIED' : result.outcome === 'FAILED' ? 'FAILED' : 'PENDING'
+  );
+  persistMemory();
+
+  return res.json({
+    success: result.verified,
+    goal,
+    outcome: result.outcome,
+    verified: result.verified,
+    awaitingApproval: result.awaitingApproval ?? false,
+    steps: result.steps,
+    audit: result.audit,
+    receipt: result.receipt,
+  });
+});
+
+app.get('/api/autonomous/goals/step-kinds', async (_req: Request, res: Response) => {
+  const { SUPPORTED_STEP_KINDS } = await import('./src/utils/autonomous/stepLibrary');
+  res.json({ success: true, kinds: SUPPORTED_STEP_KINDS });
+});
+
+// ==============================================================================
+// SCHEDULED AUTONOMOUS TASKS (backlog item 43)
+// ==============================================================================
+
+app.get('/api/autonomous/schedule', (req: Request, res: Response) => {
+  const lastRuns = (memoryState.schedulerState as unknown as {
+    lastAutonomousGoalRuns?: Record<string, string>;
+  }).lastAutonomousGoalRuns || {};
+  const istParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const part = (type: string) => istParts.find((p) => p.type === type)?.value || '0';
+  const clock = {
+    minuteOfDay: Number(part('hour')) * 60 + Number(part('minute')),
+    date: `${part('year')}-${part('month')}-${part('day')}`,
+  };
+
+  res.json({
+    success: true,
+    timezone: 'Asia/Kolkata',
+    goals: scheduledGoals.map((g) => {
+      const { nextRunAt, missedRun } = nextScheduledOccurrence(
+        g as ScheduledGoal,
+        lastRuns[g.id],
+        clock
+      );
+      return { ...g, lastRunDate: lastRuns[g.id] || null, nextRunAt, missedRun };
+    }),
+    runs: scheduledGoalRuns.slice(0, 20),
+  });
+});
+
+app.post('/api/autonomous/schedule', (req: Request, res: Response) => {
+  const id = typeof req.body?.id === 'string' ? req.body.id.trim() : '';
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const atMinuteOfDay = Number(req.body?.atMinuteOfDay);
+
+  if (!id || !name) {
+    return res.status(400).json({ success: false, error: 'id and name are required.' });
+  }
+  if (!Number.isInteger(atMinuteOfDay) || atMinuteOfDay < 0 || atMinuteOfDay > 1439) {
+    return res.status(400).json({
+      success: false,
+      error: 'atMinuteOfDay must be an integer between 0 and 1439.',
+    });
+  }
+  if (!Array.isArray(req.body?.steps) || req.body.steps.length === 0) {
+    return res.status(400).json({ success: false, error: 'At least one step is required.' });
+  }
+
+  const spec: ScheduledGoalSpec = {
+    id,
+    name,
+    atMinuteOfDay,
+    steps: req.body.steps,
+    requiresApproval: req.body?.requiresApproval === true,
+    enabled: req.body?.enabled !== false,
+  };
+
+  const existing = scheduledGoals.findIndex((g) => g.id === id);
+  if (existing >= 0) scheduledGoals[existing] = spec;
+  else scheduledGoals.push(spec);
+
+  addAuditLog(
+    `Scheduled autonomous task "${name}" (${id}) ${existing >= 0 ? 'updated' : 'registered'} to run daily at minute ${atMinuteOfDay}`,
+    3,
+    'HUMAN_OPERATOR',
+    'VERIFIED'
+  );
+  persistMemory();
+
+  res.status(existing >= 0 ? 200 : 201).json({ success: true, goal: spec });
+});
+
+app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
+  const index = scheduledGoals.findIndex((g) => g.id === req.params.id);
+  if (index < 0) {
+    return res.status(404).json({ success: false, error: 'No such scheduled task.' });
+  }
+  const [removed] = scheduledGoals.splice(index, 1);
+  addAuditLog(`Scheduled autonomous task "${removed.name}" (${removed.id}) removed`, 3, 'HUMAN_OPERATOR', 'VERIFIED');
+  persistMemory();
+  res.json({ success: true, removed: removed.id });
+});
+
 // Mobile Personal Status & Morning Briefing Telemetry Endpoints
 app.get('/api/mobile/telemetry', (req: Request, res: Response) => {
+  const device = bridgeGateway.getDevice();
   res.json({
     success: true,
     serverTime: new Date().toISOString(),
+    // Ambient weather has no source in this process. It used to return a fixed
+    // temperature/humidity snapshot labelled 'New Delhi' that callers could read
+    // as a live reading; the absence is reported explicitly instead.
     weatherSnapshot: {
-      location: 'New Delhi / Local GPS',
-      temperatureC: 27,
-      condition: 'Clear Sky / साफ मौसम',
-      humidity: 48,
+      available: false,
+      reason: 'No weather source is connected to this server process.',
     },
     systemScheduler: {
-      activeJobs: 4,
-      nextBriefing: '09:00 AM IST',
+      ...schedulerTruth(
+        (memoryState.schedulerState as { lastMorningRunDate?: string }).lastMorningRunDate,
+        scheduledGoals.length
+      ),
     },
     privacyMatrix: {
-      level4Enforced: true,
-      categories: ['battery', 'weather', 'notifications', 'calendar', 'email', 'device_health'],
+      ...privacyMatrixTruth(securityMatrixState.humanApprovalForExternal, [
+        'battery',
+        'weather',
+        'notifications',
+        'calendar',
+        'email',
+        'device_health',
+      ]),
     },
+    connectedDevice: device ? { deviceId: device.deviceId, model: device.model } : null,
   });
 });
 
@@ -5595,12 +7209,14 @@ app.post('/api/mobile/briefing/generate', async (req: Request, res: Response) =>
         const prompt = `You are HERMES JARVIS. Generate a crisp, articulate, high-density ${language === 'hindi' ? 'Hindi / Hinglish' : 'English'} Morning Briefing for Sir.
 Current time: ${new Date().toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' })}.
 Mobile telemetry data:
-- Battery: ${mobileData.battery?.levelPercent ?? 80}% (${mobileData.battery?.isCharging ? 'Charging' : 'Discharging'})
-- Weather: ${mobileData.weather?.temperatureC ?? 27}°C, ${mobileData.weather?.condition ?? 'Clear'}
-- Notifications: ${mobileData.notifications?.unreadCount ?? 0} unread
-- Calendar: ${mobileData.calendar?.todayEventsCount ?? 0} events today
-- Email: ${mobileData.email?.unreadCount ?? 0} important unread
-- Cloud Node: Oracle ARM VM online, Uptime nominal
+- Battery: ${mobileData.battery?.levelPercent != null ? `${mobileData.battery.levelPercent}% (${mobileData.battery?.isCharging ? 'Charging' : 'Discharging'})` : 'not reported by device'}
+- Weather: ${mobileData.weather?.temperatureC != null ? `${mobileData.weather.temperatureC}°C, ${mobileData.weather?.condition ?? 'condition not reported'}` : 'not reported by device'}
+- Notifications: ${mobileData.notifications?.unreadCount != null ? `${mobileData.notifications.unreadCount} unread` : 'not reported by device'}
+- Calendar: ${mobileData.calendar?.todayEventsCount != null ? `${mobileData.calendar.todayEventsCount} events today` : 'not reported by device'}
+- Email: ${mobileData.email?.unreadCount != null ? `${mobileData.email.unreadCount} important unread` : 'not reported by device'}
+- Cloud Node: not probed by this server — do not claim it is online.
+
+Use only the values above. If a field says "not reported by device", say the figure is unavailable; never substitute a plausible number.
 
 Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hindi/Hinglish (e.g. "सुप्रभात सर..."), or concise English if language is english.`;
 
@@ -5623,16 +7239,30 @@ Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hin
       }
     }
 
-    // Default authentic bilingual briefing fallback
-    const batteryLvl = mobileData?.battery?.levelPercent ?? 78;
-    const temp = mobileData?.weather?.temperatureC ?? 27;
-    const notifs = mobileData?.notifications?.unreadCount ?? 5;
-    const cal = mobileData?.calendar?.todayEventsCount ?? 2;
-    const mail = mobileData?.email?.unreadCount ?? 3;
+    // Default bilingual briefing fallback. Reports only what the device actually
+    // sent; absent fields are named as unavailable instead of defaulted.
+    const batteryLvl = mobileData?.battery?.levelPercent;
+    const temp = mobileData?.weather?.temperatureC;
+    const notifs = mobileData?.notifications?.unreadCount;
+    const cal = mobileData?.calendar?.todayEventsCount;
+    const mail = mobileData?.email?.unreadCount;
+    const anyTelemetry = [batteryLvl, temp, notifs, cal, mail].some((v) => v != null);
+
+    if (!anyTelemetry) {
+      const spokenText = language === 'hindi'
+        ? `सुप्रभात सर। इस समय कोई मोबाइल डिवाइस जुड़ा नहीं है, इसलिए बैटरी, मौसम, notifications, कैलेंडर और ईमेल का डेटा उपलब्ध नहीं है।`
+        : `Good morning, Sir. No mobile device is currently connected, so battery, weather, notification, calendar and email data are unavailable.`;
+      return res.json({
+        success: true,
+        spokenText,
+        source: 'autonomous_local_engine',
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     const spokenText = language === 'hindi'
-      ? `सुप्रभात सर। आपके मोबाइल की बैटरी ${batteryLvl} प्रतिशत है। आज मौसम साफ है और तापमान ${temp} डिग्री है। आपके ${notifs} महत्वपूर्ण notifications, ${cal} शेड्यूल्ड मीटिंग्स, और ${mail} नए ईमेल्स पेंडिंग हैं। सभी क्लाउड सिस्टम्स सामान्य रूप से सक्रिय हैं।`
-      : `Good morning, Sir. Your device battery is at ${batteryLvl} percent. Today's forecast is clear with a temperature of ${temp} degrees. You have ${notifs} notifications, ${cal} calendar events, and ${mail} emails waiting. All cloud nodes are operational.`;
+      ? `सुप्रभात सर। ${batteryLvl != null ? `आपके मोबाइल की बैटरी ${batteryLvl} प्रतिशत है। ` : 'बैटरी डेटा उपलब्ध नहीं है। '}${temp != null ? `तापमान ${temp} डिग्री है। ` : 'मौसम डेटा उपलब्ध नहीं है। '}${notifs != null ? `${notifs} notifications, ` : ''}${cal != null ? `${cal} शेड्यूल्ड मीटिंग्स, ` : ''}${mail != null ? `और ${mail} नए ईमेल्स पेंडिंग हैं।` : ''}`
+      : `Good morning, Sir. ${batteryLvl != null ? `Your device battery is at ${batteryLvl} percent. ` : 'Battery data is unavailable. '}${temp != null ? `The temperature is ${temp} degrees. ` : 'Weather data is unavailable. '}${notifs != null ? `${notifs} notifications, ` : ''}${cal != null ? `${cal} calendar events, ` : ''}${mail != null ? `and ${mail} emails are waiting.` : ''}`;
 
     res.json({
       success: true,
@@ -5644,421 +7274,627 @@ Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hin
     res.status(500).json({ success: false, error: ex.message });
   }
 });
-
 // -------------------------------------------------------------
-// ANDROID MOBILE BRIDGE & NOTIFICATION/CALL ASSISTANT ENDPOINTS
+// ANDROID MOBILE BRIDGE — AUTHENTICATED DEVICE GATEWAY
+//
+// Replaces the previous unauthenticated, client-reported bridge state.
+// Nothing here reports a device as connected, telemetry as present, or an
+// action as successful unless the device itself supplied the evidence.
 // -------------------------------------------------------------
-interface ServerMobileBridgeState {
-  status:
-    | 'MOBILE_NOT_CONNECTED'
-    | 'PERMISSION_REQUIRED'
-    | 'PARTIALLY_CONNECTED'
-    | 'CONNECTED'
-    | 'LIMITED_CAPABILITY'
-    | 'ERROR';
-  device: {
-    deviceId: string;
-    deviceName: string;
-    model: string;
-    osVersion: string;
-    bridgeVersion: string;
-    canDetectCalls: boolean;
-    canAnswerCalls: boolean;
-    telecomRoleDialer: boolean;
-    answerCallsPermission: boolean;
-    canReadNotifications: boolean;
-    canInlineReply: boolean;
-    canOpenApp: boolean;
-    canLookupContacts: boolean;
-    isSimulation: boolean;
-    connectedAt: string;
-  } | null;
-  permissions: {
-    notification_access: string;
-    call_detection: string;
-    call_answer: string;
-    message_reading: string;
-    message_reply: string;
-    contacts_lookup: string;
-    notification_history: string;
-  };
-  pendingEvent: any | null;
-  auditLogs: Array<{
-    id: string;
-    timestamp: string;
-    eventType: string;
-    application: string;
-    actionRequested: string;
-    result: string;
-    notes?: string;
-  }>;
-}
 
-const serverMobileBridgeState: ServerMobileBridgeState = {
-  status: 'MOBILE_NOT_CONNECTED',
-  device: null,
-  permissions: {
-    notification_access: 'NOT_CONFIGURED',
-    call_detection: 'NOT_CONFIGURED',
-    call_answer: 'LIMITED',
-    message_reading: 'NOT_CONFIGURED',
-    message_reply: 'LIMITED',
-    contacts_lookup: 'NOT_CONFIGURED',
-    notification_history: 'NOT_CONFIGURED',
-  },
-  pendingEvent: null,
-  auditLogs: [],
-};
-
-function recordMobileAudit(entry: {
-  eventType: string;
-  application: string;
-  actionRequested: string;
-  result: string;
-  notes?: string;
-}) {
-  serverMobileBridgeState.auditLogs.unshift({
-    id: `audit_srv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    timestamp: new Date().toISOString(),
-    ...entry,
-  });
-  if (serverMobileBridgeState.auditLogs.length > 200) {
-    serverMobileBridgeState.auditLogs.pop();
-  }
-}
-
-app.get('/api/mobile/bridge/status', (req: Request, res: Response) => {
-  const emergency = getEmergencyState();
-  res.json({
-    success: true,
-    status: serverMobileBridgeState.status,
-    device: serverMobileBridgeState.device,
-    permissions: serverMobileBridgeState.permissions,
-    pendingEvent: serverMobileBridgeState.pendingEvent,
-    emergencyPaused: emergency.emergencyPaused || emergency.hardKillSwitchTriggered,
-  });
+const bridgeGateway = new AndroidBridgeGateway({
+  signingSecret:
+    process.env.MOBILE_BRIDGE_SECRET ||
+    process.env.APP_SECRET ||
+    process.env.SESSION_SECRET ||
+    'hermes_jarvis_mobile_bridge_dev_secret',
 });
+
+/** Fixed-window limiter that counts FAILED auth attempts only, per client IP. */
+const bridgeAuthFailures = new Map<string, { count: number; windowStart: number }>();
+const BRIDGE_AUTH_WINDOW_MS = 60_000;
+const BRIDGE_AUTH_MAX_FAILURES = Number(process.env.MOBILE_BRIDGE_MAX_AUTH_FAILURES) || 25;
+
+function bridgeAuthThrottled(ip: string): boolean {
+  const now = Date.now();
+  const entry = bridgeAuthFailures.get(ip);
+  if (!entry || now - entry.windowStart > BRIDGE_AUTH_WINDOW_MS) return false;
+  return entry.count >= BRIDGE_AUTH_MAX_FAILURES;
+}
+
+/** Returns true when the caller has now exceeded the failure budget. */
+function recordBridgeAuthFailure(ip: string): boolean {
+  const now = Date.now();
+  const entry = bridgeAuthFailures.get(ip);
+  if (!entry || now - entry.windowStart > BRIDGE_AUTH_WINDOW_MS) {
+    bridgeAuthFailures.set(ip, { count: 1, windowStart: now });
+    return 1 >= BRIDGE_AUTH_MAX_FAILURES;
+  }
+  entry.count += 1;
+  return entry.count >= BRIDGE_AUTH_MAX_FAILURES;
+}
+
+/** Clears the failure budget for an IP after a successful authentication. */
+function clearBridgeAuthFailures(ip: string): void {
+  bridgeAuthFailures.delete(ip);
+}
+
+/** Extracts the session token from either supported header. */
+function extractBridgeToken(req: Request): string | undefined {
+  const header = req.header('x-jarvis-session-token') || req.header('x-jarvis-auth-token');
+  if (header) return header.trim();
+  const auth = req.header('authorization');
+  if (auth && auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
+  return undefined;
+}
+
+interface BridgeAuthContext {
+  sessionId: string;
+}
+
+/**
+ * Gate for every bridge endpoint except pairing. Returns null and writes the
+ * error response when the caller cannot prove it holds a live session.
+ */
+function requireBridgeSession(
+  req: Request,
+  res: Response
+): BridgeAuthContext | null {
+  const ip = String(req.ip || req.socket?.remoteAddress || 'unknown');
+  if (bridgeAuthThrottled(ip)) {
+    res.status(429).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: 'Too many bridge authentication attempts. Retry later.',
+    });
+    return null;
+  }
+
+  const token = extractBridgeToken(req);
+  const check = bridgeGateway.verifyToken(token);
+  if (!check.valid || !check.session) {
+    recordBridgeAuthFailure(ip);
+    bridgeGateway.recordAudit(
+      'SESSION_REJECTED',
+      `Bridge request rejected: ${check.reason}`,
+      bridgeFailureOutcome(check.reason)
+    );
+    res.status(401).json({
+      success: false,
+      outcome: bridgeFailureOutcome(check.reason),
+      reason: check.reason,
+      error: 'A valid bridge session token is required. Pair the device first via /api/mobile/bridge/pair.',
+    });
+    return null;
+  }
+
+  clearBridgeAuthFailures(ip);
+  return { sessionId: check.session.sessionId };
+}
+
+function bridgeFailureOutcome(reason: string): ExecutionOutcome {
+  // Session problems are authorization problems, not silent failures.
+  if (reason === 'MALFORMED_TOKEN' || reason === 'UNKNOWN_SESSION' || reason === 'TOKEN_MISMATCH') return 'BLOCKED';
+  return 'FAILED';
+}
+
+function emergencyActive(): boolean {
+  // Delegates to the shared helper so the HTTP layer and the host executor
+  // cannot drift apart on what "the kill switch is engaged" means.
+  return isEmergencyStopActive();
+}
+
+// ---- 1. Pairing ------------------------------------------------------------
+
+app.post('/api/mobile/bridge/pair', (req: Request, res: Response) => {
+  try {
+    const ip = String(req.ip || req.socket?.remoteAddress || 'unknown');
+    if (bridgeAuthThrottled(ip)) {
+      return res.status(429).json({ success: false, error: 'Too many pairing attempts. Retry later.' });
+    }
+
+    const pairingSecret = process.env.MOBILE_BRIDGE_PAIRING_SECRET;
+    if (!pairingSecret) {
+      return res.status(503).json({
+        success: false,
+        outcome: 'NOT_CONFIGURED',
+        error:
+          'MOBILE_BRIDGE_PAIRING_SECRET is not configured on the server. Device pairing is disabled until the operator sets it.',
+      });
+    }
+
+    const provided = req.header('x-jarvis-pairing-secret') || req.body?.pairingSecret;
+    if (!provided || typeof provided !== 'string') {
+      recordBridgeAuthFailure(ip);
+      return res.status(401).json({ success: false, outcome: 'BLOCKED', error: 'Pairing secret required.' });
+    }
+
+    const expected = Buffer.from(pairingSecret, 'utf8');
+    const actual = Buffer.from(provided, 'utf8');
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+      recordBridgeAuthFailure(ip);
+      bridgeGateway.recordAudit('PAIRING_REJECTED', 'Invalid pairing secret presented', 'BLOCKED');
+      return res.status(403).json({ success: false, outcome: 'BLOCKED', error: 'Invalid pairing secret.' });
+    }
+
+    clearBridgeAuthFailures(ip);
+
+    const deviceId = String(req.body?.deviceId || '').trim();
+    if (!deviceId) {
+      return res.status(400).json({ success: false, error: 'deviceId is required for pairing.' });
+    }
+
+    // Only one device owns the bridge at a time; re-pairing replaces the link.
+    const existing = bridgeGateway.getDevice();
+    if (existing) {
+      bridgeGateway.revoke(existing.sessionId, 'Superseded by new pairing');
+    }
+
+    const issued = bridgeGateway.issueSession(deviceId, req.body?.clientLabel || 'Android Bridge');
+    bridgeGateway.recordAudit('PAIRING_ACCEPTED', `Pairing accepted for ${deviceId}`, 'VERIFIED', {
+      sessionId: issued.session.sessionId,
+      deviceId,
+    });
+
+    return res.json({
+      success: true,
+      outcome: 'VERIFIED',
+      sessionId: issued.session.sessionId,
+      sessionToken: issued.token,
+      expiresAt: issued.expiresAt,
+      note: 'Store this token on the device. Present it as X-Jarvis-Session-Token on every bridge call.',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 2. Registration / capability handshake --------------------------------
 
 app.post('/api/mobile/bridge/connect', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
   try {
-    const { device, permissions } = req.body;
-    if (!device) {
-      return res.status(400).json({ success: false, error: 'Device details required' });
+    const { device, capabilities, permissions } = req.body || {};
+    if (!device && !capabilities) {
+      return res.status(400).json({ success: false, error: 'Device capabilities are required to register.' });
+    }
+    const caps = capabilities || device || {};
+    const deviceId = String(caps.deviceId || device?.deviceId || '').trim();
+    if (!deviceId) {
+      return res.status(400).json({ success: false, error: 'deviceId is required.' });
     }
 
-    serverMobileBridgeState.device = {
-      deviceId: device.deviceId || `android_${Date.now()}`,
-      deviceName: device.deviceName || 'Android Device',
-      model: device.model || 'Generic Android',
-      osVersion: device.osVersion || 'Android 14',
-      bridgeVersion: device.bridgeVersion || 'HERMES-ANDROID-BRIDGE/2.4.0',
-      canDetectCalls: Boolean(device.canDetectCalls),
-      canAnswerCalls: Boolean(device.canAnswerCalls),
-      telecomRoleDialer: Boolean(device.telecomRoleDialer),
-      answerCallsPermission: Boolean(device.answerCallsPermission),
-      canReadNotifications: Boolean(device.canReadNotifications),
-      canInlineReply: Boolean(device.canInlineReply),
-      canOpenApp: Boolean(device.canOpenApp),
-      canLookupContacts: Boolean(device.canLookupContacts),
-      isSimulation: Boolean(device.isSimulation),
-      connectedAt: new Date().toISOString(),
-    };
-
-    if (permissions) {
-      serverMobileBridgeState.permissions = {
-        ...serverMobileBridgeState.permissions,
-        ...permissions,
-      };
-    }
-
-    const hasNotif = serverMobileBridgeState.permissions.notification_access === 'GRANTED';
-    const hasCall = serverMobileBridgeState.permissions.call_detection === 'GRANTED';
-
-    if (!hasNotif && !hasCall) {
-      serverMobileBridgeState.status = 'PERMISSION_REQUIRED';
-    } else if (!serverMobileBridgeState.device.canAnswerCalls || !serverMobileBridgeState.device.telecomRoleDialer) {
-      serverMobileBridgeState.status = 'LIMITED_CAPABILITY';
-    } else {
-      serverMobileBridgeState.status = 'CONNECTED';
-    }
-
-    recordMobileAudit({
-      eventType: 'DEVICE_CONNECTED',
-      application: 'AndroidBridge',
-      actionRequested: 'Connect Device',
-      result: 'SUCCESS',
-      notes: `Registered ${serverMobileBridgeState.device.model} (${serverMobileBridgeState.device.deviceName}) [Simulation: ${serverMobileBridgeState.device.isSimulation}]`,
+    const { device: registered, negotiation } = bridgeGateway.register({
+      sessionId: auth.sessionId,
+      deviceId,
+      deviceName: device?.deviceName,
+      model: device?.model || caps.model,
+      osVersion: device?.osVersion || caps.osVersion,
+      bridgeVersion: device?.bridgeVersion,
+      sdkInt: caps.sdkInt,
+      capabilities: caps,
+      permissions,
     });
 
-    res.json({
+    return res.json({
       success: true,
-      status: serverMobileBridgeState.status,
-      device: serverMobileBridgeState.device,
+      outcome: 'VERIFIED',
+      status: bridgeGateway.getStatus(),
+      device: {
+        deviceId: registered.deviceId,
+        deviceName: registered.deviceName,
+        model: registered.model,
+        osVersion: registered.osVersion,
+        bridgeVersion: registered.bridgeVersion,
+        isSimulation: registered.capabilities.isSimulation,
+        registeredAt: registered.registeredAt,
+      },
+      permissions: registered.permissions,
+      capabilities: {
+        available: negotiation.available,
+        unavailable: negotiation.unavailable,
+        verdicts: negotiation.verdicts,
+      },
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/mobile/bridge/disconnect', (req: Request, res: Response) => {
-  const prevModel = serverMobileBridgeState.device?.model || 'Device';
-  serverMobileBridgeState.device = null;
-  serverMobileBridgeState.status = 'MOBILE_NOT_CONNECTED';
-  serverMobileBridgeState.pendingEvent = null;
+// ---- 3. Heartbeat + telemetry ---------------------------------------------
 
-  recordMobileAudit({
-    eventType: 'DEVICE_DISCONNECTED',
-    application: 'AndroidBridge',
-    actionRequested: 'Disconnect Device',
-    result: 'SUCCESS',
-    notes: `${prevModel} disconnected`,
+app.post('/api/mobile/bridge/heartbeat', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const telemetry = (req.body?.telemetry || {}) as DeviceTelemetryInput;
+  const result = bridgeGateway.heartbeat(auth.sessionId, telemetry);
+  if (!result.accepted) {
+    return res.status(409).json({
+      success: false,
+      outcome: 'FAILED',
+      reason: result.reason,
+      error: 'Device is not registered under this session. Call /api/mobile/bridge/connect first.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    outcome: 'VERIFIED',
+    status: bridgeGateway.getStatus(),
+    lastHeartbeatAt: result.lastHeartbeatAt,
+    reconnectCount: bridgeGateway.reconnectCount(),
+    telemetryAccepted: {
+      battery: Boolean(telemetry.battery),
+      location: Boolean(telemetry.location),
+      notifications: Boolean(telemetry.notifications),
+    },
   });
-
-  res.json({ success: true, status: 'MOBILE_NOT_CONNECTED' });
 });
 
-app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
-  try {
-    const { eventType, payload } = req.body;
-    if (!eventType || !payload) {
-      return res.status(400).json({ success: false, error: 'eventType and payload required' });
-    }
+// ---- 4. Status -------------------------------------------------------------
 
-    if (eventType === 'INCOMING_CALL') {
-      const maskedNumber = payload.callerNumber ? payload.callerNumber.replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2') : 'Unknown';
-      serverMobileBridgeState.pendingEvent = {
-        id: `call_${Date.now()}`,
-        type: 'CALL',
-        createdAt: new Date().toISOString(),
-        appName: 'Phone',
-        sender: payload.callerName || 'Unknown Caller',
-        senderNumber: maskedNumber,
-        previewText: `Incoming Call from ${payload.callerName || maskedNumber}`,
-        status: 'AWAITING_APPROVAL',
-        callId: payload.callId,
-      };
-
-      recordMobileAudit({
-        eventType: 'CALL_RECEIVED',
-        application: 'Phone',
-        actionRequested: 'Incoming Call Detection',
-        result: 'WAITING_FOR_APPROVAL',
-        notes: `Call from ${payload.callerName || 'Unknown'} (${maskedNumber})`,
-      });
-    } else if (eventType === 'INCOMING_NOTIFICATION') {
-      serverMobileBridgeState.pendingEvent = {
-        id: `notif_${Date.now()}`,
-        type: 'MESSAGE',
-        createdAt: new Date().toISOString(),
-        appName: payload.appName || 'Message',
-        sender: payload.sender || payload.title || 'Sender',
-        previewText: payload.text ? payload.text.slice(0, 100) : '[Notification Alert]',
-        status: 'AWAITING_APPROVAL',
-        hasInlineReply: Boolean(payload.hasInlineReply),
-        packageName: payload.packageName,
-      };
-
-      recordMobileAudit({
-        eventType: 'MESSAGE_RECEIVED',
-        application: payload.appName || 'Notification',
-        actionRequested: 'Incoming Notification',
-        result: 'WAITING_FOR_APPROVAL',
-        notes: `Notification from ${payload.sender || 'Sender'} on ${payload.appName}`,
-      });
-    } else if (eventType === 'CALL_ENDED') {
-      if (serverMobileBridgeState.pendingEvent?.type === 'CALL') {
-        serverMobileBridgeState.pendingEvent = null;
-      }
-    }
-
-    res.json({ success: true, pendingEvent: serverMobileBridgeState.pendingEvent });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/mobile/bridge/call/answer', (req: Request, res: Response) => {
-  const emergency = getEmergencyState();
-  if (emergency.emergencyPaused || emergency.hardKillSwitchTriggered) {
-    recordMobileAudit({
-      eventType: 'ACTION_DENIED',
-      application: 'TelecomManager',
-      actionRequested: 'Answer Call',
-      result: 'BLOCKED_EMERGENCY_STOP',
-      notes: 'Call answering blocked by Global Kill Switch',
-    });
-    return res.status(403).json({
-      success: false,
-      status: 'BLOCKED_EMERGENCY_STOP',
-      message: 'Call answering blocked by Global Kill Switch / Emergency Stop.',
-    });
-  }
-
-  if (!serverMobileBridgeState.device) {
-    return res.status(400).json({
-      success: false,
-      status: 'MOBILE_NOT_CONNECTED',
-      message: 'No Android device connected to bridge.',
-    });
-  }
-
-  if (!serverMobileBridgeState.device.canAnswerCalls) {
-    recordMobileAudit({
-      eventType: 'CAPABILITY_UNAVAILABLE',
-      application: 'TelecomManager',
-      actionRequested: 'Answer Call',
-      result: 'CALL_ANSWER_UNSUPPORTED',
-      notes: 'Device lacks call answering hardware/API capability',
-    });
-    return res.status(400).json({
-      success: false,
-      status: 'CALL_ANSWER_UNSUPPORTED',
-      message: 'Android device lacks capability or permission to answer calls.',
-    });
-  }
-
-  if (!serverMobileBridgeState.device.telecomRoleDialer && !serverMobileBridgeState.device.answerCallsPermission) {
-    recordMobileAudit({
-      eventType: 'CAPABILITY_UNAVAILABLE',
-      application: 'TelecomManager',
-      actionRequested: 'Answer Call',
-      result: 'ROLE_REQUIRED',
-      notes: 'Android Telecom Default Dialer role not granted',
-    });
-    return res.status(403).json({
-      success: false,
-      status: 'ROLE_REQUIRED',
-      message: 'Default Dialer role or ANSWER_PHONE_CALLS permission required on Android device.',
-    });
-  }
-
-  serverMobileBridgeState.pendingEvent = null;
-
-  recordMobileAudit({
-    eventType: 'CALL_ANSWERED',
-    application: 'TelecomManager',
-    actionRequested: 'Answer Call',
-    result: 'SUCCESS',
-    notes: 'Call answered after explicit human authorization',
-  });
+app.get('/api/mobile/bridge/status', (req: Request, res: Response) => {
+  const device = bridgeGateway.getDevice();
+  const live = bridgeGateway.isDeviceLive();
+  const status = bridgeGateway.getStatus();
+  const session = device ? bridgeGateway.sessions.getSession(device.sessionId) : undefined;
 
   res.json({
     success: true,
-    status: 'ANSWERED',
-    message: 'Call answered command dispatched to Android device.',
+    status,
+    /** Only true when the device is paired, live, and not a simulated testbed. */
+    deviceLive: live,
+    device: device
+      ? {
+          deviceId: device.deviceId,
+          deviceName: device.deviceName,
+          model: device.model,
+          osVersion: device.osVersion,
+          bridgeVersion: device.bridgeVersion,
+          isSimulation: device.capabilities.isSimulation,
+          registeredAt: device.registeredAt,
+          lastHeartbeatAt: device.lastHeartbeatAt,
+          heartbeatCount: device.heartbeatCount,
+          reconnectCount: session?.reconnectCount ?? 0,
+        }
+      : null,
+    permissions: device?.permissions ?? null,
+    capabilities: device
+      ? {
+          available: device.negotiation.available,
+          unavailable: device.negotiation.unavailable,
+          verdicts: device.negotiation.verdicts,
+        }
+      : null,
+    telemetryPresence: {
+      battery: Boolean(device?.telemetry.battery),
+      location: Boolean(device?.telemetry.location),
+      notifications: Boolean(device?.telemetry.notifications),
+    },
+    dispatches: {
+      pending: bridgeGateway.getDispatchLedger().filter((d) => d.status === 'DISPATCHED').length,
+      confirmed: bridgeGateway.getDispatchLedger().filter((d) => d.status === 'CONFIRMED').length,
+      failed: bridgeGateway.getDispatchLedger().filter((d) => d.status === 'FAILED').length,
+      expired: bridgeGateway.getDispatchLedger().filter((d) => d.status === 'EXPIRED').length,
+    },
+    emergencyPaused: emergencyActive(),
+    reconnect: {
+      disconnectCount: bridgeGateway.getDisconnectCount(),
+      reconnectCount: bridgeGateway.reconnectCount(),
+      liveWindowSeconds: 45,
+    },
+  });
+});
+
+// ---- 5. Telemetry reads ---------------------------------------------------
+
+const TELEMETRY_KINDS = ['battery', 'location', 'notifications'] as const;
+
+app.get('/api/mobile/bridge/telemetry/:kind', (req: Request, res: Response) => {
+  const kind = String(req.params.kind) as (typeof TELEMETRY_KINDS)[number];
+  if (!TELEMETRY_KINDS.includes(kind)) {
+    return res.status(400).json({
+      success: false,
+      error: `Unknown telemetry kind "${req.params.kind}". Expected one of: ${TELEMETRY_KINDS.join(', ')}.`,
+    });
+  }
+
+  const result = bridgeGateway.readTelemetry(kind);
+  const httpStatus = result.outcome === 'VERIFIED' ? 200 : result.outcome === 'NOT_CONFIGURED' ? 404 : 400;
+  return res.status(httpStatus).json({
+    success: result.outcome === 'VERIFIED',
+    outcome: result.outcome,
+    verified: result.outcome === 'VERIFIED',
+    kind,
+    data: result.data,
+    ageSeconds: result.ageSeconds,
+    receipt: result.receipt,
+    message: result.receipt.detailEn,
+  });
+});
+
+// ---- 6. Device events (calls, notifications) ------------------------------
+
+app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const session = bridgeGateway.sessions.getSession(auth.sessionId);
+  if (!session) {
+    return res.status(401).json({ success: false, outcome: 'BLOCKED', error: 'Session no longer exists.' });
+  }
+
+  const { eventType, payload, sequence, eventTimestamp } = req.body || {};
+  if (!eventType || !payload) {
+    return res.status(400).json({ success: false, error: 'eventType and payload are required.' });
+  }
+
+  const seqCheck = bridgeGateway.sessions.acceptSequence(session, sequence, eventTimestamp);
+  if (!seqCheck.accepted) {
+    bridgeGateway.recordAudit('EVENT_REJECTED', `Event rejected: ${seqCheck.reason}`, 'BLOCKED', {
+      sessionId: auth.sessionId,
+    });
+    return res.status(409).json({ success: false, outcome: 'BLOCKED', reason: seqCheck.reason });
+  }
+
+  if (emergencyActive()) {
+    bridgeGateway.recordAudit('EVENT_BLOCKED_EMERGENCY', `Event ${eventType} refused during emergency stop`, 'BLOCKED', {
+      sessionId: auth.sessionId,
+    });
+    return res.status(423).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: 'Global Kill Switch is active; device events are not being processed.',
+    });
+  }
+
+  // Canonical mask (src/utils/androidBridgeEngine.maskPhoneNumber). The previous
+  // inline regex left *spaced* numbers completely unmasked (+1 415 890 2134 ->
+  // unchanged) and leaked four subscriber digits when it did match.
+  const maskedNumber = maskAndroidCallerNumber(payload.callerNumber);
+
+  if (eventType === 'INCOMING_CALL') {
+    bridgeGateway.recordAudit(
+      'CALL_RECEIVED',
+      `Incoming call from ${payload.callerName || maskedNumber || 'unknown'} (awaiting approval)`,
+      'VERIFIED',
+      { sessionId: auth.sessionId, deviceId: session.deviceId }
+    );
+  } else if (eventType === 'INCOMING_NOTIFICATION') {
+    bridgeGateway.recordAudit(
+      'NOTIFICATION_RECEIVED',
+      `Notification from ${payload.appName || payload.packageName || 'unknown app'}`,
+      'VERIFIED',
+      { sessionId: auth.sessionId, deviceId: session.deviceId }
+    );
+  } else {
+    bridgeGateway.recordAudit('EVENT_RECEIVED', `Device event ${eventType}`, 'VERIFIED', {
+      sessionId: auth.sessionId,
+      deviceId: session.deviceId,
+    });
+  }
+
+  return res.json({
+    success: true,
+    outcome: 'VERIFIED',
+    accepted: true,
+    eventType,
+    sequence: session.lastSequence,
+  });
+});
+
+// ---- 7. Action dispatch + device confirmation -----------------------------
+
+app.post('/api/mobile/bridge/call/answer', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  if (emergencyActive()) {
+    bridgeGateway.recordAudit('ACTION_DENIED', 'Call answer blocked by Global Kill Switch', 'BLOCKED', {
+      sessionId: auth.sessionId,
+    });
+    return res.status(423).json({ success: false, outcome: 'BLOCKED', error: 'Global Kill Switch is active.' });
+  }
+
+  const device = bridgeGateway.getDevice();
+  if (!device || !bridgeGateway.isDeviceLive()) {
+    return res.status(409).json({
+      success: false,
+      outcome: 'NOT_CONFIGURED',
+      error: 'No live Android device is registered with the bridge.',
+    });
+  }
+
+  const answerVerdict = device.negotiation.verdicts.find((v) => v.capability === 'CALL_ANSWER');
+  if (!answerVerdict?.available) {
+    const outcome: ExecutionOutcome = answerVerdict?.requiredGrant ? 'PERMISSION_REQUIRED' : 'NOT_AVAILABLE';
+    return res.status(403).json({
+      success: false,
+      outcome,
+      requiredGrant: answerVerdict?.requiredGrant,
+      error: answerVerdict?.reason || 'Device cannot answer calls.',
+    });
+  }
+
+  if (req.body?.approved !== true) {
+    return res.status(403).json({
+      success: false,
+      outcome: 'BLOCKED',
+      error: 'Explicit human approval (approved: true) is required to answer a call.',
+    });
+  }
+
+  const { dispatch, receipt } = bridgeGateway.dispatchAction({
+    actionType: 'ANSWER_CALL',
+    sessionId: auth.sessionId,
+    target: req.body?.callId || 'active call',
+    payloadSummary: `Answer call ${req.body?.callId || 'active'}`,
+  });
+
+  return res.json({
+    success: false,
+    outcome: 'DISPATCHED',
+    verified: false,
+    dispatchId: dispatch.dispatchId,
+    receipt,
+    message:
+      'Answer command dispatched to the device. This is NOT yet confirmed — the device must report the call state back.',
   });
 });
 
 app.post('/api/mobile/bridge/message/reply', (req: Request, res: Response) => {
-  const emergency = getEmergencyState();
-  if (emergency.emergencyPaused || emergency.hardKillSwitchTriggered) {
-    recordMobileAudit({
-      eventType: 'ACTION_DENIED',
-      application: 'NotificationManager',
-      actionRequested: 'Send Reply',
-      result: 'BLOCKED_EMERGENCY_STOP',
-      notes: 'Message reply blocked by Global Kill Switch',
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  if (emergencyActive()) {
+    bridgeGateway.recordAudit('ACTION_DENIED', 'Message reply blocked by Global Kill Switch', 'BLOCKED', {
+      sessionId: auth.sessionId,
     });
+    return res.status(423).json({ success: false, outcome: 'BLOCKED', error: 'Global Kill Switch is active.' });
+  }
+
+  const device = bridgeGateway.getDevice();
+  if (!device || !bridgeGateway.isDeviceLive()) {
+    return res.status(409).json({
+      success: false,
+      outcome: 'NOT_CONFIGURED',
+      error: 'No live Android device is registered with the bridge.',
+    });
+  }
+
+  if (req.body?.approved !== true) {
     return res.status(403).json({
       success: false,
-      status: 'BLOCKED_EMERGENCY_STOP',
-      message: 'Message reply blocked by Global Kill Switch.',
+      outcome: 'BLOCKED',
+      error: 'Explicit human approval (approved: true) is required to send a reply.',
     });
   }
 
-  const { replyText, approved } = req.body;
-  if (!approved) {
-    return res.status(403).json({
-      success: false,
-      status: 'AUTHORIZATION_REQUIRED',
-      message: 'Explicit human approval required to send message reply.',
-    });
+  const replyText = typeof req.body?.replyText === 'string' ? req.body.replyText.trim() : '';
+  if (!replyText) {
+    return res.status(400).json({ success: false, error: 'replyText is required.' });
   }
 
-  if (!serverMobileBridgeState.device) {
-    return res.status(400).json({
-      success: false,
-      status: 'MOBILE_NOT_CONNECTED',
-      message: 'No Android device connected.',
-    });
-  }
-
-  serverMobileBridgeState.pendingEvent = null;
-
-  recordMobileAudit({
-    eventType: 'REPLY_SENT',
-    application: 'NotificationManager',
-    actionRequested: 'Send Inline Reply',
-    result: 'SUCCESS',
-    notes: `Reply dispatched [Content Redacted for Privacy]`,
+  const { dispatch, receipt } = bridgeGateway.dispatchAction({
+    actionType: 'SEND_REPLY',
+    sessionId: auth.sessionId,
+    target: req.body?.notificationId || 'pending notification',
+    // Never log message bodies — metadata only.
+    payloadSummary: `Reply to ${req.body?.notificationId || 'notification'} (${replyText.length} chars, content withheld)`,
   });
 
-  res.json({
-    success: true,
-    status: 'REPLY_CONFIRMED',
-    message: 'Reply dispatched to device.',
+  return res.json({
+    success: false,
+    outcome: 'DISPATCHED',
+    verified: false,
+    dispatchId: dispatch.dispatchId,
+    receipt,
+    message:
+      'Reply dispatched to the device for delivery. Delivery is NOT confirmed until the device acknowledges it.',
+  });
+});
+
+app.post('/api/mobile/bridge/action/confirm', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const { dispatchId, confirmedStatus, detail } = req.body || {};
+  if (!dispatchId || !confirmedStatus) {
+    return res.status(400).json({ success: false, error: 'dispatchId and confirmedStatus are required.' });
+  }
+
+  const receipt = bridgeGateway.confirmAction({
+    dispatchId: String(dispatchId),
+    sessionId: auth.sessionId,
+    confirmedStatus: String(confirmedStatus),
+    detail: detail ? String(detail).slice(0, 300) : undefined,
+  });
+
+  return res.status(receipt.outcome === 'VERIFIED' ? 200 : 409).json({
+    success: receipt.outcome === 'VERIFIED',
+    outcome: receipt.outcome,
+    verified: receipt.verified,
+    receipt,
   });
 });
 
 app.post('/api/mobile/bridge/app/open', (req: Request, res: Response) => {
-  const { packageName } = req.body;
-  recordMobileAudit({
-    eventType: 'APP_OPENED',
-    application: packageName || 'App',
-    actionRequested: 'Open App',
-    result: 'SUCCESS',
-    notes: `Launch intent requested for ${packageName}`,
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const { packageName } = req.body || {};
+  if (!packageName) {
+    return res.status(400).json({ success: false, error: 'packageName is required.' });
+  }
+
+  const { dispatch, receipt } = bridgeGateway.dispatchAction({
+    actionType: 'OPEN_APP',
+    sessionId: auth.sessionId,
+    target: String(packageName),
+    payloadSummary: `Launch ${packageName}`,
   });
-  res.json({ success: true, message: `Launch intent sent for ${packageName}` });
+
+  return res.json({
+    success: false,
+    outcome: 'DISPATCHED',
+    verified: false,
+    dispatchId: dispatch.dispatchId,
+    receipt,
+    message: 'Launch intent dispatched; the device has not confirmed it yet.',
+  });
 });
+
+// ---- 8. Disconnect ---------------------------------------------------------
+
+app.post('/api/mobile/bridge/disconnect', (req: Request, res: Response) => {
+  const auth = requireBridgeSession(req, res);
+  if (!auth) return;
+
+  const device = bridgeGateway.getDevice();
+  if (!device || device.sessionId !== auth.sessionId) {
+    return res.status(409).json({ success: false, outcome: 'FAILED', error: 'This session does not own the device link.' });
+  }
+
+  bridgeGateway.revoke(auth.sessionId, req.body?.reason || 'Device requested disconnect');
+  return res.json({ success: true, outcome: 'VERIFIED', status: 'MOBILE_NOT_CONNECTED' });
+});
+
+// ---- 9. Diagnostics --------------------------------------------------------
 
 app.get('/api/mobile/bridge/audit', (req: Request, res: Response) => {
-  res.json({ success: true, auditLogs: serverMobileBridgeState.auditLogs });
+  const limit = Math.min(Number(req.query.limit) || 100, 300);
+  res.json({ success: true, entries: bridgeGateway.getAudit(limit) });
 });
 
+app.get('/api/mobile/bridge/dispatches', (req: Request, res: Response) => {
+  res.json({ success: true, dispatches: bridgeGateway.getDispatchLedger() });
+});
+
+/**
+ * Developer testbed. Every response is explicitly marked SIMULATION_ONLY and the
+ * device is refused 'CONNECTED' status, so a simulated device can never be
+ * mistaken for a real one in the HUD or in Telegram.
+ */
 app.post('/api/mobile/bridge/simulate', (req: Request, res: Response) => {
-  const { type, callerName, callerNumber, appName, sender, text } = req.body;
-  if (type === 'call') {
-    const masked = callerNumber ? callerNumber.replace(/(\d{2,3})\d{4,6}(\d{3,4})/, '$1******$2') : '******1234';
-    serverMobileBridgeState.pendingEvent = {
-      id: `sim_call_${Date.now()}`,
-      type: 'CALL',
-      createdAt: new Date().toISOString(),
-      appName: 'Phone',
-      sender: callerName || 'Rahul',
-      senderNumber: masked,
-      previewText: `Incoming Call from ${callerName || 'Rahul'} (${masked})`,
-      status: 'AWAITING_APPROVAL',
-      callId: `call_${Date.now()}`,
-    };
-    recordMobileAudit({
-      eventType: 'CALL_RECEIVED',
-      application: 'Phone',
-      actionRequested: 'Simulated Incoming Call',
-      result: 'WAITING_FOR_APPROVAL',
-      notes: `[SIMULATION_ONLY] Caller: ${callerName || 'Rahul'}, Number: ${masked}`,
-    });
-  } else if (type === 'message') {
-    serverMobileBridgeState.pendingEvent = {
-      id: `sim_msg_${Date.now()}`,
-      type: 'MESSAGE',
-      createdAt: new Date().toISOString(),
-      appName: appName || 'WhatsApp',
-      sender: sender || 'Rahul',
-      previewText: text || 'Hello, are you available?',
-      status: 'AWAITING_APPROVAL',
-      hasInlineReply: true,
-      packageName: 'com.whatsapp',
-    };
-    recordMobileAudit({
-      eventType: 'MESSAGE_RECEIVED',
-      application: appName || 'WhatsApp',
-      actionRequested: 'Simulated Incoming Message',
-      result: 'WAITING_FOR_APPROVAL',
-      notes: `[SIMULATION_ONLY] App: ${appName || 'WhatsApp'}, Sender: ${sender || 'Rahul'}`,
-    });
-  }
-  res.json({ success: true, pendingEvent: serverMobileBridgeState.pendingEvent });
+  const { type, callerName, callerNumber, appName, sender, text } = req.body || {};
+  bridgeGateway.recordAudit(
+    'SIMULATION_EVENT',
+    `[SIMULATION_ONLY] synthetic ${type || 'event'} injected for developer testing`,
+    'SIMULATION_ONLY'
+  );
+  res.json({
+    success: false,
+    outcome: 'SIMULATION_ONLY',
+    verified: false,
+    simulated: true,
+    type: type || null,
+    echo: { callerName, callerNumber, appName, sender, text },
+    message:
+      'This endpoint only records a labelled test event. It does not connect a device or deliver anything. Use /api/mobile/bridge/pair for a real device.',
+  });
 });
 
 app.post('/api/memory', (req: Request, res: Response) => {
@@ -6176,7 +8012,32 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
       ...telephonySettingsState,
       ...updates,
     };
-    res.json({ success: true, settings: telephonySettingsState });
+
+    // Apply the selected engine to the live registry. Without this the
+    // selector was decorative: the status endpoint kept reporting whatever
+    // TELEPHONY_PROVIDER had set at boot. The result is reported honestly so
+    // the UI never claims a selection took effect when it did not.
+    let engineApplied: boolean | null = null;
+    if (typeof updates?.provider === 'string') {
+      const providerId = telephonyEngineProviderId(updates.provider);
+      engineApplied = providerId !== null
+        && TelephonyProviderRegistry.setActiveProvider(providerId);
+      if (!engineApplied) {
+        telephonySettingsState.engineApplyError =
+          `ENGINE_NOT_APPLIED: ${updates.provider}`;
+      } else {
+        delete telephonySettingsState.engineApplyError;
+      }
+    }
+
+    res.json({
+      success: true,
+      settings: {
+        ...telephonySettingsState,
+        twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',
+      },
+      engineApplied,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -6238,11 +8099,17 @@ CRITICAL VOICE PHONE GUIDELINES:
           success: true,
           turn: {
             replyText: parsed.replyText || "Understood. I have recorded that note.",
-            whisperTip: parsed.whisperTip || 'Call proceeding smoothly',
+            // The model authors this itself and often returns it as a receipt
+            // ("Appointment slot confirmed", "Robocall ... terminated") for an
+            // action this route never dispatches. An absent tip is reported as
+            // absent so the UI cannot render a default it did not observe.
+            whisperTip: whisperTipForDisplay(parsed.whisperTip),
             sentiment: parsed.sentiment || 'neutral',
             intent: parsed.intent || 'conversation',
             shouldEndCall: Boolean(parsed.shouldEndCall),
-            followUpActions: Array.isArray(parsed.followUpActions) ? parsed.followUpActions : [],
+            followUpActions: Array.isArray(parsed.followUpActions)
+              ? parsed.followUpActions.map((a: any) => formatLiveActionItem(String(a)))
+              : [],
           },
           source: 'gemini-2.5-flash',
         });
@@ -6254,26 +8121,29 @@ CRITICAL VOICE PHONE GUIDELINES:
     // High quality offline / rule-based fallback response
     const lowerUtterance = userUtterance.toLowerCase();
     let replyText = "Thank you for the update. I have noted that in Sir's executive calendar. Is there anything else you require?";
-    let whisperTip = "AI tracking call turns";
+    // Fallback tips are authored as suggestions only. A default that asserted
+    // "AI tracking call turns" claimed live analysis this route does not do; an
+    // unmatched turn reports no tip.
+    let whisperTip = "";
     let sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' = 'neutral';
     let shouldEndCall = false;
     let followUpActions: string[] = ['Logged call notes'];
 
     if (lowerUtterance.includes('reschedule') || lowerUtterance.includes('appointment') || lowerUtterance.includes('thursday')) {
       replyText = "Thursday at 2:30 PM is noted and accepted on our end. Please send the digital calendar invite to our verified contact. Thank you.";
-      whisperTip = "Appointment slot confirmed for Thursday 2:30 PM";
+      whisperTip = "Suggestion: confirm the Thursday 2:30 PM slot with a written invite.";
       sentiment = 'positive';
       shouldEndCall = true;
       followUpActions = ['Calendar updated: Thursday 2:30 PM', 'Send confirmation SMS'];
     } else if (lowerUtterance.includes('gate code') || lowerUtterance.includes('package') || lowerUtterance.includes('delivery')) {
       replyText = "Gate access code is #4829. Please place the delivery parcel securely behind the foyer pillar. Thank you, Dave.";
-      whisperTip = "Provided gate access #4829 to courier";
+      whisperTip = "Suggestion: confirm the courier used gate code #4829 and left the parcel.";
       sentiment = 'positive';
       shouldEndCall = true;
       followUpActions = ['Notify resident of package delivery at foyer'];
     } else if (lowerUtterance.includes('solar') || lowerUtterance.includes('free roof') || lowerUtterance.includes('interest rate')) {
       replyText = "This number is registered on the National Do-Not-Call Registry. Please remove this entry immediately. Goodbye.";
-      whisperTip = "Robocall / telemarketer identified and terminated";
+      whisperTip = "Possible robocall — the transcript matched spam keywords, not a carrier check.";
       sentiment = 'negative';
       shouldEndCall = true;
       followUpActions = ['Add number to local blocklist'];
@@ -6287,7 +8157,10 @@ CRITICAL VOICE PHONE GUIDELINES:
         sentiment,
         intent: 'telephony_conversation',
         shouldEndCall,
-        followUpActions,
+        // The fallback matched transcript keywords only — it dispatched no
+        // calendar write, SMS or blocklist change. Every item is marked as a
+        // recorded task so the UI cannot render it as a finished one.
+        followUpActions: followUpActions.map(formatLiveActionItem),
       },
       source: 'autonomous_local_telephony_engine',
     });
@@ -6328,18 +8201,29 @@ function validateTelephonyWebhook(req: Request, provider: string): boolean {
 // 6.1 Telephony Status Endpoint (Section V & E)
 app.get('/api/telephony/status', (req: Request, res: Response) => {
   const provider = TelephonyProviderRegistry.getProvider();
-  const isConfigured = provider.isConfigured();
   const allProviders = TelephonyProviderRegistry.getAllProviders();
   const activeSessions = TelephonySessionManager.getCallHistory();
   const currentActive = activeSessions.find((s) => s.state !== 'ENDED' && s.state !== 'FAILED');
 
+  // The simulator's isConfigured() is unconditionally true by design (it is a
+  // test adapter, not a carrier), so it must never surface as a configured
+  // gateway. Compute the honest mode from the id that is actually active.
+  const rawConfigured = provider.isConfigured();
+  const engineMode = telephonyEngineMode(provider.id, rawConfigured);
+  const isConfigured = engineMode === 'LIVE_GATEWAY';
+
   res.json({
     success: true,
-    status: isConfigured ? 'READY' : 'TELEPHONY_NOT_CONFIGURED',
+    status: telephonyEngineLabel(engineMode),
     isConfigured,
+    engineMode,
+    engineLabel: telephonyEngineLabel(engineMode),
+    engineApplied: telephonySelectionApplied(telephonySettingsState?.provider, provider.id),
+    engineApplyError: telephonySettingsState?.engineApplyError ?? null,
     provider: {
       id: provider.id,
       name: provider.name,
+      isSimulationOnly: provider.id === SIMULATION_PROVIDER_ID,
     },
     availableProviders: allProviders,
     currentCall: currentActive ? {
@@ -6543,6 +8427,19 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
       destinationNumber: dest,
     });
 
+    // Authorization succeeded, but the carrier dispatch is a separate fact.
+    // Do not report a placed call when no provider confirmed it — the route
+    // previously returned success:true regardless of dialResult.
+    if (!dialResult.success) {
+      return res.status(502).json({
+        success: false,
+        authorized: true,
+        status: 'PROVIDER_DISPATCH_FAILED',
+        session: sessionRes.session,
+        error: dialResult.error || 'The telephony provider did not confirm the outbound call.',
+      });
+    }
+
     res.json({
       success: true,
       authorized: true,
@@ -6582,6 +8479,42 @@ app.get('/api/telephony/test-suite', async (req: Request, res: Response) => {
   }
 });
 
+// Resolve a voice/chat telephony command into an honest dispatch verdict.
+// The active engine mode and the live session state are the only facts that
+// can confirm a call action actually reached a carrier.
+function evaluateTelephonyDispatch(phase: TelephonyDispatchPhase) {
+  const provider = TelephonyProviderRegistry.getProvider();
+  const engineMode = telephonyEngineMode(provider.id, provider.isConfigured());
+  const activeSession = TelephonySessionManager.getLatestActiveSession();
+  return telephonyDispatchVerdict(phase, engineMode, activeSession?.state ?? null);
+}
+
+// Launch intents in `/api/chat` used to speak unqualified success ("Visual
+// Studio Code brought to active foreground") and set `actionExecuted = true`
+// without touching the host. This reaches the real executor and derives the
+// verdict from observable evidence: the host capability map and the `LAUNCH_APP`
+// receipt, which is VERIFIED only when the app was seen in the foreground.
+// `open_notepad`, `open_calculator`, `open_paint` and `open_chrome` route to an
+// in-app view and do not call this; they state the in-app routing plainly
+// instead of claiming a desktop launch.
+async function evaluateLaunchDispatch(appName: string, targetApp: string) {
+  const caps = hostActionCapabilities();
+  const capability = caps.LAUNCH_APP || caps.INSPECT_SCREEN;
+  if (!capability?.available) {
+    return launchVerdict(appName, caps, null);
+  }
+  const action: ComputerAction = {
+    id: `launch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type: 'LAUNCH_APP',
+    targetApp,
+    description: `Launch ${targetApp}`,
+    securityLevel: 2,
+    requiresHumanApproval: false,
+  };
+  const result = await hostActionExecutor.execute(action);
+  return launchVerdict(appName, caps, result.receipt);
+}
+
 // Jarvis Main Chat & AI Reasoning API
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
@@ -6599,6 +8532,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     let actionExecuted = false;
     let actionDetail: any = null;
     let languageChangedTo: string | undefined;
+    // In-app voice-output level, mirroring the UI slider. Not a system mixer
+    // value — `audioDispatchTruth` never reports the host output level as changed.
+    let voiceOutputLevel = 1.0;
 
     switch (intentData.intent) {
       case 'finance_blocked': {
@@ -6633,45 +8569,45 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       case 'fix_project_error': {
         const curEmergencyState = getEmergencyState();
         const task = await ComputerOperatorEngine.executeTask(message, 'hybrid', curEmergencyState.emergencyPaused);
-        spokenResponse = language.startsWith('hi')
-          ? (task.resultSummaryHi || 'VS Code में स्क्रीन का विश्लेषण करके समस्या का समाधान कर दिया गया है।')
-          : (task.resultSummary || 'Screen-Research loop executed: Inspected VS Code, identified error, applied surgical fix, and verified test suite.');
-        actionExecuted = true;
+        // Only a COMPLETED task may be spoken as a fix. The engine itself marks
+        // illustrative runs SIMULATION_ONLY and failures FAILED, so the reply is
+        // derived from the returned status instead of a hardcoded success line.
+        spokenResponse = fixProjectErrorReply(task, language.startsWith('hi'));
+        actionExecuted = operatorTaskExecuted(task);
         actionDetail = { type: 'fix_project_error', title: 'Fix Project Error in VS Code', payload: task };
         break;
       }
       case 'inspect_screen': {
         const observation = await ScreenObserver.observeScreen({ preferredApp: message });
         const interpretation = ScreenInterpreter.interpret(observation, message);
-        spokenResponse = language.startsWith('hi')
-          ? interpretation.summaryHi
-          : interpretation.summary;
-        actionExecuted = true;
+        // The interpreter always produces a confident "Screen showing ..."
+        // summary, so it is withheld unless a host-backed observer returned a
+        // non-ambiguous observation.
+        const hostBacked = ScreenObserver.isHostBacked();
+        spokenResponse = screenInspectionReply(observation, interpretation, language.startsWith('hi'), hostBacked);
+        actionExecuted = screenInspectionExecuted(observation, hostBacked);
         actionDetail = { type: 'inspect_screen', title: 'Screen Inspection', payload: { observation, interpretation } };
         break;
       }
       case 'operate_vscode': {
-        spokenResponse = language.startsWith('hi')
-          ? 'Visual Studio Code सक्रिय किया जा रहा है।'
-          : 'Visual Studio Code brought to active foreground.';
-        actionExecuted = true;
-        actionDetail = { type: 'operate_vscode', title: 'Open VS Code', target: 'VS Code' };
+        const verdict = await evaluateLaunchDispatch('Visual Studio Code', 'code');
+        spokenResponse = launchReply('Visual Studio Code', verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'operate_vscode', title: verdict.title, target: 'VS Code', payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_browser': {
-        spokenResponse = language.startsWith('hi')
-          ? 'Google Chrome ब्राउज़र विंडो खोली जा रही है।'
-          : 'Opening web browser window.';
-        actionExecuted = true;
-        actionDetail = { type: 'operate_browser', title: 'Open Browser', target: 'Chrome' };
+        const verdict = await evaluateLaunchDispatch('Chrome browser', 'google-chrome');
+        spokenResponse = launchReply('Chrome browser', verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'operate_browser', title: verdict.title, target: 'Chrome', payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_terminal': {
-        spokenResponse = language.startsWith('hi')
-          ? 'Windows Terminal / PowerShell सक्रिय किया जा रहा है।'
-          : 'Windows Terminal / PowerShell console activated.';
-        actionExecuted = true;
-        actionDetail = { type: 'operate_terminal', title: 'Open Terminal', target: 'Terminal' };
+        const verdict = await evaluateLaunchDispatch('Terminal', 'x-terminal-emulator');
+        spokenResponse = launchReply('Terminal', verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'operate_terminal', title: verdict.title, target: 'Terminal', payload: { outcome: verdict.outcome } };
         break;
       }
       case 'open_computer_operator': {
@@ -6684,9 +8620,17 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'git_status_tool': {
         const git = realGitStatus();
-        spokenResponse = `Git repository active on branch ${git.branch}. ${git.clean ? 'Working directory is clean.' : git.statusText}`;
-        actionExecuted = true;
-        actionDetail = { type: 'git_status', title: `Git: ${git.branch}`, payload: git };
+        const branchLabel = git.branch ?? 'detached HEAD';
+        actionDetail = { type: 'git_status', title: git.success ? `Git: ${branchLabel}` : 'Git: UNKNOWN', payload: git };
+        if (!git.success) {
+          spokenResponse = language.startsWith('hi')
+            ? `Git जानकारी अनुपलब्ध है। ${git.error}`
+            : `Git status is unavailable. ${git.error}`;
+          actionExecuted = false;
+        } else {
+          spokenResponse = `Git repository active on branch ${branchLabel}. ${git.clean ? 'Working directory is clean.' : git.statusText}`;
+          actionExecuted = true;
+        }
         break;
       }
       case 'github_repos_tool': {
@@ -6727,7 +8671,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const videoId = intentData.actionPayload?.videoId || extractYouTubeVideoId(targetUrl);
         const summaryRes = await summarizeYouTubeVideoCore({ url: targetUrl, videoId: videoId || undefined });
         if (summaryRes.success && summaryRes.videoInfo) {
-          spokenResponse = `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel} (${summaryRes.videoInfo.durationFormatted}) analyzed and summarized successfully.\n\n${summaryRes.summary}`;
+          const notice = summaryRes.notice ? `\n\n${summaryRes.notice}` : '';
+          spokenResponse = summaryRes.summary
+            ? `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel} (${summaryRes.videoInfo.durationFormatted}).${notice}\n\n${summaryRes.summary}`
+            : `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel}. ${summaryRes.notice || 'No transcript or description is available, so there is nothing to summarize.'}`;
           actionExecuted = true;
           actionDetail = {
             type: 'youtube_summary',
@@ -6735,7 +8682,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
             payload: summaryRes,
           };
         } else {
-          spokenResponse = `YouTube summarizer notice: ${summaryRes.error || 'Failed to extract video content. Please verify the URL.'}`;
+          spokenResponse = `YouTube summarizer notice: ${summaryRes.success ? 'Failed to extract video content. Please verify the URL.' : summaryRes.error}`;
           actionExecuted = true;
           actionDetail = { type: 'youtube_summary_error', title: 'YouTube Error', payload: summaryRes };
         }
@@ -6743,20 +8690,21 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'youtube_status_inquiry': {
         const ytConn = memoryState.youTubeConnection;
-        const isYtConnected = ytConn?.connected && ytConn.channelTitle;
         const ytTokenCheck = await ensureValidYouTubeToken();
-        if (isYtConnected || ytTokenCheck.valid) {
-          const channelName = ytConn?.channelTitle || 'Connected Channel';
-          spokenResponse = language.startsWith('hi')
-            ? `YouTube चैनल "${channelName}" सक्रिय रूप से कनेक्टेड और सत्यापित है। API कोटा और टोकन स्टेटस सामान्य है।`
-            : `YouTube Channel "${channelName}" is active, verified, and ready. OAuth 2.0 token status is nominal.`;
-        } else {
-          spokenResponse = language.startsWith('hi')
-            ? 'YouTube चैनल अभी कनेक्टेड नहीं है। Settings में Google OAuth क्रेडेंशियल्स दर्ज करके "Connect YouTube" पर क्लिक करें।'
-            : 'YouTube is not currently connected. Please configure Google OAuth credentials in Settings and click "Connect YouTube".';
-        }
+        // The reply may only state what the token check and the recorded scope
+        // grant prove. It previously asserted a verified channel and a nominal
+        // quota that nothing measured, and named a hardcoded 'Connected Channel'
+        // when no channel had ever been read.
+        spokenResponse = youtubeVoiceStatusReply(
+          {
+            tokenValid: ytTokenCheck.valid,
+            channelTitle: ytConn?.channelTitle,
+            scopes: ytConn?.scopes,
+          },
+          language.startsWith('hi')
+        );
         actionExecuted = true;
-        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status', payload: { connected: Boolean(isYtConnected || ytTokenCheck.valid), channel: ytConn?.channelTitle } };
+        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status', payload: { tokenValid: ytTokenCheck.valid, channelVerified: false, channel: ytConn?.channelTitle } };
         break;
       }
       case 'youtube_upload_request': {
@@ -6773,7 +8721,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'tools_audit': {
         const audit = getIntegrationsAuditReport();
-        spokenResponse = `Integrations audit complete: ${audit.summary.connected} verified real integrations online, ${audit.summary.notConfigured} pending environment configuration.`;
+        spokenResponse = `Integrations audit: ${audit.summary.connected} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
         actionExecuted = true;
         actionDetail = { type: 'tools_audit', title: 'Integrations Matrix', payload: audit };
         break;
@@ -6788,46 +8736,110 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'check_project': {
-        spokenResponse = 'Auditing active project repositories on Oracle Cloud VM. Codebase is clean with zero open regressions.';
-        actionExecuted = true;
-        actionDetail = { type: 'check_project', title: 'Project Audit Complete', payload: { branches: 2, status: 'nominal' } };
+        // Report the real working tree instead of a fixed "2 branches / nominal"
+        // payload. If git cannot be queried in this environment, say so rather
+        // than asserting a clean codebase.
+        const git = realGitStatus();
+        if (git.success) {
+          const branchCount = (() => {
+            try {
+              return execSync('git branch --list 2>/dev/null', { timeout: 3000 })
+                .toString()
+                .split('\n')
+                .filter((line) => line.trim().length > 0).length;
+            } catch {
+              return null;
+            }
+          })();
+          spokenResponse = git.clean
+            ? `Project audit: on branch ${git.branch ?? 'detached HEAD'}, working tree is clean.`
+            : `Project audit: on branch ${git.branch ?? 'detached HEAD'}, the working tree has uncommitted changes.`;
+          actionExecuted = true;
+          actionDetail = {
+            type: 'check_project',
+            title: 'Project Audit Complete',
+            payload: {
+              branch: git.branch,
+              clean: git.clean,
+              statusText: git.statusText,
+              branches: branchCount,
+            },
+          };
+        } else {
+          spokenResponse = 'Project audit unavailable: git could not be queried in this environment.';
+          actionExecuted = false;
+          actionDetail = { type: 'check_project', title: 'Project Audit Unavailable', payload: { error: git.error } };
+        }
         break;
       }
       case 'create_social_post': {
-        spokenResponse = 'I have prepared today\'s social media post draft and queued it in Human Approval Mode.';
-        actionExecuted = true;
-        actionDetail = { type: 'create_social_post', title: 'Social Post Drafted', payload: { topic: 'AI Agent Architecture' } };
+        const draft = memoryState.socialPosts.find((p) => p.status === 'pending_approval');
+        if (draft) {
+          spokenResponse = `The latest social media draft on ${draft.platform} is awaiting your approval in Human Approval Mode.`;
+          actionExecuted = true;
+          actionDetail = { type: 'create_social_post', title: 'Existing Draft Awaiting Approval', payload: { postId: draft.id, topic: draft.topic, platform: draft.platform } };
+        } else {
+          spokenResponse = 'There is no social media draft awaiting approval. I did not create one — use the draft command to generate a post.';
+          actionExecuted = false;
+          actionDetail = { type: 'create_social_post', title: 'No Draft Available', payload: { posts: memoryState.socialPosts.length } };
+        }
         break;
       }
       case 'find_document': {
-        const query = intentData.actionPayload?.query || 'Document';
-        spokenResponse = `Searching memory archives for "${query}". Document located in project workspace.`;
-        actionExecuted = true;
-        actionDetail = { type: 'find_document', title: `Located: ${query}`, payload: { filename: query } };
+        const query = intentData.actionPayload?.query || '';
+        const search = realFsSearch(query);
+        if (search.success && search.matches && search.matches.length > 0) {
+          const list = search.matches.map((m) => m.path).join(', ');
+          spokenResponse = `Found ${search.matches.length} file(s) matching ${query}: ${list}.`;
+          actionExecuted = true;
+          actionDetail = { type: 'find_document', title: `Found: ${query}`, payload: search.matches };
+        } else if (search.success) {
+          spokenResponse = `No file matching ${query} exists in the workspace.`;
+          actionExecuted = true;
+          actionDetail = { type: 'find_document', title: `Not found: ${query}`, payload: { matches: [] } };
+        } else {
+          spokenResponse = `Document search is unavailable: ${search.error}`;
+          actionExecuted = false;
+          actionDetail = { type: 'find_document', title: 'Search Unavailable', payload: { error: search.error } };
+        }
         break;
       }
       case 'schedule_morning_report': {
-        spokenResponse = 'Understood, Sir. Proactive Morning Briefing scheduled for 9:00 AM on your Telegram mobile gateway.';
-        actionExecuted = true;
-        actionDetail = { type: 'schedule_morning_report', title: 'Scheduled Morning Briefing (9 AM)' };
+        const telegramLinked = !!activeTelegramChatId && !!getCleanTelegramToken();
+        spokenResponse = telegramLinked
+          ? 'The proactive Morning Briefing already runs daily at 9 AM IST on this server scheduler, and a Telegram chat is linked for delivery.'
+          : 'The proactive Morning Briefing runs daily at 9 AM IST on this server scheduler, but no Telegram chat is linked so nothing will be delivered yet.';
+        actionExecuted = telegramLinked;
+        actionDetail = { type: 'schedule_morning_report', title: 'Morning Briefing Schedule (09:00 AM IST)', payload: { telegramLinked } };
         break;
       }
       case 'generate_quotation': {
-        spokenResponse = 'Client requirement parsed. Instant project quotation prepared with milestone breakdown.';
-        actionExecuted = true;
-        actionDetail = { type: 'generate_quotation', title: 'Quotation Generated', payload: { amount: 65000 } };
+        const withQuote = memoryState.freelanceLeads.filter((l) => !!l.quotation);
+        if (withQuote.length > 0) {
+          spokenResponse = `${withQuote.length} lead has a prepared quotation stored in the freelance pipeline. I did not generate a new one.`;
+          actionExecuted = true;
+          actionDetail = { type: 'generate_quotation', title: 'Existing Quotations', payload: withQuote.map((l) => ({ id: l.id, totalPrice: l.quotation!.totalPrice })) };
+        } else {
+          spokenResponse = 'No quotation has been generated yet, so there is nothing to report.';
+          actionExecuted = false;
+          actionDetail = { type: 'generate_quotation', title: 'No Quotation Available', payload: { leads: memoryState.freelanceLeads.length } };
+        }
         break;
       }
       case 'cloud_telemetry': {
-        spokenResponse = `Oracle Always Free ARM VM is running at ${oracleCloudState.metrics.cpuUsage}% CPU and 3.4 GB RAM with zero monthly cost.`;
+        const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+        const cpuPart = live?.cpuUsage != null ? `${live.cpuUsage}% CPU` : 'CPU usage unavailable';
+        const ramPart = live?.ramUsedGb != null ? `${live.ramUsedGb} GB RAM` : 'RAM usage unavailable';
+        spokenResponse = `Oracle Always Free ARM VM host telemetry: ${cpuPart}, ${ramPart}. Metrics are read live from the daemon host.`;
         actionExecuted = true;
-        actionDetail = { type: 'cloud_telemetry', title: 'Oracle VM Nominal', payload: oracleCloudState.metrics };
+        actionDetail = { type: 'cloud_telemetry', title: 'Oracle VM Telemetry', payload: oracleCloudState.metrics };
         break;
       }
       case 'security_audit': {
-        spokenResponse = `Security protocol active at Level ${securityMatrixState.currentLevel}. Human confirmation required for external actions.`;
+        const posture = securityMatrixPosture(securityMatrixState);
+        spokenResponse = `Security protocol active at ${posture.levelLabel}. External-action approval: ${posture.humanApproval}. ${posture.secretMasking}.`;
         actionExecuted = true;
-        actionDetail = { type: 'security_audit', title: `Security Matrix Level ${securityMatrixState.currentLevel}` };
+        actionDetail = { type: 'security_audit', title: `Security Matrix ${posture.levelLabel}` };
         break;
       }
       case 'set_name': {
@@ -6850,143 +8862,156 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'open_notepad': {
-        spokenResponse = 'Opening Notepad. Ready for your notes, Sir.';
-        actionExecuted = true;
-        actionDetail = { type: 'open_notepad', title: 'Launching Notepad' };
+        const verdict = await evaluateLaunchDispatch('Notepad', 'notepad');
+        spokenResponse = launchReply('Notepad', verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'open_notepad', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'make_call': {
         const target = intentData.actionPayload?.target || 'Contact';
-        spokenResponse = language.startsWith('hi')
-          ? `${target} को ऑटोनॉमस वॉयस कॉल कनेक्ट किया जा रहा है। JARVIS टेलीफोनी चैनल सक्रिय है।`
-          : `Initiating autonomous voice call to ${target}. Establishing audio channel now.`;
-        actionExecuted = true;
+        const verdict = evaluateTelephonyDispatch('dial');
+        const base = telephonyDispatchReply(verdict.outcome, language);
+        spokenResponse = language.startsWith('hi') ? `${target}: ${base}` : `Call to ${target}: ${base}`;
+        actionExecuted = verdict.actionExecuted;
         actionDetail = {
           type: 'make_call',
-          title: `Calling ${target}`,
-          payload: { target, autoDial: true },
+          title: verdict.title,
+          payload: { target, outcome: verdict.outcome },
         };
         break;
       }
       case 'answer_call': {
-        spokenResponse = language.startsWith('hi')
-          ? 'कॉल कनेक्ट हो गया है। JARVIS AI बातचीत संभाल रहा है।'
-          : 'Connecting call with caller. JARVIS AI voice agent is active.';
-        actionExecuted = true;
-        actionDetail = { type: 'answer_call', title: 'Call Connected' };
+        const verdict = evaluateTelephonyDispatch('answer');
+        spokenResponse = telephonyDispatchReply(verdict.outcome, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'answer_call', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'hangup_call': {
-        spokenResponse = language.startsWith('hi')
-          ? 'फोन कॉल समाप्त कर दिया गया है। कॉल समरी तैयार की जा रही है।'
-          : 'Terminating active phone call. Compiling executive summary and action items.';
-        actionExecuted = true;
-        actionDetail = { type: 'hangup_call', title: 'Call Ended' };
+        const verdict = evaluateTelephonyDispatch('hangup');
+        spokenResponse = telephonyDispatchReply(verdict.outcome, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'hangup_call', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'reject_call': {
-        spokenResponse = language.startsWith('hi')
-          ? 'कॉल रिजेक्ट कर दिया गया है।'
-          : 'Declining incoming call and redirecting to automated voicemail.';
-        actionExecuted = true;
-        actionDetail = { type: 'reject_call', title: 'Call Declined' };
+        const verdict = evaluateTelephonyDispatch('reject');
+        spokenResponse = telephonyDispatchReply(verdict.outcome, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = { type: 'reject_call', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'telephony_hub': {
+        // Nothing outside this process opens a dialer; the console is routed in-app.
         spokenResponse = language.startsWith('hi')
-          ? 'टेलीफोनी हब और फोन डायलर खोला जा रहा है।'
-          : 'Opening Voice AI Telephony Hub and Smart Phone Dialer.';
+          ? 'इन-ऐप टेलीफोनी कंसोल खोला जा रहा है। कोई बाहरी फोन डायलर नहीं खुला।'
+          : 'Opening the in-app telephony console. No external phone dialer was opened.';
         actionExecuted = true;
-        actionDetail = { type: 'telephony_hub', title: 'Telephony Hub Opened' };
+        actionDetail = { type: 'telephony_hub', title: 'In-App Telephony Console (external dialer not opened)' };
         break;
       }
       case 'call_history': {
         spokenResponse = language.startsWith('hi')
-          ? 'कॉल हिस्ट्री और वॉयस लॉग्स दिखाए जा रहे हैं।'
-          : 'Displaying verified phone call history and executive transcripts.';
+          ? 'इस ऐप में दर्ज कॉल हिस्ट्री दिखाई जा रही है।'
+          : 'Showing the call history recorded in this app.';
         actionExecuted = true;
-        actionDetail = { type: 'call_history', title: 'Call Logs' };
+        actionDetail = { type: 'call_history', title: 'In-App Call Logs (no external phone records read)' };
         break;
       }
       case 'open_calculator': {
-        spokenResponse = 'Opening Calculator. Scientific computational tools ready.';
+        spokenResponse = 'Opening the in-app Calculator. No external calculator application was opened.';
         actionExecuted = true;
-        actionDetail = { type: 'open_calculator', title: 'Launching Calculator' };
+        actionDetail = { type: 'open_calculator', title: 'In-App Calculator (external app not opened)' };
         break;
       }
       case 'open_paint': {
-        spokenResponse = 'Opening Paint Canvas. Creative rendering module active.';
+        spokenResponse = 'Opening the in-app Paint Canvas. No external Paint application was opened.';
         actionExecuted = true;
-        actionDetail = { type: 'open_paint', title: 'Launching Paint Canvas' };
+        actionDetail = { type: 'open_paint', title: 'In-App Paint Canvas (external app not opened)' };
         break;
       }
       case 'open_chrome': {
-        spokenResponse = 'Opening Chrome Web Browser.';
+        spokenResponse = 'Opening the in-app Browser view. No external Chrome process was started.';
         actionExecuted = true;
-        actionDetail = { type: 'open_chrome', title: 'Opening Browser Window' };
+        actionDetail = { type: 'open_chrome', title: 'In-App Browser View (external Chrome not started)' };
         break;
       }
       case 'take_screenshot': {
-        spokenResponse = 'Capturing screen display right now.';
-        actionExecuted = true;
-        actionDetail = { type: 'take_screenshot', title: 'Screen Capture Triggered' };
+        const capture = await captureScreenshot({});
+        const verdict = screenshotVerdict(capture);
+        spokenResponse = screenshotReply(verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = {
+          type: 'take_screenshot',
+          title: verdict.title,
+          payload: {
+            outcome: verdict.outcome,
+            file: verdict.file?.absolutePath ?? null,
+            sizeBytes: verdict.file?.sizeBytes ?? null,
+            sha256: verdict.file?.sha256 ?? null,
+          },
+        };
         break;
       }
-      case 'volume_up': {
-        spokenResponse = 'Increasing master audio output level.';
-        actionExecuted = true;
-        actionDetail = { type: 'volume_up', title: 'Volume Adjusted (+)' };
-        break;
-      }
+      case 'volume_up':
       case 'volume_down': {
-        spokenResponse = 'Decreasing audio output level.';
-        actionExecuted = true;
-        actionDetail = { type: 'volume_down', title: 'Volume Adjusted (-)' };
+        const direction = intentData.intent === 'volume_up' ? 'up' : 'down';
+        const verdict = volumeVerdict(direction, voiceOutputLevel);
+        voiceOutputLevel = verdict.level;
+        spokenResponse = volumeReply(verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = {
+          type: direction === 'up' ? 'volume_up' : 'volume_down',
+          title: verdict.title,
+          payload: { outcome: verdict.outcome, inAppLevel: verdict.level },
+        };
         break;
       }
-      case 'pc_shutdown': {
-        spokenResponse = 'Simulating system shutdown protocol. Standby mode initiated.';
-        actionExecuted = true;
-        actionDetail = { type: 'pc_shutdown', title: 'Shutdown Simulation' };
-        break;
-      }
+      case 'pc_shutdown':
       case 'pc_restart': {
-        spokenResponse = 'Restarting Jarvis subsystem protocols in 5 seconds.';
-        actionExecuted = true;
-        actionDetail = { type: 'pc_restart', title: 'Restart Protocol' };
+        const kind = intentData.intent === 'pc_shutdown' ? 'shutdown' : 'restart';
+        const verdict = powerVerdict(kind, hostActionCapabilities(), isEmergencyStopActive());
+        spokenResponse = powerReply(verdict, language);
+        actionExecuted = verdict.actionExecuted;
+        actionDetail = {
+          type: kind === 'shutdown' ? 'pc_shutdown' : 'pc_restart',
+          title: verdict.title,
+          payload: { outcome: verdict.outcome, permissionRequired: verdict.permissionRequired },
+        };
         break;
       }
       case 'open_google': {
-        spokenResponse = 'Navigating to Google Search.';
+        spokenResponse = 'Opening the in-app Browser at Google. No external browser was launched.';
         actionExecuted = true;
-        actionDetail = { type: 'open_google', title: 'Google Search Engine', target: 'https://www.google.com' };
+        actionDetail = { type: 'open_google', title: 'In-App Browser: Google (external browser not launched)', target: 'https://www.google.com' };
         break;
       }
       case 'open_youtube': {
-        spokenResponse = 'Opening YouTube stream portal.';
+        spokenResponse = 'Opening the in-app Browser at YouTube. No external browser was launched.';
         actionExecuted = true;
-        actionDetail = { type: 'open_youtube', title: 'YouTube Stream', target: 'https://www.youtube.com' };
+        actionDetail = { type: 'open_youtube', title: 'In-App Browser: YouTube (external browser not launched)', target: 'https://www.youtube.com' };
         break;
       }
       case 'open_gmail': {
-        spokenResponse = 'Opening Gmail inbox communicator.';
+        spokenResponse = 'Opening the in-app Browser at Gmail. No external browser was launched.';
         actionExecuted = true;
-        actionDetail = { type: 'open_gmail', title: 'Gmail Inbox', target: 'https://mail.google.com' };
+        actionDetail = { type: 'open_gmail', title: 'In-App Browser: Gmail (external browser not launched)', target: 'https://mail.google.com' };
         break;
       }
       case 'open_chatgpt': {
-        spokenResponse = 'Opening ChatGPT web portal.';
+        spokenResponse = 'Opening the in-app Browser at ChatGPT. No external browser was launched.';
         actionExecuted = true;
-        actionDetail = { type: 'open_chatgpt', title: 'ChatGPT Portal', target: 'https://chatgpt.com' };
+        actionDetail = { type: 'open_chatgpt', title: 'In-App Browser: ChatGPT (external browser not launched)', target: 'https://chatgpt.com' };
         break;
       }
       case 'google_search': {
         const query = intentData.actionPayload?.query || message.replace(/^search\s+/i, '').trim();
-        spokenResponse = `Searching Google for "${query}".`;
+        spokenResponse = `Searching Google for "${query}" in the in-app Browser. No external browser was launched.`;
         actionExecuted = true;
         actionDetail = {
           type: 'google_search',
-          title: `Search: ${query}`,
+          title: `In-App Browser Search: ${query} (external browser not launched)`,
           target: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
           payload: { query },
         };
@@ -7001,26 +9026,29 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         };
         memoryState.notes.unshift(newNote);
         persistMemory();
-        spokenResponse = `I have saved your note to Jarvis_Notes in memory and prepared it for download.`;
+        spokenResponse = `I have saved your note to Jarvis_Notes in memory. There is no download endpoint, so this is stored, not exported.`;
         actionExecuted = true;
         actionDetail = { type: 'create_file', title: 'Saved Note', payload: newNote };
         break;
       }
       case 'system_diagnostic': {
-        spokenResponse = `Jarvis Systems Diagnostic: Core online on Oracle ARM VM. Memory banks nominal with ${memoryState.notes.length} notes stored. Audio and speech subsystems operational.`;
+        const live = oracleCloudState.metricsSource === 'live_host' ? oracleCloudState.metrics : null;
+        const cpuText = live?.cpuUsage != null ? `${live.cpuUsage}%` : 'unavailable';
+        const ramText = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : 'unavailable';
+        spokenResponse = `Jarvis Systems Diagnostic: server process online. ${memoryState.notes.length} note(s) stored. Host CPU ${cpuText}, RAM ${ramText}. Cloud node health and speech-hardware status are not probed from here.`;
         actionExecuted = true;
-        actionDetail = { type: 'system_diagnostic', title: 'Diagnostics Nominal' };
+        actionDetail = { type: 'system_diagnostic', title: 'Diagnostics (measured values only)', payload: { notes: memoryState.notes.length, cpu: cpuText, ram: ramText } };
         break;
       }
       case 'mobile_personal_status':
       case 'morning_briefing': {
         const timeNow = new Date().toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' });
-        spokenResponse = `सुप्रभात सर। अभी समय ${timeNow} है। आपके मोबाइल की बैटरी, मौसम और टास्क शेड्यूलर की स्थिति तैयार है। Mobile Personal Status डैशबोर्ड सक्रिय कर दिया गया है।`;
+        spokenResponse = `सुप्रभात सर। अभी समय ${timeNow} है। मोबाइल ब्रिज डैशबोर्ड खोल रहा हूँ — बैटरी, मौसम और टास्क डेटा केवल तभी दिखेगा जब कोई फ़ोन वास्तव में जुड़ा हो।`;
         actionExecuted = true;
         actionDetail = {
           type: 'open_mobile_personal_status',
           title: 'Mobile Personal Status & Morning Briefing',
-          payload: { intent: 'mobile_personal_status', timeNow },
+          payload: { intent: 'mobile_personal_status', timeNow, note: 'device telemetry shown only when a phone is connected' },
         };
         break;
       }
@@ -7039,22 +9067,26 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const timeStr = now.toLocaleTimeString(isHi ? 'hi-IN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
         const dateStr = now.toLocaleDateString(isHi ? 'hi-IN' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         spokenResponse = isHi
-          ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। सभी सिस्टम सामान्य हैं।`
-          : `The current time is ${timeStr} on ${dateStr}. All systems nominal.`;
+          ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है।`
+          : `The current time is ${timeStr} on ${dateStr}.`;
         actionExecuted = true;
         actionDetail = { type: 'time_inquiry', title: `Current Time: ${timeStr}`, payload: { timeStr, dateStr } };
         break;
       }
       case 'weather_inquiry': {
         const isHi = language.startsWith('hi') || /[\u0900-\u097F]/.test(message) || message.toLowerCase().includes('kya') || message.toLowerCase().includes('hai') || message.toLowerCase().includes('batao');
+        // No weather provider is wired into this server process and the Android
+        // bridge heartbeat carries no ambient weather reading, so a real value
+        // cannot exist. The handler used to print a constant temperature and
+        // humidity for 'New Delhi' as if it were a current reading; report the
+        // absence instead.
         spokenResponse = isHi
-          ? `आज का मौसम साफ है (Clear Sky) और वर्तमान तापमान लगभग 27°C (New Delhi) है। आर्द्रता 48% है।`
-          : `Today's weather is Clear Sky with a temperature of 27°C (New Delhi) and 48% humidity.`;
-        actionExecuted = true;
+          ? `अभी कोई मौसम स्रोत कनेक्टेड नहीं है, इसलिए मौसम या तापमान का डेटा उपलब्ध नहीं है।`
+          : `No weather source is connected, so no weather or temperature data is available.`;
+        actionExecuted = false;
         actionDetail = {
           type: 'weather_inquiry',
-          title: 'Current Weather Telemetry',
-          payload: { location: 'New Delhi / Local GPS', temperatureC: 27, condition: 'Clear Sky / साफ मौसम', humidity: 48 },
+          title: 'Weather Unavailable (no source connected)',
         };
         break;
       }
@@ -7098,15 +9130,37 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const ai = getGenAI();
         if (ai) {
           try {
+            // History from the client is authoritative for this turn, but a
+            // client that has just reloaded sends none. Fall back to the copy
+            // kept on the server so the conversation continues rather than
+            // restarting, which previously made JARVIS forget the thread.
+            const clientHistory = Array.isArray(history) ? history : [];
+            const effectiveHistory =
+              clientHistory.length > 0 ? clientHistory : memoryState.conversationHistory ?? [];
+
+            const context = assembleAiContext({
+              userName: memoryState.name,
+              notes: memoryState.notes,
+              customKeyValues: memoryState.customKeyValues,
+              history: effectiveHistory,
+              redactCredentials: securityMatrixState.credentialLeakProtection,
+            });
+
+            if (context.redactedSecretsCount > 0) {
+              console.warn(
+                `[Security] Credential-leak protection redacted ${context.redactedSecretsCount} secret(s) from the model context (${context.redactedCategories.join(', ')}).`,
+              );
+            }
+
             const systemInstruction = `You are HERMES JARVIS, an autonomous AI agent running on an Oracle Always Free ARM Cloud server, controllable via Android Telegram Bot and Web Panel.
-User's name: ${memoryState.name || 'Sir / Guest'}.
+${context.systemInstruction}
 Active Interaction Language Locale: ${language || 'en-US'}.
 Language Guideline: Respond in the user's selected language (${language || 'en-US'}). If set to Hindi (hi-IN) or Hinglish, use natural, respectful Hindi/Hinglish (e.g., 'जी सर', 'सुप्रभात'). If set to another regional language (Spanish, French, German, Japanese, Chinese, Russian, Arabic, etc.), respond naturally and fluently in that language. Otherwise, use crisp, polite British/Global English.
 Keep your responses crisp, concise, eloquent, and natural for speech synthesis (1-3 sentences unless asked for details).
 Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freelance CRM, Social Media human-approval engine, Proactive daily briefings, and file/git tools.`;
 
             const contents = [
-              ...history.slice(-6).map((h: any) => ({
+              ...context.turns.map((h) => ({
                 role: h.role === 'jarvis' || h.role === 'model' ? 'model' : 'user',
                 parts: [{ text: h.content || '' }],
               })),
@@ -7148,13 +9202,15 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
               ? `नमस्ते ${memoryState.name || 'सर'}! हरमीस जार्विस ऑनलाइन है और आपकी सेवा में तत्पर है। बताइए, मैं आपकी क्या सहायता करूँ?`
               : `Greetings ${memoryState.name || 'Sir'}. Hermes Jarvis online and standing by on your cloud server. How may I assist you today?`;
           } else if (userLower.includes('who are you') || userLower.includes('तुम कौन हो') || userLower.includes('aap kaun ho')) {
+            const host = getLocalHostIdentity();
             spokenResponse = isHi
-              ? `मैं हरमीस जार्विस हूँ — आपका ऑटोनॉमस पर्सनल AI असिस्टेंट, जो 24/7 सक्रिय है।`
-              : `I am HERMES JARVIS, your autonomous mobile-controlled AI assistant running on Oracle Always Free cloud.`;
+              ? `मैं हरमीस जार्विस हूँ — आपका ऑटोनॉमस पर्सनल AI असिस्टेंट। मैं होस्ट \`${host.hostname}\` पर चल रहा हूँ${host.isOracleLike ? '' : ' (क्लाउड प्रोवाइडर यहाँ सत्यापित नहीं है)'}।`
+              : `I am HERMES JARVIS, your autonomous AI assistant, running on host \`${host.hostname}\`.${host.isOracleLike ? '' : ' The cloud provider is not verified from inside this process.'}`;
           } else if (userLower.includes('how are you') || userLower.includes('कैसे हो') || userLower.includes('kaise ho')) {
+            const host = getLocalHostIdentity();
             spokenResponse = isHi
-              ? `सभी क्लाउड सिस्टम सुचारू रूप से कार्य कर रहे हैं, ${memoryState.name || 'सर'}।`
-              : `All cloud systems operating at 100% efficiency, ${memoryState.name || 'Sir'}.`;
+              ? `मैं होस्ट \`${host.hostname}\` पर चल रहा हूँ, ${memoryState.name || 'सर'}। मैं अपनी स्वयं की स्वास्थ्य जाँच नहीं कर सकता, इसलिए "सब ठीक है" कहना असत्य होगा।`
+              : `I am running on host \`${host.hostname}\`, ${memoryState.name || 'Sir'}. I cannot health-check myself, so I will not claim all systems are nominal.`;
           } else if (userLower.includes('thank') || userLower.includes('धन्यवाद') || userLower.includes('shukriya')) {
             spokenResponse = isHi
               ? `आपकी सेवा में सदैव तत्पर, ${memoryState.name || 'सर'}।`
@@ -7172,6 +9228,15 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
     if (actionExecuted) {
       memoryState.stats.actionsExecuted += 1;
     }
+
+    // Keep a bounded server-side transcript so a reloaded client still has a
+    // conversation to continue from.
+    const priorTurns = memoryState.conversationHistory ?? [];
+    memoryState.conversationHistory = [
+      ...priorTurns,
+      { role: 'user' as const, content: message, timestamp: new Date().toISOString() },
+      { role: 'jarvis' as const, content: spokenResponse, timestamp: new Date().toISOString() },
+    ].slice(-40);
 
     persistMemory();
 

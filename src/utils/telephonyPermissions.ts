@@ -131,19 +131,21 @@ export function savePhonePermissions(perms: Record<PhonePermissionKey, PhonePerm
 }
 
 /**
- * Privacy Utility: Mask phone number for privacy display
- * Treats caller ID as untrusted information.
- * Example: "+91 9876543210" -> "+91 98765*****"
- * Example: "+1 (415) 890-2134" -> "+1 (415) 890-****"
+ * Privacy Utility: Mask phone number for privacy display.
+ * Treats caller ID as untrusted information and reveals at most the
+ * country-code prefix plus the final four digits, matching the canonical
+ * format used by the Android bridge and the telephony UI.
+ * Example: "+91 9876543210" -> "+91 ******3210"
+ * Example: "+1 (415) 890-2134" -> "+1 ******2134"
  */
 export function maskPhoneNumber(phoneNumber: string): string {
-  if (!phoneNumber) return 'Unknown / Private';
+  if (!phoneNumber || !phoneNumber.trim()) return 'Unknown / Private';
   const clean = phoneNumber.trim();
-  if (clean.length <= 6) return '******';
-  // Keep first 6 characters and mask the rest
-  const visiblePart = clean.slice(0, Math.min(8, clean.length - 4));
-  const maskedCount = Math.max(4, clean.length - visiblePart.length);
-  return `${visiblePart}${'*'.repeat(maskedCount)}`;
+  const digits = clean.replace(/\D/g, '');
+  if (digits.length <= 4) return '****';
+  const prefixDigits = clean.startsWith('+') ? clean.slice(0, 3).replace(/\D/g, '') : '';
+  const prefix = prefixDigits ? `+${prefixDigits} ` : '';
+  return `${prefix}******${digits.slice(-4)}`;
 }
 
 /**

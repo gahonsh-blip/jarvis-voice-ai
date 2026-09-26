@@ -35,6 +35,19 @@ import {
 } from 'lucide-react';
 import { PermissionActionRequest, IntegrationAuditItem, EmergencyControlState } from '../types';
 import { PermissionGateway } from './PermissionGateway';
+import {
+  emergencyLiveness,
+  emergencyLivenessLabel,
+  emergencyStatusKnown,
+  emergencyEngaged,
+} from '../utils/emergencyTruth';
+import {
+  summariseFinanceGuard,
+  financeGuardLabel,
+  financeGuardDetail,
+  type FinanceGuardReport,
+  type FinanceGuardProbeResult,
+} from '../utils/financeGuardTruth';
 
 interface AutonomousToolsModalProps {
   isOpen: boolean;
@@ -48,8 +61,9 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   const [loading, setLoading] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Emergency Control State
-  const [emergency, setEmergency] = useState<EmergencyControlState>({ emergencyPaused: false });
+  // Emergency Control State. Null until /api/emergency/status answers, so a
+  // failed or unstarted fetch can never read as "not paused".
+  const [emergency, setEmergency] = useState<EmergencyControlState | null>(null);
 
   // Approvals State
   const [pendingApprovals, setPendingApprovals] = useState<PermissionActionRequest[]>([]);
@@ -91,9 +105,13 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   const [ytCopied, setYtCopied] = useState<boolean>(false);
   const [ytSubTab, setYtSubTab] = useState<'summary' | 'takeaways' | 'transcript'>('summary');
 
+  // Finance-guard self-check. Null until /api/security/finance-guard answers,
+  // so an unanswered request can never render as "lock active".
+  const [financeGuardReport, setFinanceGuardReport] = useState<FinanceGuardReport | null>(null);
+
   // Integrations Audit State
   const [auditReport, setAuditReport] = useState<{
-    summary: { total: number; connected: number; notConfigured: number };
+    summary: { total: number; connected: number; notConfigured: number; notAvailable: number };
     items: IntegrationAuditItem[];
   } | null>(null);
 
@@ -107,6 +125,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       fetchGithubData();
       fetchEmailStatus();
       fetchIntegrationsAudit();
+      fetchFinanceGuard();
     }
   }, [isOpen]);
 
@@ -120,9 +139,11 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     try {
       const res = await fetch('/api/emergency/status');
       const data = await res.json();
-      setEmergency(data);
+      // Store only a real status. A non-OK or malformed response leaves the
+      // state null, which renders as STATUS UNKNOWN rather than green.
+      setEmergency(emergencyStatusKnown(data) ? data : null);
     } catch {
-      // safe fallback
+      setEmergency(null);
     }
   };
 
@@ -134,17 +155,24 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestedBy: 'HUMAN_WEB_OPERATOR', reason: 'Operator manual toggle' }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (!emergencyStatusKnown(data)) throw new Error('Emergency endpoint returned no boolean state');
+      const engaged = emergencyEngaged(data);
       setEmergency(data);
       showFeedback(
-        data.emergencyPaused
+        engaged
           ? '🚨 EMERGENCY STOP ACTIVATED: All autonomous actions paused.'
           : '🟢 EMERGENCY STOP DEACTIVATED: Normal operations resumed.',
-        data.emergencyPaused ? 'error' : 'success'
+        engaged ? 'error' : 'success'
       );
       fetchApprovals();
     } catch (err: any) {
-      showFeedback('Failed to toggle emergency state: ' + err.message, 'error');
+      showFeedback(
+        'Failed to toggle emergency state: ' + err.message + ' — state unchanged and still UNKNOWN.',
+        'error'
+      );
+      setEmergency(null);
     } finally {
       setLoading(false);
     }
@@ -201,7 +229,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       ]);
       setGitStatus(statusRes);
       setGitCommits(logRes.commits || []);
-      setGitDiff(diffRes.diff || '');
+      setGitDiff(diffRes.success ? diffRes.diff || '' : `Git diff unavailable: ${diffRes.error || 'unknown error'}`);
     } catch {
       // safe fallback
     }
@@ -377,7 +405,16 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       const data = await res.json();
       if (data.success) {
         setYtResult(data);
-        showFeedback(`Successfully summarized "${data.videoInfo?.title}" (${data.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Autonomous Engine'})`);
+        const sourceLabel = data.source === 'gemini'
+          ? 'Gemini 2.5 Flash'
+          : data.source === 'extractive'
+            ? 'Extractive (quoted from video)'
+            : 'No content available';
+        if (data.source === 'none') {
+          showFeedback(data.notice || 'No transcript or description available for this video.', 'error');
+        } else {
+          showFeedback(`Summarized "${data.videoInfo?.title}" (${sourceLabel})`);
+        }
       } else {
         showFeedback(data.error || 'YouTube summarization failed', 'error');
       }
@@ -417,7 +454,41 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   };
 
+  // Finance-guard self-check. Only a well-formed report is stored; anything
+  // else leaves the state null and the UI reports the lock as unverified.
+  const fetchFinanceGuard = async () => {
+    try {
+      const res = await fetch('/api/security/finance-guard');
+      const data = await res.json();
+      setFinanceGuardReport(
+        data && data.success === true && data.report && Array.isArray(data.report.results)
+          ? (data.report as FinanceGuardReport)
+          : null,
+      );
+    } catch {
+      setFinanceGuardReport(null);
+    }
+  };
+
   if (!isOpen) return null;
+
+  // Derived finance-guard status. Re-summarised from the probe results the
+  // server actually returned; with no report this stays UNKNOWN, never
+  // "lock active".
+  const financeStatus = summariseFinanceGuard(
+    Array.isArray(financeGuardReport?.results)
+      ? (financeGuardReport!.results as FinanceGuardProbeResult[])
+      : [],
+  );
+
+  // Derived kill-switch liveness. UNKNOWN until a real status boolean arrived.
+  const liveness = emergencyLiveness(emergency);
+  const statusKnown = emergencyStatusKnown(emergency);
+  const emergencyPaused = liveness === 'ENGAGED';
+  // Level-3 actions (workspace file writes, queued external issues) are blocked
+  // unless the kill switch is confirmed released. An unobserved state is not a
+  // released state.
+  const actionBlocked = loading || emergencyPaused || !statusKnown;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md">
@@ -434,13 +505,20 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                 <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-mono font-bold">
                   LEVEL 1-4 GATED
                 </span>
-                {emergency.emergencyPaused ? (
+                {liveness === 'ENGAGED' ? (
                   <span className="text-[10px] px-2 py-0.5 rounded bg-rose-950 border border-rose-500 text-rose-300 font-mono font-bold animate-pulse">
-                    🚨 EMERGENCY STOP ACTIVE
+                    🚨 {emergencyLivenessLabel(liveness)}
+                  </span>
+                ) : liveness === 'ACTIVE' ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
+                    🟢 {emergencyLivenessLabel(liveness)}
                   </span>
                 ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
-                    🟢 DAEMON ACTIVE
+                  <span
+                    id="autonomous-tools-liveness-unknown"
+                    className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 font-mono font-bold"
+                  >
+                    ⚠️ {emergencyLivenessLabel(liveness)}
                   </span>
                 )}
               </div>
@@ -451,18 +529,31 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Emergency Toggle Button */}
+            {/* Emergency Toggle Button. Labelled by the observed state, never
+                by a "not paused" default. */}
             <button
               onClick={handleToggleEmergency}
               className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow-md ${
-                emergency.emergencyPaused
+                liveness === 'ENGAGED'
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                   : 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
               }`}
-              title={emergency.emergencyPaused ? 'Click to Resume System' : 'Click to Emergency Stop All Actions'}
+              title={
+                liveness === 'ENGAGED'
+                  ? 'Click to Resume System'
+                  : liveness === 'ACTIVE'
+                    ? 'Click to Emergency Stop All Actions'
+                    : 'Emergency status UNKNOWN — click to fetch and report the real state'
+              }
             >
               <AlertOctagon className="w-4 h-4" />
-              <span>{emergency.emergencyPaused ? 'RESUME SYSTEM' : 'EMERGENCY STOP'}</span>
+              <span>
+                {liveness === 'ENGAGED'
+                  ? 'RESUME SYSTEM'
+                  : liveness === 'ACTIVE'
+                    ? 'EMERGENCY STOP'
+                    : 'STATUS UNKNOWN'}
+              </span>
             </button>
 
             <button
@@ -765,7 +856,11 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                           </span>
                           <span>•</span>
                           <span className="text-[10px] text-slate-500">
-                            Source: {ytResult.source === 'gemini' ? 'Gemini 2.5 Flash' : 'Autonomous Engine'}
+                            Source: {ytResult.source === 'gemini'
+                              ? 'Gemini 2.5 Flash'
+                              : ytResult.source === 'extractive'
+                                ? 'Extractive — quoted from video'
+                                : 'No content available'}
                           </span>
                         </div>
                       </div>
@@ -831,8 +926,13 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                   {/* SubTab 1: Summary */}
                   {ytSubTab === 'summary' && (
                     <div className="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-4 font-mono text-xs leading-relaxed text-slate-200">
+                      {ytResult.notice && (
+                        <div className="p-3 rounded-lg bg-amber-950/60 border border-amber-500/40 text-amber-300 text-[11px]">
+                          {ytResult.notice}
+                        </div>
+                      )}
                       <div className="whitespace-pre-wrap selection:bg-rose-950 selection:text-rose-200">
-                        {ytResult.summary}
+                        {ytResult.summary || 'No summary text is available for this video.'}
                       </div>
                     </div>
                   )}
@@ -937,17 +1037,24 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                   <div className="flex items-center gap-2">
                     <span className="text-slate-400">Current Branch:</span>
                     <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-bold">
-                      {gitStatus?.branch || 'main'}
+                      {gitStatus?.success ? gitStatus.branch : 'UNKNOWN'}
                     </span>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
-                    {gitStatus?.statusText || 'Working tree clean.'}
+                    {gitStatus?.success
+                      ? gitStatus.statusText
+                      : gitStatus?.error || 'Git status not yet queried.'}
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
                   <span className="text-[10px] text-slate-500 uppercase font-bold">Recent Commit Log</span>
                   <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {gitCommits.length === 0 && (
+                      <div className="p-2 rounded bg-slate-900 border border-slate-800/80 text-slate-500">
+                        No commit log available.
+                      </div>
+                    )}
                     {gitCommits.map((c, i) => (
                       <div key={i} className="p-2 rounded bg-slate-900 border border-slate-800/80 text-slate-300">
                         {c}
@@ -1051,7 +1158,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                   />
                   <button
                     onClick={handleCreateOrSaveFile}
-                    disabled={loading || emergency.emergencyPaused}
+                    disabled={actionBlocked}
                     className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
                   >
                     <Check className="w-4 h-4" />
@@ -1185,7 +1292,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                 />
                 <button
                   onClick={handleQueueGithubIssue}
-                  disabled={loading || emergency.emergencyPaused}
+                  disabled={actionBlocked}
                   className="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -1255,7 +1362,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
 
               <div
                 className={`p-4 rounded-xl border flex items-center justify-between font-mono text-xs ${
-                  emailStatus?.configured
+                  emailStatus?.transportImplemented
                     ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
                     : 'bg-amber-950/60 border-amber-500/40 text-amber-200'
                 }`}
@@ -1266,12 +1373,17 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                 </div>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                    emailStatus?.configured
+                    emailStatus?.transportImplemented
                       ? 'bg-emerald-900 border border-emerald-500 text-emerald-300'
                       : 'bg-amber-900 border border-amber-500 text-amber-300'
                   }`}
                 >
-                  {emailStatus?.configured ? 'READY' : 'NOT CONFIGURED'}
+                  {/* Badge reflects whether a sender exists, not whether credentials do. */}
+                  {emailStatus?.transportImplemented
+                    ? 'READY'
+                    : emailStatus?.configured
+                      ? 'CREDENTIALS ONLY — NO SENDER'
+                      : 'NOT CONFIGURED'}
                 </span>
               </div>
             </div>
@@ -1287,12 +1399,15 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                     Truth-in-Execution Integrations Matrix
                   </h3>
                   <p className="text-xs text-slate-400 font-mono">
-                    Zero fake success states. Audits all official OAuth and REST API integrations for real credentials.
+                    Zero fake success states. Audits all official OAuth and REST API integrations for credentials actually present in this environment; presence of a credential is not a live connection test.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 font-mono text-xs">
                   <span className="px-2.5 py-1 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300">
                     {auditReport.summary.connected} Connected
+                  </span>
+                  <span className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                    {auditReport.summary.notAvailable} Not Available Here
                   </span>
                   <span className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300">
                     {auditReport.summary.notConfigured} Pending Setup
@@ -1382,10 +1497,29 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                   </ul>
                 </div>
 
-                <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+                <div
+                  className={`p-3 rounded-xl border flex items-start gap-2 ${
+                    financeStatus.status === 'ENFORCED'
+                      ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300'
+                      : financeStatus.status === 'GAP_DETECTED'
+                        ? 'bg-rose-950/50 border-rose-500/40 text-rose-300'
+                        : 'bg-slate-900/60 border-slate-600/40 text-slate-300'
+                  }`}
+                >
+                  {financeStatus.status === 'ENFORCED' ? (
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+                  ) : financeStatus.status === 'GAP_DETECTED' ? (
+                    <ShieldAlert className="w-5 h-5 shrink-0 text-rose-400" />
+                  ) : (
+                    <AlertOctagon className="w-5 h-5 shrink-0 text-slate-400" />
+                  )}
                   <span>
-                    Security status: <strong>FINANCE SAFETY LOCK ACTIVE (100% EXCLUDED)</strong>. Any user request or autonomous intent referencing financial transactions is automatically intercepted and terminated.
+                    Security status: <strong>{financeGuardLabel(financeStatus.status)}</strong>.{' '}
+                    {financeGuardDetail(financeStatus)} Any user request or autonomous intent
+                    referencing financial transactions is intercepted and terminated by the
+                    finance filter in the intent classifier and the computer-operator permission
+                    guard; the count above is the number of enforced probes those two engines
+                    actually refused in this session.
                   </span>
                 </div>
               </div>

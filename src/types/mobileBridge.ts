@@ -327,7 +327,7 @@ export interface MobileAuditEntry {
   actionRequested?: string;
   permissionState?: MobilePermissionState;
   authorizationState?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'AUTO' | 'BLOCKED';
-  result?: 'SUCCESS' |'FAILED' |'DENIED' |'UNAVAILABLE';
+  result?: 'SUCCESS' |'FAILED' |'DENIED' |'UNAVAILABLE' | 'UNVERIFIED';
   masked?: string;
 }
 
@@ -367,6 +367,8 @@ export interface MobilePermissionMatrix {
   message_reply: AndroidPermissionState;
   contacts_lookup: AndroidPermissionState;
   notification_history: AndroidPermissionState;
+  /** ACCESS_FINE_LOCATION — gates real GPS telemetry from the device. */
+  location_access: AndroidPermissionState;
 }
 
 export type NotificationCategory =
@@ -501,6 +503,5 @@ export interface AndroidBridgeSettings {
   readNotificationsAloud: boolean;
   privacyRules: Record<string, AppPrivacyRule>;
   categoryPermissions: Record<NotificationCategory, boolean>;
-  sensitiveFilteringEnabled: boolean;
   blockHealthNotificationsByDefault: boolean;
 }

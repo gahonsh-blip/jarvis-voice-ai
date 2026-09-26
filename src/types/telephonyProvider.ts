@@ -10,6 +10,10 @@ export type TelephonyCallState =
   | 'ENDING'
   | 'ENDED'
   | 'FAILED'
+  // Reported when an adapter holds no live provider control channel and
+  // therefore cannot observe the real call state. Distinct from IDLE, which
+  // asserts the call is not active.
+  | 'UNKNOWN'
   | 'HANDOFF_REQUIRED';
 
 export type TelephonyStatus =
@@ -54,7 +58,7 @@ export interface TelephonyTurn {
 export interface TelephonySession {
   callSessionId: string;
   direction: 'inbound' | 'outbound';
-  callerIdentifier: string; // Masked for privacy (e.g. "+91 98765*****")
+  callerIdentifier: string; // Masked for privacy (e.g. "+91 ******3210")
   callerRawNumber: string; // Raw provider number, untrusted
   callerVerified: boolean;
   recipientIdentifier: string;

@@ -11,6 +11,7 @@ import {
   AndroidAuditLog,
   AndroidBridgeSettings,
 } from '../types/mobileBridge';
+import { buildReceipt, makeEvidence, type ExecutionReceipt } from './executionTruth';
 
 // Storage keys
 const SETTINGS_STORAGE_KEY = 'hermes_jarvis_android_bridge_settings_v1';
@@ -25,6 +26,7 @@ export const DEFAULT_PERMISSIONS_MATRIX: MobilePermissionMatrix = {
   message_reply: 'LIMITED',
   contacts_lookup: 'NOT_CONFIGURED',
   notification_history: 'NOT_CONFIGURED',
+  location_access: 'NOT_CONFIGURED',
 };
 
 export const DEFAULT_CATEGORY_PERMISSIONS: Record<NotificationCategory, boolean> = {
@@ -103,7 +105,6 @@ export const DEFAULT_BRIDGE_SETTINGS: AndroidBridgeSettings = {
   readNotificationsAloud: true,
   privacyRules: DEFAULT_APP_RULES,
   categoryPermissions: DEFAULT_CATEGORY_PERMISSIONS,
-  sensitiveFilteringEnabled: true,
   blockHealthNotificationsByDefault: true,
 };
 
@@ -114,10 +115,18 @@ export const DEFAULT_BRIDGE_SETTINGS: AndroidBridgeSettings = {
 export function maskPhoneNumber(numberStr: string): string {
   if (!numberStr) return 'Unknown Number';
   const clean = numberStr.trim();
+  if (!clean) return 'Unknown Number';
+
+  // Non-numeric identifiers ("Unknown", "N/A", "private") carry no number to
+  // mask; returning a mangled slice of the label would leak it and read as a
+  // phone number. Report the honest unknown state instead.
+  const digits = clean.replace(/\D/g, '');
+  if (!digits) return 'Unknown Number';
   if (clean.length <= 4) return '****';
-  const lastFour = clean.slice(-4);
-  const prefix = clean.startsWith('+') ? clean.slice(0, 3) : '';
-  return `${prefix ? prefix + ' ' : ''}******${lastFour}`;
+
+  const lastFour = digits.padStart(4, '*').slice(-4);
+  const prefix = clean.match(/^(\+?\d{1,3})[\s-]/);
+  return `${prefix ? prefix[1] + ' ' : ''}******${lastFour}`;
 }
 
 /**
@@ -288,6 +297,7 @@ export class AndroidBridgeManager {
   private pendingEventQueue: AndroidPendingEvent[] = [];
   private auditLogs: AndroidAuditLog[] = [];
   private isEmergencyStopActive = false;
+  private lastReceipt: ExecutionReceipt | null = null;
   private listeners: ((event: AndroidPendingEvent | null) => void)[] = [];
 
   constructor() {
@@ -311,17 +321,107 @@ export class AndroidBridgeManager {
     }
   }
 
-  public openApplication(packageName: string): { success: boolean; message: string } {
+  public openApplication(packageName: string): {
+    success: boolean;
+    blockedReason?:
+      | 'MOBILE_NOT_CONNECTED'
+      | 'BLOCKED_EMERGENCY_STOP'
+      | 'OPEN_APP_UNSUPPORTED'
+      | 'APP_DENIED';
+    message: string;
+  } {
+    // Launching an app is a device-side effect. Without a device acknowledgement
+    // we can only say we asked for it, not that it happened — so gates are
+    // checked first and success is never reported.
+    if (this.status === 'MOBILE_NOT_CONNECTED' || !this.capabilities) {
+      this.recordAudit({
+        eventType: 'ACTION_DENIED',
+        application: packageName,
+        actionRequested: 'Launch Application',
+        permissionState: 'DENIED',
+        authorizationState: 'MOBILE_NOT_CONNECTED',
+        result: 'REJECTED',
+        notes: `App launch requested for ${packageName} with no Android device connected`,
+      });
+      return {
+        success: false,
+        blockedReason: 'MOBILE_NOT_CONNECTED',
+        message: 'No Android device is connected to the bridge.',
+      };
+    }
+
+    if (this.isEmergencyStopActive) {
+      this.recordAudit({
+        eventType: 'ACTION_DENIED',
+        application: packageName,
+        actionRequested: 'Launch Application',
+        permissionState: 'DENIED',
+        authorizationState: 'BLOCKED_EMERGENCY_STOP',
+        result: 'BLOCKED_EMERGENCY_STOP',
+        notes: `App launch for ${packageName} blocked by Global Kill Switch`,
+      });
+      return {
+        success: false,
+        blockedReason: 'BLOCKED_EMERGENCY_STOP',
+        message: 'App launch blocked by Global Kill Switch.',
+      };
+    }
+
+    if (!this.capabilities.canOpenApp) {
+      this.recordAudit({
+        eventType: 'CAPABILITY_UNAVAILABLE',
+        application: packageName,
+        actionRequested: 'Launch Application',
+        permissionState: 'GRANTED',
+        authorizationState: 'CAPABILITY_MISSING',
+        result: 'UNSUPPORTED',
+        notes: 'Device does not report launch-intent capability',
+      });
+      return {
+        success: false,
+        blockedReason: 'OPEN_APP_UNSUPPORTED',
+        message: 'This device does not support launching applications via the bridge.',
+      };
+    }
+
+    const rule = this.settings.privacyRules[packageName];
+    if (rule && !rule.allowed) {
+      this.recordAudit({
+        eventType: 'ACTION_DENIED',
+        application: rule.appName,
+        actionRequested: 'Launch Application',
+        permissionState: 'DENIED',
+        authorizationState: 'APP_DENIED',
+        result: 'REJECTED',
+        notes: `Launch of ${packageName} denied by privacy policy`,
+      });
+      return {
+        success: false,
+        blockedReason: 'APP_DENIED',
+        message: `Application ${rule.appName} is denied by the privacy policy.`,
+      };
+    }
+
+    // Gates passed: dispatch the launch intent, but the app opening is still
+    // unconfirmed, so success stays false and the attempt is audited as dispatched.
     this.recordAudit({
       eventType: 'APP_OPENED',
-      application: packageName,
+      application: rule?.appName || packageName,
       actionRequested: 'Launch Application',
       permissionState: 'GRANTED',
       authorizationState: 'HUMAN_EXPLICIT_APPROVAL',
-      result: 'SUCCESS',
-      notes: `Launched application ${packageName} on Android device`,
+      result: 'UNSUPPORTED',
+      notes: `Launch intent requested for ${packageName}; awaiting device confirmation`,
     });
-    return { success: true, message: `Application ${packageName} launched.` };
+    this.lastReceipt = buildReceipt({
+      action: 'OPEN_APP',
+      target: packageName,
+      outcome: 'DISPATCHED',
+      detailEn: `Launch intent for ${packageName} was handed to the Android device; confirmation pending.`,
+      detailHi: `${packageName} खोलने का निर्देश भेज दिया गया है; पुष्टि बाकी है।`,
+      dispatchedAt: new Date().toISOString(),
+    });
+    return { success: false, message: `Launch intent for ${packageName} dispatched; awaiting device confirmation.` };
   }
 
   private loadState(): void {
@@ -420,10 +520,15 @@ export class AndroidBridgeManager {
     const hasNotif = this.permissions.notification_access === 'GRANTED';
     const hasCall = this.permissions.call_detection === 'GRANTED';
 
-    if (!hasNotif && !hasCall) {
+    if (caps.isSimulation) {
+      // A simulated/testbed device must never be reported as a live connection.
+      this.status = 'LIMITED_CAPABILITY';
+    } else if (!hasNotif && !hasCall) {
       this.status = 'PERMISSION_REQUIRED';
     } else if (!caps.canAnswerCalls || !caps.telecomRoleDialer) {
       this.status = 'LIMITED_CAPABILITY';
+    } else if (!hasNotif || !hasCall) {
+      this.status = 'PARTIALLY_CONNECTED';
     } else {
       this.status = 'CONNECTED';
     }
@@ -434,8 +539,8 @@ export class AndroidBridgeManager {
       actionRequested: 'Device Pairing & Registration',
       permissionState: this.permissions.notification_access,
       authorizationState: 'AUTHENTICATED',
-      result: 'SUCCESS',
-      notes: `Device: ${caps.model} (${caps.deviceName}), OS: ${caps.osVersion}${caps.isSimulation ? ' [SIMULATION_ONLY]' : ''}`,
+      result: caps.isSimulation ? 'UNSUPPORTED' : 'SUCCESS',
+      notes: `Device: ${caps.model} (${caps.deviceName}), OS: ${caps.osVersion}${caps.isSimulation ? ' [SIMULATION_ONLY - not a live device]' : ''}`,
     });
 
     return { success: true, status: this.status };
@@ -529,14 +634,14 @@ export class AndroidBridgeManager {
         permissionState: this.permissions.call_detection,
         authorizationState: 'UNAUTHORIZED',
         result: 'PERMISSION_REQUIRED',
-        notes: `Call detection denied for masked number ${maskPhoneNumber(payload.callerNumber || 'Unknown')}`,
+        notes: `Call detection denied for masked number ${maskPhoneNumber(payload.callerNumber || '')}`,
       });
       return { announced: false, isSensitive: false, blockedReason: 'PERMISSION_REQUIRED' };
     }
 
     const contactsAllowed = this.permissions.contacts_lookup === 'GRANTED';
     const effectiveCallerName = contactsAllowed && payload.callerName ? payload.callerName : null;
-    const masked = maskPhoneNumber(payload.callerNumber || 'Unknown');
+    const masked = maskPhoneNumber(payload.callerNumber || '');
 
     // 2. Generate natural announcement
     const isHindi = language.startsWith('hi') || language === 'auto';
@@ -550,7 +655,15 @@ export class AndroidBridgeManager {
         ? `Sir, ${effectiveCallerName} ka call aaya hai. Kya main call utha doon?`
         : `Sir, incoming call from ${effectiveCallerName}. Shall I answer the call?`;
     } else {
-      const displayNum = masked !== 'Unknown' ? masked : 'अज्ञात नंबर';
+      // maskPhoneNumber reports 'Unknown Number' for unparseable caller IDs,
+      // so testing for digits (not the stale 'Unknown' sentinel) selects the
+      // honest localized fallback.
+      const hasNumber = /\d/.test(masked);
+      const displayNum = hasNumber
+        ? masked
+        : isHindi
+        ? 'अज्ञात नंबर'
+        : 'an unknown number';
       spokenText = isHindi
         ? `सर, ${displayNum} से कॉल आया है। क्या मैं कॉल उठा दूँ?`
         : isHinglish
@@ -645,9 +758,33 @@ export class AndroidBridgeManager {
       return { announced: false, blockedReason: 'DUPLICATE_NOTIFICATION' };
     }
 
-    // 5. Sensitive content detection
+    // 5. Sensitive content detection. This guard is deliberately not
+    // settings-gated: docs/MOBILE_CALL_NOTIFICATION.md promises OTP, banking and
+    // credential bodies are *never* read aloud or written to logs, so there is
+    // no owner override that would let a raw secret through. (A persisted
+    // `sensitiveFilteringEnabled: false` from an older build is ignored, since
+    // it could otherwise silently disable the guard.)
     const sensitiveCheck = detectSensitiveContent(payload.text, payload.title);
     const isSensitive = sensitiveCheck.isSensitive;
+
+    // Health notifications are the one category the owner may opt into, via
+    // AndroidBridgeSettings.blockHealthNotificationsByDefault. It defaults to
+    // blocking, and unlike the redaction guard it only widens what is announced.
+    if (
+      this.settings.blockHealthNotificationsByDefault &&
+      sensitiveCheck.category === 'HEALTH'
+    ) {
+      this.recordAudit({
+        eventType: 'SENSITIVE_REDACTION',
+        application: payload.appName || 'Unknown',
+        actionRequested: 'Announce Notification',
+        permissionState: 'GRANTED',
+        authorizationState: 'BLOCKED_HEALTH_DEFAULT',
+        result: 'REJECTED',
+        notes: 'Health notification blocked because blockHealthNotificationsByDefault is enabled',
+      });
+      return { announced: false, blockedReason: 'HEALTH_BLOCKED' };
+    }
 
     const isHindi = language.startsWith('hi') || language === 'auto';
     const isHinglish = language === 'hinglish';
@@ -714,6 +851,19 @@ export class AndroidBridgeManager {
       notes: `App: ${appName}, Sender: ${sender}, Sensitive: ${isSensitive}`,
     });
 
+    if (isSensitive) {
+      // Record the redaction without ever persisting the protected body.
+      this.recordAudit({
+        eventType: 'SENSITIVE_REDACTION',
+        application: appName,
+        actionRequested: 'Redact Notification Body',
+        permissionState: 'GRANTED',
+        authorizationState: 'WAITING_FOR_OWNER_APPROVAL',
+        result: 'SUCCESS',
+        notes: `Protected ${sensitiveCheck.category} content redacted before announcement`,
+      });
+    }
+
     return {
       announced: true,
       spokenText,
@@ -776,52 +926,46 @@ export class AndroidBridgeManager {
         return regex.test(pNorm);
       }
 
-      // For Devanagari Hindi phrases
+      // For Devanagari Hindi phrases: match whole tokens only. Loose prefix
+      // matching is unsafe here because verb stems appear inside negated
+      // phrases ("उठाओ" inside "मत उठाओ"), which would read a refusal as consent.
       const tokens = pNorm.split(/\s+/);
       if (tokens.includes(kNorm)) return true;
       if (kNorm.includes(' ')) {
         return pNorm.includes(kNorm);
       }
-      return tokens.some((t) => t === kNorm || t.startsWith(kNorm));
+      return false;
     };
 
-    // Call approvals
-    const callApprovalKeywords = ['हाँ', 'हां', 'जी', 'उठा', 'answer', 'yes', 'कॉल उठा', 'फोन उठा'];
-    const callRejectKeywords = ['नहीं', 'मत', 'काट', 'रहने', 'cancel', 'no', 'decline', 'reject'];
+    // Call approvals. 'उठा' is deliberately excluded: it is a verb stem that
+    // also occurs inside refusals ("मत उठा"), so it is ambiguous on its own.
+    const callApprovalKeywords = ['हाँ', 'हां', 'जी', 'answer', 'yes', 'कॉल उठा', 'फोन उठा', 'उठा लो'];
+    const callRejectKeywords = ['नहीं', 'नही', 'मत', 'काट', 'रहने', 'cancel', 'no', 'decline', 'reject'];
 
     // Message approvals
     const msgApprovalKeywords = ['हाँ', 'हां', 'जी', 'जवाब', 'भेज', 'रिप्लाई', 'reply', 'send', 'yes'];
-    const msgRejectKeywords = ['नहीं', 'मत', 'रहने', 'cancel', 'no', 'dismiss'];
+    const msgRejectKeywords = ['नहीं', 'नही', 'मत', 'रहने', 'cancel', 'no', 'dismiss'];
 
-    if (current.type === 'CALL') {
-      const isApprove = callApprovalKeywords.some((p) => {
+    const keywordMatrix = current.type === 'CALL'
+      ? { approve: callApprovalKeywords, reject: callRejectKeywords }
+      : current.type === 'MESSAGE'
+      ? { approve: msgApprovalKeywords, reject: msgRejectKeywords }
+      : null;
+
+    if (keywordMatrix) {
+      const matches = (p: string) => {
         const normP = p.replace(/\u0901/g, '\u0902');
         return matchesKeyword(normHindi, normP);
-      });
-      if (isApprove) {
-        return { decision: 'APPROVE', targetType: 'CALL', matchedPhrase: clean };
+      };
+
+      // Negation takes precedence. A single spoken phrase must never satisfy the
+      // Level-4 human approval gate by contradicting itself: "नहीं उठाओ" is a
+      // refusal, not consent, even though it also contains the verb stem "उठा".
+      if (keywordMatrix.reject.some(matches)) {
+        return { decision: 'REJECT', targetType: current.type, matchedPhrase: clean };
       }
-      const isReject = callRejectKeywords.some((p) => {
-        const normP = p.replace(/\u0901/g, '\u0902');
-        return matchesKeyword(normHindi, normP);
-      });
-      if (isReject) {
-        return { decision: 'REJECT', targetType: 'CALL', matchedPhrase: clean };
-      }
-    } else if (current.type === 'MESSAGE') {
-      const isApprove = msgApprovalKeywords.some((p) => {
-        const normP = p.replace(/\u0901/g, '\u0902');
-        return matchesKeyword(normHindi, normP);
-      });
-      if (isApprove) {
-        return { decision: 'APPROVE', targetType: 'MESSAGE', matchedPhrase: clean };
-      }
-      const isReject = msgRejectKeywords.some((p) => {
-        const normP = p.replace(/\u0901/g, '\u0902');
-        return matchesKeyword(normHindi, normP);
-      });
-      if (isReject) {
-        return { decision: 'REJECT', targetType: 'MESSAGE', matchedPhrase: clean };
+      if (keywordMatrix.approve.some(matches)) {
+        return { decision: 'APPROVE', targetType: current.type, matchedPhrase: clean };
       }
     }
 
@@ -833,7 +977,7 @@ export class AndroidBridgeManager {
    */
   public executeCallAnswer(): {
     success: boolean;
-    status: 'ANSWERED' | 'ROLE_REQUIRED' | 'CALL_ANSWER_UNSUPPORTED' | 'BLOCKED_EMERGENCY_STOP' | 'CALL_NOT_FOUND' | 'MOBILE_NOT_CONNECTED';
+    status: 'ANSWER_DISPATCHED' | 'ROLE_REQUIRED' | 'CALL_ANSWER_UNSUPPORTED' | 'BLOCKED_EMERGENCY_STOP' | 'CALL_NOT_FOUND' | 'MOBILE_NOT_CONNECTED';
     messageEn: string;
     messageHi: string;
   } {
@@ -897,6 +1041,9 @@ export class AndroidBridgeManager {
     current.status = 'APPROVED';
     this.clearPendingEvent();
 
+    // The server has authorized the answer, but the phone has not confirmed it.
+    // We report DISPATCHED here; only the device's ACTION_RESULT can upgrade this
+    // to VERIFIED via confirmCallAnswer().
     this.recordAudit({
       eventType: 'CALL_ANSWERED',
       application: 'TelecomManager',
@@ -904,15 +1051,58 @@ export class AndroidBridgeManager {
       permissionState: 'GRANTED',
       authorizationState: 'HUMAN_EXPLICIT_APPROVAL',
       result: 'SUCCESS',
-      notes: `Answered call ${current.callId} after explicit voice approval`,
+      notes: `Answer authorized for call ${current.callId}; awaiting device confirmation`,
+    });
+
+    this.lastReceipt = buildReceipt({
+      action: 'ANSWER_CALL',
+      target: current.senderNumber || current.sender,
+      outcome: 'DISPATCHED',
+      detailEn: 'Call answer authorized and handed to the Android device. Awaiting device confirmation.',
+      detailHi: 'कॉल उठाने की अनुमति दे दी गई है; डिवाइस की पुष्टि की प्रतीक्षा है।',
+      dispatchedAt: new Date().toISOString(),
+      dispatchId: current.callId,
     });
 
     return {
-      success: true,
-      status: 'ANSWERED',
-      messageEn: 'Call successfully answered.',
-      messageHi: 'कॉल उठा ली गई है।',
+      success: false,
+      status: 'ANSWER_DISPATCHED',
+      messageEn: 'Call answer authorized and dispatched to the Android device; confirmation pending.',
+      messageHi: 'कॉल उठाने का निर्देश डिवाइस को भेज दिया गया है; पुष्टि बाकी है।',
     };
+  }
+
+  /**
+   * Records the device's own confirmation that a call was answered.
+   * This is the ONLY path that can produce a verified call-answer result.
+   */
+  public confirmCallAnswer(callId: string | undefined, deviceConfirmed: boolean): ExecutionReceipt {
+    if (!deviceConfirmed) {
+      this.lastReceipt = buildReceipt({
+        action: 'ANSWER_CALL',
+        target: callId || 'unknown call',
+        outcome: 'FAILED',
+        detailEn: 'Android device reported that the call was not answered.',
+        detailHi: 'डिवाइस ने बताया कि कॉल नहीं उठाई गई।',
+        failureReason: 'DEVICE_REPORTED_NOT_ANSWERED',
+      });
+      return this.lastReceipt;
+    }
+
+    this.lastReceipt = buildReceipt({
+      action: 'ANSWER_CALL',
+      target: callId || 'unknown call',
+      outcome: 'VERIFIED',
+      detailEn: 'Android device confirmed the call is connected.',
+      detailHi: 'Android डिवाइस ने पुष्टि कर दी कि कॉल जुड़ गई है।',
+      evidence: makeEvidence('device_ack', 'Device call-state confirmation (OFFHOOK)', { ref: callId }),
+    });
+    return this.lastReceipt;
+  }
+
+  /** The most recent truthful receipt produced by this engine, if any. */
+  public getLastReceipt(): ExecutionReceipt | null {
+    return this.lastReceipt;
   }
 
   /**
@@ -973,9 +1163,11 @@ export class AndroidBridgeManager {
 
     // If notification has inline reply action supported
     if (current.hasInlineReply && this.capabilities?.canInlineReply) {
-      current.status = 'CONFIRMED';
+      current.status = 'DISPATCHED';
       this.clearPendingEvent();
 
+      // The reply text left the server. Whether WhatsApp/SMS actually delivered it
+      // is the device's business — we report DISPATCHED until the device confirms.
       this.recordAudit({
         eventType: 'REPLY_SENT',
         application: current.appName,
@@ -983,19 +1175,29 @@ export class AndroidBridgeManager {
         permissionState: 'GRANTED',
         authorizationState: 'HUMAN_EXPLICIT_APPROVAL',
         result: 'SUCCESS',
-        notes: `Inline reply sent to ${current.sender} via RemoteInput [Content Protected]`,
+        notes: `Inline reply handed to ${current.sender} via RemoteInput; awaiting device confirmation [Content Protected]`,
+      });
+
+      this.lastReceipt = buildReceipt({
+        action: 'SEND_REPLY',
+        target: `${current.sender} on ${current.appName}`,
+        outcome: 'DISPATCHED',
+        detailEn: `Reply handed to ${current.appName} through the notification RemoteInput action. Awaiting the device's own delivery confirmation.`,
+        detailHi: `${current.appName} को उत्तर भेज दिया गया है; डिवाइस की पुष्टि बाकी है।`,
+        dispatchedAt: new Date().toISOString(),
+        dispatchId: current.id,
       });
 
       return {
-        success: true,
-        status: 'REPLY_CONFIRMED',
+        success: false,
+        status: 'REPLY_DISPATCHED',
         actionType: 'INLINE_REPLY',
-        messageEn: `Reply dispatched to ${current.sender} via inline notification response.`,
-        messageHi: `उत्तर ${current.sender} को भेज दिया गया है।`,
+        messageEn: `Reply handed to ${current.appName} for ${current.sender}. Delivery is not yet confirmed by the device.`,
+        messageHi: `उत्तर ${current.sender} को भेजने के लिए ${current.appName} को दिया गया है; डिलीवरी की पुष्टि बाकी है।`,
       };
     }
 
-    // Fallback: Open Messaging Application
+    // Fallback: Open Messaging Application for the human to send it themselves
     if (this.capabilities?.canOpenApp) {
       current.status = 'DISPATCHED';
       this.clearPendingEvent();
@@ -1007,15 +1209,25 @@ export class AndroidBridgeManager {
         permissionState: 'GRANTED',
         authorizationState: 'HUMAN_EXPLICIT_APPROVAL',
         result: 'SUCCESS',
-        notes: `Opened ${current.appName} for manual dispatch`,
+        notes: `Opened ${current.appName} for manual dispatch; message was NOT sent by JARVIS`,
+      });
+
+      this.lastReceipt = buildReceipt({
+        action: 'SEND_REPLY',
+        target: `${current.sender} on ${current.appName}`,
+        outcome: 'DISPATCHED',
+        detailEn: `${current.appName} was opened with the reply prepared. JARVIS did not send it — you must press send. The message has NOT been delivered.`,
+        detailHi: `${current.appName} खोल दिया गया है। JARVIS ने संदेश नहीं भेजा — आपको भेजना होगा। संदेश अभी नहीं गया है।`,
+        dispatchedAt: new Date().toISOString(),
+        dispatchId: current.id,
       });
 
       return {
-        success: true,
+        success: false,
         status: 'REPLY_DISPATCHED',
         actionType: 'OPEN_APP',
-        messageEn: `Opened ${current.appName} with prepared response.`,
-        messageHi: `${current.appName} खोल दिया गया है ताकि आप उत्तर भेज सकें।`,
+        messageEn: `${current.appName} opened with the response prepared. The message has NOT been sent — you must confirm it in the app.`,
+        messageHi: `${current.appName} खोल दिया गया है। संदेश अभी नहीं भेजा गया — आपको ऐप में भेजना होगा।`,
       };
     }
 

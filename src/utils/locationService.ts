@@ -118,6 +118,8 @@ export async function reverseGeocodeCoordinates(lat: number, lon: number): Promi
         countryCode,
         postcode,
         road,
+        resolved: true,
+        source: 'nominatim',
       };
     }
   } catch (err) {
@@ -129,38 +131,49 @@ export async function reverseGeocodeCoordinates(lat: number, lon: number): Promi
 }
 
 /**
- * Approximate offline region when network reverse geocoder is unavailable
+ * Approximate offline region when network reverse geocoder is unavailable.
+ *
+ * This returns a coarse quadrant estimate, NOT a resolved civic address. It is
+ * marked `resolved: false` / `source: 'offline_estimate'` so every surface can
+ * distinguish "we looked this up" from "we guessed the quadrant".
  */
 function estimateOfflineRegion(lat: number, lon: number): LocationAddress {
   // Rough geographic quadrant checks
-  let city = 'Telemetry Sector';
-  let country = 'Earth Grid';
-  let countryCode = 'INT';
+  let city = 'Unresolved region';
+  let country = 'Unresolved';
+  let countryCode = 'UNK';
 
   if (lat >= 8 && lat <= 37 && lon >= 68 && lon <= 97) {
-    city = 'Indian Subcontinent Core';
-    country = 'India';
+    city = 'Indian Subcontinent (quadrant estimate)';
+    country = 'India (estimated)';
     countryCode = 'IN';
   } else if (lat >= 24 && lat <= 49 && lon >= -125 && lon <= -66) {
-    city = 'North American Sector';
-    country = 'United States';
+    city = 'North American (quadrant estimate)';
+    country = 'United States (estimated)';
     countryCode = 'US';
   } else if (lat >= 35 && lat <= 71 && lon >= -10 && lon <= 40) {
-    city = 'European Continental Zone';
-    country = 'European Union';
+    city = 'European Continental (quadrant estimate)';
+    country = 'Europe (estimated)';
     countryCode = 'EU';
   } else if (lat >= 20 && lat <= 46 && lon >= 122 && lon <= 154) {
-    city = 'East Asia Node';
-    country = 'Japan / Asia';
+    city = 'East Asia (quadrant estimate)';
+    country = 'Japan / Asia (estimated)';
     countryCode = 'JP';
   }
 
   return {
-    formattedAddress: `${city}, ${country} (${lat.toFixed(4)}°, ${lon.toFixed(4)}°)`,
+    formattedAddress: `${city} — ${country} (offline estimate, not a resolved address; ${lat.toFixed(4)}°, ${lon.toFixed(4)}°)`,
     city,
     country,
     countryCode,
+    resolved: false,
+    source: 'offline_estimate',
   };
+}
+
+/** True only when a real reverse geocoder resolved this address. */
+export function isResolvedAddress(address: LocationAddress | null): boolean {
+  return address?.resolved === true;
 }
 
 /**
@@ -177,6 +190,78 @@ export function saveCachedLocation(coords: GeoCoordinates, address: LocationAddr
       })
     );
   } catch {}
+}
+
+/**
+ * Provenance of the coordinates currently shown by a location surface. Only
+ * `live` means the reading came from the device GPS radio in this session.
+ */
+export type CoordsSource = 'live' | 'cache' | 'preset' | 'manual';
+
+const SOURCE_LABELS: Record<CoordsSource, string> = {
+  live: 'LIVE GPS',
+  cache: 'LAST KNOWN (CACHED)',
+  preset: 'SIMULATED PRESET',
+  manual: 'MANUAL ENTRY',
+};
+
+/** A null source means no position is held at all — never render it as a fix. */
+const NO_FIX_LABEL = 'NO FIX';
+
+export function locationSourceLabel(source: CoordsSource | null): string {
+  return source ? SOURCE_LABELS[source] ?? SOURCE_LABELS.cache : NO_FIX_LABEL;
+}
+
+/**
+ * Compact provenance badge for a status bar. `live` is the only value that may
+ * be presented as a device GPS link; every other provenance — including none at
+ * all — renders as a non-live label.
+ */
+export function locationFixBadge(source: CoordsSource | null): { label: string; live: boolean } {
+  switch (source) {
+    case 'live':
+      return { label: 'LIVE GPS', live: true };
+    case 'cache':
+      return { label: 'CACHED FIX', live: false };
+    case 'preset':
+      return { label: 'PRESET ONLY', live: false };
+    case 'manual':
+      return { label: 'MANUAL ENTRY', live: false };
+    default:
+      return { label: 'NO FIX', live: false };
+  }
+}
+
+/**
+ * Accuracy figure to display. A preset, manual, or cached coordinate has no
+ * measured GPS precision, so it must never render a fabricated ±Nm value.
+ */
+export function accuracyDisplay(source: CoordsSource | null, accuracy: number): string {
+  return source === 'live' ? `±${Math.round(accuracy)}m` : 'N/A — no GPS fix';
+}
+
+/**
+ * Spoken location briefing. When there is no live GPS fix it must say so and
+ * name the real provenance instead of reading the position as a device fix.
+ */
+export function locationBriefing(
+  source: CoordsSource | null,
+  options: { latitude: number; longitude: number; accuracy: number; placeLabel: string },
+): string {
+  const { latitude, longitude, accuracy, placeLabel } = options;
+  const position = `Latitude ${latitude.toFixed(4)} degrees, Longitude ${longitude.toFixed(4)} degrees`;
+  if (source === 'live') {
+    return `Sir, your current geospatial fix is located at ${placeLabel}. ${position}, with a GPS precision of plus or minus ${Math.round(accuracy)} meters.`;
+  }
+  const qualifier =
+    source === 'preset'
+      ? 'a simulated tactical preset'
+      : source === 'manual'
+        ? 'manually entered coordinates'
+        : source === 'cache'
+          ? 'the last known cached position'
+          : 'an unverified position of unknown origin';
+  return `Sir, there is no live GPS fix. I am showing ${placeLabel} at ${position} from ${qualifier}, which is not a device location reading.`;
 }
 
 /**

@@ -12,6 +12,14 @@ import {
   getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from './telephonyAudio';
+import { spamReasonLabel } from './hardening/spamVerdictTruth';
+import {
+  describeInboundCall,
+  describeOutboundCall,
+  formatActionItem,
+  formatLocalTurnFollowUp,
+  formatLocalTurnReply,
+} from './hardening/callSummaryTruth';
 
 const STORAGE_KEY_CALLS = 'hermes_jarvis_telephony_calls_v1';
 const STORAGE_KEY_SETTINGS = 'hermes_jarvis_telephony_settings_v1';
@@ -135,7 +143,8 @@ export function evaluateSpamRisk(callerNumber: string, firstLine: string): { isS
   }
 
   const isSpam = score >= 50;
-  return { isSpam, score: Math.min(score, 100), reason: reason || 'Verified Legitimate Caller' };
+  // No match means no indicator was found — never that the caller is vetted.
+  return { isSpam, score: Math.min(score, 100), reason: spamReasonLabel(reason) };
 }
 
 /**
@@ -188,7 +197,7 @@ export async function processTelephonyTurn(params: {
 /**
  * Local AI Call Dialogue Logic (works 100% offline without internet)
  */
-export function generateLocalCallTurn(params: {
+function buildLocalCallTurn(params: {
   direction: 'outbound' | 'inbound';
   callerName: string;
   recipientName: string;
@@ -241,8 +250,8 @@ export function generateLocalCallTurn(params: {
 
     if (input.includes('friday') || input.includes('3:00') || input.includes('available') || input.includes('confirmed')) {
       return {
-        replyText: 'Friday at 3:00 PM works perfectly. I have locked this into Alex’s calendar and synced our reminders. Is there any pre-visit paperwork or preparation we should have ready?',
-        whisperTip: 'Lock appointment to calendar and ask for paperwork requirements.',
+        replyText: 'Friday at 3:00 PM works perfectly. I will pass the confirmation to Alex to lock into the calendar and set the reminders. Is there any pre-visit paperwork or preparation we should have ready?',
+        whisperTip: 'Suggestion: offer to lock the appointment and ask about paperwork requirements.',
         sentiment: 'positive',
         intent: 'confirmation',
         shouldEndCall: false,
@@ -257,13 +266,13 @@ export function generateLocalCallTurn(params: {
         sentiment: 'positive',
         intent: 'call_wrapup',
         shouldEndCall: true,
-        followUpActions: ['Call completed successfully', 'Calendar event dispatched'],
+        followUpActions: ['Confirm call wrap-up with Alex', 'Record calendar follow-up for Alex'],
       };
     }
 
     // Default outbound turn
     return {
-      replyText: 'Understood. I have logged that note directly into Alex’s briefing system. Would you like me to note anything else before we conclude?',
+      replyText: 'Understood. I will pass that note to Alex for review. Would you like me to note anything else before we conclude?',
       whisperTip: 'Ask if any additional items need to be documented.',
       sentiment: 'neutral',
       intent: 'information_intake',
@@ -275,17 +284,17 @@ export function generateLocalCallTurn(params: {
   if (input.includes('gate') || input.includes('code') || input.includes('buzz') || input.includes('delivery')) {
     return {
       replyText: 'Hello Dave. For building access, the resident gate code is #4092. You may leave the package right outside door 4B on the second level. Thank you for delivering!',
-      whisperTip: 'Provided gate code #4092 and delivery instructions.',
+      whisperTip: 'Suggestion: note the gate code and delivery instructions you gave.',
       sentiment: 'positive',
       intent: 'delivery_gate_code',
       shouldEndCall: false,
-      followUpActions: ['Gate code provided to courier Dave (#4092)', 'Package expected at front door 4B'],
+      followUpActions: ['Note gate code relayed to courier Dave (#4092)', 'Check for package at front door 4B'],
     };
   }
 
   if (input.includes('meeting') || input.includes('sync') || input.includes('demo') || input.includes('free')) {
     return {
-      replyText: 'Hello Ms. Rostova. Alex is currently in deep focus mode, but has your review marked as priority. Would 4:00 PM EST or tomorrow at 10:00 AM work best for a 15-minute sync? I can book it instantly.',
+      replyText: 'Hello Ms. Rostova. Alex is currently in deep focus mode, but has your review marked as priority. Would 4:00 PM EST or tomorrow at 10:00 AM work best for a 15-minute sync? I can hold that option for Alex to book.',
       whisperTip: 'Offer 4:00 PM today or 10:00 AM tomorrow.',
       sentiment: 'positive',
       intent: 'meeting_scheduling',
@@ -296,29 +305,29 @@ export function generateLocalCallTurn(params: {
 
   if (input.includes('solar') || input.includes('utility') || input.includes('debt') || input.includes('pre-selected')) {
     return {
-      replyText: 'This line is protected by HERMES JARVIS Autonomous Call Screening. This number does not accept unsolicited marketing inquiries. We are declining this offer and adding your caller ID to our blocked directory. Goodbye.',
-      whisperTip: 'Spam detected. Terminating line automatically.',
+      replyText: 'This line is protected by HERMES JARVIS Autonomous Call Screening. This number does not accept unsolicited marketing inquiries. We are declining this offer and will flag your caller ID for the blocked directory. Goodbye.',
+      whisperTip: 'Possible spam — transcript matched keywords. Decide whether to end the call.',
       sentiment: 'negative',
       intent: 'spam_rejection',
       shouldEndCall: true,
-      followUpActions: ['Blocked spam marketing number', 'Added to automated reject list'],
+      followUpActions: ['Flag spam marketing number for blocking', 'Add caller to automated reject review list'],
     };
   }
 
   if (input.includes('confirm') || input.includes('friday') || input.includes('doctor') || input.includes('clinic')) {
     return {
-      replyText: 'Thank you Sarah. I have confirmed Alex’s attendance for Friday at 3:00 PM. I will ensure Alex brings his photo ID and arrives 10 minutes early. Thank you for calling to confirm!',
-      whisperTip: 'Confirmed Friday 3 PM appointment with medical office.',
+      replyText: 'Thank you Sarah. I will note Alex’s attendance for Friday at 3:00 PM and remind him to bring his photo ID and arrive 10 minutes early. Thank you for calling to confirm!',
+      whisperTip: 'Suggestion: confirm the Friday 3 PM appointment and note it for follow-up.',
       sentiment: 'positive',
       intent: 'appointment_confirmed',
       shouldEndCall: false,
-      followUpActions: ['Medical appointment confirmed for Friday 3:00 PM', 'Reminder set 1 hour prior'],
+      followUpActions: ['Note medical appointment for Friday 3:00 PM', 'Set reminder 1 hour prior'],
     };
   }
 
   if (input.includes('bye') || input.includes('thanks') || input.includes('see you') || input.includes('goodbye')) {
     return {
-      replyText: 'Thank you for calling. I have relayed all details to Alex. Have a wonderful day!',
+      replyText: 'Thank you for calling. Your details are recorded for Alex’s review. Have a wonderful day!',
       whisperTip: 'End call politely.',
       sentiment: 'positive',
       intent: 'call_wrapup',
@@ -328,12 +337,38 @@ export function generateLocalCallTurn(params: {
 
   // Default Inbound Receptionist Turn
   return {
-    replyText: 'Thank you for that information. I have documented your message in full and prioritized it for Alex’s immediate review. May I take your callback number or any other detail?',
+    replyText: 'Thank you for that information. Your message is recorded for Alex’s review. May I take your callback number or any other detail?',
     whisperTip: 'Message logged. Inquire if caller has any other urgent note.',
     sentiment: 'neutral',
     intent: 'message_taking',
     shouldEndCall: false,
     followUpActions: ['Relay detailed caller notes to Alex'],
+  };
+}
+
+/**
+ * Local AI Call Dialogue Logic (works 100% offline without internet).
+ *
+ * Every reply and follow-up produced here is routed through the truth helpers
+ * before it leaves the function: the rule-based replies assert work no code in
+ * this path performed (calendar writes, Telegram notices, caller-ID blocking),
+ * so a disclosure is appended to the reply and each captured follow-up is
+ * marked as an outstanding task. The wire shape is unchanged.
+ */
+export function generateLocalCallTurn(params: {
+  direction: 'outbound' | 'inbound';
+  callerName: string;
+  recipientName: string;
+  objective?: string;
+  dialogueHistory: CallTurn[];
+  latestInput: string;
+  aiPersona?: string;
+}) {
+  const turn = buildLocalCallTurn(params);
+  return {
+    ...turn,
+    replyText: formatLocalTurnReply(turn.replyText),
+    followUpActions: turn.followUpActions?.map(formatLocalTurnFollowUp),
   };
 }
 
@@ -354,23 +389,25 @@ export function summarizeCallTranscript(transcript: CallTurn[], direction: 'outb
   }
 
   const fullText = transcript.map((t) => `${t.speaker}: ${t.text}`).join('\n').toLowerCase();
-  let sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' = 'positive';
+  // No keyword matched means the summariser observed nothing — it did not
+  // perform sentiment analysis, so the default must not assert a positive call.
+  let sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' = 'neutral';
   const followUps: string[] = [];
 
   if (fullText.includes('solar') || fullText.includes('spam') || fullText.includes('pre-selected') || fullText.includes('decline')) {
     sentiment = 'negative';
-    followUps.push('Added caller to spam blocklist');
+    followUps.push('Add caller to spam blocklist');
   } else if (fullText.includes('urgent') || fullText.includes('emergency') || fullText.includes('asap')) {
     sentiment = 'urgent';
-    followUps.push('High priority: follow up with caller immediately');
+    followUps.push('Follow up with caller urgently');
   }
 
   if (fullText.includes('reschedule') || fullText.includes('appointment') || fullText.includes('friday') || fullText.includes('calendar')) {
-    followUps.push('Calendar appointment updated');
+    followUps.push('Update calendar with the discussed appointment');
   }
 
   if (fullText.includes('gate') || fullText.includes('delivery') || fullText.includes('package')) {
-    followUps.push('Delivery gate access code provided (#4092)');
+    followUps.push('Complete delivery/gate-access follow-up with courier');
   }
 
   if (fullText.includes('sync') || fullText.includes('meeting') || fullText.includes('demo')) {
@@ -381,12 +418,18 @@ export function summarizeCallTranscript(transcript: CallTurn[], direction: 'outb
     followUps.push(`Review notes from call with ${counterpart}`);
   }
 
+  // A recorded follow-up is a task, not a receipt: nothing in this function
+  // dispatches a calendar event, blacklists a number, or sends an SMS.
   const summary =
     direction === 'outbound'
-      ? `JARVIS autonomously dialed ${counterpart}. Successfully conveyed objectives, gathered scheduling and operational updates, and synced action items.`
-      : `JARVIS AI Receptionist answered incoming call from ${counterpart}. Screened inquiry, confirmed schedule/delivery notes, and logged action items.`;
+      ? describeOutboundCall(counterpart)
+      : describeInboundCall(counterpart);
 
-  return { summary, sentiment, followUpActions: followUps };
+  return {
+    summary,
+    sentiment,
+    followUpActions: followUps.map(formatActionItem),
+  };
 }
 
 /**

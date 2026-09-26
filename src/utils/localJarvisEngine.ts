@@ -8,6 +8,16 @@ import {
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
 import { androidBridgeEngine } from './androidBridgeEngine';
+import {
+  youtubeOfflineStatusReply,
+  offlineTokenFreshness,
+  type YouTubeVoiceMode,
+} from './hardening/youtubeVoiceStatusTruth';
+import {
+  offlineOperatorVerdict,
+  offlineOperatorReply,
+  offlineOperatorCountsAsHostWork,
+} from './computerOperator/offlineOperatorTruth';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
@@ -86,16 +96,24 @@ export function processOfflineCommand(
   const lower = clean.toLowerCase();
 
   // Determine actual language response mode
+  // `hinglish` must be tested before the `hi` prefix check: `'hinglish'`
+  // starts with `'hi'`, so the old order made the Hinglish branch dead code
+  // and answered a Hinglish request in Devanagari.
   const detectedLang = language === 'auto'
     ? detectSpeechLanguage(clean, language)
-    : language.startsWith('hi')
-    ? 'hindi'
     : language === 'hinglish'
     ? 'hinglish'
+    : language.startsWith('hi')
+    ? 'hindi'
     : 'english';
 
   const isHindi = detectedLang === 'hindi' || detectedLang === 'hi-IN';
   const isHinglish = detectedLang === 'hinglish';
+  const operatorLang: 'hindi' | 'hinglish' | 'english' = isHindi
+    ? 'hindi'
+    : isHinglish
+    ? 'hinglish'
+    : 'english';
 
   let updatedMemory: MemoryStore = {
     ...currentMemory,
@@ -229,29 +247,43 @@ export function processOfflineCommand(
         }
 
         const answerResult = androidBridgeEngine.executeCallAnswer();
-        const reply = isHindi ? 'सर, कॉल उठा ली गई है।' : 'Sir, the call has been answered.';
+        // The phone has been told to answer, but has not confirmed it. Say so.
+        const reply = isHindi
+          ? 'सर, कॉल उठाने का निर्देश डिवाइस को भेज दिया गया है। डिवाइस की पुष्टि आते ही बताऊँगा।'
+          : 'Sir, the answer command has been dispatched to the device. I will confirm once the device reports back.';
         return {
           reply,
           spokenText: reply,
           intent: 'answer_call',
           actionExecuted: answerResult.success,
-          actionDetail: { type: 'answer_call', title: 'Call Answered via Android Bridge' },
+          actionDetail: {
+            type: 'answer_call',
+            title: 'Call Answer Dispatched (unconfirmed)',
+            payload: { status: answerResult.status, receipt: androidBridgeEngine.getLastReceipt() },
+          },
           updatedMemory,
           offline: true,
         };
       } else if (evaluation.targetType === 'MESSAGE') {
         const replyResult = androidBridgeEngine.executeMessageReply('Approved by user');
-        const reply = isHindi
-          ? 'सर, संदेश का उत्तर सफलतापूर्वक भेज दिया गया है।'
-          : isHinglish
-          ? 'Sir, sandesh ka reply successfully bhej diya gaya hai.'
-          : 'Sir, the message reply has been dispatched.';
+        const reply =
+          replyResult.actionType === 'OPEN_APP'
+            ? isHindi
+              ? 'सर, ऐप खोल दिया गया है। संदेश अभी भेजा नहीं गया — आपको ऐप में भेजना होगा।'
+              : 'Sir, the app has been opened. The message has NOT been sent yet — you need to send it in the app.'
+            : isHindi
+            ? 'सर, संदेश का उत्तर डिवाइस को भेज दिया गया है। डिलीवरी की पुष्टि बाकी है।'
+            : 'Sir, the reply has been handed to the device. Delivery is not yet confirmed.';
 
         return {
           reply,
           spokenText: reply,
           actionExecuted: replyResult.success,
-          actionDetail: { type: 'open_notepad', title: 'Message Reply Dispatched' },
+          actionDetail: {
+            type: 'open_notepad',
+            title: 'Message Reply Dispatched (delivery unconfirmed)',
+            payload: { status: replyResult.status, actionType: replyResult.actionType },
+          },
           updatedMemory,
           offline: true,
         };
@@ -318,13 +350,19 @@ export function processOfflineCommand(
         };
       }
       const answerResult = androidBridgeEngine.executeCallAnswer();
-      const reply = isHindi ? 'सर, कॉल उठा ली गई है।' : 'Sir, the call has been answered.';
+      const reply = isHindi
+        ? 'सर, कॉल उठाने का निर्देश डिवाइस को भेज दिया गया है। डिवाइस की पुष्टि आते ही बताऊँगा।'
+        : 'Sir, the answer command has been dispatched to the device. I will confirm once the device reports back.';
       return {
         reply,
         spokenText: reply,
         intent: 'answer_call',
         actionExecuted: answerResult.success,
-        actionDetail: { type: 'answer_call', title: 'Call Answered via Android Bridge' },
+        actionDetail: {
+          type: 'answer_call',
+          title: 'Call Answer Dispatched (unconfirmed)',
+          payload: { status: answerResult.status, receipt: androidBridgeEngine.getLastReceipt() },
+        },
         updatedMemory,
         offline: true,
       };
@@ -452,49 +490,42 @@ export function processOfflineCommand(
     updatedMemory.stats.actionsExecuted += 1;
     const yt = currentMemory.youTubeConnection;
     const isConnected = Boolean(yt && yt.connected && (yt.channelTitle || yt.channelId));
+    const mode: YouTubeVoiceMode = isHindi ? 'hi' : isHinglish ? 'hinglish' : 'en';
 
-    if (!isConnected) {
-      const reply = isHindi
-        ? 'YouTube अभी connected नहीं है। OAuth 2.0 authorization बाकी है। आप Settings या Integrations से इसे कभी भी 1-Click में सुरक्षित जोड़ सकते हैं।'
-        : isHinglish
-        ? 'YouTube abhi connect nahi hai, Sir. OAuth authorization pending hai. Aap Settings se 1-click connect kar sakte hain.'
-        : 'YouTube is currently not connected, Sir. OAuth 2.0 authorization is required before channel data or video uploads can be processed.';
+    // The offline engine performs no provider call. The reply may only state
+    // what the local record holds; it previously claimed "connected and
+    // verified" with a "ready" Level-4 pipeline, and named a hardcoded
+    // 'Connected Channel' when no channel had ever been read.
+    const reply = youtubeOfflineStatusReply(
+      {
+        connected: isConnected,
+        channelTitle: yt?.channelTitle,
+        scopes: yt?.scopes,
+        expiresAt: yt?.expiresAt,
+      },
+      mode
+    );
 
-      return {
-        reply,
-        spokenText: isHindi
-          ? 'YouTube अभी connected नहीं है। OAuth authorization बाकी है।'
-          : isHinglish
-          ? 'YouTube abhi connect nahi hai, Sir. OAuth authorization pending hai.'
-          : 'YouTube is currently not connected, Sir. OAuth authorization is required.',
-        intent: 'youtube_status_inquiry',
-        actionExecuted: true,
-        actionDetail: { type: 'youtube_status_inquiry', title: 'YouTube Status: Not Connected' },
-        updatedMemory,
-        offline: true,
-      };
-    } else {
-      const channelTitle = yt?.channelTitle || 'Connected Channel';
-      const reply = isHindi
-        ? `YouTube चैनल "${channelTitle}" सफलतापूर्वक जुड़ा हुआ है। API status verified है और वीडियो अपलोड पाइपलाइन Level-4 सुरक्षा के साथ तैयार है।`
-        : isHinglish
-        ? `Sir, YouTube channel "${channelTitle}" connected hai aur API verified hai. Video pipeline Level-4 safety ke sath ready hai.`
-        : `YouTube channel "${channelTitle}" is connected and verified. The upload pipeline is standing by with Level-4 authorization enforcement.`;
-
-      return {
-        reply,
-        spokenText: isHindi
-          ? `YouTube चैनल ${channelTitle} connected है और वीडियो पाइपलाइन तैयार है।`
-          : isHinglish
-          ? `YouTube channel ${channelTitle} connected hai aur ready hai.`
-          : `YouTube channel ${channelTitle} is connected and verified.`,
-        intent: 'youtube_status_inquiry',
-        actionExecuted: true,
-        actionDetail: { type: 'youtube_status_inquiry', title: `YouTube Status: ${channelTitle}` },
-        updatedMemory,
-        offline: true,
-      };
-    }
+    return {
+      reply,
+      spokenText: reply,
+      intent: 'youtube_status_inquiry',
+      actionExecuted: true,
+      actionDetail: {
+        type: 'youtube_status_inquiry',
+        title: isConnected
+          ? `YouTube Status: ${yt?.channelTitle?.trim() || 'channel not read'}`
+          : 'YouTube Status: Not Connected',
+        payload: {
+          connected: isConnected,
+          channelVerified: false,
+          tokenFreshness: offlineTokenFreshness(yt?.expiresAt, new Date()),
+          channel: yt?.channelTitle ?? null,
+        },
+      },
+      updatedMemory,
+      offline: true,
+    };
   }
 
   // ==============================================================================
@@ -512,22 +543,18 @@ export function processOfflineCommand(
     lower.includes('cancel operator') ||
     lower.includes('stop operator')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'कंप्यूटर ऑपरेटर कार्य तुरंत रोक दिया गया है। स्क्रीन लूप सुरक्षित रूप से बंद है।'
-      : isHinglish
-      ? 'Computer operator task turant rok diya gaya hai, Sir.'
-      : 'Computer operator task has been immediately cancelled. The Screen-Research loop is safely halted.';
+    const verdict = offlineOperatorVerdict('cancel_computer_task');
+    const reply = offlineOperatorReply('cancel_computer_task', operatorLang);
 
     return {
       reply,
       spokenText: reply,
       intent: 'cancel_computer_task',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('cancel_computer_task'),
       actionDetail: {
         type: 'cancel_computer_task',
-        title: 'Cancel Computer Operator Task',
-        payload: { objective: clean },
+        title: verdict.title,
+        payload: { objective: clean, offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -539,25 +566,19 @@ export function processOfflineCommand(
     (lower.includes('vs code') || lower.includes('vscode') || lower.includes('project')) &&
     (lower.includes('error') || lower.includes('fix') || lower.includes('समस्या') || lower.includes('ठीक करो') || lower.includes('ठीक कर'))
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'स्क्रीन-रिसर्च लूप प्रारंभ: मैं Visual Studio Code खोल रहा हूँ, स्क्रीन का विश्लेषण करके समस्या की पहचान करूँगा और कोड को ठीक करूँगा।'
-      : isHinglish
-      ? 'Screen-Research loop initiate kar raha hoon: VS Code open karke error identify karunga aur surgical fix apply karunga, Sir.'
-      : 'Screen-Research loop initiated: Opening Visual Studio Code, inspecting screen for project errors, and applying surgical fix with test verification.';
+    const verdict = offlineOperatorVerdict('fix_project_error');
+    const reply = offlineOperatorReply('fix_project_error', operatorLang);
 
     return {
       reply,
-      spokenText: isHindi
-        ? 'VS Code खोलकर स्क्रीन का विश्लेषण और समस्या का समाधान शुरू कर रहा हूँ।'
-        : 'Initiating Screen-Research loop in VS Code to locate and resolve project errors.',
+      spokenText: reply,
       intent: 'fix_project_error',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('fix_project_error'),
       actionDetail: {
         type: 'fix_project_error',
-        title: 'Screen-Research: Open VS Code & Fix Error',
+        title: verdict.title,
         target: 'VS Code',
-        payload: { objective: clean, app: 'VS Code', mode: 'hybrid' },
+        payload: { objective: clean, app: 'VS Code', mode: 'hybrid', offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -574,22 +595,18 @@ export function processOfflineCommand(
     lower.includes('what is on the screen') ||
     (lower.includes('screen') && lower.includes('error'))
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'स्क्रीन का विश्लेषण प्रारंभ कर दिया गया है। सक्रिय विंडो, खुले हुए डायलॉग और त्रुटियों का निरीक्षण किया जा रहा है।'
-      : isHinglish
-      ? 'Screen inspection start ho gaya hai. Active window, dialogs aur errors ka analysis kar raha hoon, Sir.'
-      : 'Screen inspection underway. Analyzing active window, open dialogs, and visible errors.';
+    const verdict = offlineOperatorVerdict('inspect_screen');
+    const reply = offlineOperatorReply('inspect_screen', operatorLang);
 
     return {
       reply,
       spokenText: reply,
       intent: 'inspect_screen',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('inspect_screen'),
       actionDetail: {
         type: 'inspect_screen',
-        title: 'Screen Researcher: Inspect Desktop & Errors',
-        payload: { objective: clean },
+        title: verdict.title,
+        payload: { objective: clean, offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -602,23 +619,19 @@ export function processOfflineCommand(
     lower.includes('vscode') ||
     (lower.includes('visual studio') && lower.includes('code'))
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'Visual Studio Code सक्रिय किया जा रहा है। स्क्रीन स्थिति को VS Code वर्कस्पेस पर लाया जा रहा है।'
-      : isHinglish
-      ? 'Visual Studio Code open kar raha hoon, Sir.'
-      : 'Visual Studio Code window brought to active foreground.';
+    const verdict = offlineOperatorVerdict('operate_vscode');
+    const reply = offlineOperatorReply('operate_vscode', operatorLang);
 
     return {
       reply,
-      spokenText: isHindi ? 'Visual Studio Code खोला जा रहा है।' : 'Switching to Visual Studio Code.',
+      spokenText: reply,
       intent: 'operate_vscode',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('operate_vscode'),
       actionDetail: {
         type: 'operate_vscode',
-        title: 'Computer Operator: Launch VS Code',
+        title: verdict.title,
         target: 'VS Code',
-        payload: { app: 'VS Code' },
+        payload: { app: 'VS Code', offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -631,21 +644,19 @@ export function processOfflineCommand(
     lower.includes('कंप्यूटर ऑपरेटर') ||
     lower.includes('स्क्रीन ऑपरेटर')
   ) {
+    const verdict = offlineOperatorVerdict('open_computer_operator');
+    const reply = offlineOperatorReply('open_computer_operator', operatorLang);
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'कंप्यूटर ऑपरेटर और स्क्रीन रिसर्चर कंसोल खोल दिया गया है। आप स्क्रीन विश्लेषण और ऑटोमेशन देख सकते हैं।'
-      : isHinglish
-      ? 'Computer Operator HUD open kar diya gaya hai, Sir.'
-      : 'Computer Operator and Screen Researcher HUD activated.';
 
     return {
       reply,
       spokenText: reply,
       intent: 'open_computer_operator',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('open_computer_operator'),
       actionDetail: {
         type: 'open_computer_operator',
-        title: 'Open Computer Operator HUD',
+        title: verdict.title,
+        payload: { offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -659,22 +670,19 @@ export function processOfflineCommand(
     lower.includes('open browser') ||
     lower.includes('chrome खोलो')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'Google Chrome ब्राउज़र विंडो खोली जा रही है।'
-      : isHinglish
-      ? 'Browser window open kar raha hoon, Sir.'
-      : 'Opening web browser window.';
+    const verdict = offlineOperatorVerdict('operate_browser');
+    const reply = offlineOperatorReply('operate_browser', operatorLang);
 
     return {
       reply,
-      spokenText: isHindi ? 'ब्राउज़र खोला जा रहा है।' : 'Opening browser.',
+      spokenText: reply,
       intent: 'operate_browser',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('operate_browser'),
       actionDetail: {
         type: 'operate_browser',
-        title: 'Computer Operator: Open Browser',
+        title: verdict.title,
         target: 'Chrome',
+        payload: { offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -689,22 +697,19 @@ export function processOfflineCommand(
     lower.includes('open powershell') ||
     lower.includes('powershell खोलो')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'Windows Terminal / PowerShell कंसोल सक्रिय किया जा रहा है।'
-      : isHinglish
-      ? 'Terminal console open kar raha hoon, Sir.'
-      : 'Windows Terminal / PowerShell console activated.';
+    const verdict = offlineOperatorVerdict('operate_terminal');
+    const reply = offlineOperatorReply('operate_terminal', operatorLang);
 
     return {
       reply,
-      spokenText: isHindi ? 'टर्मिनल खोला जा रहा है।' : 'Opening terminal.',
+      spokenText: reply,
       intent: 'operate_terminal',
-      actionExecuted: true,
+      actionExecuted: offlineOperatorCountsAsHostWork('operate_terminal'),
       actionDetail: {
         type: 'operate_terminal',
-        title: 'Computer Operator: Open Terminal',
+        title: verdict.title,
         target: 'Terminal',
+        payload: { offlineHostWork: false },
       },
       updatedMemory,
       offline: true,
@@ -809,10 +814,31 @@ export function processOfflineCommand(
   ) {
     updatedMemory.stats.actionsExecuted += 1;
     const weatherData = mobileStatus?.weather;
-    const condition = weatherData?.condition || 'Clear Sky';
-    const tempC = weatherData?.temperatureC ?? 27;
-    const humidity = weatherData?.humidity ?? 48;
-    const location = weatherData?.location || 'New Delhi';
+
+    // No weather source means no reading. Previously each field fell back to a
+    // constant (27°C, 48%, 'New Delhi'), so the reply presented invented
+    // readings as current conditions. A fixture sample counts as no source.
+    if (!weatherData || weatherData.isSample === true || weatherData.available === false) {
+      const unavailable = isHindi
+        ? 'अभी कोई मौसम स्रोत कनेक्टेड नहीं है, इसलिए मौसम या तापमान का डेटा उपलब्ध नहीं है।'
+        : isHinglish
+        ? 'Abhi koi weather source connected nahi hai, isliye weather ya temperature data available nahi hai.'
+        : 'No weather source is connected, so no weather or temperature data is available.';
+      return {
+        reply: unavailable,
+        spokenText: unavailable,
+        intent: 'weather_inquiry',
+        actionExecuted: false,
+        actionDetail: { type: 'weather_inquiry', title: 'Weather Unavailable' },
+        updatedMemory,
+        offline: true,
+      };
+    }
+
+    const condition = weatherData.condition || 'Unknown';
+    const tempC = weatherData.temperatureC;
+    const humidity = weatherData.humidity;
+    const location = weatherData.location || 'unknown location';
 
     const reply = isHindi
       ? `आज का मौसम ${condition === 'Clear Sky' ? 'साफ (Clear Sky)' : condition} है। वर्तमान तापमान लगभग ${tempC}°C (${location}) और आर्द्रता ${humidity}% है।`
@@ -852,28 +878,39 @@ export function processOfflineCommand(
     const timeStrHi = `${hours} बजकर ${mins < 10 ? '0' + mins : mins} मिनट`;
     const userName = updatedMemory.name || '';
 
-    // Check actual permissions in mobileStatus or memory
+    // Check actual permissions in mobileStatus or memory. With no connected
+    // phone there is no telemetry, so each permission starts false; the caller
+    // has supplied `mobileStatus` when a device really is attached. Previously
+    // these all defaulted to true and the values below each fell back to a
+    // plausible-looking constant (78%, 27°C, 5 notifications, 3 events,
+    // 2 emails), so a briefing with no device attached reported invented
+    // readings as if they were measured.
     const perms = mobileStatus?.permissions || {
-      BATTERY_STATUS: true,
-      WEATHER_LOCATION: true,
-      NOTIFICATIONS: true,
-      CALENDAR_EVENTS: true,
-      EMAIL_INBOX: true,
-      DEVICE_HEALTH: true,
+      BATTERY_STATUS: false,
+      WEATHER_LOCATION: false,
+      NOTIFICATIONS: false,
+      CALENDAR_EVENTS: false,
+      EMAIL_INBOX: false,
+      DEVICE_HEALTH: false,
     };
 
-    const batteryAvailable = perms.BATTERY_STATUS && mobileStatus?.battery?.available !== false;
-    const weatherAvailable = perms.WEATHER_LOCATION && mobileStatus?.weather?.available !== false;
-    const notifsAvailable = perms.NOTIFICATIONS && mobileStatus?.notifications?.available !== false;
-    const calAvailable = perms.CALENDAR_EVENTS && mobileStatus?.calendar?.available !== false;
-    const mailAvailable = perms.EMAIL_INBOX && mobileStatus?.email?.available !== false;
+    // `available` alone is not enough: the mobile status engine returns
+    // placeholder fixtures with available === true for notifications, calendar,
+    // email and device health whenever the permission flag is set. Speaking
+    // those numbers would present invented readings as measured ones, so an
+    // isSample section is never treated as a real data source here.
+    const batteryAvailable = perms.BATTERY_STATUS && mobileStatus?.battery?.available !== false && mobileStatus?.battery?.isSample !== true;
+    const weatherAvailable = perms.WEATHER_LOCATION && mobileStatus?.weather?.available !== false && mobileStatus?.weather?.isSample !== true;
+    const notifsAvailable = perms.NOTIFICATIONS && mobileStatus?.notifications?.available !== false && mobileStatus?.notifications?.isSample !== true;
+    const calAvailable = perms.CALENDAR_EVENTS && mobileStatus?.calendar?.available !== false && mobileStatus?.calendar?.isSample !== true;
+    const mailAvailable = perms.EMAIL_INBOX && mobileStatus?.email?.available !== false && mobileStatus?.email?.isSample !== true;
 
-    const batteryLvl = mobileStatus?.battery?.level ?? 78;
-    const tempC = mobileStatus?.weather?.temperatureC ?? 27;
-    const condition = isHindi ? (mobileStatus?.weather?.conditionHi || 'साफ') : (mobileStatus?.weather?.condition || 'Clear');
-    const notifCount = mobileStatus?.notifications?.totalCount ?? 5;
-    const calCount = mobileStatus?.calendar?.todayEventsCount ?? 3;
-    const mailCount = mobileStatus?.email?.unreadCount ?? 2;
+    const batteryLvl = mobileStatus?.battery?.level ?? null;
+    const tempC = mobileStatus?.weather?.temperatureC ?? null;
+    const condition = isHindi ? (mobileStatus?.weather?.conditionHi || null) : (mobileStatus?.weather?.condition || null);
+    const notifCount = mobileStatus?.notifications?.totalCount ?? null;
+    const calCount = mobileStatus?.calendar?.todayEventsCount ?? null;
+    const mailCount = mobileStatus?.email?.unreadCount ?? null;
 
     let hiLines: string[] = [];
     let enLines: string[] = [];
@@ -892,6 +929,10 @@ export function processOfflineCommand(
       hiLines.push(`बैटरी ${batteryLvl}% है और स्थिति सामान्य है।`);
       enLines.push(`Device battery is at ${batteryLvl}%.`);
       hinglishLines.push(`Battery ${batteryLvl}% charge hai.`);
+    } else if (perms.BATTERY_STATUS) {
+      hiLines.push('बैटरी की रीडिंग इस रनटाइम पर उपलब्ध नहीं है।');
+      enLines.push('No battery reading is available in this runtime.');
+      hinglishLines.push('Battery reading is runtime par available nahi hai.');
     } else {
       hiLines.push('बैटरी डेटा अनुमति बंद है।');
       enLines.push('Battery telemetry access is not permitted.');
@@ -903,6 +944,10 @@ export function processOfflineCommand(
       hiLines.push(`मौसम ${condition} है, तापमान ${tempC}°C है।`);
       enLines.push(`Weather is ${condition} at ${tempC}°C.`);
       hinglishLines.push(`Weather ${condition} hai, temperature ${tempC}°C.`);
+    } else if (perms.WEATHER_LOCATION) {
+      hiLines.push('मौसम की जानकारी उपलब्ध नहीं है — कोई मौसम स्रोत कनेक्टेड नहीं है।');
+      enLines.push('Weather is not available — no weather source is connected.');
+      hinglishLines.push('Weather data available nahi hai — koi weather source connected nahi hai.');
     } else {
       hiLines.push('मौसम और लोकेशन अनुमति बंद है।');
       enLines.push('Weather location access is disabled.');
@@ -914,6 +959,10 @@ export function processOfflineCommand(
       hiLines.push(`${notifCount} महत्वपूर्ण नोटिफिकेशन्स हैं।`);
       enLines.push(`You have ${notifCount} priority notifications.`);
       hinglishLines.push(`${notifCount} important notifications hain.`);
+    } else if (perms.NOTIFICATIONS) {
+      hiLines.push('नोटिफिकेशन्स इस रनटाइम पर पढ़े नहीं जा सके — कोई डिवाइस स्रोत जुड़ा नहीं है।');
+      enLines.push('Notifications could not be read — no device notification source is connected.');
+      hinglishLines.push('Notifications read nahi ho sake — koi device source connected nahi hai.');
     } else {
       hiLines.push('नोटिफिकेशन अनुमति अभी बंद है।');
       enLines.push('Notification access permission is not granted.');
@@ -925,23 +974,31 @@ export function processOfflineCommand(
       hiLines.push(`आज ${calCount} इवेंट्स निर्धारित हैं।`);
       enLines.push(`${calCount} events scheduled today.`);
       hinglishLines.push(`Aaj ${calCount} meetings scheduled hain.`);
+    } else if (perms.CALENDAR_EVENTS) {
+      enLines.push('No calendar reading is available — no device calendar source is connected.');
     }
     if (mailAvailable) {
       hiLines.push(`इनबॉक्स में ${mailCount} जरूरी ईमेल्स हैं।`);
       enLines.push(`${mailCount} unread emails in inbox.`);
       hinglishLines.push(`Inbox me ${mailCount} unread emails hain.`);
+    } else if (perms.EMAIL_INBOX) {
+      enLines.push('No inbox reading is available — no device email source is connected.');
     }
 
-    hiLines.push('सभी क्लाउड और स्थानीय सिस्टम सामान्य रूप से सक्रिय हैं।');
-    enLines.push('All cloud nodes and local services are nominal.');
-    hinglishLines.push('All systems online aur ready hain.');
+    // No device attached means no telemetry. Say so rather than asserting
+    // health nobody measured.
+    if (!mobileStatus) {
+      hiLines.push('कोई फ़ोन जुड़ा नहीं है, इसलिए बैटरी, मौसम और टास्क डेटा उपलब्ध नहीं है।');
+      enLines.push('No phone is connected, so battery, weather and task telemetry are not available.');
+      hinglishLines.push('Koi phone connected nahi hai, isliye battery, weather aur task data available nahi hai.');
+    }
 
     const reply = isHindi ? hiLines.join('\n') : isHinglish ? hinglishLines.join('\n') : enLines.join(' ');
     const spokenText = isHindi
-      ? `${greetingHi} ${batteryAvailable ? `बैटरी ${batteryLvl} प्रतिशत है।` : ''} ${weatherAvailable ? `मौसम ${condition} है।` : ''} ${notifsAvailable ? `${notifCount} नए नोटिफिकेशन्स हैं।` : ''} सभी सिस्टम सामान्य हैं।`
+      ? `${greetingHi} ${batteryAvailable ? `बैटरी ${batteryLvl} प्रतिशत है।` : ''} ${weatherAvailable ? `मौसम ${condition} है।` : ''} ${notifsAvailable ? `${notifCount} नए नोटिफिकेशन्स हैं।` : ''}`
       : isHinglish
-      ? `${greetingHinglish} ${batteryAvailable ? `Battery ${batteryLvl}% hai.` : ''} ${weatherAvailable ? `Weather ${condition} hai.` : ''} ${notifsAvailable ? `${notifCount} new notifications hain.` : ''} All systems ready.`
-      : `${greetingEn} ${batteryAvailable ? `Battery is at ${batteryLvl}%.` : ''} ${weatherAvailable ? `Weather is ${condition} at ${tempC} degrees.` : ''} ${notifsAvailable ? `You have ${notifCount} priority notifications.` : ''} All systems operational.`;
+      ? `${greetingHinglish} ${batteryAvailable ? `Battery ${batteryLvl}% hai.` : ''} ${weatherAvailable ? `Weather ${condition} hai.` : ''} ${notifsAvailable ? `${notifCount} new notifications hain.` : ''}`
+      : `${greetingEn} ${batteryAvailable ? `Battery is at ${batteryLvl}%.` : ''} ${weatherAvailable ? `Weather is ${condition} at ${tempC} degrees.` : ''} ${notifsAvailable ? `You have ${notifCount} priority notifications.` : ''}`;
 
     return {
       reply,
@@ -1042,13 +1099,17 @@ export function processOfflineCommand(
 
   if (lower.includes('calculator') || lower.includes('कैलकुलेटर') || lower.includes('open math')) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'कैलकुलेटर खोला जा रहा है।' : isHinglish ? 'Calculator open ho raha hai.' : 'Opening Calculator tool.';
+    const reply = isHindi
+      ? 'इन-ऐप कैलकुलेटर दृश्य खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक डेस्कटॉप कैलकुलेटर ऐप नहीं खुलता।'
+      : isHinglish
+      ? 'In-app calculator view khol raha hoon, Sir. Offline mode mein asli desktop Calculator app nahi khulta.'
+      : 'Opening the in-app calculator view. Offline mode does not open a real desktop Calculator application.';
     return {
       reply,
       spokenText: reply,
       intent: 'open_calculator',
       actionExecuted: true,
-      actionDetail: { type: 'open_calculator', title: 'Open Calculator Tool' },
+      actionDetail: { type: 'open_calculator', title: 'Open Calculator View (in-app)' },
       updatedMemory,
       offline: true,
     };
@@ -1057,13 +1118,17 @@ export function processOfflineCommand(
   // 7. Notepad & Workspace
   if (lower.includes('notepad') || lower.includes('create file') || lower.includes('नोटपैड') || lower.includes('फाइल बनाओ') || lower.includes('write note')) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'नोटपैड खोला जा रहा है।' : isHinglish ? 'Notepad open ho raha hai.' : 'Opening Notepad.';
+    const reply = isHindi
+      ? 'इन-ऐप नोट्स वर्कस्पेस खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक नोटपैड ऐप नहीं खुलता।'
+      : isHinglish
+      ? 'In-app notes workspace khol raha hoon, Sir. Offline mode mein asli Notepad app nahi khulta.'
+      : 'Opening the in-app notes workspace. Offline mode does not open a real Notepad application.';
     return {
       reply,
       spokenText: reply,
       intent: 'open_notepad',
       actionExecuted: true,
-      actionDetail: { type: 'open_notepad', title: 'Open Notepad Workspace' },
+      actionDetail: { type: 'open_notepad', title: 'Open Notes Workspace (in-app)' },
       updatedMemory,
       offline: true,
     };
@@ -1345,13 +1410,13 @@ export function processOfflineCommand(
     lower.includes('फोन डायलर')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'टेलीफोनी हब खोला जा रहा है।' : isHinglish ? 'Telephony Hub open ho raha hai.' : 'Opening Voice AI Telephony Hub.';
+    const reply = isHindi ? 'टेलीफोनी हब खोला जा रहा है।' : isHinglish ? 'Telephony Hub open ho raha hai.' : 'Opening the in-app Voice AI Telephony Hub. No external phone dialer is opened.';
     return {
       reply,
       spokenText: reply,
       intent: 'telephony_hub',
       actionExecuted: true,
-      actionDetail: { type: 'telephony_hub', title: 'Open Telephony Hub' },
+      actionDetail: { type: 'telephony_hub', title: 'In-App Telephony Hub (external dialer not opened)' },
       updatedMemory,
       offline: true,
     };
@@ -1365,13 +1430,13 @@ export function processOfflineCommand(
     lower.includes('कॉल हिस्ट्री')
   ) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'कॉल हिस्ट्री और लॉग्स लोड किए जा रहे हैं।' : 'Loading phone call logs and transcripts.';
+    const reply = isHindi ? 'इस ऐप में दर्ज कॉल हिस्ट्री दिखाई जा रही है।' : 'Showing the call logs and transcripts recorded in this app.';
     return {
       reply,
       spokenText: reply,
       intent: 'call_history',
       actionExecuted: true,
-      actionDetail: { type: 'call_history', title: 'Call History' },
+      actionDetail: { type: 'call_history', title: 'In-App Call Logs (no external phone records read)' },
       updatedMemory,
       offline: true,
     };
@@ -1380,13 +1445,17 @@ export function processOfflineCommand(
   // 8. Paint & Canvas
   if (lower.includes('paint') || lower.includes('drawing') || lower.includes('पेंट')) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'पेंट कैनवास खोला जा रहा है।' : isHinglish ? 'Paint canvas open ho raha hai.' : 'Opening Paint canvas.';
+    const reply = isHindi
+      ? 'इन-ऐप पेंट कैनवास खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक पेंट ऐप नहीं खुलता।'
+      : isHinglish
+      ? 'In-app paint canvas khol raha hoon, Sir. Offline mode mein asli Paint app nahi khulta.'
+      : 'Opening the in-app paint canvas. Offline mode does not open a real desktop Paint application.';
     return {
       reply,
       spokenText: reply,
       intent: 'open_paint',
       actionExecuted: true,
-      actionDetail: { type: 'open_paint', title: 'Open Paint Canvas' },
+      actionDetail: { type: 'open_paint', title: 'Open Paint Canvas (in-app)' },
       updatedMemory,
       offline: true,
     };
@@ -1394,14 +1463,21 @@ export function processOfflineCommand(
 
   // 8.1 Screenshot Tool
   if (lower.includes('take screenshot') || lower.includes('screenshot') || lower.includes('स्क्रीनशॉट') || lower.includes('screen capture')) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'स्क्रीनशॉट लिया जा रहा है।' : isHinglish ? 'Screenshot capture ho raha hai.' : 'Capturing screen display.';
+    // This offline path captures nothing: it has no capture backend, and the
+    // browser/desktop route is chosen by the caller. It must not speak as though
+    // a screen capture happened. The real capture lives in
+    // `captureScreenshot()` and reports NOT_AVAILABLE on a headless host.
+    const reply = isHindi
+      ? 'स्क्रीनशॉट अनुरोध दर्ज किया गया, परंतु ऑफ़लाइन मोड में कोई कैप्चर बैकएंड नहीं है — कोई छवि नहीं बनी।'
+      : isHinglish
+      ? 'Screenshot request note kar liya, lekin offline mode mein capture backend nahi hai — koi image nahi bani.'
+      : 'Screenshot request registered, but this offline path has no capture backend, so no image was captured.';
     return {
       reply,
       spokenText: reply,
       intent: 'take_screenshot',
-      actionExecuted: true,
-      actionDetail: { type: 'take_screenshot', title: 'Screen Capture Triggered' },
+      actionExecuted: false,
+      actionDetail: { type: 'take_screenshot', title: 'Screen Capture Not Available (offline path)' },
       updatedMemory,
       offline: true,
     };
@@ -1522,29 +1598,38 @@ export function processOfflineCommand(
   }
 
   // 11.3 Media / Audio Volume Controls
+  // No mixer backend is reached from here, so these branches must not speak as
+  // though the system output level moved. The honest in-app slider verdict comes
+  // from `volumeVerdict()` on the `/api/chat` path.
   if (lower.includes('volume up') || lower.includes('आवाज बढ़ाओ') || lower.includes('increase volume') || lower.includes('louder')) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'ऑडियो वॉल्यूम बढ़ाया जा रहा है।' : 'Increasing master audio volume.';
+    const reply = isHindi
+      ? 'इन-ऐप वॉइस आउटपुट बढ़ाया जा सकता है; सिस्टम वॉल्यूम मिक्सर ऑफ़लाइन मोड से नहीं बदला जाता।'
+      : isHinglish
+      ? 'In-app voice output badha sakta hoon; system volume mixer offline mode se nahi badalta.'
+      : 'The in-app voice output can be raised, but the system volume mixer is not changed from offline mode.';
     return {
       reply,
       spokenText: reply,
       intent: 'volume_up',
-      actionExecuted: true,
-      actionDetail: { type: 'volume_up', title: 'Volume Adjusted (+)' },
+      actionExecuted: false,
+      actionDetail: { type: 'volume_up', title: 'In-App Volume Only (system mixer not changed)' },
       updatedMemory,
       offline: true,
     };
   }
 
   if (lower.includes('volume down') || lower.includes('आवाज कम करो') || lower.includes('decrease volume') || lower.includes('quieter')) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'ऑडियो वॉल्यूम कम किया जा रहा है।' : 'Decreasing audio volume.';
+    const reply = isHindi
+      ? 'इन-ऐप वॉइस आउटपुट कम किया जा सकता है; सिस्टम वॉल्यूम मिक्सर ऑफ़लाइन मोड से नहीं बदला जाता।'
+      : isHinglish
+      ? 'In-app voice output kam kar sakta hoon; system volume mixer offline mode se nahi badalta.'
+      : 'The in-app voice output can be lowered, but the system volume mixer is not changed from offline mode.';
     return {
       reply,
       spokenText: reply,
       intent: 'volume_down',
-      actionExecuted: true,
-      actionDetail: { type: 'volume_down', title: 'Volume Adjusted (-)' },
+      actionExecuted: false,
+      actionDetail: { type: 'volume_down', title: 'In-App Volume Only (system mixer not changed)' },
       updatedMemory,
       offline: true,
     };
@@ -1585,18 +1670,20 @@ export function processOfflineCommand(
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    // No subsystem probe runs here, so this branch reports the clock and says
+    // so plainly instead of asserting that systems are healthy.
     const reply = isHindi
-      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। सिस्टम डायग्नोस्टिक्स सामान्य हैं।`
+      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। मैंने डायग्नोस्टिक्स नहीं चलाए हैं।`
       : isHinglish
-      ? `Abhi time ${timeStr} hai, date ${dateStr}. Systems nominal.`
-      : `The current system time is ${timeStr} on ${dateStr}. Systems are operational.`;
+      ? `Abhi time ${timeStr} hai, date ${dateStr}. Maine diagnostics nahi chalaye.`
+      : `The current system time is ${timeStr} on ${dateStr}. I have not run any system diagnostics.`;
 
     return {
       reply,
       spokenText: reply,
       intent: 'system_diagnostic',
       actionExecuted: true,
-      actionDetail: { type: 'system_diagnostic', title: 'Diagnostics Nominal' },
+      actionDetail: { type: 'system_diagnostic', title: 'Clock reported (no diagnostics run)' },
       updatedMemory,
       offline: true,
     };
@@ -1617,11 +1704,12 @@ export function processOfflineCommand(
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    // Answering the clock is not a health check; do not claim system health.
     const reply = isHindi
-      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है। सभी सिस्टम सामान्य हैं।`
+      ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है।`
       : isHinglish
-      ? `Abhi time ${timeStr} hai, date ${dateStr}. Systems nominal.`
-      : `The current system time is ${timeStr} on ${dateStr}. Systems are operational.`;
+      ? `Abhi time ${timeStr} hai, date ${dateStr}.`
+      : `The current system time is ${timeStr} on ${dateStr}.`;
 
     return {
       reply,
@@ -1678,10 +1766,10 @@ export function processOfflineCommand(
     lower.includes('आप कैसे हैं')
   ) {
     const reply = isHindi
-      ? `सभी सिस्टम सुचारू रूप से कार्यरत हैं।`
+      ? `मैं अपनी स्वयं की स्वास्थ्य जाँच नहीं कर सकता, इसलिए "सब ठीक है" कहना असत्य होगा। आपने जो पूछा उसके लिए मैं तैयार हूँ।`
       : isHinglish
-      ? `All systems smoothly running hain aur sucharu roop se active hain.`
-      : `All systems nominal. Ready to assist.`;
+      ? `Main apni health khud check nahi kar sakta, isliye "sab theek hai" kehna galat hoga. Aapke agle command ke liye ready hoon.`
+      : `I cannot health-check myself, so I will not claim all systems are nominal. Ready for your next command.`;
 
     return {
       reply,
