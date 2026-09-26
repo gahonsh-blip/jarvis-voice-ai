@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 03:10 IST (2026-09-26 21:40 UTC) — work slot 6: /api/chat tool-intent truth
+
+### Fixed
+- **The `/api/chat` tool intents credited failed tool calls as executed actions.** Every tool intent in the switch set `actionExecuted = true` regardless of what the tool returned: `list_files_tool` announced the workspace index even when `realFsList` failed; `web_research_tool` spoke *"Web analysis complete"* even when `realWebFetch` failed; `github_repos_tool` replied *"Authenticated as GitHub user @…"* with no token or a failed repo listing; `summarize_youtube_video`'s failure path still counted; an unparseable `math_computation` still counted; and `youtube_upload_request` claimed *"Video is staged"* with `actionExecuted: true` for an upload it never performed (and cannot without Level-4 authorization). Since the route increments `memoryState.stats.actionsExecuted` whenever `actionExecuted` is true, every one of these inflated the user-visible "Autonomous Actions Executed" counter with work that never happened.
+  - Added `src/utils/toolDispatchTruth.ts`: `toolActionExecuted` credits an action only when the tool reported `success: true`; `toolActionResultReply` returns the confirmation line only on success and otherwise names the failed tool and states, in English or Hindi, that no action was executed; `countedItems` reports a real count or `0`, never a fabricated list. Wired into all seven intents; `youtube_upload_request` now honestly reports that Level-4 authorization is required and no video was uploaded.
+
+### Tests
+- `src/tests/toolDispatchTruth.test.ts` (new, 15 tests): helper semantics plus source guards on the seven intents (source guards are used because `server.ts` binds a port on import, matching `launchDispatchTruth.test.ts`).
+- Negative-validated: reverting the `web_research_tool` guard to `actionExecuted = true;` fails exactly that assertion (`1 failed | 14 passed`); restored → green.
+- Full suite observed: **112 files / 1486 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 928107 bytes).
+
 ## [Unreleased] - 2026-09-27 02:56 IST (2026-09-26 21:26 UTC) — work slot 5: offline emergency-stop truth
 
 ### Fixed

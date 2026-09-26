@@ -6468,3 +6468,78 @@ Next Slot:
 - ऑफ़लाइन इंजन अब इमरजेंसी स्टॉप/रिज़्यूम का नकली सफलता नहीं दिखाता — दोनों
   ब्रांच `actionExecuted: false` रिपोर्ट करती हैं; पूरी सूट 1471 टेस्ट पास, लिंट
   और बिल्ड क्लीन।
+
+
+---
+
+# Slot 6 — 2026-09-27 03:05 IST (WORK) — /api/chat tool-intent truth
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:10
+Window date: 2026-09-27   Window slots completed so far: 6
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL advanced, one real class closed.
+  The /api/chat tool-intent dispatch set `actionExecuted = true` regardless of the
+  tool result, inflating memoryState.stats.actionsExecuted ("Autonomous Actions
+  Executed") with work that never happened. Fixed via the new
+  src/utils/toolDispatchTruth.ts (toolActionExecuted / toolActionResultReply /
+  countedItems) wired into list_files_tool, web_research_tool, github_repos_tool,
+  summarize_youtube_video, youtube_status_inquiry, youtube_upload_request and
+  math_computation. Evidence: src/tests/toolDispatchTruth.test.ts (new, 15 tests
+  pass); the seven intents now derive actionExecuted from the observed result.
+
+In Progress:
+- #13 — the `actionExecuted: true` audit is not exhausted; claims outside this
+  switch (and other truth surfaces) remain `UNKNOWN`.
+
+Remaining:
+- #13 (PARTIAL), plus the rest of the 60-item backlog that is not VERIFIED.
+  Items #1 and #55 are blocked on hardware/credentials.
+
+Bugs Found:
+- The live chat route counted a failed `realWebFetch`, a failed `realFsList`, a
+  missing/failed GitHub listing, a failed YouTube extraction, an unparseable
+  arithmetic expression and an unperformed Level-4 upload each as an executed
+  action, and spoke an unqualified success for several of them.
+
+Bugs Fixed:
+- Each of the seven intents now credits work only on observed success and reports
+  failures honestly in English/Hindi; proven by the new dedicated test and the
+  negative validation below.
+
+Tests:    112 files / 1486 tests passed (observed `npx vitest run`)
+Lint:     exit 0 (observed `npm run lint` → `tsc --noEmit`)
+Build:    exit 0 (observed `npm run build`; `dist/server.cjs` 928107 bytes)
+E2E:      NOT RUN — no handset, no display session
+Security: no new external action surface; the fix removes false success claims and
+          keeps the Level-4 upload gate honest (no upload is performed).
+          `git check-ignore -v .env` NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  112396d (fix), docs commit follows
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         NONE opened this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+
+Blocked:
+- #1 Real Android E2E — requires a physical Android device
+- #55 — requires hardware/credentials not present
+
+Human Approval Required:
+- None this slot.
+
+Negative validation:
+- Reverting the `web_research_tool` guard to `actionExecuted = true;` fails exactly
+  the matching assertion (`1 failed | 14 passed` of the new file); restored → green.
+
+Next Slot:
+- #13 — continue the `actionExecuted: true` audit (next unaudited truth surface).
+
+हिंदी सारांश (एक पंक्ति):
+- /api/chat के टूल इंटेंट्स अब असफल टूल कॉल को "निष्पादित कार्य" के रूप में नहीं
+  गिनते — सातों इंटेंट असली परिणाम पर आधारित हैं; पूरी सूट 1486 टेस्ट पास, लिंट
+  और बिल्ड क्लीन।
