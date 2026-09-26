@@ -14,7 +14,7 @@ All notable improvements, security updates, and feature additions are documented
 ### Tests
 - `src/tests/remainingFakeSuccess.test.ts`: behavioral cases for all five offline intents (intent, `actionExecuted`, the disclosure text, absence of `orbital`) plus source guards pinning the five retired fake-success strings are gone and the server case no longer contains `Oracle Always Free ARM VM` / `Metrics are read live from the daemon host.`
 - `src/tests/localJarvisEngine.test.ts`: contract assertions updated to the corrected semantics.
-- Negative-validated: reintroducing `acquired orbital positioning telemetry` in the location branch fails the disclosure test (`1 failed | 31 skipped`); restored → green.
+- Negative-validated: reintroducing `acquired orbital positioning telemetry` in the location branch fails the disclosure test (`1 failed | 76 passed` of 77); restored → 77/77 green.
 - **Regression caught and fixed in-slot:** the first attempt set `actionExecuted: false`, which broke `voiceAndHindiModes.test.ts:138` (the Level-4 social-gate test needs the in-app console to open). `actionExecuted` is the navigation signal `App.tsx` uses; honesty belongs in the reply text, not in suppressing the real in-app action.
 - Full suite observed: **110 files / 1467 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 924348 bytes).
 

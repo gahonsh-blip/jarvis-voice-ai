@@ -37,7 +37,7 @@ gone and the server case no longer contains `Oracle Always Free ARM VM` /
 `Metrics are read live from the daemon host.`; and by the updated contract
 assertions in `src/tests/localJarvisEngine.test.ts`.
 Negative-validated — reintroducing `acquired orbital positioning telemetry` in the
-location branch fails the disclosure test (`1 failed | 31 skipped`), restored → green.
+location branch fails the disclosure test (`1 failed | 76 passed` of 77 in the two truth test files), restored → 77/77 green.
 Gates observed this slot on `46eb0a6`: lint (`tsc --noEmit`) exit 0; full suite
 **110 files / 1467 tests passed**; build exit 0 (`dist/server.cjs` 924348 bytes).
 E2E: NOT RUN — no display session, no handset. Deploy: NOT_CONFIGURED. Item 13
