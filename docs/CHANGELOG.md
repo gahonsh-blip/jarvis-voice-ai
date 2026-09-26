@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 03:52 IST (2026-09-26 22:22 UTC) — work slot 7: offline upload truth
+
+### Fixed
+- **The offline engine claimed a video upload it never staged.** `src/utils/localJarvisEngine.ts` (section 2, `youtube_upload_request`) replied that the payload "is staged", returned `actionExecuted: true` and incremented the user-visible "Autonomous Actions Executed" counter, although the module holds no staged-upload state and the caller's `handleExecuteAction` switch has no `youtube_upload_request` case (`default: break`) — no UI side effect was possible. The branch now returns `actionExecuted: false`, leaves the counter unchanged, reports `payload.staged: false`, and states in English/Hindi/Hinglish that the video was not staged and that Level-4 Human Authorization is still required.
+
+### Tests
+- `src/tests/offlineCallTruth.test.ts` — 18 tests (up from 16): a verdict test asserting `actionExecuted: false`, `payload.staged: false` and an honest reply, plus a source guard scoped to the upload branch.
+- `src/tests/voiceAndHindiModes.test.ts` — the two Level-4 upload-gate tests now assert the honest verdict (`actionExecuted: false`) while keeping their `Level-4` / `requiresConfirmation` assertions.
+- Negative-validated: reintroducing `actionExecuted: true`, the fabricated title and the unconditional counter bump fails exactly 2 of 18 (`2 failed | 16 passed`); restored → 18/18.
+- Full suite observed: **112 files / 1491 tests passed**. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 928643 bytes).
+
 ## [Unreleased] - 2026-09-27 03:10 IST (2026-09-26 21:40 UTC) — work slot 6: /api/chat tool-intent truth
 
 ### Fixed
