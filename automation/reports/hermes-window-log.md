@@ -6049,3 +6049,57 @@ Next Slot:
 - यह फ़ाइनलाइज़ेशन स्लॉट था — कोई नया कोड नहीं लिखा; मौजूदा टिप 96bc552 को दोबारा
   सत्यापित किया (लिंट 0, 1417 टेस्ट पास, बिल्ड 0), सुरक्षा जाँच साफ़, PR #4 खुला और
   one-click mergeable — merge मानव अनुमोदन की प्रतीक्षा में है।
+
+---
+
+## 2026-09-27 00:35 IST — WORK SLOT 1 (window 2026-09-27)
+
+Slot: WORK | IST 00:35 | Window date 2026-09-27 | slots_completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL slice) — operator chat replies now derived
+  from returned task status, not assumed success. `src/utils/computerOperator/operatorReplyTruth.ts`
+  (93 lines) + `src/tests/operatorReplyTruth.test.ts` (16 tests) + `server.ts` wiring for the
+  `fix_project_error` and `inspect_screen` intents. Commit `252b9a1`, pushed to origin
+  (`993f3c2..252b9a1`).
+
+In Progress:
+- #13 — remaining fake-success paths outside the operator intents still need audit.
+
+Bugs Found:
+- `/api/chat` `fix_project_error` spoke "applied surgical fix, and verified test suite" and set
+  `actionExecuted = true` regardless of the engine result, so SIMULATION_ONLY/FAILED runs were
+  reported as real host work. `inspect_screen` narrated a confident screen summary with no host desktop.
+
+Bugs Fixed:
+- Both replies and `actionExecuted` are now derived from task status (only COMPLETED = executed) and
+  observation provenance. Covered by `operatorReplyTruth.test.ts` (16 tests).
+
+Tests:    109 files / 1433 passed (npx vitest run, exit 0)
+Lint:     pass (tsc --noEmit, exit 0)
+Build:    pass (exit 0, dist/server.cjs 913182 bytes)
+E2E:      NOT RUN — no Android device, no Windows host, no display session
+Security: NOT RUN this slot (no audit change)
+
+Documentation: docs/COMPLETION_STATUS.md, automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  252b9a1
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         #4 (open, for feature/hermes-full-completion)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- #1 Real Android Mobile Bridge — requires a physical Android device.
+- #55 Real-device E2E suite — requires an Android device or Windows host.
+
+Human Approval Required:
+- Merge of PR #4 to `main` after a human reads the final verification report.
+
+Next Slot:
+- #13 next unguarded fake-success path, or #54 if a credential surface appears.
+
+हिंदी सारांश (एक पंक्ति):
+- ऑपरेटर चैट अब कार्य-स्थिति से उत्तर बनाता है, झूठी सफलता हटाई गई; लिंट 0, 1433 टेस्ट पास, बिल्ड 0, बदलाव push हो गया।
+

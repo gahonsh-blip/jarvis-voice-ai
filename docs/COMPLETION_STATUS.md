@@ -4,7 +4,32 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-25 22:51 UTC (04:21 IST 2026-09-26) — **WORK SLOT 13** of the
+Last cycle: 2026-09-27 19:27 UTC (00:57 IST 2026-09-27) — **WORK SLOT 1** of the
+2026-09-27 window, the 00:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **computer-operator chat replies**.
+
+**Two operator chat intents spoke success the host never produced.** `/api/chat`
+`fix_project_error` answered *"applied surgical fix, and verified test suite"* and set
+`actionExecuted = true` no matter what `ComputerOperatorEngine.executeTask` returned, so a
+run the engine itself marked `SIMULATION_ONLY` or `FAILED` was spoken and recorded as real
+host work. `inspect_screen` narrated the interpreter's confident *"Screen showing …"*
+summary even when `ScreenObserver` had no host desktop to observe.
+
+Fixed by deriving both the spoken reply and `actionExecuted` from the returned data:
+`src/utils/computerOperator/operatorReplyTruth.ts` — `fixProjectErrorReply()` and
+`screenInspectionReply()` only assert completion for a `COMPLETED` task, and
+`operatorTaskExecuted()` / `screenInspectionExecuted()` return true only for that status
+and for a host-backed, non-ambiguous observation. `server.ts` wires both intents to these
+helpers.
+
+Guarded by `src/tests/operatorReplyTruth.test.ts` (16 tests) covering COMPLETED,
+SIMULATION_ONLY, FAILED and unknown statuses, plus the ambiguous/no-host observation cases.
+Gates observed this slot on `252b9a1`: lint (`tsc --noEmit`) exit 0; full suite
+**109 files / 1433 tests passed**; build exit 0 (`dist/server.cjs` 913182 bytes). E2E:
+NOT RUN — no display session, no handset. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`
+— another real fake-success path closed; more remain.
+
+Last cycle (previous): 2026-09-25 22:51 UTC (04:21 IST 2026-09-26) — **WORK SLOT 13** of the
 2026-09-26 window, the 04:05 IST fire. Item 54
 (`Secret/token protection audit`), the **filesystem-tool path confinement**.
 
