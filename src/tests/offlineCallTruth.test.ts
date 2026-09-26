@@ -223,3 +223,30 @@ describe('the offline engine never bumps the actions counter for an unperformed 
     }
   });
 });
+
+// The video-upload branch claimed the payload "is staged" and set
+// actionExecuted true, but this module holds no staged-upload state and the
+// caller's action handler has no `youtube_upload_request` case (it falls to
+// `default: break`). So nothing was staged and the counter was bumped for
+// unperformed work. The upload branch is section 2 of the offline engine.
+describe('the offline video upload never claims the video was staged', () => {
+  it('reports the upload as not staged and does not bump the counter', () => {
+    const memory = freshMemory();
+    const res = processOfflineCommand('upload this video to youtube publicly', memory, 'en-US');
+    expect(res.intent).toBe('youtube_upload_request');
+    expect(res.actionExecuted).toBe(false);
+    expect(memory.stats.actionsExecuted).toBe(0);
+    expect(res.actionDetail?.payload?.staged).toBe(false);
+    expect(res.reply).toMatch(/not staged|stage nahi hua|स्टेज नहीं हुआ/i);
+    expect(res.reply).not.toMatch(/payload staged|Video ready|तैयार है/i);
+  });
+
+  it('does not stage the upload at the source level', () => {
+    const at = engineSource.indexOf('// 2. Video Upload Command');
+    expect(at).toBeGreaterThanOrEqual(0);
+    const branch = engineSource.slice(at, engineSource.indexOf('// 3.', at)).replace(/\s+/g, ' ');
+    expect(branch).toContain('actionExecuted: false');
+    expect(branch).not.toContain('Stage YouTube Video');
+    expect(branch).not.toContain('actionsExecuted += 1');
+  });
+});

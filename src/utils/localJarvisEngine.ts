@@ -744,29 +744,33 @@ export function processOfflineCommand(
     (lower.includes('upload') || lower.includes('अपलोड')) &&
     (lower.includes('video') || lower.includes('वीडियो') || lower.includes('youtube'))
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const isPublic = lower.includes('public') || lower.includes('पब्लिक');
     const modeStr = isPublic ? 'Public' : 'Private';
 
+    // Nothing is staged here: there is no staged-upload state in this module and
+    // the caller's action handler has no `youtube_upload_request` case, so the
+    // page cannot hold a video for a later Level-4 approval. The earlier reply
+    // claimed the payload "is staged", set actionExecuted true and incremented
+    // the user-visible actions counter for work that never happened.
     const reply = isHindi
-      ? `वीडियो तैयार है। ${modeStr} upload के लिए Level-4 approval required है। कृपया Authorization Gateway में approval दें।`
+      ? `वीडियो ${modeStr} upload के लिए तैयार नहीं किया गया — ऑफ़लाइन मोड में कोई अपलोड स्टेज नहीं हुआ। ${modeStr} upload के लिए Level-4 approval required है।`
       : isHinglish
-      ? `Video ready hai. ${modeStr} upload ke liye Level-4 approval required hai. Kripya gateway me approval den.`
-      : `Video payload staged for ${modeStr} upload. Level-4 Human Authorization is required before the YouTube API upload can execute.`;
+      ? `Video ${modeStr} upload ke liye stage nahi hua — offline mode me koi upload stage nahi hua. ${modeStr} upload ke liye Level-4 approval required hai.`
+      : `The video was not staged for ${modeStr} upload — this offline path holds no staged upload. A Level-4 Human Authorization is still required before any YouTube API upload can execute.`;
 
     return {
       reply,
       spokenText: isHindi
-        ? `वीडियो तैयार है। ${modeStr} upload के लिए Level-4 approval required है।`
+        ? `वीडियो ${modeStr} upload के लिए स्टेज नहीं हुआ। Level-4 approval required है।`
         : isHinglish
-        ? `Video ready hai. ${modeStr} upload ke liye Level-4 approval required hai.`
-        : `Video staged. Level-4 Human Authorization is required to proceed.`,
+        ? `Video ${modeStr} upload ke liye stage nahi hua. Level-4 approval required hai.`
+        : `Video not staged for ${modeStr} upload. Level-4 Human Authorization is required to proceed.`,
       intent: 'youtube_upload_request',
-      actionExecuted: true,
+      actionExecuted: false,
       actionDetail: {
         type: 'youtube_upload_request',
-        title: `Stage YouTube Video (${modeStr})`,
-        payload: { requiresConfirmation: true, risk: 'HIGH', mode: modeStr },
+        title: `YouTube Upload Not Staged (${modeStr}, offline)`,
+        payload: { requiresConfirmation: true, risk: 'HIGH', mode: modeStr, staged: false },
       },
       updatedMemory,
       offline: true,
