@@ -6390,3 +6390,5 @@ Next Slot:
 - ऑफ़लाइन इंजन अब वे बाहरी काम नहीं बताता जो उसने नहीं किए — जवाब में साफ़ लिखा
   है कि क्या नहीं हुआ; पूरी सूट 1467 टेस्ट पास, लिंट और बिल्ड क्लीन।
 
+
+Correction (same slot, after push): slot head is `0ec4441` on feature/hermes-full-completion; `621a99d` carried the window-report log, `0ec4441` the negative-validation doc correction. State branch head `3dd2ec6` (slots_completed=4).
