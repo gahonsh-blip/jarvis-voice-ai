@@ -6631,3 +6631,38 @@ Next Slot:
 - Continue #13: audit remaining `actionExecuted: true` branches (`language_switch`,
   `emergency_stop`/`emergency_resume`, `answer_call`, `telephony_hub`, Google
   Search Extraction) against their real callers.
+
+### Slot 8 — carry-forward audit map for #13 (next slots)
+
+`grep -c "actionExecuted: true" src/utils/localJarvisEngine.ts` -> **25** remaining
+sites on `3a2db95`, mapped to their preceding `intent` (line -> intent):
+
+```
+189  language_switch             1036 mobile_personal_status      1570 create_social_post
+325  reject_call                 1083 location_services          1589 security_audit
+339  (reject_call branch)        1121 open_calculator            1610 cloud_telemetry
+425  reject_call                 1144 open_calculator            1629 schedule_morning_report
+461  answer_call                 1163 open_notepad               1695 google_search
+491  open_notepad                1260 outbound_call_authorization 1763 time_inquiry
+807  set_name                    1452 telephony_hub
+882  weather_inquiry             1472 call_history
+                                 1491 open_paint
+                                 1532 check_project
+                                 1551 generate_quotation
+```
+
+Likely-genuine (page-local, no external effect - verify against caller switch):
+`set_name`, `open_notepad`, `open_calculator`, `open_paint`, `language_switch`,
+`time_inquiry`.
+
+Likely-suspect (claims work a browser tab cannot perform - telephony, location,
+social publish, security audit, cloud telemetry, project build, quotation):
+`mobile_personal_status`, `location_services`, `telephony_hub`, `call_history`,
+`outbound_call_authorization`, `check_project`, `generate_quotation`,
+`create_social_post`, `security_audit`, `cloud_telemetry`,
+`schedule_morning_report`, `google_search`, `answer_call`, `reject_call`,
+`weather_inquiry`.
+
+Each must be checked against `handleExecuteAction` (`src/App.tsx` line 928; calls
+at 1261/1303) before any status change - the presence of a case there is what
+distinguishes a real action from a narrated one. NOT audited this slot.
