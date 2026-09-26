@@ -178,3 +178,48 @@ describe('the offline engine source no longer hardcodes call success', () => {
     expect(telephonySection).not.toContain('Connecting call with caller');
   });
 });
+
+// The user-visible "Autonomous Actions Executed" counter is rendered from
+// `updatedMemory.stats.actionsExecuted` (MemoryModal.tsx). A branch that
+// returned `actionExecuted: false` while still bumping that counter showed the
+// user a success that the verdict denied. These tests pin the counter to the
+// verdict for every offline telephony branch.
+describe('the offline engine never bumps the actions counter for an unperformed call', () => {
+  beforeEach(() => {
+    TelephonyProviderRegistry.setActiveProvider(SIMULATION_PROVIDER_ID);
+  });
+
+  it('keeps the counter at 0 for the reachable dial and hangup branches', () => {
+    const memory = freshMemory();
+    const res = processOfflineCommand('call +91 98765 43210', memory, 'en-US');
+    expect(res.intent).toBe('outbound_call_authorization');
+    expect(res.actionExecuted).toBe(false);
+    expect(memory.stats.actionsExecuted).toBe(0);
+  });
+
+  it('keeps the counter at 0 when a call is ended with no active call', () => {
+    const memory = freshMemory();
+    const res = processOfflineCommand('end call', memory, 'en-US');
+    expect(res.intent).toBe('hangup_call');
+    expect(res.actionExecuted).toBe(false);
+    expect(memory.stats.actionsExecuted).toBe(0);
+  });
+
+  // "answer call" and "reject call" are intercepted earlier by the Android
+  // bridge section (0.51 / 0.52) before reaching the offline telephony section,
+  // so those branches are pinned at the source level instead.
+  it('gates every offline call increment on a verdict, never unconditionally', () => {
+    // Dial, schedule, answer, hangup and reject each derive their verdict from
+    // offlineCallVerdict and gate the counter on it. (Query branches such as
+    // clinic hours report actionExecuted: true and are not call branches.)
+    const gated = (telephonySection.match(/countAction\(updatedMemory, verdict\.actionExecuted\)/g) || [])
+      .length;
+    expect(gated).toBeGreaterThanOrEqual(6);
+    for (const phase of ['dial', 'schedule', 'answer', 'hangup', 'reject']) {
+      const at = telephonySection.indexOf(`offlineCallVerdict('${phase}'`);
+      expect(at).toBeGreaterThanOrEqual(0);
+      const window = telephonySection.slice(at, at + 200);
+      expect(window).toContain('countAction(updatedMemory, verdict.actionExecuted)');
+    }
+  });
+});

@@ -33,6 +33,17 @@ function activeTelephonyEngineMode(): TelephonyEngineMode {
   return telephonyEngineMode(provider.id, provider.isConfigured());
 }
 
+/**
+ * The "Autonomous Actions Executed" counter is user-visible (MemoryModal), so it
+ * must not advance for an intent that reports `actionExecuted: false`. Several
+ * offline branches incremented it before their verdict was known, leaving the
+ * counter and the verdict contradicting each other. Gate the increment on the
+ * verdict actually returned.
+ */
+function countAction(memory: MemoryStore, actionExecuted: boolean | undefined): void {
+  if (actionExecuted !== false) memory.stats.actionsExecuted += 1;
+}
+
 export interface LocalProcessingResult {
   reply: string;
   spokenText?: string;
@@ -824,7 +835,6 @@ export function processOfflineCommand(
     (lower.includes('मौसम') || lower.includes('weather') || lower.includes('तापमान') || lower.includes('temperature') || lower.includes('forecast')) &&
     !lower.includes('good morning') && !lower.includes('सुप्रभात') && !lower.includes('ब्रीफिंग') && !lower.includes('briefing') && !lower.includes('बैटरी')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const weatherData = mobileStatus?.weather;
 
     // No weather source means no reading. Previously each field fell back to a
@@ -852,6 +862,7 @@ export function processOfflineCommand(
     const humidity = weatherData.humidity;
     const location = weatherData.location || 'unknown location';
 
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? `आज का मौसम ${condition === 'Clear Sky' ? 'साफ (Clear Sky)' : condition} है। वर्तमान तापमान लगभग ${tempC}°C (${location}) और आर्द्रता ${humidity}% है।`
       : isHinglish
@@ -1157,12 +1168,12 @@ export function processOfflineCommand(
     lower.includes('कल फोन करना') ||
     lower.includes('schedule call tomorrow')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const targetMatch = clean.match(/(?:नंबर पर फोन|कल फोन करना|schedule call tomorrow)\s*(.*)/i);
     const target = targetMatch && targetMatch[1].trim() ? targetMatch[1].trim() : '+91 9876543210';
     const masked = maskPhoneNumber(target);
     stagedOutboundCall = { destination: target, masked, isScheduled: true };
     const verdict = offlineCallVerdict('schedule', activeTelephonyEngineMode());
+    countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi
       ? `कल के लिए ${masked} पर आउटबाउंड कॉल अनुरोध दर्ज कर लिया गया है। ${verdict.replyHi}`
       : `Scheduled pending outbound call request for tomorrow to ${masked}. ${verdict.replyEn}`;
@@ -1190,7 +1201,6 @@ export function processOfflineCommand(
       lower === 'approve') &&
     stagedOutboundCall
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const { destination, masked } = stagedOutboundCall;
     const providerStatus = TelephonyProviderRegistry.getActiveStatus();
 
@@ -1212,6 +1222,7 @@ export function processOfflineCommand(
 
     stagedOutboundCall = null;
     const verdict = offlineCallVerdict('dial', activeTelephonyEngineMode());
+    countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi
       ? `कॉल अधिकृत है। ${masked} के लिए: ${verdict.replyHi}`
       : `Call authorized for ${masked}. ${verdict.replyEn}`;
@@ -1258,7 +1269,6 @@ export function processOfflineCommand(
     lower.includes('call lagao') ||
     lower.includes('इस नंबर पर फोन करो')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const targetMatch = clean.match(/(?:call|dial|फोन करो|कॉल करो|call lagao|इस नंबर पर फोन करो)\s+(.+)/i);
     const target = targetMatch ? targetMatch[1].trim() : '+91 9876543210';
     const masked = maskPhoneNumber(target);
@@ -1267,6 +1277,7 @@ export function processOfflineCommand(
     stagedOutboundCall = { destination: target, masked };
 
     const verdict = offlineCallVerdict('dial', activeTelephonyEngineMode());
+    countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi
       ? `सर, मैं इस नंबर पर कॉल करने वाला हूँ: ${masked}। क्या आप अनुमति देते हैं? ${verdict.replyHi}`
       : `Sir, I am about to call: ${masked}. Do you authorize this outbound call? ${verdict.replyEn}`;
@@ -1358,8 +1369,8 @@ export function processOfflineCommand(
     lower.includes('फोन उठाओ') ||
     lower.includes('phone uthao')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const verdict = offlineCallVerdict('answer', activeTelephonyEngineMode());
+    countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
     return {
       reply,
@@ -1381,8 +1392,8 @@ export function processOfflineCommand(
     lower.includes('फोन काटो') ||
     lower.includes('call kato')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const verdict = offlineCallVerdict('hangup', activeTelephonyEngineMode());
+    countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
     return {
       reply,
@@ -1400,8 +1411,8 @@ export function processOfflineCommand(
     lower.includes('decline call') ||
     lower.includes('कॉल रिजेक्ट करो')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const verdict = offlineCallVerdict('reject', activeTelephonyEngineMode());
+    countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
     return {
       reply,
