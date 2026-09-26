@@ -6179,3 +6179,26 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - ऑफलाइन इंजन अब होस्ट कार्य की झूठी सफलता नहीं दिखाता; लिंट 0, 1447 टेस्ट पास, बिल्ड 0, बदलाव push हो गए।
+
+
+### Next-slot triage appendix — item 13 remaining `actionExecuted: true` sites (read-only audit, not a code change)
+
+40 occurrences remain in `src/utils/localJarvisEngine.ts` (line numbers from commit `ec59dc1`).
+Nearest preceding intent label, from a read-only grep — labels are approximate and must be
+re-derived before editing:
+
+- Genuinely in-process state changes (counter arguably honest): `language_switch` (166),
+  `emergency_stop` (192), `emergency_resume` (216), `set_name` (778), `time_inquiry` (1718),
+  `capabilities_inquiry` (1751).
+- External / host claims that need truth review first (highest value): `youtube_upload_request`
+  (742), `outbound_call_authorization` (1156, 1225, 1258), `make_call` (1204),
+  `answer_call` (438, 1356), `hangup_call` (1378), `reject_call` (302, 316, 402, 1396),
+  `create_social_post` (1536), `security_audit` (1555), `cloud_telemetry` (1574),
+  `generate_quotation` (1517), `check_project` (1498), `schedule_morning_report` (1593),
+  `system_diagnostic` (1685).
+- Desktop-launch claims to confirm against the real launcher: `open_notepad` (468, 1130),
+  `open_calculator` (1088, 1111), `open_paint` (1457).
+
+Suggested next-slot slice: the `outbound_call_authorization` / `make_call` cluster, because
+placing a call is an irreversible outside-world action and is gated by the permission
+gateway — a false success there is the most damaging. Status for all of the above: `UNKNOWN`.
