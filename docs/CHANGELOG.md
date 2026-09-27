@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-28 01:45 IST (2026-09-27 20:15 UTC) — work slot 10: a summary-less YouTube lookup is not executed work
+
+### Fixed
+- **The live `/api/chat` `summarize_youtube_video` case credited a summary-less lookup.** The case gated `actionExecuted` on `summaryRes.success` alone. `summarizeYouTubeVideoCore` returns `success: true` as soon as the video metadata is fetched, so a video with no transcript and no description (empty summary, `source: 'none'`) still set `actionExecuted = true` and advanced the user-visible "Autonomous Actions Executed" counter — while the spoken reply showed only the title with no summary. Same inflation class as the slot 8 `find_document` fix.
+- The success branch now derives `hasSummary = Boolean(summaryRes.summary && summaryRes.summary.trim())` and sets `actionExecuted = hasSummary`. A summary-less result speaks an honest "nothing to summarize" line and carries the inert `youtube_summary_empty` detail; only a non-empty summary credits work. The extraction-failure branch keeps `actionExecuted = false`.
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts` — new test `the /api/chat summarize_youtube_video case gates success on a non-empty summary`, plus a direct `buildYouTubeSummary` unit test proving a no-content video yields `summary: ''`, `source: 'none'`, `verificationStatus: 'PARTIAL'` while still reporting `success: true`. Negative-validated: reverting only the `server.ts` change fails the route assertion (`1 failed | 38 passed`); restored → `39 passed`.
+- `src/tests/toolDispatchTruth.test.ts` — widened `caseBody` with a `max` parameter (the YouTube case grew past the previous 1400-char view).
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted `remainingFakeSuccess` + `youtubeSummarizerTruthfulness` **44 tests passed**, `toolDispatchTruth` **15 tests passed**; full suite **114 files / 1537 tests passed** (20.98 s); build exit 0 (`dist/server.cjs` 940914 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — one more real fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are not individually audited (`UNKNOWN`), and the unrouted `set_name` and `time_inquiry` cases remain to be handled. E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-28 00:39 IST (2026-09-27 19:09 UTC) — work slot 8: a document search that found nothing is not executed work
 
 ### Fixed
