@@ -4,7 +4,30 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 21:05 UTC (02:35 IST 2026-09-28) — **WORK SLOT 12** of the
+Last cycle: 2026-09-27 21:35 UTC (03:05 IST 2026-09-28) — **WORK SLOT 13** of the
+2026-09-28 window, the 03:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
+the **Computer Operator panel's unmeasured live-screen claims** — the modal printed
+`OPERATOR ACTIVE: OBSERVING SCREEN`, `ACTIVE APP: <name> | None`, and `LIVE COMMAND
+STREAM & TELEMETRY` regardless of whether the ScreenObserver had read the host
+desktop (commit `3f4cb6b`).
+
+**The panel asserted a screen it had not read.** `ComputerOperatorModal.tsx` renders
+an honest status dot (`observationStatusLabel`) beside three hardcoded claims: when
+the observer serves the built-in illustrative preview, or the host desktop is
+unreachable (`isAmbiguous`), the dot said UNOBSERVED while the text still said
+`OPERATOR ACTIVE: OBSERVING SCREEN`, still named a foreground application, and still
+labelled the preview's synthetic frames `LIVE COMMAND STREAM & TELEMETRY`. A reader
+could not tell a verified observation from an illustrative one.
+
+Fixed: `src/utils/computerOperator/observationTruth.ts` gains
+`observationOperatorStateLabel`, `observationActiveAppLabel`, and
+`observationStreamHeader`; the modal now derives all three. Until a real,
+non-ambiguous observation exists they hold at `SCREEN UNOBSERVED` /
+`ILLUSTRATIVE PREVIEW` / a non-live stream header, and a foreground app is named only
+when one was genuinely read. Item 13 stays `PARTIAL` — one more real violation closed,
+not proof the sweep is complete.
+
+Last cycle (previous): 2026-09-27 21:05 UTC (02:35 IST 2026-09-28) — **WORK SLOT 12** of the
 2026-09-28 window, the 02:35 IST fire. Item 13 (`Zero-fake-success for all tools`),
 the **live `/api/chat` `time_inquiry` case** and its **offline Local JARVIS Engine twin** —
 a clock question credited as executed work (commits `ac39d5d`, `754aa0a`, docs `00bbe72`).

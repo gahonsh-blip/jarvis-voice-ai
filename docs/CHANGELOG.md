@@ -4,6 +4,12 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-28 03:05 IST (2026-09-27 21:35 UTC) — work slot 13: a live-screen claim is not a measurement
+
+### Fixed
+- **`ComputerOperatorModal` printed three live-screen claims it never measured.** The panel hardcoded `OPERATOR ACTIVE: OBSERVING SCREEN`, `ACTIVE APP: <name> | None`, and `LIVE COMMAND STREAM & TELEMETRY` regardless of whether the ScreenObserver had actually read the host desktop — contradicting the honest status dot rendered beside them. When the observer serves the built-in illustrative preview or the host is unreachable (`isAmbiguous`), the modal still asserted observation and named a foreground application, and labelled synthetic preview frames as a live stream. Same inflation class item 13 tracks.
+- Added `observationOperatorStateLabel`, `observationActiveAppLabel`, and `observationStreamHeader` to `src/utils/computerOperator/observationTruth.ts`; `ComputerOperatorModal.tsx` now derives all three labels. Until a real, non-ambiguous observation exists they read `SCREEN UNOBSERVED` / `ILLUSTRATIVE PREVIEW` / a non-live stream header, and name an app only when one was genuinely read.
+
 ## [Unreleased] - 2026-09-28 02:35 IST (2026-09-27 21:05 UTC) — work slot 12: a clock read is not executed work
 
 ### Fixed
