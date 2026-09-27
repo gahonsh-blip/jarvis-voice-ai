@@ -7061,3 +7061,80 @@ E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
 PR: NONE this slot. Main merge: NOT MERGED — awaiting human approval.
 Item 13 remains `PARTIAL` — the remaining `actionExecuted: true` sites in
 `server.ts` are still not individually audited (`UNKNOWN`).
+
+---
+
+## WORK SLOT 7 — 2026-09-28 00:23 IST (2026-09-27 18:53 UTC)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:23
+Window date: 2026-09-28   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools — the live `/api/chat` `emergency_stop` /
+  `emergency_resume` cases (`server.ts` ~8556–8583). Evidence:
+  `src/utils/computerOperator/offlineEmergencyTruth.ts` `emergencyToggleVerdict`;
+  `src/tests/offlineEmergencyTruth.test.ts` new 6-test block (10/10 passed);
+  full suite 114 files / 1530 tests passed; build exit 0.
+
+In Progress:
+- #13 — remaining `actionExecuted: true` sites in `server.ts` still not
+  individually audited.
+
+Remaining:
+- #13 (PARTIAL) plus the other non-VERIFIED backlog items per
+  `docs/COMPLETION_STATUS.md`.
+
+Bugs Found:
+- A severity-2 safety inversion: `emergency_stop`/`emergency_resume` in
+  `/api/chat` called `toggleEmergencyStop(...)`, which *flips* the freeze — so a
+  second "stop" RELEASED the freeze and a "resume" while nothing was paused
+  ENGAGED it, each while speaking an unconditional success and crediting
+  `actionExecuted = true` (inflating the "Autonomous Actions Executed" counter).
+
+Bugs Fixed:
+- Both cases now derive the verdict from the pre-transition state via a new
+  `emergencyToggleVerdict(action, state)` and **gate the flip on it**, so a
+  no-op transition cannot change state serverside:
+  repeated stop -> `Already Active` (false), resume with nothing paused ->
+  `Not Active` (false), latched hard-kill resume -> `NOT Released` (false,
+  freeze honestly still in force), first stop / genuine resume ->
+  `actionExecuted: true`.
+  Verification: source-pin test pins `emergencyToggleVerdict(` in `server.ts`
+  and the absence of the old success literal; negative-validated — literal
+  present in `git show HEAD~1:server.ts` (count 1), absent in `server.ts`
+  (count 0).
+
+Tests:    114 files / 1530 tests passed (21.48 s) — `npx vitest run`
+Lint:     exit 0 — `npm run lint` (`tsc --noEmit`)
+Build:    exit 0 — `npm run build`, `dist/server.cjs` 938,697 bytes
+E2E:      NOT RUN — no display session, no handset
+Security: no `.env` staged; no token/key in the diff; no `node_modules`/`dist`
+          committed (build artifact on disk only, gitignored)
+
+Documentation: `docs/COMPLETION_STATUS.md`, `docs/CHANGELOG.md`,
+               `automation/reports/hermes-window-log.md`
+Branch:  feature/hermes-full-completion
+Commit:  97f09af (fix d5a9a2f)
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         NONE this slot. Main merge: NOT MERGED — awaiting human approval.
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present.
+
+Blocked:
+- #1 Android Bridge real-device E2E — no physical handset
+- #50 wake word on device — no microphone/device session
+- #55 third-party security audit — no external auditor
+- #8 Windows PowerShell capture path — no Windows host
+
+Human Approval Required:
+- Merge to `main` (owner reads the final verification report first).
+
+Next Slot:
+- #13 — audit another `actionExecuted: true` site in `server.ts`, or the
+  remaining informational/counter-inflation cases; keep the item `PARTIAL`.
+
+हिंदी सारांश (एक पंक्ति):
+- #13 के तहत /api/chat के emergency stop/resume को अब टॉगल की तरह व्यवहार नहीं
+  करने दिया — दो बार "stop" कहने पर फ्रीज़ खुलने जैसी खतरनाक उलटी गलती ठीक की और
+  बिना बदलाव के झूठा सफलता-दावा/काउंट बंद किया; पूरा सूट 1530/1530 पास।
