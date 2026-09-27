@@ -6939,3 +6939,82 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - ऑफलाइन इंजन अब Android ब्रिज कॉल अस्वीकार को नकली "executed" नहीं गिनता — 2 नए
   टेस्ट पास, पूरा सूट 1514 पास, lint/build साफ़; बदलाव पुश हो गया।
+
+---
+
+## Slot 4 — 2026-09-27 17:44 UTC / 23:14 IST (WORK SLOT, 23:05 IST fire)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:14
+Window date: 2026-09-28   Window slots completed so far: 4
+
+Completed:
+- #13 Zero-fake-success for all tools — blocked-finance request path. A financial
+  operation is prohibited by the safety protocol, so it is refused, not performed;
+  both surfaces nonetheless credited it as executed work.
+  - `server.ts` (`finance_blocked` case): was `actionExecuted = true`, title
+    `Finance Blocked (Safety Exclusion)` → now `actionExecuted = false`, title
+    `Finance Blocked (safety exclusion, no action taken)`.
+  - `src/utils/localJarvisEngine.ts` (§0, `isFinanceRestricted`): returned no
+    `actionExecuted` value, which `countAction` (`if (actionExecuted !== false)`)
+    read as *not false* and counted → now returns `actionExecuted: false` with an
+    honest `actionDetail`.
+  - Evidence: `src/tests/remainingFakeSuccess.test.ts` new
+    `describe('a blocked finance request is a refusal, not executed work')` block
+    (source-pin + behavioural counter case + engine source-pin) — 37 passed.
+  - `App.tsx` `handleExecuteAction` has no `finance_blocked` case (read the router),
+    so no view opened either — the `true` was pure counter inflation.
+
+In Progress:
+- #13 Zero-fake-success for all tools — `PARTIAL`. Remaining `actionExecuted: true`
+  claims outside the audited branches are not individually audited (`UNKNOWN`).
+
+Remaining:
+- #1 Android Bridge real-device E2E (`BLOCKED` — no handset); #50 wake word on
+  device (`BLOCKED` — no mic/device); #55 third-party security audit (`BLOCKED` —
+  no auditor); #8 Windows PowerShell capture (`BLOCKED` — no Windows host). Item 13
+  remains the only advanceable backlog item.
+
+Bugs Found:
+- The `/api/chat` `finance_blocked` case and the offline `isFinanceRestricted` guard
+  both advanced the user-visible "Autonomous Actions Executed" counter for a request
+  the safety protocol refused. Found by reading both surfaces against the
+  `countAction` helper semantics.
+
+Bugs Fixed:
+- Both surfaces now report `actionExecuted: false` for a blocked finance request.
+- Verification: reverting both fixes fails the new block (`3 failed | 34 passed`);
+  restoring → `37 passed`. Negative-validated.
+
+Tests:    114 files / 1517 tests passed (24.81 s) — full `npx vitest run`
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0
+Build:    `npm run build` exit 0 — `dist/server.cjs` 932093 bytes
+E2E:      NOT RUN — no handset, no display session
+Security: no `.env`/tokens staged; diff limited to 3 source/test files + docs
+
+Documentation: `docs/COMPLETION_STATUS.md`, `docs/CHANGELOG.md`
+Branch:  feature/hermes-full-completion
+Commit:  2392ae6 (fix) + c729eb4 (docs)
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         NONE opened this slot (finalization slot owns PR refresh)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified artifact `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- #1 Android Bridge real-device E2E — requires a physical handset
+- #50 wake word on device — requires a microphone/device session
+- #55 third-party security audit — requires an external auditor
+- #8 Windows PowerShell capture path — requires a Windows host
+
+Human Approval Required:
+- None this slot. Merge to `main` remains human-gated.
+
+Next Slot:
+- #13 Zero-fake-success — next unaudited `actionExecuted: true` branch on the
+  `/api/chat` path (continue the sweep; the remaining claims are `UNKNOWN`).
+
+हिंदी सारांश (एक पंक्ति):
+- ब्लॉक किए गए फाइनेंस अनुरोध को अब "executed" नहीं गिना जाता — दोनों सतहों पर
+  `actionExecuted: false`; 37 टेस्ट पास, पूरा सूट 1517 पास, lint/build साफ़, पुश हो गया।
