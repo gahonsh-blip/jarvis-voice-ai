@@ -38,6 +38,8 @@ import {
   observationStreamHeader,
   observationPlatformLabel,
   observationResolutionLabel,
+  observationWindowTitleLabel,
+  observationElementsParsedLabel,
   screenSyncLabel,
   screenSyncState,
 } from '../utils/computerOperator/observationTruth';
@@ -347,7 +349,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
                     <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
                   </div>
-                  <span className="truncate">{currentObservation?.windowTitle || 'Desktop Observation'}</span>
+                  <span className="truncate">{observationWindowTitleLabel(currentObservation, observationIsPreview)}</span>
                 </div>
                 <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-900">
                   {observationResolutionLabel(currentObservation)}
@@ -372,7 +374,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                       {observationActiveAppLabel(currentObservation, observationIsPreview)}
                     </span>
                     <span>
-                      {currentObservation?.visibleElements.length || 0} UI Elements Parsed
+                      {observationElementsParsedLabel(currentObservation, observationIsPreview)}
                     </span>
                   </div>
 

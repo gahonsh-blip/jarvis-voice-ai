@@ -22,6 +22,8 @@ import {
   observationOperatorStateLabel,
   observationActiveAppLabel,
   observationStreamHeader,
+  observationWindowTitleLabel,
+  observationElementsParsedLabel,
 } from '../utils/computerOperator/observationTruth';
 
 const baseObservation: ScreenObservation = {
@@ -189,6 +191,61 @@ describe('ComputerOperatorModal does not print unmeasured screen state', () => {
   it('no longer hardcodes a live command-stream claim', () => {
     expect(src).toContain('observationStreamHeader(observationIsPreview)');
     expect(src).not.toContain('LIVE COMMAND STREAM & TELEMETRY');
+  });
+
+  it('derives the fake window title bar from the truth helper', () => {
+    expect(src).toContain('observationWindowTitleLabel(currentObservation, observationIsPreview)');
+    expect(src).not.toContain("currentObservation?.windowTitle || 'Desktop Observation'");
+  });
+
+  it('derives the parsed-element count from the truth helper', () => {
+    expect(src).toContain('observationElementsParsedLabel(currentObservation, observationIsPreview)');
+    expect(src).not.toContain('UI Elements Parsed');
+  });
+});
+
+describe('observation window title / parsed-element truth', () => {
+  it('does not name a window for an illustrative preview', () => {
+    expect(observationWindowTitleLabel(baseObservation, true)).toBe('WINDOW NOT OBSERVED');
+  });
+
+  it('does not name a window for an unreachable host', () => {
+    expect(observationWindowTitleLabel(ambiguousObservation, false)).toBe('WINDOW NOT OBSERVED');
+    expect(observationWindowTitleLabel(null, false)).toBe('WINDOW NOT OBSERVED');
+  });
+
+  it('reports the window title only when it was really observed', () => {
+    expect(observationWindowTitleLabel(baseObservation, false)).toBe('main.ts');
+  });
+
+  it('never renders an empty observed window title as a name', () => {
+    expect(observationWindowTitleLabel({ ...baseObservation, windowTitle: '   ' }, false)).toBe(
+      'WINDOW TITLE NOT REPORTED'
+    );
+  });
+
+  it('never advertises parsed elements for a preview or an unreachable host', () => {
+    expect(observationElementsParsedLabel(baseObservation, true)).toBe('NO SCREEN CONTENT OBSERVED');
+    expect(observationElementsParsedLabel(ambiguousObservation, false)).toBe(
+      'NO SCREEN CONTENT OBSERVED'
+    );
+    expect(observationElementsParsedLabel(null, false)).toBe('NO SCREEN CONTENT OBSERVED');
+  });
+
+  it('reports the parsed-element count for a real observation', () => {
+    expect(observationElementsParsedLabel(baseObservation, false)).toBe('0 UI Elements Parsed');
+    expect(
+      observationElementsParsedLabel(
+        { ...baseObservation, visibleElements: [{} as any, {} as any] },
+        false
+      )
+    ).toBe('2 UI Elements Parsed');
+  });
+
+  it('singularises a one-element count', () => {
+    expect(
+      observationElementsParsedLabel({ ...baseObservation, visibleElements: [{} as any] }, false)
+    ).toBe('1 UI Element Parsed');
   });
 });
 

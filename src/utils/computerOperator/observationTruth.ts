@@ -143,6 +143,42 @@ export function observationStreamHeader(isPreview: boolean): string {
     : 'COMMAND STREAM & EXECUTION LOG';
 }
 
+/**
+ * The fake window title bar's label.
+ *
+ * The bar printed `{windowTitle || 'Desktop Observation'}` for every state, so
+ * an illustrative preview or an unreachable host still showed a named window it
+ * never read.
+ */
+export function observationWindowTitleLabel(
+  observation: ScreenObservation | null,
+  isPreview: boolean
+): string {
+  if (screenSyncState(observation, isPreview) !== 'OBSERVED') {
+    return 'WINDOW NOT OBSERVED';
+  }
+  const title = observation?.windowTitle?.trim();
+  return title || 'WINDOW TITLE NOT REPORTED';
+}
+
+/**
+ * The `N UI Elements Parsed` readout.
+ *
+ * Printed `{visibleElements.length || 0} UI Elements Parsed` unconditionally, so
+ * a preview or an unreachable host advertised a parsed-element count for a
+ * screen that was never parsed.
+ */
+export function observationElementsParsedLabel(
+  observation: ScreenObservation | null,
+  isPreview: boolean
+): string {
+  if (screenSyncState(observation, isPreview) !== 'OBSERVED') {
+    return 'NO SCREEN CONTENT OBSERVED';
+  }
+  const count = observation?.visibleElements?.length ?? 0;
+  return `${count} UI Element${count === 1 ? '' : 's'} Parsed`;
+}
+
 /** The reason an observation is ambiguous, when one was given. */
 export function observationAmbiguityNotice(
   observation: ScreenObservation | null,
