@@ -4,9 +4,26 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 22:35 UTC (04:05 IST 2026-09-28) — **WORK SLOT 15** of the
+Last cycle: 2026-09-27 23:05 UTC (04:35 IST 2026-09-28) — **FINALIZATION SLOT** of the
+2026-09-28 window, the 04:35 IST fire. No new backlog item was advanced: the window
+was frozen and re-verified, and one repository-hygiene regression guard was added
+(`test(repo): guard .gitignore against non-UTF-8 encoding`, commit `c334491`).
+
+**`.gitignore` on the stale `main` snapshot was UTF-16 LE encoded.** A clone of
+`main` (HEAD `20e541d`) ships a `.gitignore` starting with a UTF-16 BOM and NUL
+bytes. Git only parses a UTF-8 `.gitignore`, so the first four intended patterns
+were silently dropped: `*.wav`, `*.mp3`, `__pycache__/` and — the sharp one —
+`.env` were **not** ignored, leaving a real path to committing secrets or build
+artifacts. The feature branch had already been rewritten to UTF-8 by an earlier
+slot, so this slot added the missing regression guard rather than a second fix:
+`src/tests/gitignoreHygiene.test.ts` asserts the file is valid UTF-8 with no
+NUL/BOM and still contains `.env`/`.env.local`/`node_modules/`/`dist/`/
+`__pycache__/`. Negative-validated by re-encoding the file to UTF-16 LE →
+`2 failed`, restored → `2 passed`.
+
+Last cycle (previous): 2026-09-27 22:35 UTC (04:05 IST 2026-09-28) — **WORK SLOT 15** of the
 2026-09-28 window, the 04:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
-the **browser-open intents' unloaded-destination claim** (commit `bcc0f14`).
+the browser-open intents' unloaded-destination claim (commit `bcc0f14`).
 
 **Four intents named a site the in-app Browser never opened.** The live
 `/api/chat` cases `open_google`, `open_youtube`, `open_gmail`, `open_chatgpt`
@@ -4137,6 +4154,22 @@ engine fix fails the new block (`3 failed | 20 passed`); restored → 23/23.
 ---
 
 ## Known limitations
+
+- **Finalization slot, 2026-09-27 23:05 UTC (04:35 IST 2026-09-28) — window
+  closed; no new backlog item was advanced.** Froze and re-verified the tip on
+  `feature/hermes-full-completion`: `npm run lint` (`tsc --noEmit`) exit 0; full
+  `npx vitest run` **117 files / 1577 tests passed** (21.79 s); `npm run build`
+  exit 0 with artifact `dist/server.cjs` **944934 bytes**. The only change this
+  slot is the `.gitignore` encoding regression guard
+  (`src/tests/gitignoreHygiene.test.ts`, 2 tests; negative-validated). Security
+  checks clean: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status
+  --short` empty; no `.env`, token, key, `node_modules/` or `dist/` tracked or
+  staged; the diff-vs-main secret scan returned only template/placeholder names.
+  Item 13 (`Zero-fake-success for all tools`) remains `PARTIAL` — the many
+  `actionExecuted: true` sites in `server.ts` are still not individually audited
+  and their truthfulness is `UNKNOWN`. E2E: NOT RUN — no handset and no display
+  session in this sandbox. Deploy: `NOT_CONFIGURED`. Hardware-blocked items
+  #1/#50/#55 remain `NOT_AVAILABLE`.
 
 - **Work slot 5, 2026-09-27 18:10 UTC (23:40 IST 2026-09-27) — item 13, the
   offline outbound-call cancel branch.** One real fake-success class closed. The

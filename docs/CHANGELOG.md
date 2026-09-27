@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-28 04:35 IST (2026-09-27 23:05 UTC) — finalization slot: guard .gitignore encoding
+
+### Added
+- **Regression guard for `.gitignore` encoding.** The stale `main` snapshot (HEAD `20e541d`) shipped a `.gitignore` encoded as UTF-16 LE (BOM + NUL bytes). Git only parses a UTF-8 `.gitignore`, so `*.wav`, `*.mp3`, `__pycache__/` and `.env` were silently not ignored — a real path to committing secrets or build artifacts. A previous slot rewrote the file to UTF-8; this slot adds `src/tests/gitignoreHygiene.test.ts`, which asserts the raw file is valid UTF-8 with no NUL/BOM and still contains `.env`, `.env.local`, `node_modules/`, `dist/` and `__pycache__/`.
+
+### Tests
+- `src/tests/gitignoreHygiene.test.ts` — 2 tests. Negative-validated by re-encoding the file to UTF-16 LE (`2 failed`), then restoring UTF-8 (`2 passed`).
+
+### Verification (this slot, no source change beyond the guard)
+- `npm run lint` (`tsc --noEmit`) — exit 0.
+- `npx vitest run` — **117 files / 1577 tests passed** (21.79 s).
+- `npm run build` — exit 0, `dist/server.cjs` 944934 bytes.
+- Security: `.env` ignored, working tree clean, no secret in the diff-vs-main scan. E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-09-28 03:35 IST (2026-09-27 22:05 UTC) — work slot 14: a printed window title is not a read screen
 
 ### Fixed
