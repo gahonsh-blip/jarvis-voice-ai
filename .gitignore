@@ -1,8 +1,0 @@
-*.wav
-*.mp3
-__pycache__/
-.env
-
-node_modules/
-
-dist/

@@ -1,16 +1,16 @@
 {
   "window_date": "2026-09-28",
   "window_started_at": "2026-09-27T15:35:00Z",
-  "last_slot_at": "2026-09-27T21:35:00Z",
-  "slots_completed": 1,
+  "last_slot_at": "2026-09-27T22:05:00Z",
+  "slots_completed": 2,
   "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools (Computer Operator live-screen labels)",
+  "current_item_title": "Zero-fake-success for all tools (Computer Operator window-title + parsed-element labels)",
   "current_item_status": "PARTIAL",
-  "last_commit": "f75700a",
+  "last_commit": "66add08",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [],
+  "blocked_items": [1, 2, 8, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "state_note": "automation/hermes-state was empty on entry; slots_completed recorded as 1 per the missing-state rule, though the wall clock (03:05 IST) is schedule slot 13."
+  "state_note": "state recorded slots_completed=1 on entry; this slot is the 03:35 IST fire (schedule slot 14 of 16). Incremented by 1."
 }
