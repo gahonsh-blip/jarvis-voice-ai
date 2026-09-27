@@ -39,7 +39,10 @@ describe('HERMES JARVIS - Conversational Pipeline Regression Test Suite', () => 
       const input = 'अभी कितने बजे हैं?';
       const result = processOfflineCommand(input, initialMemory, 'hi-IN');
       expect(result.intent).toBe('time_inquiry');
-      expect(result.actionExecuted).toBe(true);
+      // Reading the clock is a question, not executed work, and
+      // `handleExecuteAction` only switches views for this intent. The counter
+      // must not advance (cases C and D above hold the same line).
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).not.toContain(CANNED_GREETING_SUBSTRING);
       expect(result.reply).toMatch(/समय|बजे/);
       expect(result.actionDetail?.payload?.timeStr).toBeDefined();
