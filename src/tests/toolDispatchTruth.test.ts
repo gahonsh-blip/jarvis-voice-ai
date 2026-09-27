@@ -14,13 +14,13 @@ const serverFlat = fs
   .replace(/\s+/g, ' ');
 
 /** The case body, bounded at the next `case '...': {` so it cannot leak into a neighbour. */
-function caseBody(intent: string): string {
+function caseBody(intent: string, max = 1400): string {
   const label = serverFlat.indexOf(`case '${intent}':`);
   expect(label, `${intent} case missing`).toBeGreaterThan(-1);
   const rest = serverFlat.slice(label);
   const nextMatch = /case '[a-z_]+': \{/.exec(rest.slice(rest.indexOf('{') + 1));
-  const end = nextMatch ? label + rest.indexOf('{') + 1 + nextMatch.index : label + 1400;
-  return serverFlat.slice(label, Math.min(end, label + 1400));
+  const end = nextMatch ? label + rest.indexOf('{') + 1 + nextMatch.index : label + max;
+  return serverFlat.slice(label, Math.min(end, label + max));
 }
 
 describe('toolActionExecuted only credits a tool that reported success', () => {
@@ -95,8 +95,11 @@ describe('the /api/chat tool intents credit work only when the tool succeeded', 
   });
 
   it('a failed YouTube extraction is not a successful summarization', () => {
-    const body = caseBody('summarize_youtube_video');
+    // The case body grew past the default 1200-char view when the summary-less
+    // branch was added; 2000 covers the whole case so the failure path is seen.
+    const body = caseBody('summarize_youtube_video', 2000);
     expect(body).toContain('actionExecuted = false');
+    expect(body).toContain('actionExecuted = hasSummary;');
   });
 
   it('an invalid YouTube token makes the status inquiry a non-action', () => {
