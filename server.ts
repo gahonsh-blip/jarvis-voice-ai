@@ -7,6 +7,7 @@ import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
+import { judgeSetNameIntent } from './src/utils/identityTruth';
 import { freelanceLeadsReply } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
 import {
@@ -8911,12 +8912,29 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'set_name': {
-        const detectedName = intentData.actionPayload?.name || message.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
-        memoryState.name = detectedName;
-        persistMemory();
-        spokenResponse = `I will remember that, ${detectedName}. Your identity has been recorded into my primary memory banks.`;
-        actionExecuted = true;
-        actionDetail = { type: 'set_name', title: 'Memory Updated', payload: { name: detectedName } };
+        const rawName = intentData.actionPayload?.name || message.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
+        const verdict = judgeSetNameIntent(rawName);
+        // The classifier's name group is greedy over a whitespace class, so a
+        // sentence ("my name is hello how are you") or a digit-only payload
+        // reaches here. Recording that as the identity and crediting executed
+        // work inflated the user-visible counter for a no-op. Only a plausible
+        // name updates memory and counts.
+        if (verdict.kind === 'name') {
+          memoryState.name = verdict.name;
+          persistMemory();
+          spokenResponse = `I will remember that, ${verdict.name}. Your identity has been recorded into my primary memory banks.`;
+          actionExecuted = true;
+          actionDetail = { type: 'set_name', title: 'Memory Updated', payload: { name: verdict.name } };
+        } else {
+          spokenResponse = language.startsWith('hi')
+            ? 'क्षमा करें, मैं आपका नाम नहीं समझ सका। कृपया ऐसे कहें: "मेरा नाम [नाम] है"।'
+            : 'I could not read a usable name there. Please say it plainly, for example "My name is [your name]".';
+          actionExecuted = false;
+          actionDetail = {
+            type: 'set_name_rejected',
+            title: `Name Not Recorded (${verdict.reason})`,
+          };
+        }
         break;
       }
       case 'get_name': {

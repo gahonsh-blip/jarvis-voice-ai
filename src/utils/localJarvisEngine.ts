@@ -7,6 +7,7 @@ import {
   checkHumanHandoffIntent,
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
+import { judgeSetNameIntent } from './identityTruth';
 import { androidBridgeEngine } from './androidBridgeEngine';
 import {
   youtubeOfflineStatusReply,
@@ -830,9 +831,13 @@ export function processOfflineCommand(
   const nameMatchEn = clean.match(/(?:my name is|call me|i am)\s+([a-zA-Z0-9_\-\s]+)/i);
   const nameMatchHi = clean.match(/(?:मेरा नाम|मुझे)\s+([a-zA-Z0-9_\-\u0900-\u097F\s]+?)(?:\s+(?:है|बुलाओ)|$)/i);
   if (nameMatchEn || nameMatchHi) {
-    let extractedName = (nameMatchEn ? nameMatchEn[1] : nameMatchHi![1]).trim();
-    extractedName = extractedName.replace(/\s*(?:है|बुलाओ|hai|ji|जी)$/i, '').trim();
-    if (extractedName && !['who', 'what', 'jarvis', 'hermes'].includes(extractedName.toLowerCase())) {
+    const rawCandidate = (nameMatchEn ? nameMatchEn[1] : nameMatchHi![1]).trim();
+    // The name group is greedy over a whitespace class, so a pasted sentence
+    // ("my name is hello how are you") or a digit-only payload reaches here.
+    // Only a plausible single name is stored and credited as executed work.
+    const nameVerdict = judgeSetNameIntent(rawCandidate);
+    if (nameVerdict.kind === 'name' && !['who', 'what', 'jarvis', 'hermes'].includes(nameVerdict.name.toLowerCase())) {
+      const extractedName = nameVerdict.name;
       updatedMemory = {
         ...updatedMemory,
         name: extractedName,
