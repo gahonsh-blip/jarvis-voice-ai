@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-28 00:23 IST (2026-09-27 18:53 UTC) — work slot 7: emergency stop is not a toggle
+
+### Fixed
+- **The live `/api/chat` `emergency_stop` / `emergency_resume` cases flipped the freeze and always claimed success.** Both called `toggleEmergencyStop(...)`, which *flips* `emergencyState.emergencyPaused` — so a second "emergency stop" silently RELEASED the freeze, and an "emergency resume" while nothing was paused ENGAGED it. Each also spoke an unconditional success (`Emergency Stop is now active. …`) and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter. A false success in the unsafe direction.
+- Added `emergencyToggleVerdict(action, state)` to `src/utils/computerOperator/offlineEmergencyTruth.ts`, derived from the pre-transition state, and **gated the flip on it** so a no-op transition cannot change state. A repeated stop, a resume with nothing paused, and a resume while the hard kill switch is latched all report `actionExecuted: false` with honest titles and leave the state untouched; a first stop and a genuine resume report `actionExecuted: true`.
+
+### Tests
+- `src/tests/offlineEmergencyTruth.test.ts` — new `describe('emergencyToggleVerdict never credits a toggle that changed nothing')` block (6 tests): first-stop, repeated-stop, latched-resume, nothing-to-release, real-resume, and a `server.ts` source-pin that `emergencyToggleVerdict(` is wired in and the old hardcoded success literals are gone. Negative-validated: the forbidden literal is present in `git show HEAD~1:server.ts` and absent after the fix.
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted suite `offlineEmergencyTruth` **10 tests passed**; full suite **114 files / 1530 tests passed** (21.48 s); build exit 0 (`dist/server.cjs` 938697 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — another real fake-success class closed, and a genuine safety inversion removed; the remaining `actionExecuted: true` sites in `server.ts` are not individually audited (`UNKNOWN`). E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-27 23:45 IST (2026-09-27 18:15 UTC) — work slot 6: a cancel that stopped no task is not executed work
 
 ### Fixed
