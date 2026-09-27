@@ -512,7 +512,9 @@ export class AndroidBridgeManager {
       } else {
         this.permissions.call_answer = 'LIMITED';
       }
-      if (caps.canInlineReply) this.permissions.message_reply = 'GRANTED';
+      // The reply path falls back to opening the messaging app when inline reply
+      // is unavailable, so message_reply is granted if either path is capable.
+      if (caps.canInlineReply || caps.canOpenApp) this.permissions.message_reply = 'GRANTED';
       if (caps.canLookupContacts) this.permissions.contacts_lookup = 'GRANTED';
     }
 
@@ -977,7 +979,7 @@ export class AndroidBridgeManager {
    */
   public executeCallAnswer(): {
     success: boolean;
-    status: 'ANSWER_DISPATCHED' | 'ROLE_REQUIRED' | 'CALL_ANSWER_UNSUPPORTED' | 'BLOCKED_EMERGENCY_STOP' | 'CALL_NOT_FOUND' | 'MOBILE_NOT_CONNECTED';
+    status: 'ANSWER_DISPATCHED' | 'ROLE_REQUIRED' | 'CALL_ANSWER_UNSUPPORTED' | 'BLOCKED_EMERGENCY_STOP' | 'PERMISSION_REQUIRED' | 'CALL_NOT_FOUND' | 'MOBILE_NOT_CONNECTED';
     messageEn: string;
     messageHi: string;
   } {
@@ -1035,6 +1037,27 @@ export class AndroidBridgeManager {
         status: capability.requiresRole ? 'ROLE_REQUIRED' : 'CALL_ANSWER_UNSUPPORTED',
         messageEn: capability.reason,
         messageHi: capability.hindiNotice,
+      };
+    }
+
+    // Owner permission matrix gate: a capable device still requires the explicit
+    // call_answer permission. A revoked permission must block the answer, not be
+    // silently overridden by device capability.
+    if (this.permissions.call_answer !== 'GRANTED') {
+      this.recordAudit({
+        eventType: 'ACTION_DENIED',
+        application: 'TelecomManager',
+        actionRequested: 'Answer Call',
+        permissionState: this.permissions.call_answer,
+        authorizationState: 'PERMISSION_REQUIRED',
+        result: 'PERMISSION_REQUIRED',
+        notes: `Call answer blocked: call_answer permission is ${this.permissions.call_answer}`,
+      });
+      return {
+        success: false,
+        status: 'PERMISSION_REQUIRED',
+        messageEn: 'Call answering is not permitted. Grant the call_answer permission first.',
+        messageHi: 'सर, कॉल उठाने की अनुमति अभी नहीं दी गई है। पहले अनुमति दें।',
       };
     }
 
@@ -1116,6 +1139,7 @@ export class AndroidBridgeManager {
       | 'REPLY_UNAVAILABLE'
       | 'BLOCKED_EMERGENCY_STOP'
       | 'AUTHORIZATION_REQUIRED'
+      | 'PERMISSION_REQUIRED'
       | 'MOBILE_NOT_CONNECTED';
     actionType: 'INLINE_REPLY' | 'OPEN_APP' | 'NONE';
     messageEn: string;
@@ -1158,6 +1182,27 @@ export class AndroidBridgeManager {
         actionType: 'NONE',
         messageEn: 'No pending message awaiting reply.',
         messageHi: 'उत्तर देने के लिए कोई पेंडिंग संदेश नहीं मिला।',
+      };
+    }
+
+    // Owner permission matrix gate: replying requires the explicit message_reply
+    // permission; a revoked permission must not be bypassed by device capability.
+    if (this.permissions.message_reply !== 'GRANTED') {
+      this.recordAudit({
+        eventType: 'ACTION_DENIED',
+        application: current.appName,
+        actionRequested: 'Message Reply',
+        permissionState: this.permissions.message_reply,
+        authorizationState: 'PERMISSION_REQUIRED',
+        result: 'PERMISSION_REQUIRED',
+        notes: `Message reply blocked: message_reply permission is ${this.permissions.message_reply}`,
+      });
+      return {
+        success: false,
+        status: 'PERMISSION_REQUIRED',
+        actionType: 'NONE',
+        messageEn: 'Message reply is not permitted. Grant the message_reply permission first.',
+        messageHi: 'सर, संदेश का उत्तर देने की अनुमति अभी नहीं दी गई है। पहले अनुमति दें।',
       };
     }
 

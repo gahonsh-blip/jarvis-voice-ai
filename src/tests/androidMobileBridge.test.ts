@@ -688,4 +688,80 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     expect(maskPhoneNumber('+1 415 890 2134')).toBe('+1 ******2134');
     expect(maskPhoneNumber('+91-9876543210')).toBe('+91 ******3210');
   });
+
+  const capableDevice = {
+    deviceId: 'phone_perm_gate',
+    deviceName: 'Phone',
+    model: 'Phone',
+    osVersion: 'Android 14',
+    bridgeVersion: 'HERMES-ANDROID-BRIDGE/2.4.0',
+    canDetectCalls: true,
+    canAnswerCalls: true,
+    telecomRoleDialer: true,
+    answerCallsPermission: true,
+    canReadNotifications: true,
+    canInlineReply: true,
+    canOpenApp: true,
+    canLookupContacts: true,
+    isSimulation: false,
+  };
+
+  it('Scenario 21: A capable device with call_answer revoked cannot answer a call', () => {
+    // Regression: executeCallAnswer previously ignored the owner permission
+    // matrix, so revoking call_answer was silently overridden by device capability.
+    engine.connectDevice(capableDevice);
+    engine.updatePermission('call_answer', 'DENIED');
+    engine.handleIncomingCall({ callerName: 'Rohit' });
+
+    const result = engine.executeCallAnswer();
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('PERMISSION_REQUIRED');
+    // The pending call must still be waiting, not silently consumed.
+    expect(engine.getPendingEvent()?.status).toBe('AWAITING_APPROVAL');
+
+    const audit = engine.getAuditLogs()[0];
+    expect(audit.eventType).toBe('ACTION_DENIED');
+    expect(audit.result).toBe('PERMISSION_REQUIRED');
+  });
+
+  it('Scenario 22: A capable device with message_reply revoked cannot reply', () => {
+    // Regression: executeMessageReply previously ignored the owner permission matrix.
+    engine.connectDevice(capableDevice);
+    engine.updatePermission('message_reply', 'DENIED');
+    engine.handleIncomingNotification({
+      appName: 'WhatsApp',
+      packageName: 'com.whatsapp',
+      title: 'Vikas',
+      text: 'Are you joining the standup?',
+      hasInlineReply: true,
+    });
+
+    const result = engine.executeMessageReply('On my way');
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('PERMISSION_REQUIRED');
+    expect(result.actionType).toBe('NONE');
+    expect(engine.getPendingEvent()?.status).toBe('AWAITING_APPROVAL');
+
+    const audit = engine.getAuditLogs()[0];
+    expect(audit.eventType).toBe('ACTION_DENIED');
+    expect(audit.result).toBe('PERMISSION_REQUIRED');
+  });
+
+  it('Scenario 23: message_reply is granted when only the open-app fallback is capable', () => {
+    // Regression: message_reply is now derived from canInlineReply OR canOpenApp,
+    // because executeMessageReply falls back to opening the messaging app.
+    engine.connectDevice({ ...capableDevice, canInlineReply: false, canOpenApp: true });
+    expect(engine.getPermissions().message_reply).toBe('GRANTED');
+
+    engine.updatePermission('message_reply', 'DENIED');
+    engine.handleIncomingNotification({
+      appName: 'Messages',
+      packageName: 'com.google.android.apps.messaging',
+      title: 'Vikas',
+      text: 'Ping',
+      hasInlineReply: false,
+    });
+    const result = engine.executeMessageReply('Ping');
+    expect(result.status).toBe('PERMISSION_REQUIRED');
+  });
 });
