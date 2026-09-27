@@ -20,8 +20,12 @@ const appFlat = fs
   .readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8')
   .replace(/\s+/g, ' ');
 
-/** The case body, bounded at the next block-opening case so it cannot leak into a neighbour. */
-function caseBody(intent: string): string {
+/**
+ * The case body, bounded at the next block-opening case so it cannot leak into a
+ * neighbour. `max` must exceed the longest reply string in the case (the
+ * capabilities reply is long) or the trailing flag assignments are cut off.
+ */
+function caseBody(intent: string, max = 1200): string {
   const label = serverFlat.indexOf(`case '${intent}':`);
   expect(label, `${intent} case missing`).toBeGreaterThan(-1);
   // Fall-through labels (`case 'volume_down':` after `case 'volume_up':`) share a
@@ -31,7 +35,7 @@ function caseBody(intent: string): string {
   const rest = serverFlat.slice(blockOpen + 1);
   const nextMatch = /case '[a-z_]+': \{/.exec(rest);
   const end = nextMatch ? blockOpen + 1 + nextMatch.index : serverFlat.length;
-  return serverFlat.slice(label, Math.min(end, label + 1200));
+  return serverFlat.slice(label, Math.min(end, label + max));
 }
 
 const NO_DISPLAY = {
@@ -315,5 +319,34 @@ describe('the /api/chat cloud_telemetry case asserts neither a plan nor a live r
     expect(body).toContain('describeBillingCost(oracleCloudState.billingEntitlement)');
     expect(body).not.toContain('Oracle Always Free ARM VM');
     expect(body).not.toContain('Metrics are read live from the daemon host.');
+  });
+});
+
+
+describe('the /api/chat informational cases do not count a question as executed work', () => {
+  // A look-up or capability answer runs no tool and opens no view: `handleExecuteAction`
+  // in App.tsx has no case for any of these intents, so they must report
+  // `actionExecuted: false` and must not advance the "Autonomous Actions Executed"
+  // counter. The offline engine already reports false for the same intents; the live
+  // route previously disagreed and marked each as a performed action.
+  it('get_name reports the stored name without crediting an action', () => {
+    const body = caseBody('get_name');
+    expect(body).toContain('actionExecuted = false;');
+    expect(body).not.toContain('actionExecuted = true;');
+    expect(body).toContain('informational, no action taken');
+  });
+
+  it('capabilities_inquiry lists capabilities without crediting an action', () => {
+    const body = caseBody('capabilities_inquiry', 2200);
+    expect(body).toContain('actionExecuted = false;');
+    expect(body).not.toContain('actionExecuted = true;');
+    expect(body).toContain('informational, no action taken');
+  });
+
+  it('system_diagnostic reports measured values without crediting a probe', () => {
+    const body = caseBody('system_diagnostic');
+    expect(body).toContain('actionExecuted = false;');
+    expect(body).not.toContain('actionExecuted = true;');
+    expect(body).toContain('informational, no probe run');
   });
 });

@@ -8887,13 +8887,17 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'get_name': {
+        // Reading the stored name is a lookup, not an action: `handleExecuteAction`
+        // has no `get_name` case and no view opens, so this must not increment the
+        // user-visible "Autonomous Actions Executed" counter. Mirrors the offline
+        // engine, where the same intent already reports `actionExecuted: false`.
         if (memoryState.name) {
           spokenResponse = `Your name is ${memoryState.name}, as logged in my database.`;
         } else {
           spokenResponse = `I do not know your name yet. You can tell me by saying "My name is [your name]".`;
         }
-        actionExecuted = true;
-        actionDetail = { type: 'get_name', title: 'Memory Query' };
+        actionExecuted = false;
+        actionDetail = { type: 'get_name', title: 'Memory Query (informational, no action taken)' };
         break;
       }
       case 'open_notepad': {
@@ -9071,8 +9075,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const cpuText = live?.cpuUsage != null ? `${live.cpuUsage}%` : 'unavailable';
         const ramText = live?.ramUsedGb != null ? `${live.ramUsedGb} GB` : 'unavailable';
         spokenResponse = `Jarvis Systems Diagnostic: server process online. ${memoryState.notes.length} note(s) stored. Host CPU ${cpuText}, RAM ${ramText}. Cloud node health and speech-hardware status are not probed from here.`;
-        actionExecuted = true;
-        actionDetail = { type: 'system_diagnostic', title: 'Diagnostics (measured values only)', payload: { notes: memoryState.notes.length, cpu: cpuText, ram: ramText } };
+        // Reporting measured values is informational — it runs no diagnostic probe
+        // and `handleExecuteAction` has no `system_diagnostic` case, so the count of
+        // executed actions must not advance. Mirrors the offline engine branch.
+        actionExecuted = false;
+        actionDetail = { type: 'system_diagnostic', title: 'Diagnostics (informational, no probe run)', payload: { notes: memoryState.notes.length, cpu: cpuText, ram: ramText } };
         break;
       }
       case 'mobile_personal_status':
@@ -9130,8 +9137,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         spokenResponse = isHi
           ? `मैं HERMES JARVIS हूँ — आपका ऑटोनॉमस AI असिस्टेंट। मेरी प्रमुख क्षमताएं:\n1. 📱 मोबाइल पर्सनल स्टेटस, बैटरी व मौसम टेलीमेट्री\n2. 🛡️ 4-लेवल सुरक्षा मैट्रिक्स और अनुमति गेटवे\n3. 💼 फ्रीलांस लीड्स व स्वचालित कोटेशन जनरेटर\n4. 📱 सोशल मीडिया पोस्ट्स निर्माण व अनुमोदन\n5. 💻 गिट ऑडिट, फाइल्स एक्सप्लोरर व वेब रिसर्च\n6. 🌐 यूट्यूब वीडियो सारांश व ओरेकल क्लाउड मॉनिटरिंग`
           : `I am HERMES JARVIS — your autonomous AI assistant. My primary capabilities include:\n1. 📱 Mobile Personal Status, battery & weather telemetry\n2. 🛡️ 4-Level Security Matrix & Human Consent Gateway\n3. 💼 Freelance lead management & instant quotation generator\n4. 📱 Social media drafts with Level-4 publishing approval\n5. 💻 Autonomous tools: Git audit, file manager & web research\n6. 🌐 YouTube video summarization & Oracle Always Free cloud monitoring`;
-        actionExecuted = true;
-        actionDetail = { type: 'capabilities_inquiry', title: 'JARVIS Capabilities & Subsystems' };
+        // Listing capabilities is informational: it opens no view and runs no tool,
+        // so it must not be counted as executed work. The offline engine already
+        // reports `actionExecuted: false` for this intent (engineInformationalTruth).
+        actionExecuted = false;
+        actionDetail = { type: 'capabilities_inquiry', title: 'JARVIS Capabilities (informational, no action taken)' };
         break;
       }
       case 'math_computation': {
