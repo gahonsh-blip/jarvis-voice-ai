@@ -8835,8 +8835,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           actionExecuted = true;
           actionDetail = { type: 'find_document', title: `Found: ${query}`, payload: search.matches };
         } else if (search.success) {
+          // A search that returned nothing retrieved no document: no work was
+          // executed, and the "Not found" card must not be counted as an action.
           spokenResponse = `No file matching ${query} exists in the workspace.`;
-          actionExecuted = true;
+          actionExecuted = false;
           actionDetail = { type: 'find_document', title: `Not found: ${query}`, payload: { matches: [] } };
         } else {
           spokenResponse = `Document search is unavailable: ${search.error}`;

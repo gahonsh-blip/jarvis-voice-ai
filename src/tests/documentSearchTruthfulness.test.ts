@@ -44,3 +44,37 @@ describe('document search reports real files, never fabricated ones', () => {
     expect(serialized).not.toContain('42.5');
   });
 });
+
+// server.ts binds a port on import, so the route assertion reads the source
+// text, matching the convention in toolDispatchTruth.test.ts.
+const serverFlat = fs
+  .readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8')
+  .replace(/\s+/g, ' ');
+
+function chatCaseBody(intent: string, max = 900): string {
+  const label = serverFlat.indexOf(`case '${intent}':`);
+  expect(label, `${intent} case missing`).toBeGreaterThan(-1);
+  const blockOpen = serverFlat.indexOf('{', label);
+  const rest = serverFlat.slice(blockOpen + 1);
+  const nextMatch = /case '[a-z_]+': \{/.exec(rest);
+  const end = nextMatch ? blockOpen + 1 + nextMatch.index : serverFlat.length;
+  return serverFlat.slice(label, Math.min(end, label + max));
+}
+
+describe('the find_document route does not credit a search that found nothing', () => {
+  it('a zero-match search is a non-action, not an executed document lookup', () => {
+    const body = chatCaseBody('find_document');
+    expect(body).toContain('No file matching');
+    // Isolate the "search succeeded but found nothing" branch.
+    const afterFound = body.slice(body.indexOf('else if (search.success)'));
+    const branch = afterFound.slice(0, afterFound.indexOf('} else {'));
+    expect(branch).toContain('actionExecuted = false;');
+    expect(branch).not.toContain('actionExecuted = true;');
+  });
+
+  it('an empty query is rejected by the real search rather than inventing success', () => {
+    const result = realFsSearch('   ');
+    expect(result.success).toBe(false);
+    expect(result.error).toBeTruthy();
+  });
+});
