@@ -1,16 +1,22 @@
 {
   "window_date": "2026-09-28",
   "window_started_at": "2026-09-27T15:35:00Z",
-  "last_slot_at": "2026-09-27T22:05:00Z",
-  "slots_completed": 2,
+  "last_slot_at": "2026-09-27T22:35:00Z",
+  "slots_completed": 3,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools (Computer Operator window-title + parsed-element labels)",
   "current_item_status": "PARTIAL",
-  "last_commit": "66add08",
+  "last_commit": "fbe19e5",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [1, 2, 8, 50, 55],
+  "blocked_items": [
+    1,
+    2,
+    8,
+    50,
+    55
+  ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "state_note": "state recorded slots_completed=1 on entry; this slot is the 03:35 IST fire (schedule slot 14 of 16). Incremented by 1."
+  "state_note": "advanced item 13: browser-open intents (open_google/youtube/gmail/chatgpt) now derive reply+card+target URL from browserOpenVerdict and pass initialUrl to BrowserModal; 10 targeted green. slots_completed incremented 2->3 (state-branch counter; this is schedule slot 15 of 16). Next fire 04:35 IST is the FINALIZATION slot."
 }
