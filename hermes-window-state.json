@@ -1,15 +1,20 @@
 {
   "window_date": "2026-09-28",
   "window_started_at": "2026-09-27T19:35:00Z",
-  "last_slot_at": "2026-09-27T20:18:00Z",
-  "slots_completed": 10,
+  "last_slot_at": "2026-09-27T20:42:00Z",
+  "slots_completed": 11,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "c2ecfcf",
+  "last_commit": "e5606ad",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [1, 8, 50, 55],
+  "blocked_items": [
+    1,
+    8,
+    50,
+    55
+  ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
