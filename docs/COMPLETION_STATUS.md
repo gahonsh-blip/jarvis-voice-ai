@@ -4,7 +4,46 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-26 23:10 UTC (04:40 IST 2026-09-27) — **FINALIZATION SLOT**
+Last cycle: 2026-09-27 15:46 UTC (21:16 IST 2026-09-27) — **WORK SLOT 1** of the
+2026-09-28 window, the 21:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **offline Local JARVIS Engine Android
+inquiry branches**.
+
+**Two read-only Android inquiries reported a performed action.** In
+`src/utils/localJarvisEngine.ts` (section `0.6 Android Mobile Assistant
+Inquiries`):
+
+- `"किसका कॉल है"` / `"who is calling"` returned `intent: 'answer_call'` with
+  `actionExecuted: true`. `src/App.tsx` routes `data.actionExecuted &&
+  data.intent` to `handleExecuteAction()`, whose `answer_call` case calls
+  `handleAnswerCall()` — so merely *asking who was calling* could **answer the
+  call**, an irreversible telephony side effect triggered by a read.
+- `"कोई notification आया क्या"` / `"any notifications"` returned
+  `intent: 'open_notepad'` with `actionExecuted: true`, so a query opened the
+  Notes workspace and advanced the user-visible "Autonomous Actions Executed"
+  counter for work that never happened.
+
+Fixed: both branches now emit dedicated read-only intents (`caller_inquiry`,
+`notification_inquiry`) with `actionExecuted: false` and an action type no
+caller switch acts on; the honest reply text is unchanged. `src/types.ts`
+`IntentCategory` gained the two union members.
+
+Guarded by `src/tests/androidInquiryTruth.test.ts` (5 tests: caller inquiry with
+an active `CALL` and with none, notification inquiry with a pending `MESSAGE`
+and with an empty queue, plus a source-level guard over the `0.6` section).
+**Negative-validated** — stashing only `src/utils/localJarvisEngine.ts` fails
+all 5 (`5 failed | 5`), restored → `5 passed`. Related suites observed this slot
+on `ac2daa1`: `localJarvisEngine` + `androidMobileBridge` + `offlineCallTruth` +
+`androidBridgePrivacySettings` + `remainingFakeSuccess` **5 files / 140 tests
+passed**. Gates: `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run`
+**114 files / 1509 tests passed** (20.85 s); `npm run build` exit 0
+(`dist/server.cjs` 907.4 kb). E2E: NOT RUN — no handset, no display session.
+Deploy: `NOT_CONFIGURED`. Item 13 remains `PARTIAL` — two more real fake-success
+paths closed; the remaining `actionExecuted: true` claims outside the audited
+branches are still **not** individually audited, so their truthfulness is
+`UNKNOWN`, not confirmed.
+
+Previous cycle: 2026-09-26 23:10 UTC (04:40 IST 2026-09-27) — **FINALIZATION SLOT**
 of the 2026-09-27 window, the 04:35 IST fire. No new backlog item was advanced;
 the slot re-verified the frozen tip and prepared the PR for a human merge.
 

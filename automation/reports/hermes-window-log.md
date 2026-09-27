@@ -6722,3 +6722,68 @@ Item #13 remains `PARTIAL` — the remaining `actionExecuted: true` claims were
 NOT audited this slot; their truthfulness is `UNKNOWN`. E2E: NOT RUN — no
 handset, no display session.
 
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:05
+Window date: 2026-09-28   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — offline Local JARVIS Engine Android
+  inquiry branches. src/utils/localJarvisEngine.ts section 0.6:
+  caller-identity inquiry no longer returns intent:'answer_call' /
+  actionExecuted:true; notification inquiry no longer returns
+  intent:'open_notepad' / actionExecuted:true. New read-only intents
+  caller_inquiry / notification_inquiry (src/types.ts).
+  Evidence: src/tests/androidInquiryTruth.test.ts (5 tests) passes;
+  negative-validated (5 fail with fix stashed, 5 pass restored).
+
+In Progress:
+- #13 remains PARTIAL — the sweep is not exhausted; remaining
+  actionExecuted:true claims outside the audited branches are UNKNOWN.
+
+Remaining:
+- #13 (continue audit), then remaining backlog items per mandated order.
+  Many hardware/credential-gated items stay BLOCKED/NOT_AVAILABLE.
+
+Bugs Found:
+- Read-only "who is calling" inquiry carried answer_call actionExecuted:true,
+  so App.tsx handleExecuteAction() could ANSWER the call (irreversible).
+- Read-only "any notifications" inquiry carried open_notepad
+  actionExecuted:true, opening Notes and inflating the actions counter.
+
+Bugs Fixed:
+- Both branches made read-only (actionExecuted:false, no callable intent).
+  Verified by 5 new tests; negative validation (5 failed without the fix).
+
+Tests:    114 files / 1509 tests passed (full npx vitest run, 20.85 s)
+Lint:     npm run lint (tsc --noEmit) exit 0
+Build:    npm run build exit 0; dist/server.cjs 907.4 kb
+E2E:      NOT RUN — no handset, no display session
+Security: git check-ignore -v .env -> .gitignore; no .env/node_modules/dist
+          tracked; no secrets added
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  ac2daa1
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #4 (existing) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this environment
+
+Blocked:
+- Real Android E2E / screenshot / device actions — no handset.
+- Live provider calls — no credentials configured in sandbox.
+
+Human Approval Required:
+- Merge of feature/hermes-full-completion -> main (finalization slot).
+
+Next Slot:
+- Continue item #13: audit the next untrusted actionExecuted:true cluster in
+  the offline engine (e.g. surface/launch/telephony intents) with a truth test.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में ऑफ़लाइन इंजन के दो डमी-सक्सेस बग ठीक किए — "किसका कॉल है" अब
+  कॉल नहीं उठाता और "कोई notification आया क्या" अब नोटपैड नहीं खोलता; 5 नए
+  टेस्ट पास, पूरा सूट 1509 पास, lint/build साफ़।
+
+---

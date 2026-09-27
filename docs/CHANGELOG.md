@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 21:16 IST (2026-09-27 15:46 UTC) — work slot 1: Android inquiries must not fake an action
+
+### Fixed
+- **A read-only inquiry could answer a live call.** In `src/utils/localJarvisEngine.ts` (section `0.6 Android Mobile Assistant Inquiries`), the caller-identity branch (`"किसका कॉल है"`, `"who is calling"`) returned `intent: 'answer_call'` with `actionExecuted: true`. `src/App.tsx` routes `data.actionExecuted && data.intent` to `handleExecuteAction()`, whose `answer_call` case calls `handleAnswerCall()` — so asking **who** was calling could answer the call, an irreversible telephony side effect triggered by a read. The notification branch (`"कोई notification आया क्या"`, `"any notifications"`) returned `intent: 'open_notepad'` with `actionExecuted: true`, so a query opened the Notes workspace and advanced the user-visible "Autonomous Actions Executed" counter for work that never happened.
+- Both branches now emit dedicated read-only intents (`caller_inquiry`, `notification_inquiry`) with `actionExecuted: false` and an action type no caller switch acts on. `src/types.ts` `IntentCategory` gained the two union members. The honest reply text is unchanged.
+
+### Tests
+- `src/tests/androidInquiryTruth.test.ts` — new, 5 tests: caller inquiry with an active `CALL` and with none, notification inquiry with a pending `MESSAGE` and with an empty queue, plus a source-level guard over the `0.6` section. Negative-validated: stashing only `src/utils/localJarvisEngine.ts` fails all 5 (`5 failed | 5`); restored → `5 passed`.
+- Related suites observed on `ac2daa1`: `localJarvisEngine` + `androidMobileBridge` + `offlineCallTruth` + `androidBridgePrivacySettings` + `remainingFakeSuccess` **5 files / 140 tests passed**. Full suite **114 files / 1509 tests passed** (20.85 s). Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 907.4 kb).
+
+### Notes
+- Item 13 remains `PARTIAL` — two more real fake-success paths closed; the remaining `actionExecuted: true` claims outside the audited branches are not individually audited (`UNKNOWN`). E2E: NOT RUN — no handset, no display session. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-27 04:40 IST (2026-09-26 23:10 UTC) — finalization slot: window verified, PR ready for human merge
 
 ### Verified
