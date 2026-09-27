@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 19:09 UTC (00:39 IST 2026-09-28) — **WORK SLOT 8** of the
+Last cycle: 2026-09-27 19:41 UTC (01:11 IST 2026-09-28) — **WORK SLOT 9** of the
+2026-09-28 window, the 01:05 IST fire. Item 2
+(`Android → JARVIS → Server E2E test`), the **`AndroidBridgeManager` permission
+matrix bypass**.
+
+**A capable Android device with a revoked owner permission could still answer
+calls and send replies.** `executeCallAnswer()` and `executeMessageReply()` in
+`src/utils/androidBridgeEngine.ts` gated on the *device* capability
+(`evaluateCallAnswerSupport()`, `canInlineReply` / `canOpenApp`) but never on
+the owner-controlled `MobilePermissionMatrix` that `updatePermission()` writes.
+So an owner who revoked `call_answer` or `message_reply` on a capable handset
+was silently overridden — the permission screen and the operation disagreed.
+`connectDevice()` was also inconsistent: it granted `message_reply` only from
+`canInlineReply`, though `executeMessageReply()` falls back to the open-app path
+when inline reply is unavailable, so a device whose only reply route is opening
+the messaging app got a `LIMITED`/absent reply permission it could still act on.
+
+Fixed: both operations now check the matrix and return the new honest
+`PERMISSION_REQUIRED` status, auditing `ACTION_DENIED` / `PERMISSION_REQUIRED`
+and leaving the pending call/notification at `AWAITING_APPROVAL` instead of
+consuming it; `connectDevice()` derives `message_reply` from
+`canInlineReply || canOpenApp`. Guarded by new
+`androidMobileBridge.test.ts` Scenarios 21–23 (file now 43 tests). Gates
+observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted suite
+`src/tests/androidMobileBridge.test.ts` **43 tests passed**. Full suite and
+build: see the run's window log. E2E: NOT RUN — no handset, no display session.
+Deploy: `NOT_CONFIGURED`. Item 2 remains `PARTIAL` — the server-side leg is now
+stricter, but the device-to-server leg still needs a physical handset.
+
+Previous cycle: 2026-09-27 19:09 UTC (00:39 IST 2026-09-28) — **WORK SLOT 8** of the
 2026-09-28 window, the 00:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **live `/api/chat` `find_document`
 case**.
@@ -3339,7 +3368,7 @@ files / 675 tests, clean lint, clean build.
 | # | Item | Status | Evidence |
 | :--- | :--- | :--- | :--- |
 | 1 | Real Android Mobile Bridge connection | `PARTIAL` | Authenticated pairing + capability handshake verified by `androidBridge.e2e.test.ts` (real server process). Physical device leg unverified. **2026-09-23 19:35 UTC (01:05 IST 2026-09-24)** ŌĆö the real adapter's connect/handshake itself was still asserted by a live test that could never pass: `/api/mobile/bridge/connect` (and every bridge route but `/pair`) requires a paired session token, and pairing is disabled unless `MOBILE_BRIDGE_PAIRING_SECRET` is set, so the test asserted `CONNECTED` against a server that always answers 401. The test now pairs first when the secret is provisioned and otherwise asserts the honest unauthenticated rejection. Client-side adapter contract remains exercised by `src/tests/realAndroidBridgeAdapter.test.ts`. Still `PARTIAL` ŌĆö no paired physical handset. |
-| 2 | Android ŌåÆ JARVIS ŌåÆ Server E2E test | `PARTIAL` | Full server-side chain verified E2E. Device-to-server leg needs hardware. **2026-09-23 19:35 UTC (01:05 IST 2026-09-24)** ŌĆö `RealAndroidBridgeAdapter.answerCall()` was completely ungated: it POSTed an irreversible call-answer with no human approval while the server demanded `approved: true`, and it read only `data.status` though the gateway answers `data.outcome`, flattening every response into a bare `FAILED`. Now it refuses locally with `AUTHORIZATION_REQUIRED` and maps the real verdict (`BLOCKED`/`NOT_CONFIGURED`/`DISPATCHED`). Guarded by `src/tests/realAndroidBridgeAdapter.test.ts`; negative-validated (removing the gate fails exactly the approval test). **2026-09-21 22:06 IST** ŌĆö the owner-approval leg of the chain was reading refusals as consent (see item 34); a refused call now stays `AWAITING_APPROVAL` and the guard is pinned in `src/tests/androidMobileBridge.test.ts`. |
+| 2 | Android ŌåÆ JARVIS ŌåÆ Server E2E test | `PARTIAL` | Full server-side chain verified E2E. Device-to-server leg needs hardware. **2026-09-27 19:41 UTC (01:11 IST 2026-09-28)** — `AndroidBridgeManager.executeCallAnswer()` / `executeMessageReply()` ignored the owner `MobilePermissionMatrix`: a capable handset with `call_answer`/`message_reply` revoked still answered and replied, silently overriding the permission screen. Both now return `PERMISSION_REQUIRED` (audited `ACTION_DENIED`), leave the pending event `AWAITING_APPROVAL`, and `connectDevice()` derives `message_reply` from `canInlineReply || canOpenApp` to match the open-app fallback. Guarded by `androidMobileBridge.test.ts` Scenarios 21–23 (43 tests). **2026-09-23 19:35 UTC (01:05 IST 2026-09-24)** ŌĆö `RealAndroidBridgeAdapter.answerCall()` was completely ungated: it POSTed an irreversible call-answer with no human approval while the server demanded `approved: true`, and it read only `data.status` though the gateway answers `data.outcome`, flattening every response into a bare `FAILED`. Now it refuses locally with `AUTHORIZATION_REQUIRED` and maps the real verdict (`BLOCKED`/`NOT_CONFIGURED`/`DISPATCHED`). Guarded by `src/tests/realAndroidBridgeAdapter.test.ts`; negative-validated (removing the gate fails exactly the approval test). **2026-09-21 22:06 IST** ŌĆö the owner-approval leg of the chain was reading refusals as consent (see item 34); a refused call now stays `AWAITING_APPROVAL` and the guard is pinned in `src/tests/androidMobileBridge.test.ts`. |
 | 3 | Real Android battery/status telemetry | `VERIFIED` (server) | Device-reported telemetry only; fabricated defaults removed. |
 | 4 | Real Android notifications integration | `VERIFIED` (server) | Notification listener gated and replay-protected. Sensitive-content filter is now tested: `src/tests/mobileNotificationPrivacy.test.ts` (39 tests). A garbled Hindi OTP matcher that let Hindi OTP bodies through was found and fixed 2026-09-20 21:05 IST. 2026-09-21 02:10 IST: a regression introduced by the 01:05 IST slot had made the redaction guard switchable off via `sensitiveFilteringEnabled`; that was reverted (guard is unconditional, field removed) and is pinned by `src/tests/androidBridgePrivacySettings.test.ts` (5 tests), negative-validated. |
 | 5 | Real Android location/GPS integration | `VERIFIED` (server) | `ACCESS_FINE_LOCATION` gating with real coordinates accepted. |
