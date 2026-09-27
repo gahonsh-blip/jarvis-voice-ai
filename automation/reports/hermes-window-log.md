@@ -7018,3 +7018,46 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - ब्लॉक किए गए फाइनेंस अनुरोध को अब "executed" नहीं गिना जाता — दोनों सतहों पर
   `actionExecuted: false`; 37 टेस्ट पास, पूरा सूट 1517 पास, lint/build साफ़, पुश हो गया।
+
+
+---
+
+## 2026-09-28 window — WORK SLOT 6 (23:35 IST / 18:15 UTC, 2026-09-27)
+
+**Item 13 — Zero-fake-success for all tools (`PARTIAL`).** Closed the live
+`/api/chat` `cancel_computer_task` fake-success class.
+
+**Bug.** The `cancel_computer_task` case in `server.ts` (~line 8569) called
+`TaskTracker.cancelActiveTask('User requested stop')` and unconditionally spoke
+`Computer operator task has been immediately cancelled.`, titled the action
+`Task Cancelled` and set `actionExecuted = true` — but `cancelActiveTask`
+returns `{ cancelled: false }` when no task is active, and the case ignored it.
+With nothing running, nothing was cancelled, yet the case still bumped the
+user-visible "Autonomous Actions Executed" counter
+(`memoryState.stats.actionsExecuted`).
+
+**Fix.** New `cancelComputerTaskVerdict(result)` in
+`src/utils/computerOperator/operatorReplyTruth.ts` (the module that already
+carries the honest `fix_project_error` / `inspect_screen` verdicts). False or
+absent result -> `actionExecuted: false`, title `Nothing to Cancel (no task
+running)`, EN/HI reply stating nothing was cancelled. Real cancellation ->
+`actionExecuted: true`, title `Running Host Task Cancelled`. `server.ts` now
+derives both the reply and the flag from the verdict.
+
+**Evidence.** `src/tests/operatorReplyTruth.test.ts` — new
+`describe('cancelComputerTaskVerdict never credits a stop that stopped nothing')`
+block: `{cancelled:false}` case, `null`/`undefined` case, actual-cancel case,
+and a `server.ts` source-pin. Negative-validated: reverting only the `server.ts`
+change fails the source-pin (`1 failed | 19 passed`); restored -> `20 passed`.
+
+**Observed gates.** lint (`tsc --noEmit`) exit 0 · targeted `operatorReplyTruth`
+20 passed · full `npx vitest run` **114 files / 1524 tests passed** (21.34 s) ·
+build exit 0 (`dist/server.cjs` 934519 bytes).
+
+**Commits.** `2dde6cf` (fix), `e01086c` (docs). State branch
+`automation/hermes-state` -> `6480831`.
+
+E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
+PR: NONE this slot. Main merge: NOT MERGED — awaiting human approval.
+Item 13 remains `PARTIAL` — the remaining `actionExecuted: true` sites in
+`server.ts` are still not individually audited (`UNKNOWN`).
