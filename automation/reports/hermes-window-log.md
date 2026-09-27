@@ -7403,3 +7403,29 @@ route.
 **Next slot:** #13 — audit the next `actionExecuted: true` site in `server.ts`; the previously-named unrouted `time_inquiry` case is now handled.
 
 **हिंदी सारांश:** घड़ी पूछना अब "executed work" नहीं गिना जाता — लाइव और ऑफ़लाइन दोनों सतहों पर ठीक किया, 2 नए टेस्ट, पूरा सूट 1546/1546 पास, lint/build हरे।
+
+---
+
+## 2026-09-28 03:05 IST — WORK SLOT 13
+
+**Slot:** WORK | **IST:** 03:05 | **Window date:** 2026-09-28 | **Slots completed:** 13
+
+**Completed:** #13 Zero-fake-success for all tools — `PARTIAL` (coherent slice: the Computer Operator panel's unmeasured live-screen claims). Evidence: `src/utils/computerOperator/observationTruth.ts` gains `observationOperatorStateLabel` / `observationActiveAppLabel` / `observationStreamHeader`; `src/components/ComputerOperatorModal.tsx` derives all three; `src/tests/observationTruth.test.ts` 34 passed. Commit `3f4cb6b`.
+
+**Bugs found:** `ComputerOperatorModal` printed `OPERATOR ACTIVE: OBSERVING SCREEN`, `ACTIVE APP: <name> | None`, and `LIVE COMMAND STREAM & TELEMETRY` unconditionally, contradicting the honest status dot beside them — it asserted observation for the built-in illustrative preview and for an unreachable (`isAmbiguous`) host.
+
+**Bugs fixed:** Same — fixed and negative-validated (reverting only the stream-header call in the modal fails exactly the new guard: `1 failed | 33 passed`; restored → 34/34).
+
+**Tests:** 115 files / **1556 passed** (21.53 s). Targeted `observationTruth`: 34 passed. **Lint:** exit 0 (`tsc --noEmit`). **Build:** exit 0 (`dist/server.cjs` 943006 bytes). **E2E:** NOT RUN — no display session, no handset. **Security:** no `.env` staged, no secrets in diff.
+
+**Documentation:** `docs/CHANGELOG.md`, `docs/COMPLETION_STATUS.md`.
+
+**Branch:** feature/hermes-full-completion · **Commits:** `3f4cb6b` (fix), `f75700a` (docs) · **Push:** succeeded.
+
+**PR:** NONE opened this slot. **Main merge:** NOT MERGED — awaiting human approval. **Deploy:** NOT_CONFIGURED — no deployment target present.
+
+**Blocked:** #1, #2 (hardware), #8 (Windows host), #50 (device mic), #55 (external auditor).
+
+**Next slot:** #13 — audit the next unconditional success/status literal in the Computer Operator surfaces (`ComputerOperatorModal` telemetry rows, then the operator router).
+
+**हिंदी सारांश:** कंप्यूटर ऑपरेटर पैनल अब बिने देखे स्क्रीन का दावा नहीं करता — तीनों लेबल असली माप से बनते हैं, 10 नए टेस्ट, पूरा सूट 1556/1556 पास, lint/build हरे।
