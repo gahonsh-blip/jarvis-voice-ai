@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 22:12 IST (2026-09-27 16:42 UTC) — work slot 2: `/api/chat` informational cases must not fake an action
+
+### Fixed
+- **The live `/api/chat` route counted questions as executed work.** `get_name`, `capabilities_inquiry` and `system_diagnostic` in `server.ts` each set `actionExecuted = true`, which flows into `if (actionExecuted) memoryState.stats.actionsExecuted += …` and advanced the user-visible "Autonomous Actions Executed" counter. None runs a tool or opens a view — `handleExecuteAction()` in `src/App.tsx` has no case for any of them — so a name look-up, a capability list and a clock-only diagnostic were recorded as performed work. The offline engine already reports `actionExecuted: false` for the same intents.
+- All three now set `actionExecuted = false` and carry an explicitly informational title (`Memory Query (informational, no action taken)`, `JARVIS Capabilities (informational, no action taken)`, `Diagnostics (informational, no probe run)`). The honest reply text is unchanged and the counter is untouched.
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts` — 3 new source-level cases (the `caseBody` helper gained an optional window width so the long capabilities reply is not truncated before the flag assignments). Negative-validated: stashing only `server.ts` fails all 3 (`3 failed | 31 passed`); restored → `34 passed`.
+- Targeted truth suites observed on `f3cdf6b`: `remainingFakeSuccess` + `engineInformationalTruth` + `toolDispatchTruth` **3 files / 62 tests passed**. Full suite **114 files / 1512 tests passed** (21.49 s). Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 929257 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — three more real fake-success paths closed; the remaining `actionExecuted: true` claims outside the audited branches are not individually audited (`UNKNOWN`). E2E: NOT RUN — no handset, no display session. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-27 21:16 IST (2026-09-27 15:46 UTC) — work slot 1: Android inquiries must not fake an action
 
 ### Fixed

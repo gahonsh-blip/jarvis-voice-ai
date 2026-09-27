@@ -4,7 +4,42 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 15:46 UTC (21:16 IST 2026-09-27) — **WORK SLOT 1** of the
+Last cycle: 2026-09-27 16:42 UTC (22:12 IST 2026-09-27) — **WORK SLOT 2** of the
+2026-09-28 window, the 22:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **live `/api/chat` informational cases**.
+
+**Three read-only `/api/chat` cases counted a question as executed work.** In
+`server.ts` (the `/api/chat` intent switch), `get_name`, `capabilities_inquiry`
+and `system_diagnostic` each set `actionExecuted = true`, which flows into
+`if (actionExecuted) memoryState.stats.actionsExecuted += …` and advanced the
+user-visible "Autonomous Actions Executed" counter. None of the three runs a
+tool or opens a view — `handleExecuteAction()` in `src/App.tsx` has no case for
+any of them — so a name look-up, a capability list and a clock-only diagnostic
+were being recorded as performed work. The offline engine already reports
+`actionExecuted: false` for the same intents, so the live route disagreed with
+the engine.
+
+Fixed: all three now set `actionExecuted = false` and carry an explicitly
+informational action title (`Memory Query (informational, no action taken)`,
+`JARVIS Capabilities (informational, no action taken)`, `Diagnostics
+(informational, no probe run)`); the honest reply text each already produced is
+unchanged and the counter is left untouched.
+
+Guarded by three new source-level cases in
+`src/tests/remainingFakeSuccess.test.ts` (the `caseBody` helper was given an
+optional window width so the long capabilities reply is not truncated before
+the flag assignments). **Negative-validated** — stashing only `server.ts` fails
+all 3 (`3 failed | 31 passed`), restored → `34 passed`. Gates observed this slot
+on `f3cdf6b`: `npm run lint` (`tsc --noEmit`) exit 0; targeted truth suites
+(`remainingFakeSuccess` + `engineInformationalTruth` + `toolDispatchTruth`)
+**3 files / 62 tests passed**; full `npx vitest run` **114 files / 1512 tests
+passed** (21.49 s); `npm run build` exit 0 (`dist/server.cjs` 929257 bytes).
+E2E: NOT RUN — no handset, no display session. Deploy: `NOT_CONFIGURED`. Item 13
+remains `PARTIAL` — three more real fake-success paths closed; the remaining
+`actionExecuted: true` claims outside the audited branches are still **not**
+individually audited, so their truthfulness is `UNKNOWN`, not confirmed.
+
+Previous cycle: 2026-09-27 15:46 UTC (21:16 IST 2026-09-27) — **WORK SLOT 1** of the
 2026-09-28 window, the 21:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **offline Local JARVIS Engine Android
 inquiry branches**.
