@@ -145,6 +145,49 @@ export function offlineCallReply(
 }
 
 // ---------------------------------------------------------------------------
+// Outbound-call cancellation truth
+//
+// The offline cancel branch ("रहने दो", "cancel call", "don't call") cleared any
+// staged outbound call and always reported `actionExecuted: true` with the
+// reply "Outbound call has been cancelled." and title "Outbound Call Cancelled",
+// incrementing the user-visible "Autonomous Actions Executed" counter. But the
+// branch fires whenever the phrase appears — there need not be anything staged.
+// With no staged call, nothing was cancelled: a carrier call can only be
+// "cancelled" if one was first requested, and a merely staged request is never
+// placed ("The outbound call request was recorded, not dialed."). Cancelling
+// nothing is not executed work. Only a request that this process actually
+// staged and then dropped may be spoken as cancelled — and even that is a local
+// queue action, not carrier work performed.
+// ---------------------------------------------------------------------------
+
+export interface OfflineOutboundCancelVerdict {
+  actionExecuted: boolean;
+  title: string;
+  replyEn: string;
+  replyHi: string;
+  replyHinglish: string;
+}
+
+export function offlineOutboundCancelVerdict(stagedByThisCommand: boolean): OfflineOutboundCancelVerdict {
+  if (stagedByThisCommand) {
+    return {
+      actionExecuted: true,
+      title: 'Outbound Call Cancelled (device was never dialed)',
+      replyEn: 'Cancelled the outbound call request that was staged — it had not been dialed.',
+      replyHi: 'स्टेज किया गया आउटबाउंड कॉल अनुरोध रद्द कर दिया गया — वह डायल नहीं हुआ था।',
+      replyHinglish: 'Staged outbound call request cancel kar diya, Sir — wo dial nahi hui thi.',
+    };
+  }
+  return {
+    actionExecuted: false,
+    title: 'Nothing Cancelled (no staged call)',
+    replyEn: 'There was no staged outbound call to cancel, so nothing was cancelled.',
+    replyHi: 'रद्द करने के लिए कोई स्टेज किया गया आउटबाउंड कॉल नहीं था, इसलिए कुछ रद्द नहीं हुआ।',
+    replyHinglish: 'Cancel karne ke liye koi staged outbound call nahi thi, Sir — kuch cancel nahi hua.',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Android-bridge reject truth
 //
 // The Android-bridge reject branches in localJarvisEngine run *before* section

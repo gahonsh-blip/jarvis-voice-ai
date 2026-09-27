@@ -284,3 +284,47 @@ describe('the Android-bridge call decline never fakes a device-confirmed decline
 });
 
 });
+
+// The offline cancel branch ("रहने दो", "cancel call", "don't call") cleared any
+// staged outbound call and always returned `actionExecuted: true` with the reply
+// "Outbound call has been cancelled." and title "Outbound Call Cancelled",
+// bumping the user-visible "Autonomous Actions Executed" counter. But the phrase
+// fires whether or not a call was ever staged — with nothing staged, nothing was
+// cancelled, and a carrier call can only be cancelled if one was first requested
+// (and a merely staged request is never dialed). Cancelling nothing is not work.
+describe('the offline cancel branch never claims a cancellation that did not happen', () => {
+  beforeEach(() => {
+    TelephonyProviderRegistry.setActiveProvider(SIMULATION_PROVIDER_ID);
+  });
+
+  it('reports "nothing cancelled" and does not bump the counter when no call was staged', () => {
+    // The staged-call slot is module state shared across this file; clear any
+    // leftover first so this case is order-independent.
+    processOfflineCommand('cancel call', freshMemory(), 'en-US');
+
+    const memory = freshMemory();
+    const res = processOfflineCommand("don't call", memory, 'en-US');
+    expect(res.intent).toBe('outbound_call_authorization');
+    expect(res.actionExecuted).toBe(false);
+    expect(memory.stats.actionsExecuted).toBe(0);
+    expect(res.actionDetail?.title).toBe('Nothing Cancelled (no staged call)');
+    expect(res.reply).toMatch(/nothing was cancelled/i);
+    expect(res.reply).not.toContain('has been cancelled');
+  });
+
+  it('does report a cancel when a request was actually staged in the same session', () => {
+    const memory = freshMemory();
+    processOfflineCommand('call +91 98765 43210', memory, 'en-US');
+    const res = processOfflineCommand('cancel call', memory, 'en-US');
+    expect(res.intent).toBe('outbound_call_authorization');
+    expect(res.actionExecuted).toBe(true);
+    expect(res.actionDetail?.title).toBe('Outbound Call Cancelled (device was never dialed)');
+  });
+
+  it('pins the cancel branch to the honest verdict, not a hardcoded literal', () => {
+    expect(telephonySection).toContain('offlineOutboundCancelVerdict(');
+    expect(engineSource).not.toContain("title: 'Outbound Call Cancelled'");
+    expect(engineSource).not.toContain('आउटबाउंड कॉल रद्द कर दी गई है।');
+  });
+});
+

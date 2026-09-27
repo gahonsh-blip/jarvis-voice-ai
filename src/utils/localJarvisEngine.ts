@@ -22,6 +22,7 @@ import {
   offlineCallVerdict,
   offlineHumanHandoffReply,
   offlineAndroidRejectVerdict,
+  offlineOutboundCancelVerdict,
 } from './computerOperator/offlineCallTruth';
 import { offlineEmergencyVerdict, offlineEmergencyReply } from './computerOperator/offlineEmergencyTruth';
 import { telephonyEngineMode, type TelephonyEngineMode } from './telephonyGatewayTruth';
@@ -1296,15 +1297,20 @@ export function processOfflineCommand(
     lower.includes('don\'t call') ||
     lower.includes('कॉल रद्द करो')
   ) {
+    // The phrase appears whether or not a call was ever staged. Cancelling a
+    // request that does not exist is not performed work, so only a staged
+    // request (which this branch then drops) may be reported as cancelled.
+    const cancelledStagedCall = stagedOutboundCall !== null;
     stagedOutboundCall = null;
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi ? 'आउटबाउंड कॉल रद्द कर दी गई है।' : 'Outbound call has been cancelled.';
+    const verdict = offlineOutboundCancelVerdict(cancelledStagedCall);
+    countAction(updatedMemory, verdict.actionExecuted);
+    const reply = isHindi ? verdict.replyHi : isHinglish ? verdict.replyHinglish : verdict.replyEn;
     return {
       reply,
       spokenText: reply,
       intent: 'outbound_call_authorization',
-      actionExecuted: true,
-      actionDetail: { type: 'outbound_call_authorization', title: 'Outbound Call Cancelled' },
+      actionExecuted: verdict.actionExecuted,
+      actionDetail: { type: 'outbound_call_authorization', title: verdict.title },
       updatedMemory,
       offline: true,
     };
