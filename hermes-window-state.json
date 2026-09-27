@@ -1,15 +1,16 @@
 {
   "window_date": "2026-09-28",
-  "window_started_at": "2026-09-27T19:35:00Z",
+  "window_started_at": "2026-09-27T15:35:00Z",
   "last_slot_at": "2026-09-27T21:35:00Z",
-  "slots_completed": 12,
+  "slots_completed": 1,
   "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools",
+  "current_item_title": "Zero-fake-success for all tools (Computer Operator live-screen labels)",
   "current_item_status": "PARTIAL",
-  "last_commit": "11ccc50",
+  "last_commit": "f75700a",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [1, 8, 50, 55],
-  "last_report_path": "/tmp/hermes-window-report.md"
+  "blocked_items": [],
+  "last_report_path": "/tmp/hermes-window-report.md",
+  "state_note": "automation/hermes-state was empty on entry; slots_completed recorded as 1 per the missing-state rule, though the wall clock (03:05 IST) is schedule slot 13."
 }
