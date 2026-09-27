@@ -85,6 +85,64 @@ export function observationInterpretationNotice(
   }
 }
 
+/**
+ * The status line for the panel's state indicator.
+ *
+ * The panel printed a bare `OPERATOR ACTIVE: OBSERVING SCREEN` whenever a task
+ * was running, even when `ScreenObserver` had served the built-in illustrative
+ * preview — so the "we are watching the real desktop" claim sat directly beside
+ * the honest `SCREEN NOT OBSERVED` / illustrative dot.
+ */
+export function observationOperatorStateLabel(
+  observation: ScreenObservation | null,
+  isPreview: boolean,
+  isRunning = false
+): string {
+  const state = screenSyncState(observation, isPreview);
+  if (isRunning) {
+    switch (state) {
+      case 'OBSERVED':
+        return 'OPERATOR ACTIVE: OBSERVING SCREEN';
+      case 'ILLUSTRATIVE':
+        return 'OPERATOR ACTIVE: ILLUSTRATIVE PREVIEW (no live desktop)';
+      default:
+        return 'OPERATOR ACTIVE: SCREEN UNOBSERVED';
+    }
+  }
+  return screenSyncLabel(observation, isPreview);
+}
+
+/**
+ * The `ACTIVE APP:` readout.
+ *
+ * The panel printed `ACTIVE APP: {activeApplication || 'None'}` for every state,
+ * including an illustrative preview and an unreachable host, where no foreground
+ * application was ever read from the desktop.
+ */
+export function observationActiveAppLabel(
+  observation: ScreenObservation | null,
+  isPreview: boolean
+): string {
+  if (screenSyncState(observation, isPreview) !== 'OBSERVED') {
+    return 'ACTIVE APP: NOT OBSERVED';
+  }
+  const app = observation?.activeApplication?.trim();
+  return app ? `ACTIVE APP: ${app}` : 'ACTIVE APP: NOT REPORTED';
+}
+
+/**
+ * The command-stream column header.
+ *
+ * `LIVE COMMAND STREAM & TELEMETRY` was hardcoded and printed above the
+ * illustrative preview's synthetic frames, claiming a live telemetry feed that
+ * does not exist for a preview.
+ */
+export function observationStreamHeader(isPreview: boolean): string {
+  return isPreview
+    ? 'ILLUSTRATIVE COMMAND STREAM (no live telemetry)'
+    : 'COMMAND STREAM & EXECUTION LOG';
+}
+
 /** The reason an observation is ambiguous, when one was given. */
 export function observationAmbiguityNotice(
   observation: ScreenObservation | null,

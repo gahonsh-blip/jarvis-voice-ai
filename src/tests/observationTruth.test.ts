@@ -19,6 +19,9 @@ import {
   observationResolutionLabel,
   observationAmbiguityNotice,
   observationInterpretationNotice,
+  observationOperatorStateLabel,
+  observationActiveAppLabel,
+  observationStreamHeader,
 } from '../utils/computerOperator/observationTruth';
 
 const baseObservation: ScreenObservation = {
@@ -171,5 +174,64 @@ describe('ComputerOperatorModal does not print unmeasured screen state', () => {
   it('gates the semantic interpretation summary behind the truth helper', () => {
     expect(src).toContain('observationInterpretationNotice');
     expect(src).toContain('interpretationNotice ??');
+  });
+
+  it('derives the ACTIVE APP readout instead of printing the raw field', () => {
+    expect(src).toContain('observationActiveAppLabel(currentObservation, observationIsPreview)');
+    expect(src).not.toContain("ACTIVE APP: {currentObservation?.activeApplication || 'None'}");
+  });
+
+  it('gates the running status line behind the state helper', () => {
+    expect(src).toContain('observationOperatorStateLabel(');
+    expect(src).not.toContain("'OPERATOR ACTIVE: OBSERVING SCREEN'");
+  });
+
+  it('no longer hardcodes a live command-stream claim', () => {
+    expect(src).toContain('observationStreamHeader(observationIsPreview)');
+    expect(src).not.toContain('LIVE COMMAND STREAM & TELEMETRY');
+  });
+});
+
+describe('observation operator-truth labels', () => {
+  const observed = baseObservation;
+
+  it('does not claim to observe a live desktop for an illustrative preview', () => {
+    const label = observationOperatorStateLabel(observed, true, true);
+    expect(label).toContain('ILLUSTRATIVE');
+    expect(label).not.toContain('OBSERVING SCREEN');
+  });
+
+  it('does not claim observation when the host desktop is unreachable', () => {
+    const label = observationOperatorStateLabel(ambiguousObservation, false, true);
+    expect(label).toBe('OPERATOR ACTIVE: SCREEN UNOBSERVED');
+  });
+
+  it('claims observation only for a real, non-ambiguous observation', () => {
+    expect(observationOperatorStateLabel(observed, false, true)).toBe(
+      'OPERATOR ACTIVE: OBSERVING SCREEN'
+    );
+  });
+
+  it('falls back to the derived sync label when idle', () => {
+    expect(observationOperatorStateLabel(observed, true, false)).toBe(
+      screenSyncLabel(observed, true)
+    );
+  });
+
+  it('withholds the active application unless it was really observed', () => {
+    expect(observationActiveAppLabel(observed, true)).toBe('ACTIVE APP: NOT OBSERVED');
+    expect(observationActiveAppLabel(null, false)).toBe('ACTIVE APP: NOT OBSERVED');
+    expect(observationActiveAppLabel(observed, false)).toBe('ACTIVE APP: VS Code');
+  });
+
+  it('never renders an empty observed application as a name', () => {
+    expect(observationActiveAppLabel({ ...observed, activeApplication: '   ' }, false)).toBe(
+      'ACTIVE APP: NOT REPORTED'
+    );
+  });
+
+  it('labels the stream as illustrative only for a preview', () => {
+    expect(observationStreamHeader(true)).toContain('ILLUSTRATIVE');
+    expect(observationStreamHeader(false)).not.toContain('LIVE');
   });
 });

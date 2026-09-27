@@ -33,6 +33,9 @@ import {
 import {
   observationAmbiguityNotice,
   observationInterpretationNotice,
+  observationActiveAppLabel,
+  observationOperatorStateLabel,
+  observationStreamHeader,
   observationPlatformLabel,
   observationResolutionLabel,
   screenSyncLabel,
@@ -366,7 +369,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                 <div className="z-10 flex flex-col gap-2">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1">
                     <span className="text-cyan-400 font-semibold">
-                      ACTIVE APP: {currentObservation?.activeApplication || 'None'}
+                      {observationActiveAppLabel(currentObservation, observationIsPreview)}
                     </span>
                     <span>
                       {currentObservation?.visibleElements.length || 0} UI Elements Parsed
@@ -442,7 +445,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                     />
                     <span>
                       {isRunning
-                        ? 'OPERATOR ACTIVE: OBSERVING SCREEN'
+                        ? observationOperatorStateLabel(currentObservation, observationIsPreview, true)
                         : screenSyncLabel(currentObservation, observationIsPreview)}
                     </span>
                   </div>
@@ -471,7 +474,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
                 <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                <span>LIVE COMMAND STREAM & TELEMETRY</span>
+                <span>{observationStreamHeader(observationIsPreview)}</span>
               </div>
               {isRunning && (
                 <button
