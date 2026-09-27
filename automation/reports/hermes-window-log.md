@@ -7223,3 +7223,58 @@ Next Slot:
 - #13 के तहत /api/chat के find_document में ज़ीरो-मैच खोज को अब "निष्पादित कार्य"
   नहीं गिना जाता — झूठा action काउंट बंद किया, नए टेस्ट से निगेटिव-वैलिडेट किया;
   पूरा सूट 1532/1532 पास।
+
+---
+
+## Slot 9 — 2026-09-28 01:05 IST fire (WORK SLOT) — Item 2
+
+**Completed:**
+- #2 Android -> JARVIS -> Server E2E test — closed an `AndroidBridgeManager`
+  permission-matrix bypass. Evidence:
+  `src/utils/androidBridgeEngine.ts` (`executeCallAnswer`,
+  `executeMessageReply`, `connectDevice`), guarded by
+  `src/tests/androidMobileBridge.test.ts` Scenarios 21-23 (file 43 tests,
+  observed 43/43 passed).
+
+**Bugs Found:**
+- `executeCallAnswer()` and `executeMessageReply()` gated on *device*
+  capability but never on the owner `MobilePermissionMatrix` written by
+  `updatePermission()`. A capable handset with `call_answer`/`message_reply`
+  revoked still answered and replied — the permission screen and the operation
+  disagreed. `connectDevice()` granted `message_reply` only from
+  `canInlineReply`, though `executeMessageReply()` falls back to the open-app
+  path, so a device whose only reply route is opening the messaging app got an
+  absent permission it could still act on.
+
+**Bugs Fixed:**
+- Both operations now check the matrix, return the honest `PERMISSION_REQUIRED`
+  status, audit `ACTION_DENIED`/`PERMISSION_REQUIRED`, and leave the pending
+  event at `AWAITING_APPROVAL` rather than consuming it; `connectDevice()`
+  derives `message_reply` from `canInlineReply || canOpenApp`.
+  **Negative-validated** — reverting only `androidBridgeEngine.ts` fails exactly
+  Scenarios 21-23 (`3 failed | 40 passed`); restored → `43 passed`.
+
+**Gates observed:** `npm run lint` (`tsc --noEmit`) exit 0; targeted
+`npx vitest run src/tests/androidMobileBridge.test.ts` **43 passed**; full
+`npx vitest run` **114 files / 1535 tests passed** (21.37 s); `npm run build`
+exit 0 (`dist/server.cjs` 940,695 bytes).
+**E2E:** NOT RUN — no Android handset, no display session.
+**Security:** no `.env` staged, no credential in the diff, permission gateway
+not weakened (this change tightens it).
+
+**Blocked:**
+- #1 Android Bridge real-device E2E — requires a physical handset.
+- #55 third-party security audit — requires an external auditor.
+- #8 Windows PowerShell capture path — requires a Windows host.
+- #50 wake word on device — requires a microphone/device session.
+
+**Human Approval Required:** None this slot.
+
+**Next Slot:**
+- #13 — continue the fake-success audit with `summarize_youtube_video`,
+  `set_name`, and `time_inquiry`: each still credits `actionExecuted = true`
+  with no `handleExecuteAction` route.
+
+**हिंदी सारांश:** Android ब्रिज में owner permission matrix बायपास बंद किया —
+call_answer/message_reply रद्द होने पर अब PERMISSION_REQUIRED मिलता है;
+नए टेस्ट निगेटिव-वैलिडेटेड, पूरा सूट 1535/1535 पास।
