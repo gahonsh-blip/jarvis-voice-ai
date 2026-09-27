@@ -350,3 +350,37 @@ describe('the /api/chat informational cases do not count a question as executed 
     expect(body).toContain('informational, no probe run');
   });
 });
+
+describe('a blocked finance request is a refusal, not executed work', () => {
+  // The safety protocol rejects financial operations. The /api/chat case and the
+  // offline job declared `actionExecuted = true` and titled the action "Finance
+  // Blocked", advancing the "Autonomous Actions Executed" counter for work the
+  // assistant refused to do. App.tsx has no `finance_blocked` case, so no view
+  // opens either. Refusing must report false on both surfaces.
+  it('the /api/chat finance_blocked case credits no executed action', () => {
+    const body = caseBody('finance_blocked');
+    expect(body).toContain('actionExecuted = false;');
+    expect(body).not.toContain('actionExecuted = true;');
+    expect(body).toContain('no action taken');
+  });
+
+  it('the offline finance guard returns actionExecuted false and does not advance the counter', () => {
+    const memory = {
+      name: 'Gahonsh',
+      notes: [],
+      customKeyValues: {},
+      stats: { totalCommands: 5, actionsExecuted: 2, lastActive: new Date().toISOString() },
+    } as any;
+    const result = processOfflineCommand('please send money to my landlord', memory, 'en-US');
+    expect(result.intent).toBe('finance_blocked');
+    expect(result.actionExecuted).toBe(false);
+    // The counter is the user-visible "Autonomous Actions Executed" figure.
+    expect(memory.stats.actionsExecuted).toBe(2);
+  });
+
+  it('the engine finance guard source states the refusal explicitly', () => {
+    expect(engineFlat).toContain(
+      "actionDetail: { type: 'finance_blocked', title: 'Finance Blocked (safety exclusion, no action taken)' }",
+    );
+  });
+});

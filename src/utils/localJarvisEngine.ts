@@ -160,6 +160,13 @@ export function processOfflineCommand(
       intent: 'finance_blocked',
       financeBlocked: true,
       financeReason: reply,
+      // A refusal is not performed work. The branch reported no `actionExecuted`
+      // value, which the caller read as "not false" and counted, advancing the
+      // "Autonomous Actions Executed" counter for a request the safety protocol
+      // rejected. The default branch and every other offline intent report an
+      // explicit boolean; state the refusal plainly so the counter stays honest.
+      actionExecuted: false,
+      actionDetail: { type: 'finance_blocked', title: 'Finance Blocked (safety exclusion, no action taken)' },
       updatedMemory,
       offline: true,
     };

@@ -8544,8 +8544,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     switch (intentData.intent) {
       case 'finance_blocked': {
         spokenResponse = intentData.financeReason || 'HERMES JARVIS Security Protocol: Financial operations are strictly restricted and prohibited from autonomous control.';
-        actionExecuted = true;
-        actionDetail = { type: 'finance_blocked', title: 'Finance Blocked (Safety Exclusion)', payload: { reason: intentData.financeReason } };
+        // Refusing a prohibited request is not performed work, and App.tsx has no
+        // `finance_blocked` case to pop a view for it. Credit no action so the
+        // "Autonomous Actions Executed" counter does not advance for a refusal.
+        actionExecuted = false;
+        actionDetail = { type: 'finance_blocked', title: 'Finance Blocked (safety exclusion, no action taken)', payload: { reason: intentData.financeReason } };
         break;
       }
       case 'emergency_stop': {
