@@ -68,3 +68,76 @@ export function offlineEmergencyVerdict(
 export function offlineEmergencyReply(verdict: OfflineEmergencyVerdict, lang: Lang): string {
   return lang === 'hi' ? verdict.replyHi : lang === 'hinglish' ? verdict.replyHinglish : verdict.replyEn;
 }
+
+// ==============================================================================
+// LIVE `/api/chat` emergency toggle truth
+//
+// The live cases drove `toggleEmergencyStop`, which *flips* the flag. Saying
+// "emergency stop" twice therefore RELEASED the freeze, and saying "resume"
+// while nothing was paused ENGAGED it — both while `actionExecuted = true` and
+// the "Emergency Stop Activated/Released" title were spoken unconditionally.
+// A false success in the unsafe direction: the operator believes autonomy is
+// frozen (or resumed) when the state is the opposite.
+//
+// This verdict is derived from the state observed *before* the transition, so
+// the reply and the counter match what actually changed.
+// ==============================================================================
+
+export interface EmergencyToggleState {
+  emergencyPaused: boolean;
+  hardKillSwitchTriggered?: boolean;
+}
+
+export interface EmergencyToggleVerdict {
+  actionExecuted: boolean;
+  title: string;
+  replyEn: string;
+  replyHi: string;
+}
+
+export function emergencyToggleVerdict(
+  action: 'stop' | 'resume',
+  state: EmergencyToggleState
+): EmergencyToggleVerdict {
+  const latched = state.hardKillSwitchTriggered === true;
+
+  if (action === 'stop') {
+    if (state.emergencyPaused || latched) {
+      return {
+        actionExecuted: false,
+        title: 'Emergency Stop Already Active (no new change)',
+        replyEn: 'Emergency Stop was already active. No new freeze was engaged, so nothing changed.',
+        replyHi: 'इमरजेंसी स्टॉप पहले से सक्रिय था। कोई नया फ़्रीज़ सक्रिय नहीं हुआ, इसलिए कुछ नहीं बदला।',
+      };
+    }
+    return {
+      actionExecuted: true,
+      title: 'Emergency Stop Activated',
+      replyEn: 'Emergency Stop is now active. All autonomous modifications, drafts, and external publishing are frozen.',
+      replyHi: 'इमरजेंसी स्टॉप अब सक्रिय है। सभी स्वायत्त बदलाव, ड्राफ़्ट और बाहरी प्रकाशन रोक दिए गए हैं।',
+    };
+  }
+
+  if (latched) {
+    return {
+      actionExecuted: false,
+      title: 'Emergency Stop NOT Released (hard kill switch latched)',
+      replyEn: 'Emergency Stop was NOT released. The hard kill switch is latched, so the emergency freeze is still in force. This must be cleared by an operator.',
+      replyHi: 'इमरजेंसी स्टॉप हटाया नहीं गया। हार्ड किल स्विच लैच है, इसलिए इमरजेंसी फ़्रीज़ अभी भी लागू है। इसे ऑपरेटर द्वारा हटाया जाना चाहिए।',
+    };
+  }
+  if (!state.emergencyPaused) {
+    return {
+      actionExecuted: false,
+      title: 'Emergency Stop Not Active (nothing to release)',
+      replyEn: 'Emergency Stop was not active, so nothing was released. Subsystems were already running normally.',
+      replyHi: 'इमरजेंसी स्टॉप सक्रिय नहीं था, इसलिए कुछ नहीं हटाया गया। सबसिस्टम पहले से सामान्य रूप से चल रहे थे।',
+    };
+  }
+  return {
+    actionExecuted: true,
+    title: 'Emergency Stop Released',
+    replyEn: 'Emergency Stop deactivated. All subsystems resumed under normal Level 1-4 permission gating.',
+    replyHi: 'इमरजेंसी स्टॉप हटा दिया गया। सभी सबसिस्टम सामान्य लेवल 1-4 अनुमति गेटिंग के अंतर्गत फिर से शुरू हुए।',
+  };
+}

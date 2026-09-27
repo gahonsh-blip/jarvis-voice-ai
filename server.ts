@@ -89,6 +89,7 @@ import {
   screenInspectionReply,
   cancelComputerTaskVerdict,
 } from './src/utils/computerOperator/operatorReplyTruth';
+import { emergencyToggleVerdict } from './src/utils/computerOperator/offlineEmergencyTruth';
 import {
   toolActionExecuted,
   toolActionResultReply,
@@ -8553,17 +8554,31 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'emergency_stop': {
-        toggleEmergencyStop('VOICE_OR_CHAT_USER', 'User requested immediate Emergency Stop');
-        spokenResponse = 'Emergency Stop is now active. All autonomous modifications, drafts, and external publishing are frozen.';
-        actionExecuted = true;
-        actionDetail = { type: 'emergency_stop', title: 'Emergency Stop Activated', payload: getEmergencyState() };
+        // `toggleEmergencyStop` FLIPS the flag, so it is only safe to call when
+        // the pre-state says the freeze is not already on. Otherwise a repeated
+        // "emergency stop" would silently RELEASE autonomy. The verdict is
+        // computed from the observed pre-state and gates both the flip and the
+        // spoken claim.
+        const stopVerdict = emergencyToggleVerdict('stop', getEmergencyState());
+        if (stopVerdict.actionExecuted) {
+          toggleEmergencyStop('VOICE_OR_CHAT_USER', 'User requested immediate Emergency Stop');
+        }
+        spokenResponse = stopVerdict.replyEn;
+        actionExecuted = stopVerdict.actionExecuted;
+        actionDetail = { type: 'emergency_stop', title: stopVerdict.title, payload: getEmergencyState() };
         break;
       }
       case 'emergency_resume': {
-        toggleEmergencyStop('VOICE_OR_CHAT_USER', 'User released Emergency Stop');
-        spokenResponse = 'Emergency Stop deactivated. All subsystems resumed under normal Level 1-4 permission gating.';
-        actionExecuted = true;
-        actionDetail = { type: 'emergency_resume', title: 'Emergency Stop Released', payload: getEmergencyState() };
+        // Same guard: only resume when the freeze was actually engaged, so a
+        // "resume" while a latched hard kill switch holds autonomy frozen cannot
+        // be spoken as a successful release.
+        const resumeVerdict = emergencyToggleVerdict('resume', getEmergencyState());
+        if (resumeVerdict.actionExecuted) {
+          toggleEmergencyStop('VOICE_OR_CHAT_USER', 'User released Emergency Stop');
+        }
+        spokenResponse = resumeVerdict.replyEn;
+        actionExecuted = resumeVerdict.actionExecuted;
+        actionDetail = { type: 'emergency_resume', title: resumeVerdict.title, payload: getEmergencyState() };
         break;
       }
       case 'cancel_computer_task': {
