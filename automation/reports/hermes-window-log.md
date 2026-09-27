@@ -7278,3 +7278,44 @@ not weakened (this change tightens it).
 **हिंदी सारांश:** Android ब्रिज में owner permission matrix बायपास बंद किया —
 call_answer/message_reply रद्द होने पर अब PERMISSION_REQUIRED मिलता है;
 नए टेस्ट निगेटिव-वैलिडेटेड, पूरा सूट 1535/1535 पास।
+
+---
+
+## Slot 10 — WORK — 2026-09-28 01:35 IST (2026-09-27 20:18 UTC)
+
+**Item:** #13 Zero-fake-success for all tools — `summarize_youtube_video` case.
+
+**Found:** The `/api/chat` `summarize_youtube_video` case in `server.ts` gated
+`actionExecuted` on `summaryRes.success` alone. `summarizeYouTubeVideoCore`
+returns `success: true` as soon as the video metadata is fetched, and a video
+with no transcript and no description comes back `success: true` with an empty
+summary (`source: 'none'`). The case still set `actionExecuted = true`, bumping
+the user-visible "Autonomous Actions Executed" counter for a summarization that
+produced nothing — the same class as the slot 8 `find_document` fix.
+
+**Fixed:** `actionExecuted = hasSummary` where
+`hasSummary = Boolean(summaryRes.summary && summaryRes.summary.trim())`.
+Summary-less result -> honest "nothing to summarize" reply and the inert
+`youtube_summary_empty` detail; failure branch keeps `actionExecuted = false`.
+
+**Tests:** New `remainingFakeSuccess.test.ts` route test + `buildYouTubeSummary`
+unit test; `toolDispatchTruth.test.ts` YouTube case widened via a new `max`
+parameter on `caseBody`.
+- Targeted: toolDispatchTruth 15/15; remainingFakeSuccess + youtubeSummarizerTruthfulness 44/44.
+- Full: `npx vitest run` — 114 files / 1537 tests passed (20.98 s).
+
+**Lint:** `npm run lint` (tsc --noEmit) — exit 0.
+**Build:** `npm run build` — exit 0; dist/server.cjs 940,914 bytes.
+**E2E:** NOT RUN — no Android handset, no display session.
+**Security:** no `.env` staged, no credential in the diff, permission gateway not weakened.
+**Deploy:** NOT_CONFIGURED — no deployment target in this sandbox.
+**Commit:** 7b62bfd (fix b02ef73, test 21d647b, docs 7b62bfd).
+**Push:** succeeded — origin/feature/hermes-full-completion @ 7b62bfd (ls-remote confirmed).
+**Main merge:** NOT MERGED — awaiting human approval.
+
+**Blocked:** #1, #2 (hardware), #8 (Windows host), #50 (device mic), #55 (external auditor).
+
+**Next slot:** #13 — the unrouted `set_name` / `time_inquiry` cases still credit
+`actionExecuted = true` with no `handleExecuteAction` route.
+
+**हिंदी सारांश:** YouTube सारांश में बिना सारांश वाली lookup अब executed work नहीं गिनी जाती — नया टेस्ट निगेटिव-वैलिडेटेड, पूरा सूट 1537/1537 पास, lint/build हरे।
