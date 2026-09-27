@@ -350,6 +350,24 @@ describe('the /api/chat informational cases do not count a question as executed 
     expect(body).not.toContain('actionExecuted = true;');
     expect(body).toContain('informational, no probe run');
   });
+
+  it('time_inquiry reports the clock without crediting an action', () => {
+    const body = caseBody('time_inquiry');
+    expect(body).toContain('actionExecuted = false;');
+    expect(body).not.toContain('actionExecuted = true;');
+    expect(body).toContain('informational, no action taken');
+  });
+
+  it('the offline engine reports the clock without crediting an action either', () => {
+    // The offline twin of the case above; `handleExecuteAction` routes the intent
+    // only to a view switch, so neither surface may credit the read as work.
+    const idx = engineFlat.indexOf("intent: 'time_inquiry'");
+    expect(idx, 'offline time_inquiry branch missing').toBeGreaterThan(-1);
+    const branch = engineFlat.slice(idx, idx + 800);
+    expect(branch).toContain('actionExecuted: false');
+    expect(branch).not.toContain('actionExecuted: true');
+    expect(branch).toContain('informational, no action taken');
+  });
 });
 
 describe('a blocked finance request is a refusal, not executed work', () => {

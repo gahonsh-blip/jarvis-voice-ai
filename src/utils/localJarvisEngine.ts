@@ -1817,8 +1817,12 @@ export function processOfflineCommand(
       reply,
       spokenText: reply,
       intent: 'time_inquiry',
-      actionExecuted: true,
-      actionDetail: { type: 'time_inquiry', title: `Current Time: ${timeStr}`, payload: { timeStr, dateStr } },
+      // Reading the clock performs no work and opens no view: `handleExecuteAction`
+      // routes `time_inquiry` only to `setActiveApp('mobile_personal_status')`, which
+      // does not read the clock, so crediting the increment inflated the user-visible
+      // "Autonomous Actions Executed" counter for a question.
+      actionExecuted: false,
+      actionDetail: { type: 'time_inquiry', title: 'Clock Query (informational, no action taken)', payload: { timeStr, dateStr } },
       updatedMemory,
       offline: true,
     };

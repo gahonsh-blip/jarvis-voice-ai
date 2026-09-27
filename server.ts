@@ -9162,8 +9162,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         spokenResponse = isHi
           ? `वर्तमान समय ${timeStr} है और आज ${dateStr} है।`
           : `The current time is ${timeStr} on ${dateStr}.`;
-        actionExecuted = true;
-        actionDetail = { type: 'time_inquiry', title: `Current Time: ${timeStr}`, payload: { timeStr, dateStr } };
+        // Reading the clock runs no tool and opens no view: `handleExecuteAction`
+        // routes `time_inquiry` only to `setActiveApp('mobile_personal_status')`, which
+        // does not read the clock, so crediting the increment inflated the
+        // "Autonomous Actions Executed" counter for a question.
+        actionExecuted = false;
+        actionDetail = { type: 'time_inquiry', title: 'Clock Query (informational, no action taken)', payload: { timeStr, dateStr } };
         break;
       }
       case 'weather_inquiry': {
