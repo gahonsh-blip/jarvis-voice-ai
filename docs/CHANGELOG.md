@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-28 00:39 IST (2026-09-27 19:09 UTC) — work slot 8: a document search that found nothing is not executed work
+
+### Fixed
+- **The live `/api/chat` `find_document` case credited a zero-match search.** The case only had a "no file exists" branch for `search.success === false`; when the real search ran and returned an empty `matches` list (`search.success === true`), it fell through to the success path and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter for a lookup that retrieved nothing. `find_document` also has no `handleExecuteAction` route, so the credited action opened no panel either — a phantom action in the counter with nothing beside it.
+- The zero-match branch is now explicit (`else if (search.success)`): it speaks the honest `No file matching <query> exists in the workspace.` reply and sets `actionExecuted = false`. The `Not found: <query>` card is retained only as the inert non-action detail. Only a search with real matches still credits executed work.
+
+### Tests
+- `src/tests/documentSearchTruthfulness.test.ts` — new test `a zero-match search is a non-action, not an executed document lookup`, which isolates the zero-match branch of the `server.ts` case and asserts it sets `actionExecuted = false` and never `actionExecuted = true`. Negative-validated: reverting only the `server.ts` fix fails the test (`1 failed | 5 passed`); restored → `6 passed`.
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted suite `documentSearchTruthfulness` **6 tests passed**; full suite **114 files / 1532 tests passed** (21.64 s); build exit 0 (`dist/server.cjs` 938698 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — another real fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are not individually audited (`UNKNOWN`), and the unrouted cases (`summarize_youtube_video`, `set_name`, `time_inquiry`) remain to be handled. E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-28 00:23 IST (2026-09-27 18:53 UTC) — work slot 7: emergency stop is not a toggle
 
 ### Fixed

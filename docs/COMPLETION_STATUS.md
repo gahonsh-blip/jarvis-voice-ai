@@ -4,7 +4,45 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 18:53 UTC (00:23 IST 2026-09-28) — **WORK SLOT 7** of the
+Last cycle: 2026-09-27 19:09 UTC (00:39 IST 2026-09-28) — **WORK SLOT 8** of the
+2026-09-28 window, the 00:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **live `/api/chat` `find_document`
+case**.
+
+**A document search that matched nothing was credited as executed work.** The
+`find_document` case in `server.ts` (~line 8834) already had a "no file exists"
+branch, but only for `search.success === false`. When the real search *ran* and
+returned an empty `matches` list (`search.success === true`), the case fell
+through to the success path: it rendered the `Not found: <query>` card, spoke
+that no file matched, and still set `actionExecuted = true`, bumping
+`memoryState.stats.actionsExecuted` — the user-visible "Autonomous Actions
+Executed" counter — for a lookup that retrieved nothing. Combined with the
+earlier finding (recorded in slot 7) that `find_document` — like
+`summarize_youtube_video`, `set_name`, and `time_inquiry` — has **no
+`handleExecuteAction` route**, the credited action also opened no panel: the
+operator saw a phantom action in the counter and nothing beside it.
+
+Fixed: the zero-match branch is now explicit — `else if (search.success)`
+renders the honest `No file matching <query> exists in the workspace.` reply and
+sets `actionExecuted = false` (the "Not found" card is retained only as the
+inert non-action detail). Only a search that returns real matches still credits
+executed work. Guarded by a new regression test
+`a zero-match search is a non-action, not an executed document lookup` in
+`src/tests/documentSearchTruthfulness.test.ts`, which isolates the zero-match
+branch and asserts it sets `actionExecuted = false` and never
+`actionExecuted = true`. **Negative-validated** — reverting only the `server.ts`
+change fails that test (`1 failed | 5 passed`); restoring it → `6 passed`.
+Gates observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted suite
+`src/tests/documentSearchTruthfulness.test.ts` **6 tests passed**; full
+`npx vitest run` **114 files / 1532 tests passed** (21.64 s); `npm run build`
+exit 0 (`dist/server.cjs` 938,698 bytes). E2E: NOT RUN — no display session, no
+handset. Deploy: `NOT_CONFIGURED`. Item 13 remains `PARTIAL` — another real
+fake-success class closed; the remaining `actionExecuted: true` sites in
+`server.ts` are still **not** individually audited, so their truthfulness is
+`UNKNOWN`, not confirmed, and the unrouted cases
+(`summarize_youtube_video`, `set_name`, `time_inquiry`) remain to be handled.
+
+Previous cycle: 2026-09-27 18:53 UTC (00:23 IST 2026-09-28) — **WORK SLOT 7** of the
 2026-09-28 window, the 00:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **live `/api/chat` `emergency_stop` /
 `emergency_resume` cases**.
