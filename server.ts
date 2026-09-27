@@ -8707,13 +8707,22 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const summaryRes = await summarizeYouTubeVideoCore({ url: targetUrl, videoId: videoId || undefined });
         if (summaryRes.success && summaryRes.videoInfo) {
           const notice = summaryRes.notice ? `\n\n${summaryRes.notice}` : '';
-          spokenResponse = summaryRes.summary
+          // `success` only proves the video metadata was fetched — not that a
+          // summary was produced. A video that exposes no transcript and no
+          // description comes back `success: true` with an empty summary
+          // (`source: 'none'`), so crediting it advanced the user-visible
+          // "Autonomous Actions Executed" counter for a summarization that
+          // never happened. Only a non-empty summary is executed work.
+          const hasSummary = Boolean(summaryRes.summary && summaryRes.summary.trim());
+          spokenResponse = hasSummary
             ? `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel} (${summaryRes.videoInfo.durationFormatted}).${notice}\n\n${summaryRes.summary}`
             : `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel}. ${summaryRes.notice || 'No transcript or description is available, so there is nothing to summarize.'}`;
-          actionExecuted = true;
+          actionExecuted = hasSummary;
           actionDetail = {
-            type: 'youtube_summary',
-            title: `YouTube: ${summaryRes.videoInfo.title}`,
+            type: hasSummary ? 'youtube_summary' : 'youtube_summary_empty',
+            title: hasSummary
+              ? `YouTube: ${summaryRes.videoInfo.title}`
+              : `YouTube: No Content (nothing summarized) — ${summaryRes.videoInfo.title}`,
             payload: summaryRes,
           };
         } else {

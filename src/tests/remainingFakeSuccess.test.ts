@@ -5,6 +5,7 @@ import { screenshotVerdict, screenshotReply } from '../utils/computerOperator/sc
 import { volumeVerdict, volumeReply } from '../utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from '../utils/computerOperator/powerDispatchTruth';
 import { processOfflineCommand } from '../utils/localJarvisEngine';
+import { buildYouTubeSummary } from '../../server_tools';
 
 // server.ts binds a port on import, so the route assertions read the source
 // text, matching the convention in launchDispatchTruth.test.ts.
@@ -384,3 +385,47 @@ describe('a blocked finance request is a refusal, not executed work', () => {
     );
   });
 });
+
+describe('a fetch-only YouTube summarization is not credited as executed work', () => {
+  // `summarizeYouTubeVideoCore` returns `success: true` as soon as the video
+  // metadata is fetched, even when the video exposes no transcript and no
+  // description and the resulting summary is empty (`source: 'none'`). The
+  // /api/chat case gated `actionExecuted` on `summaryRes.success` alone, so a
+  // summarization that produced nothing still advanced the user-visible
+  // "Autonomous Actions Executed" counter. Only a non-empty summary is work.
+  it('the /api/chat summarize_youtube_video case gates success on a non-empty summary', () => {
+    const body = caseBody('summarize_youtube_video', 3000);
+    expect(body).toContain('const hasSummary = Boolean(summaryRes.summary && summaryRes.summary.trim());');
+    expect(body).toContain('actionExecuted = hasSummary;');
+    expect(body).not.toContain('actionExecuted = true;');
+    expect(body).toContain("'youtube_summary_empty'");
+  });
+
+  it('buildYouTubeSummary reports an empty summary for a video with no content to quote', () => {
+    const result = buildYouTubeSummary({
+      videoInfo: {
+        videoId: 'noContent1',
+        url: 'https://www.youtube.com/watch?v=noContent1',
+        title: 'No Content Video',
+        channel: 'Test Channel',
+        durationSeconds: 60,
+        durationFormatted: '1:00',
+        description: '',
+        thumbnailUrl: '',
+        hasTranscript: false,
+        transcriptLength: 0,
+        availableLanguages: [],
+      },
+      segments: [],
+      transcript: '',
+      description: '',
+      geminiRawSummary: null,
+      geminiFailed: false,
+    });
+    expect(result.success).toBe(true);
+    expect(result.summary.trim()).toBe('');
+    expect(result.source).toBe('none');
+    expect(result.verificationStatus).toBe('PARTIAL');
+  });
+});
+
