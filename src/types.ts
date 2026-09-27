@@ -52,6 +52,8 @@ export type IntentCategory =
   | 'reject_call'
   | 'telephony_hub'
   | 'call_history'
+  | 'caller_inquiry'
+  | 'notification_inquiry'
   | 'clinic_hours'
   | 'appointment_process'
   | 'human_handoff'

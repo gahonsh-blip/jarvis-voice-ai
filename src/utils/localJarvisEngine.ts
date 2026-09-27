@@ -453,13 +453,17 @@ export function processOfflineCommand(
     lower.includes('कॉलर कौन है')
   ) {
     if (activePendingEvent && activePendingEvent.type === 'CALL') {
+      // Reporting the caller identity is a READ of the pending event, not an
+      // answer/dispatch. This must NOT carry the `answer_call` intent: App.tsx
+      // routes that intent to handleAnswerCall(), so asking "who is calling"
+      // would otherwise answer the call — an irreversible telephony side effect.
       const reply = activePendingEvent.spokenAnnouncement;
       return {
         reply,
         spokenText: reply,
-        intent: 'answer_call',
-        actionExecuted: true,
-        actionDetail: { type: 'answer_call', title: `Caller: ${activePendingEvent.sender}` },
+        intent: 'caller_inquiry',
+        actionExecuted: false,
+        actionDetail: { type: 'caller_inquiry', title: `Caller: ${activePendingEvent.sender}` },
         updatedMemory,
         offline: true,
       };
@@ -472,6 +476,10 @@ export function processOfflineCommand(
       return {
         reply,
         spokenText: reply,
+        intent: 'caller_inquiry',
+        actionExecuted: false,
+        actionDetail: { type: 'caller_inquiry', title: 'No Active Call' },
+        updatedMemory,
         offline: true,
       };
     }
@@ -483,13 +491,17 @@ export function processOfflineCommand(
     lower.includes('सूचना')
   ) {
     if (activePendingEvent && activePendingEvent.type === 'MESSAGE') {
+      // Reading the pending notification is not an action. It previously carried
+      // the `open_notepad` intent with actionExecuted:true, so merely asking
+      // "any notifications?" opened the Notes workspace and inflated the
+      // "Autonomous Actions Executed" counter.
       const reply = activePendingEvent.spokenAnnouncement;
       return {
         reply,
         spokenText: reply,
-        intent: 'open_notepad',
-        actionExecuted: true,
-        actionDetail: { type: 'open_notepad', title: `Notification: ${activePendingEvent.appName}` },
+        intent: 'notification_inquiry',
+        actionExecuted: false,
+        actionDetail: { type: 'notification_inquiry', title: `Notification: ${activePendingEvent.appName}` },
         updatedMemory,
         offline: true,
       };
@@ -502,6 +514,10 @@ export function processOfflineCommand(
       return {
         reply,
         spokenText: reply,
+        intent: 'notification_inquiry',
+        actionExecuted: false,
+        actionDetail: { type: 'notification_inquiry', title: 'No Pending Notification' },
+        updatedMemory,
         offline: true,
       };
     }
