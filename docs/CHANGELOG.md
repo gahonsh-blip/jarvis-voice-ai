@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 23:45 IST (2026-09-27 18:15 UTC) — work slot 6: a cancel that stopped no task is not executed work
+
+### Fixed
+- **The `/api/chat` `cancel_computer_task` case credited a cancel that cancelled nothing.** It called `TaskTracker.cancelActiveTask('User requested stop')` and unconditionally spoke `Computer operator task has been immediately cancelled.`, titled the action `Task Cancelled` and set `actionExecuted = true` — but `cancelActiveTask` returns `{ cancelled: false }` when no task is active, and the case ignored it. With nothing running, nothing was cancelled, yet the case still bumped the user-visible "Autonomous Actions Executed" counter (`memoryState.stats.actionsExecuted`).
+- Added `cancelComputerTaskVerdict(result)` to `src/utils/computerOperator/operatorReplyTruth.ts` (the module that already carries the honest `fix_project_error` / `inspect_screen` verdicts). A false or absent result reports `actionExecuted: false` with the title `Nothing to Cancel (no task running)` and a reply stating nothing was cancelled; a real cancellation reports `actionExecuted: true` with the title `Running Host Task Cancelled`. Both replies have Hindi variants. The `server.ts` case now derives both the reply and the flag from the verdict.
+
+### Tests
+- `src/tests/operatorReplyTruth.test.ts` — new `describe('cancelComputerTaskVerdict never credits a stop that stopped nothing')` block: a `{cancelled:false}` case, a `null`/`undefined` case, an actual-cancel case and a `server.ts` source-pin. Negative-validated: reverting only the `server.ts` fix fails the source-pin (`1 failed | 19 passed`); restored → `20 passed`.
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted suite `operatorReplyTruth` **20 tests passed**; full suite **114 files / 1524 tests passed** (21.34 s); build exit 0 (`dist/server.cjs` 934519 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — another real fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are not individually audited (`UNKNOWN`). E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-27 23:14 IST (2026-09-27 17:44 UTC) — work slot 4: a blocked finance request is a refusal, not an executed action
 
 ### Fixed
