@@ -4,7 +4,44 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 17:23 UTC (22:53 IST 2026-09-27) — **WORK SLOT 3** of the
+Last cycle: 2026-09-27 17:44 UTC (23:14 IST 2026-09-27) — **WORK SLOT 4** of the
+2026-09-28 window, the 23:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **blocked-finance request path**.
+
+**Both surfaces credited a refused request as an executed action.** A financial
+operation is prohibited by the safety protocol, so the request is *refused*, not
+performed. Yet the `/api/chat` `finance_blocked` case in `server.ts` set
+`actionExecuted = true` and titled the action `Finance Blocked (Safety
+Exclusion)`, and the offline finance guard in
+`src/utils/localJarvisEngine.ts` (§0, `isFinanceRestricted`) returned **no**
+`actionExecuted` value at all — which `countAction(memory, actionExecuted)`
+reads as *not false* (`if (actionExecuted !== false)`) and therefore counted.
+Both advanced the user-visible "Autonomous Actions Executed" counter for work
+the assistant declined to do. `App.tsx`'s `handleExecuteAction` has no
+`finance_blocked` case (confirmed by reading the router), so no view opened
+either — the action was pure counter inflation.
+
+Fixed: the `/api/chat` case now sets `actionExecuted = false` with the title
+`Finance Blocked (safety exclusion, no action taken)`; the offline guard now
+returns `actionExecuted: false` with the same honest title and an `actionDetail`.
+Guarded by a new `describe('a blocked finance request is a refusal, not executed
+work')` block in `src/tests/remainingFakeSuccess.test.ts`: a source-pin on the
+`/api/chat` case (asserts `actionExecuted = false`, not `true`, and the
+`no action taken` title), a behavioural case driving `processOfflineCommand`
+with `'please send money to my landlord'` asserting `actionExecuted === false`
+and that `memory.stats.actionsExecuted` did **not** move, and a source-pin on the
+engine literal. **Negative-validated** — reverting both fixes fails the new
+block (`3 failed | 34 passed`), restoring them → `37 passed`. Gates observed this
+slot: `npm run lint` (`tsc --noEmit`) exit 0; targeted suite
+`src/tests/remainingFakeSuccess.test.ts` **37 tests passed**; full
+`npx vitest run` **114 files / 1517 tests passed** (24.81 s); `npm run build`
+exit 0 (`dist/server.cjs` 932093 bytes). E2E: NOT RUN — no handset, no display
+session. Deploy: `NOT_CONFIGURED`. Item 13 remains `PARTIAL` — another real
+fake-success class closed; remaining `actionExecuted: true` claims outside the
+audited branches are still **not** individually audited, so their truthfulness
+is `UNKNOWN`, not confirmed.
+
+Previous cycle: 2026-09-27 17:23 UTC (22:53 IST 2026-09-27) — **WORK SLOT 3** of the
 2026-09-28 window, the 22:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **offline Local JARVIS Engine
 Android-bridge call-decline branches**.

@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 23:14 IST (2026-09-27 17:44 UTC) — work slot 4: a blocked finance request is a refusal, not an executed action
+
+### Fixed
+- **Both surfaces credited a refused finance request as executed work.** A financial operation is prohibited by the safety protocol, so the request is refused, not performed, yet the `/api/chat` `finance_blocked` case in `server.ts` set `actionExecuted = true`, and the offline finance guard in `src/utils/localJarvisEngine.ts` (§0, `isFinanceRestricted`) returned no `actionExecuted` value at all — which `countAction` reads as *not false* (`if (actionExecuted !== false)`) and therefore counted. Both advanced the user-visible "Autonomous Actions Executed" counter for work the assistant declined to do. `App.tsx` has no `finance_blocked` case, so no view opened either.
+- The `/api/chat` case now sets `actionExecuted = false` with title `Finance Blocked (safety exclusion, no action taken)`; the offline guard now returns `actionExecuted: false` with the same honest title and an `actionDetail`.
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts` — new `describe('a blocked finance request is a refusal, not executed work')` block: a source-pin on the `/api/chat` case, a behavioural case driving `processOfflineCommand('please send money to my landlord')` asserting `actionExecuted === false` and that `memory.stats.actionsExecuted` did not move, and a source-pin on the engine literal. Negative-validated: reverting both fixes fails the block (`3 failed | 34 passed`); restored → `37 passed`.
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted suite `remainingFakeSuccess` **37 tests passed**; full suite **114 files / 1517 tests passed** (24.81 s); build exit 0 (`dist/server.cjs` 932093 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — another real fake-success class closed; the remaining `actionExecuted: true` claims outside the audited branches are not individually audited (`UNKNOWN`). E2E: NOT RUN — no handset, no display session. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-27 22:53 IST (2026-09-27 17:23 UTC) — work slot 3: Android-bridge call decline must not fake a device decline
 
 ### Fixed
