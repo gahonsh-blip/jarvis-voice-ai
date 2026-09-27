@@ -7,6 +7,7 @@ import {
   fixProjectErrorReply,
   screenInspectionExecuted,
   screenInspectionReply,
+  cancelComputerTaskVerdict,
 } from '../utils/computerOperator/operatorReplyTruth';
 import type {
   ComputerOperatorTask,
@@ -168,5 +169,41 @@ describe('operatorTaskSummary is redaction-safe passthrough', () => {
   it('falls back to English when no Hindi summary exists', () => {
     const t = task({ resultSummary: 'EN' });
     expect(operatorTaskSummary(t, true)).toBe('EN');
+  });
+});
+
+// The `/api/chat` `cancel_computer_task` case used to speak
+// "Computer operator task has been immediately cancelled." and title the action
+// "Task Cancelled" with `actionExecuted = true` even when `cancelActiveTask`
+// reported `{ cancelled: false }` (no task running). Stopping nothing is not
+// performed work, so the counter must not advance for it.
+describe('cancelComputerTaskVerdict never credits a stop that stopped nothing', () => {
+  it('reports not-executed and an honest title when no task was running', () => {
+    const v = cancelComputerTaskVerdict({ cancelled: false });
+    expect(v.actionExecuted).toBe(false);
+    expect(v.title).toBe('Nothing to Cancel (no task running)');
+    expect(v.title).not.toBe('Task Cancelled');
+    expect(v.replyEn).toMatch(/nothing was cancelled/i);
+    expect(v.replyEn).not.toMatch(/has been cancelled/i);
+    expect(v.replyHi).toContain('कुछ रद्द नहीं हुआ');
+    expect(v.replyHi).not.toContain('रद्द कर दिया गया है।');
+  });
+
+  it('reports executed only when a task was actually cancelled', () => {
+    const v = cancelComputerTaskVerdict({ cancelled: true, taskId: 't9' });
+    expect(v.actionExecuted).toBe(true);
+    expect(v.title).toBe('Running Host Task Cancelled');
+    expect(v.replyEn).toMatch(/has been cancelled/i);
+  });
+
+  it('treats a null/undefined result as nothing to cancel', () => {
+    expect(cancelComputerTaskVerdict(null).actionExecuted).toBe(false);
+    expect(cancelComputerTaskVerdict(undefined).actionExecuted).toBe(false);
+  });
+
+  it('pins the server case to the verdict, not a hardcoded success literal', () => {
+    expect(flat).toContain('cancelComputerTaskVerdict(');
+    expect(flat).not.toContain("title: 'Task Cancelled'");
+    expect(flat).not.toContain('कंप्यूटर ऑपरेटर कार्य तुरंत रोक दिया गया है।');
   });
 });

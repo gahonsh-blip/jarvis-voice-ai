@@ -87,6 +87,7 @@ import {
   operatorTaskExecuted,
   screenInspectionExecuted,
   screenInspectionReply,
+  cancelComputerTaskVerdict,
 } from './src/utils/computerOperator/operatorReplyTruth';
 import {
   toolActionExecuted,
@@ -8567,11 +8568,14 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'cancel_computer_task': {
         const cancelResult = TaskTracker.cancelActiveTask('User requested stop');
-        spokenResponse = language.startsWith('hi')
-          ? 'कंप्यूटर ऑपरेटर कार्य तुरंत रोक दिया गया है।'
-          : 'Computer operator task has been immediately cancelled.';
-        actionExecuted = true;
-        actionDetail = { type: 'cancel_computer_task', title: 'Task Cancelled', payload: cancelResult };
+        // Cancelling is real work only if a task was actually running. The
+        // tracker reports `cancelled: false` when none is, and speaking a
+        // cancellation (and bumping the counter) for that stop-stopped-nothing
+        // case was fake success.
+        const cancelVerdict = cancelComputerTaskVerdict(cancelResult);
+        spokenResponse = language.startsWith('hi') ? cancelVerdict.replyHi : cancelVerdict.replyEn;
+        actionExecuted = cancelVerdict.actionExecuted;
+        actionDetail = { type: 'cancel_computer_task', title: cancelVerdict.title, payload: cancelResult };
         break;
       }
       case 'fix_project_error': {

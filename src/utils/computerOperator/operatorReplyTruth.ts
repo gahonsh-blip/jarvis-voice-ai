@@ -91,3 +91,42 @@ export function screenInspectionReply(
   }
   return 'The host desktop could not be observed, so no screen content is claimed.';
 }
+
+/**
+ * What `TaskTracker.cancelActiveTask` actually did.
+ *
+ * Stopping a running host task is real work only when a task was actually
+ * running. `cancelActiveTask` returns `{ cancelled: false }` when there is no
+ * active task — and the `/api/chat` `cancel_computer_task` case used to speak
+ * "Computer operator task has been immediately cancelled." and title the action
+ * "Task Cancelled" (with `actionExecuted = true`) for that case too, bumping the
+ * user-visible "Autonomous Actions Executed" counter for a stop that stopped
+ * nothing. A task that was never running cannot be cancelled; the only honest
+ * result for it is that nothing was running to stop.
+ */
+export interface CancelComputerTaskVerdict {
+  /** True only when a task was actually running and is now stopped. */
+  actionExecuted: boolean;
+  title: string;
+  replyEn: string;
+  replyHi: string;
+}
+
+export function cancelComputerTaskVerdict(
+  result: { cancelled: boolean; taskId?: string } | null | undefined
+): CancelComputerTaskVerdict {
+  if (result?.cancelled) {
+    return {
+      actionExecuted: true,
+      title: 'Running Host Task Cancelled',
+      replyEn: 'The running computer operator task has been cancelled.',
+      replyHi: 'चल रहा कंप्यूटर ऑपरेटर कार्य रद्द कर दिया गया है।',
+    };
+  }
+  return {
+    actionExecuted: false,
+    title: 'Nothing to Cancel (no task running)',
+    replyEn: 'No computer operator task was running, so nothing was cancelled.',
+    replyHi: 'कोई कंप्यूटर ऑपरेटर कार्य चल नहीं रहा था, इसलिए कुछ रद्द नहीं हुआ।',
+  };
+}
