@@ -4,7 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 22:05 UTC (03:35 IST 2026-09-28) — **WORK SLOT 14** of the
+Last cycle: 2026-09-27 22:35 UTC (04:05 IST 2026-09-28) — **WORK SLOT 15** of the
+2026-09-28 window, the 04:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
+the **browser-open intents' unloaded-destination claim** (commit `bcc0f14`).
+
+**Four intents named a site the in-app Browser never opened.** The live
+`/api/chat` cases `open_google`, `open_youtube`, `open_gmail`, `open_chatgpt`
+cleared the search query and switched `App` to the Browser view, but nothing
+passed a URL to `BrowserModal`; the modal initialises its address bar to
+`https://www.google.com` and only follows an `initialUrl`/`initialQuery` prop.
+So "open YouTube", "open Gmail" and "open ChatGPT" all loaded the Google home
+page while the spoken line and the action card named the other site — a
+destination claimed that was never loaded.
+
+Fixed: `browserDispatchTruth.ts` holds one `SITE_TO_URL`/`SITE_LABEL` table;
+`browserOpenVerdict(intent, targetUrl)` returns the honest reply (EN/HI), the
+card title, and the exact URL the view must load. A named site whose URL was not
+resolved degrades to the default home with an explicit "could not be pointed at
+<site>" line instead of being claimed. `server.ts` derives all four browser-open
+replies/cards from one verdict and emits the URL in `actionDetail.target`;
+`App.tsx` passes it to `BrowserModal` via `initialUrl` (new `browserInitialUrl`
+state). `open_chrome` and `google_search` carry no fixed site and are unchanged.
+Item 13 stays `PARTIAL` — one more real violation closed, not proof the sweep is
+complete.
+
+Evidence: `src/tests/browserDispatchTruth.test.ts` — 10 passed (targeted); full
+suite `116 files / 1575 tests passed`; lint clean; build green
+(`dist/server.cjs` 944934 B). Negative-validated: removing the `App.tsx`
+`setBrowserInitialUrl(...)` wiring fails the new source guard
+(`1 failed | 9 passed`), then restored → 10/10.
+
+Last cycle (previous): 2026-09-27 22:05 UTC (03:35 IST 2026-09-28) — **WORK SLOT 14** of the
 2026-09-28 window, the 03:35 IST fire. Item 13 (`Zero-fake-success for all tools`),
 the **Computer Operator panel's remaining unmeasured live-screen claims** — the fake
 window-title bar and the parsed-element count (commit `6f40b91`).

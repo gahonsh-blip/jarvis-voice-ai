@@ -7512,3 +7512,70 @@ Next Slot:
 - कंप्यूटर ऑपरेटर पैनल में दो और बिना-मापे दिखाए जा रहे स्क्रीन दावे (window title और
   parsed-element count) असली observation से derive किए गए; 43 targeted + 1565 कुल टेस्ट,
   lint और build पास।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:05
+Window date: 2026-09-28   Window slots completed so far: 15
+
+Completed:
+- #13 Zero-fake-success for all tools — browser-open intents' unloaded-destination
+  claim. `server.ts` cases `open_google`/`open_youtube`/`open_gmail`/`open_chatgpt`
+  now derive reply, card title and destination URL from one `browserOpenVerdict`
+  (src/utils/browserDispatchTruth.ts) and emit the URL in `actionDetail.target`;
+  `src/App.tsx` hands it to `BrowserModal` via `initialUrl`. Evidence:
+  `src/tests/browserDispatchTruth.test.ts` — 10 passed.
+
+In Progress:
+- #13 remains PARTIAL. The sweep is not proven complete; other paths may still
+  name a resource they never loaded.
+
+Remaining:
+- #13 (continuing sweep), then the mandated order beyond it (Android E2E,
+  screenshot, Computer Operator live-screen items) as slots allow.
+
+Bugs Found:
+- Four live `/api/chat` intents claimed to open a named site but loaded none.
+  `BrowserModal` initialises to `https://www.google.com` and only follows an
+  `initialUrl`/`initialQuery` prop; `handleExecuteAction` passed neither, so
+  "open YouTube/Gmail/ChatGPT" landed on the Google home while the spoken line
+  and action card named the other site.
+
+Bugs Fixed:
+- Routed all four browser-open intents through `browserOpenVerdict`; a named site
+  whose URL was not resolved now reports the default home with an explicit
+  "could not be pointed at <site>" line instead of claiming it. Negative-validated:
+  deleting the `App.tsx` `setBrowserInitialUrl(...)` wiring fails the new source
+  guard (`1 failed | 9 passed`); restored → 10/10.
+
+Tests:    1575 passed / 116 files (full suite, `npx vitest run`)
+Lint:     clean (`npm run lint` → tsc --noEmit, exit 0)
+Build:    green (`npm run build`; dist/server.cjs 944934 B)
+E2E:      NOT RUN — no device/emulator in this sandbox
+Security: NOT RUN — no secrets printed; no .env touched
+
+Documentation: docs/COMPLETION_STATUS.md; automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  bcc0f14 (code) + docs commit this slot
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         not refreshed this slot (work slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified artifact (dist/server.cjs) is the deployment unit.
+
+Blocked:
+- Real Android E2E / real screenshot / live Computer Operator screen observation —
+  require a device, emulator, or host screen not present in this sandbox.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- 04:35 FINALIZATION slot: full verification, security checks, refresh PR to main,
+  write final state (finalized: true). No new development.
+
+हिंदी सारांश (एक पंक्ति):
+- ब्राउज़र-खोलने वाले चार इरादे अब सही साइट खोलते हैं या साफ़ कहते हैं कि साइट लोड
+  नहीं हुई — झूठा दावा बंद; टेस्ट 10/10 पास, पूरी सूट 1575 पास।
