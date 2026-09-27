@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-28 03:05 IST (2026-09-27 21:35 UTC) — work slot 12: a clock read is not executed work
+
+### Fixed
+- **The live `/api/chat` `time_inquiry` case and its offline Local JARVIS Engine twin credited a question as work.** Both the `/api/chat` case (~line 9157) and the engine's time branch set `actionExecuted = true` and advanced the user-visible "Autonomous Actions Executed" counter. `handleExecuteAction` in `src/App.tsx` routes `time_inquiry` only to `setActiveApp('mobile_personal_status')` — a view switch that cannot read the clock (the read already happened inside the handler) — so the intent performed no work and opened no view. Same inflation class as the earlier `get_name`/`capabilities_inquiry`/`system_diagnostic` fixes.
+- Both surfaces now report `actionExecuted = false` with an inert `Clock Query (informational, no action taken)` detail; the spoken and written clock answers are unchanged.
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts` — two new cases: a `server.ts` source-pin that the `time_inquiry` case sets `actionExecuted = false` and carries the informational title, and an offline-engine guard asserting the same on the engine branch. File now 41 tests.
+- `src/tests/conversationalPipelineRegression.test.ts` — case B asserted the old fake contract (`actionExecuted === true` for the clock read); aligned with the honest contract, matching cases C (weather) and D (youtube status) in the same file which already assert `false`. Reply content, intent and payload assertions unchanged.
+- Negative-validated: reverting only `src/utils/localJarvisEngine.ts` fails exactly the new offline-engine guard (`1 failed | 40 passed`); restored → 41/41.
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted `remainingFakeSuccess` **41 passed**; full suite **115 files / 1546 tests passed** (23.11 s); build exit 0 (`dist/server.cjs` 943006 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — another real fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited (`UNKNOWN`). The last previously-named unrouted case, `time_inquiry`, is now handled. E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-28 02:12 IST (2026-09-27 20:42 UTC) — work slot 11: an unusable name clause is not executed work
 
 ### Fixed

@@ -7379,3 +7379,27 @@ route.
 **हिंदी सारांश:** अनुपयोगी नाम ("my name is hello how are you", "123") अब पहचान के
 रूप में दर्ज नहीं होता और executed-work काउंटर नहीं बढ़ाता — लाइव प्रोब + 9 नए
 टेस्ट, पूरा सूट 1544/1544 पास, lint/build हरे।
+
+---
+
+## Slot: WORK | IST 03:05 | 2026-09-28 — slots completed so far: 12
+
+**Completed:** #13 Zero-fake-success for all tools — `PARTIAL` (coherent slice: the `time_inquiry` clock read, both surfaces). Evidence: `server.ts` ~line 9157 and `src/utils/localJarvisEngine.ts` `time_inquiry` branch both `actionExecuted = false` with the `Clock Query (informational, no action taken)` detail; `src/tests/remainingFakeSuccess.test.ts` source-pin + offline-engine guard (41 tests); `src/tests/conversationalPipelineRegression.test.ts` case B aligned.
+
+**Bugs found:** Both surfaces credited a clock question as executed work and advanced the user-visible "Autonomous Actions Executed" counter, though `handleExecuteAction` routes `time_inquiry` only to `setActiveApp('mobile_personal_status')`, which cannot read the clock.
+
+**Bugs fixed:** Same — fixed and negative-validated (reverting only `src/utils/localJarvisEngine.ts` fails exactly the new engine guard: `1 failed | 40 passed`; restored → 41/41).
+
+**Tests:** 115 files / 1546 passed (23.11 s). Targeted `remainingFakeSuccess`: 41 passed. **Lint:** exit 0. **Build:** exit 0 (`dist/server.cjs` 943006 bytes). **E2E:** NOT RUN — no display session, no handset. **Security:** no `.env` staged, no secrets in diff.
+
+**Documentation:** `docs/COMPLETION_STATUS.md` (item 13 evidence), `docs/CHANGELOG.md`.
+
+**Branch:** feature/hermes-full-completion · **Commits:** `ac39d5d` (fix), `754aa0a` (test) · **Push:** succeeded.
+
+**PR:** NONE opened this slot. **Main merge:** NOT MERGED — awaiting human approval. **Deploy:** NOT_CONFIGURED — no deployment target present.
+
+**Blocked:** #1, #2 (hardware), #8 (Windows host), #50 (device mic), #55 (external auditor).
+
+**Next slot:** #13 — audit the next `actionExecuted: true` site in `server.ts`; the previously-named unrouted `time_inquiry` case is now handled.
+
+**हिंदी सारांश:** घड़ी पूछना अब "executed work" नहीं गिना जाता — लाइव और ऑफ़लाइन दोनों सतहों पर ठीक किया, 2 नए टेस्ट, पूरा सूट 1546/1546 पास, lint/build हरे।
