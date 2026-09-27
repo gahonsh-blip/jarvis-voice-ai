@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-27 22:53 IST (2026-09-27 17:23 UTC) — work slot 3: Android-bridge call decline must not fake a device decline
+
+### Fixed
+- **The offline engine reported a phone decline the bridge cannot perform.** In `src/utils/localJarvisEngine.ts`, both Android-bridge reject branches (the section-0.5 contextual reject and the section-7.4 direct `कॉल काटो` / `reject call` branch) called `androidBridgeEngine.clearPendingEvent()` and then returned `actionExecuted: true` with `title: 'Call Declined'` / `title: 'Call Declined via Android Bridge'`, advancing the user-visible "Autonomous Actions Executed" counter and speaking *"सर, कॉल अस्वीकार कर दी गई है।"*. `AndroidBridgeManager` exposes no call-decline or end-call command — its call dispatch is limited to answering — so clearing the local mirror does not tell the physical device to decline.
+- Added `offlineAndroidRejectVerdict(connected)` in `src/utils/computerOperator/offlineCallTruth.ts`. Both branches now clear the local mirror but report `actionExecuted: false`, count nothing (`countAction(updatedMemory, false)`), and title the action `Incoming Call Dismissed Locally (device not told to decline)`, saying plainly that the device was not told to decline.
+
+### Tests
+- `src/tests/androidMobileBridge.test.ts` — `Scenario 14` rewritten: asserts `actionExecuted: false`, the honest title, the retired decline phrase is gone, and `mockMemory.stats.actionsExecuted` does not move.
+- `src/tests/offlineCallTruth.test.ts` — 2 new cases: a helper case (connected and not) and a source-pin that the retired literals are gone and the helper is wired in. Negative-validated: renaming only the helper call in `localJarvisEngine.ts` fails the source-pin (`1 failed | 19 passed`); restored → `20 passed`.
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted truth suites (`offlineCallTruth` + `androidMobileBridge` + `telephonyDispatchTruth`) **3 files / 70 tests passed**; full suite **114 files / 1514 tests passed** (21.65 s); build exit 0 (`dist/server.cjs` 931531 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — another real fake-success path closed; the remaining `actionExecuted: true` claims outside the audited branches are not individually audited (`UNKNOWN`). E2E: NOT RUN — no handset, no display session. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-27 22:12 IST (2026-09-27 16:42 UTC) — work slot 2: `/api/chat` informational cases must not fake an action
 
 ### Fixed

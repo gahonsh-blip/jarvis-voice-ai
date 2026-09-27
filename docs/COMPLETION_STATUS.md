@@ -4,7 +4,45 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 16:42 UTC (22:12 IST 2026-09-27) — **WORK SLOT 2** of the
+Last cycle: 2026-09-27 17:23 UTC (22:53 IST 2026-09-27) — **WORK SLOT 3** of the
+2026-09-28 window, the 22:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **offline Local JARVIS Engine
+Android-bridge call-decline branches**.
+
+**The offline engine faked a phone decline the bridge cannot perform.** In
+`src/utils/localJarvisEngine.ts`, both Android-bridge reject branches (the
+section-0.5 contextual reject and the section-7.4 direct `कॉल काटो` / `reject
+call` branch) called `androidBridgeEngine.clearPendingEvent()` and then returned
+`actionExecuted: true` with `title: 'Call Declined'` /
+`title: 'Call Declined via Android Bridge'`, bumping the user-visible
+"Autonomous Actions Executed" counter and speaking *"सर, कॉल अस्वीकार कर दी गई
+है।"* (`Scenario 14` in `src/tests/androidMobileBridge.test.ts` pinned that
+contract). `AndroidBridgeManager` exposes **no** call-decline or end-call
+command — its call dispatch is limited to answering — so clearing the locally
+mirrored pending call does not tell the physical device to decline. The user was
+told the phone declined while it kept ringing.
+
+Fixed: added `offlineAndroidRejectVerdict(connected)` in
+`src/utils/computerOperator/offlineCallTruth.ts`. Both branches now clear the
+local mirror but report `actionExecuted: false`, count nothing
+(`countAction(updatedMemory, false)`), and title the action `Incoming Call
+Dismissed Locally (device not told to decline)`, saying plainly that the device
+was not told to decline. Guarded by the rewritten `Scenario 14` (asserts
+`actionExecuted: false`, the honest title, and that the counter does not move)
+plus two new cases in `src/tests/offlineCallTruth.test.ts`: a helper case and a
+source-pin that the retired literals are gone. **Negative-validated** —
+renaming only the helper call in `localJarvisEngine.ts` fails the source-pin
+(`1 failed | 19 passed`), restored → `20 passed`. Gates observed this slot:
+`npm run lint` (`tsc --noEmit`) exit 0; targeted truth suites
+(`offlineCallTruth` + `androidMobileBridge` + `telephonyDispatchTruth`)
+**3 files / 70 tests passed**; full `npx vitest run` **114 files / 1514 tests
+passed** (21.65 s); `npm run build` exit 0 (`dist/server.cjs` 931531 bytes).
+E2E: NOT RUN — no handset, no display session. Deploy: `NOT_CONFIGURED`. Item 13
+remains `PARTIAL` — another real fake-success path closed; the remaining
+`actionExecuted: true` claims outside the audited branches are still **not**
+individually audited, so their truthfulness is `UNKNOWN`, not confirmed.
+
+Previous cycle: 2026-09-27 16:42 UTC (22:12 IST 2026-09-27) — **WORK SLOT 2** of the
 2026-09-28 window, the 22:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **live `/api/chat` informational cases**.
 
