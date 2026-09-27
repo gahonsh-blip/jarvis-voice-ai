@@ -7319,3 +7319,63 @@ parameter on `caseBody`.
 `actionExecuted = true` with no `handleExecuteAction` route.
 
 **हिंदी सारांश:** YouTube सारांश में बिना सारांश वाली lookup अब executed work नहीं गिनी जाती — नया टेस्ट निगेटिव-वैलिडेटेड, पूरा सूट 1537/1537 पास, lint/build हरे।
+
+
+---
+
+## Slot — 2026-09-28 02:05 IST (WORK slot 11) — Item 13: unusable `set_name` payloads
+
+**Slot:** WORK | **IST:** 02:05 (fired) / 02:14 (reported) | **Window:** 2026-09-28, slot 11 of 16.
+
+**Item:** #13 `Zero-fake-success for all tools` — the live `/api/chat` `set_name`
+case and its offline Local JARVIS Engine twin. Status stays `PARTIAL`.
+
+**Found:** The name classifier's group `(?:my name is|call me|i am)\s+([a-zA-Z0-9_\-\s]+)`
+(in the offline engine; the live case shares the intent classifier) is greedy
+over a whitespace class and accepts digits. A live probe against `npm run dev`
+confirmed three fake successes: `"my name is hello how are you"` stored the
+literal sentence as `memoryState.name`, `"my name is 123"` stored `123`, and each
+spoke a "recorded" success and set `actionExecuted = true`, advancing the
+user-visible "Autonomous Actions Executed" counter — a success claim and a
+counter bump for a no-op. The offline identity branch wrote the same value into
+`updatedMemory.name` and bumped `updatedMemory.stats.actionsExecuted`.
+
+**Fixed:** New `src/utils/identityTruth.ts` — `judgeSetNameIntent(raw)` plus
+`canonicalizeNameCandidate(raw)` accept only a plausible name: after trimming
+surrounding punctuation and the trailing Hindi copula/honorific (`है`/`जी`/`ji`/`hai`)
+it must contain at least one Unicode letter, no digit, and at most three words
+(so a legitimate full name such as "Tony Stark" still passes). Both call sites
+route through it. A genuine name is stored and counted exactly as before; an
+unusable payload leaves the stored name untouched, does not advance the counter,
+and answers honestly ("I could not read a usable name there...") with the inert
+`set_name_rejected` action detail. Hindi reply added.
+
+**Tests:** New `src/tests/identityTruth.test.ts` (9 tests): helper verdicts
+(single / full / Hindi names accepted; sentence, digit-only and empty rejected;
+punctuation and copula/honorific canonicalized), two `server.ts` source-pins, and
+the offline engine's before/after name + counter with a genuine-name positive
+control.
+- Negative-validated: disabling only the `MAX_NAME_WORDS` guard fails 2 of 7
+  (`2 failed | 5 passed`); restored -> 7/7.
+- Targeted: identityTruth + localJarvisEngine + engineInformationalTruth +
+  conversationalPipelineRegression — 4 files / 81 passed.
+- Full: `npx vitest run` — 115 files / 1544 tests passed (21.08 s).
+
+**Lint:** `npm run lint` (tsc --noEmit) — exit 0.
+**Build:** `npm run build` — exit 0; dist/server.cjs 942,642 bytes.
+**E2E:** NOT RUN — no Android handset, no display session.
+**Security:** no `.env` staged, no credential in the diff, permission gateway not weakened.
+**Deploy:** NOT_CONFIGURED — no deployment target in this sandbox.
+**Commit:** 40b3d02 (fix+test), a96c13c (docs).
+**Push:** succeeded — origin/feature/hermes-full-completion.
+**Main merge:** NOT MERGED — awaiting human approval.
+
+**Blocked:** #1, #2 (hardware), #8 (Windows host), #50 (device mic), #55 (external auditor).
+
+**Next slot:** #13 — audit the next `actionExecuted: true` site / the unrouted
+`time_inquiry` case, which still credits executed work with no `handleExecuteAction`
+route.
+
+**हिंदी सारांश:** अनुपयोगी नाम ("my name is hello how are you", "123") अब पहचान के
+रूप में दर्ज नहीं होता और executed-work काउंटर नहीं बढ़ाता — लाइव प्रोब + 9 नए
+टेस्ट, पूरा सूट 1544/1544 पास, lint/build हरे।
