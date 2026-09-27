@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-28 03:35 IST (2026-09-27 22:05 UTC) — work slot 14: a printed window title is not a read screen
+
+### Fixed
+- **`ComputerOperatorModal` still printed two live-screen claims it never measured.** The fake window-title bar rendered `{windowTitle || 'Desktop Observation'}` and the element header rendered `{visibleElements.length || 0} UI Elements Parsed` for *every* state, including the illustrative preview and an unreachable host (`isAmbiguous`). Both named a window and counted parsed elements on a desktop that was never observed, directly beneath the honest `SCREEN NOT OBSERVED` dot. Same inflation class item 13 tracks.
+- Added `observationWindowTitleLabel` and `observationElementsParsedLabel` to `src/utils/computerOperator/observationTruth.ts`; `ComputerOperatorModal.tsx` now derives both. They hold at `WINDOW NOT OBSERVED` / `NO SCREEN CONTENT OBSERVED` until a real, non-ambiguous observation exists; an empty observed title reads `WINDOW TITLE NOT REPORTED`, and the parsed-element count singularises correctly.
+
+### Tests
+- `src/tests/observationTruth.test.ts` — two source pins (the raw window-title expression and the `UI Elements Parsed` literal are gone; both helpers are used) plus six unit cases for the new helpers. File now 43 tests.
+- Negative-validated: restoring the raw `{windowTitle || 'Desktop Observation'}` expression fails exactly the new source guard (`1 failed | 42 passed`); restored → 43/43.
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted `observationTruth` **43 passed**; full suite **115 files / 1565 tests passed** (21.53 s); build exit 0 (`dist/server.cjs` 943006 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — another real fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited (`UNKNOWN`). The previously-named unrouted `set_name` / `time_inquiry` cases were handled in slots 11 and 12. E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-28 03:05 IST (2026-09-27 21:35 UTC) — work slot 13: a live-screen claim is not a measurement
 
 ### Fixed

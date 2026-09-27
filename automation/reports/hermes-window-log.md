@@ -7429,3 +7429,86 @@ route.
 **Next slot:** #13 — audit the next unconditional success/status literal in the Computer Operator surfaces (`ComputerOperatorModal` telemetry rows, then the operator router).
 
 **हिंदी सारांश:** कंप्यूटर ऑपरेटर पैनल अब बिने देखे स्क्रीन का दावा नहीं करता — तीनों लेबल असली माप से बनते हैं, 10 नए टेस्ट, पूरा सूट 1556/1556 पास, lint/build हरे।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:35
+Window date: 2026-09-28   Window slots completed so far: 2 (state recorded 1 on entry
+             + this one; the wall clock is schedule slot 14 of 16)
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (one more real violation closed).
+  Closed the two remaining unmeasured live-screen claims in
+  src/components/ComputerOperatorModal.tsx: the fake window-title bar
+  ({windowTitle || 'Desktop Observation'}) and the element header
+  ({visibleElements.length || 0} UI Elements Parsed). Both printed a window name
+  and a parsed-element count for the illustrative preview and for an unreachable
+  host (isAmbiguous), contradicting the honest SCREEN NOT OBSERVED dot already
+  rendered beside them.
+  Evidence: src/utils/computerOperator/observationTruth.ts gains
+  observationWindowTitleLabel + observationElementsParsedLabel; the modal derives
+  both. src/tests/observationTruth.test.ts — 43 passed (targeted), 2 new source
+  pins + 6 new unit cases. Commit 6f40b91.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remaining actionExecuted: true sites in
+  server.ts (~8498-8816) are still not individually audited; status UNKNOWN.
+
+Remaining:
+- #1 Real Android Mobile Bridge connection — PARTIAL (authenticated handshake
+  verified; physical-device leg unverified).
+- #2 Real Android E2E, #50 device mic, #8 Windows-host Computer Operator leg,
+  #55 external security audit — hardware/host blocked.
+
+Bugs Found:
+- Two more printed-but-never-measured screen claims in ComputerOperatorModal.tsx
+  (window title, parsed-element count), found by reading the modal render tree
+  against the observationTruth helper set from prior slots.
+
+Bugs Fixed:
+- Both. Verified by the targeted suite (43 passed) and by negative validation:
+  restoring the raw {windowTitle || 'Desktop Observation'} expression makes the
+  new source guard fail exactly (1 failed | 42 passed); restored → 43/43.
+
+Tests:    115 files / 1565 tests passed (full npx vitest run, 21.53 s);
+          targeted observationTruth 43 passed.
+Lint:     PASS — npm run lint (tsc --noEmit) exit 0.
+Build:    PASS — npm run build exit 0; dist/server.cjs 943006 bytes.
+E2E:      NOT RUN — no display session, no Android handset in this sandbox.
+Security: CLEAN — git check-ignore -v .env → .gitignore:4:.env; working tree
+          clean; diff-vs-main secret scan shows only documented synthetic test
+          fixtures, no real credential.
+
+Documentation: docs/COMPLETION_STATUS.md (last-cycle entry), docs/CHANGELOG.md
+               (slot 14 entry), automation/reports/hermes-window-log.md.
+
+Branch:  feature/hermes-full-completion
+Commit:  6f40b91 (fix+test), plus a docs/report commit pushed after it
+Push:    succeeded — d935989..6f40b91 to origin/feature/hermes-full-completion
+
+PR:         NONE opened this slot (work slot; existing PR state unchanged)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present in
+            this sandbox; the verified artifact dist/server.cjs is the deploy unit.
+
+Blocked:
+- #1 / #2 — require a physical Android device and a real bridge pairing secret.
+- #50 — requires device microphone hardware.
+- #8 — Windows-host Computer Operator leg requires a Windows host.
+- #55 — external security audit requires a human/third-party auditor.
+
+Human Approval Required:
+- Merge of feature/hermes-full-completion to main after reading this report.
+- Decide whether the remaining server.ts actionExecuted: true sites should be
+  audited case-by-case or covered by a systematic guard.
+
+Next Slot:
+- #13: audit the remaining server.ts actionExecuted: true sites (~8498-8816)
+  toward a systematic fake-success guard, since the modal's printed-claim class in
+  this area is now closed.
+
+हिंदी सारांश (एक पंक्ति):
+- कंप्यूटर ऑपरेटर पैनल में दो और बिना-मापे दिखाए जा रहे स्क्रीन दावे (window title और
+  parsed-element count) असली observation से derive किए गए; 43 targeted + 1565 कुल टेस्ट,
+  lint और build पास।

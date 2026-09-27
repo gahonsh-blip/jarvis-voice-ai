@@ -4,7 +4,31 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 21:35 UTC (03:05 IST 2026-09-28) — **WORK SLOT 13** of the
+Last cycle: 2026-09-27 22:05 UTC (03:35 IST 2026-09-28) — **WORK SLOT 14** of the
+2026-09-28 window, the 03:35 IST fire. Item 13 (`Zero-fake-success for all tools`),
+the **Computer Operator panel's remaining unmeasured live-screen claims** — the fake
+window-title bar and the parsed-element count (commit `6f40b91`).
+
+**Two more printed screen claims were not read from any screen.**
+`ComputerOperatorModal.tsx` rendered `{windowTitle || 'Desktop Observation'}` in its
+fake title bar and `{visibleElements.length || 0} UI Elements Parsed` in its element
+header for *every* state — including the illustrative preview and an unreachable host
+(`isAmbiguous`). Both named a window and counted parsed elements on a desktop that was
+never observed, sitting directly beneath the honest `SCREEN NOT OBSERVED` dot.
+
+Fixed: `observationTruth.ts` gains `observationWindowTitleLabel` and
+`observationElementsParsedLabel`; the modal derives both. They hold at
+`WINDOW NOT OBSERVED` / `NO SCREEN CONTENT OBSERVED` until a real, non-ambiguous
+observation exists; an empty observed title reads `WINDOW TITLE NOT REPORTED`, and the
+count singularises correctly. Item 13 stays `PARTIAL` — one more real violation closed,
+not proof the sweep is complete.
+
+Evidence: `src/tests/observationTruth.test.ts` — 43 passed (targeted); full suite
+`115 files / 1565 tests passed`; lint clean; build green (`dist/server.cjs` 943006 B).
+Negative-validated: restoring the raw window-title expression fails the new source
+guard (`1 failed | 42 passed`), then restored → 43/43.
+
+Last cycle (previous): 2026-09-27 21:35 UTC (03:05 IST 2026-09-28) — **WORK SLOT 13** of the
 2026-09-28 window, the 03:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
 the **Computer Operator panel's unmeasured live-screen claims** — the modal printed
 `OPERATOR ACTIVE: OBSERVING SCREEN`, `ACTIVE APP: <name> | None`, and `LIVE COMMAND
