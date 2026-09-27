@@ -7138,3 +7138,88 @@ Next Slot:
 - #13 के तहत /api/chat के emergency stop/resume को अब टॉगल की तरह व्यवहार नहीं
   करने दिया — दो बार "stop" कहने पर फ्रीज़ खुलने जैसी खतरनाक उलटी गलती ठीक की और
   बिना बदलाव के झूठा सफलता-दावा/काउंट बंद किया; पूरा सूट 1530/1530 पास।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35
+Window date: 2026-09-28   Window slots completed so far: 8
+
+Completed:
+- #13 Zero-fake-success for all tools — closed the `find_document` zero-match
+  class. Evidence: `server.ts` (`case 'find_document'`, ~line 8834) now has an
+  explicit `else if (search.success)` branch that speaks "No file matching
+  <query> exists in the workspace." and sets `actionExecuted = false`; the
+  success path (real matches) still credits executed work. Regression test
+  `a zero-match search is a non-action, not an executed document lookup` in
+  `src/tests/documentSearchTruthfulness.test.ts` isolates that branch and asserts
+  `actionExecuted = false` / never `actionExecuted = true`. Negative-validated:
+  reverting only the `server.ts` change → `1 failed | 5 passed`; restored →
+  `6 passed`. Full suite 114 files / 1532 tests passed.
+
+In Progress:
+- #13 — the remaining `actionExecuted: true` sites in `server.ts` are still not
+  individually audited (UNKNOWN). The unrouted cases flagged in slot 7
+  (`summarize_youtube_video`, `set_name`, `time_inquiry`) still credit actions
+  with no `handleExecuteAction` route and remain to be handled.
+
+Remaining:
+- #13 remainder: audit the other `actionExecuted: true` sites and the three
+  unrouted cases.
+- #1 Android Bridge real-device E2E, #50 wake word on device — BLOCKED, no
+  hardware. #55 external audit — BLOCKED, no auditor. #8 Windows capture —
+  BLOCKED, no Windows host.
+
+Bugs Found:
+- `find_document`: a search that ran and returned an empty match list set
+  `actionExecuted = true` and rendered the `Not found: <query>` card, inflating
+  the user-visible "Autonomous Actions Executed" counter for a lookup that
+  retrieved nothing. Combined with slot 7's finding that `find_document` has no
+  `handleExecuteAction` route, the credited action also opened no panel.
+
+Bugs Fixed:
+- The zero-match branch in the `/api/chat` `find_document` case now reports
+  `actionExecuted = false` while keeping the honest "No file matching …" reply.
+  Proof: the new source-pin test fails when the fix is reverted and passes when
+  it is restored (see Completed).
+
+Tests:    114 files / 1532 tests passed (npx vitest run, 21.64 s); targeted
+          `src/tests/documentSearchTruthfulness.test.ts` 6 passed.
+Lint:     PASS — `npm run lint` (`tsc --noEmit`) exit 0.
+Build:    PASS — `npm run build` exit 0; `dist/server.cjs` 938,698 bytes.
+E2E:      NOT RUN — no display session, no physical handset in this sandbox.
+Security: Partial — no `.env` staged, no secrets in the diff; full audit
+          (`npm audit`) NOT RUN this slot. Human-approval gateway untouched and
+          not weakened.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  e08be13 (code fix 3bb3f3e; state 254557b)
+Push:    succeeded → origin/feature/hermes-full-completion (a16a5be..e08be13)
+
+PR:         NONE opened this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this sandbox; `dist/server.cjs` (938,698 bytes) is the verified
+            deployment unit available.
+
+Blocked:
+- #1 Android Bridge real-device E2E — requires a physical handset.
+- #50 wake word on device — requires a microphone/device session.
+- #55 third-party security audit — requires an external auditor.
+- #8 Windows PowerShell capture path — requires a Windows host.
+
+Human Approval Required:
+- None this slot. The permission gateway and emergency-stop path were not
+  weakened; the change only removes a phantom success counter.
+
+Next Slot:
+- #13 — continue the audit with `summarize_youtube_video`, `set_name`, and
+  `time_inquiry`: each still credits `actionExecuted = true` with no
+  `handleExecuteAction` route, the same phantom-action shape fixed for
+  `find_document` this slot.
+
+हिंदी सारांश (एक पंक्ति):
+- #13 के तहत /api/chat के find_document में ज़ीरो-मैच खोज को अब "निष्पादित कार्य"
+  नहीं गिना जाता — झूठा action काउंट बंद किया, नए टेस्ट से निगेटिव-वैलिडेट किया;
+  पूरा सूट 1532/1532 पास।
