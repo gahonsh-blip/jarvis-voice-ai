@@ -144,6 +144,57 @@ export function offlineCallReply(
   return verdict.replyEn;
 }
 
+// ---------------------------------------------------------------------------
+// Android-bridge reject truth
+//
+// The Android-bridge reject branches in localJarvisEngine run *before* section
+// 7.1 and clear the locally mirrored pending call, then reported
+// `actionExecuted: true` and titled the action "Call Declined" / "Call Declined
+// via Android Bridge". The real bridge exposes no decline/end-call command
+// (AndroidBridgeManager's call actions are limited to answer), so clearing the
+// local mirror does not stop the device from ringing — the user was told a
+// success the device never performed.
+//
+// We can only confirm a real decline when a *connected* device advertises an
+// actual decline capability. Clearing local UI state is not that. Until such a
+// capability is wired, the honest result is a local-only dismiss that never
+// counts as executed work.
+// ---------------------------------------------------------------------------
+
+export interface OfflineAndroidRejectVerdict {
+  /** Always false: clearing the local mirror is not a device-confirmed decline. */
+  actionExecuted: boolean;
+  /** True when only the local UI mirror was cleared. */
+  localMirrorCleared: boolean;
+  title: string;
+  replyEn: string;
+  replyHi: string;
+  replyHinglish: string;
+}
+
+export function offlineAndroidRejectVerdict(connected: boolean): OfflineAndroidRejectVerdict {
+  const detail = connected
+    ? {
+        en: 'the connected Android device exposes no call-decline capability, so it was not told to decline',
+        hi: 'कनेक्टेड Android डिवाइस कॉल अस्वीकार करने की सुविधा नहीं देता, इसलिए उसे अस्वीकार करने को नहीं कहा गया',
+        hinglish: 'connected Android device call decline capability nahi deta, isliye usse decline karne ko nahi kaha gaya',
+      }
+    : {
+        en: 'no Android device is connected, so the physical phone was not told to decline',
+        hi: 'कोई Android डिवाइस कनेक्टेड नहीं है, इसलिए असली फोन को अस्वीकार करने को नहीं कहा गया',
+        hinglish: 'koi Android device connected nahi hai, isliye asli phone ko decline nahi bataya gaya',
+      };
+
+  return {
+    actionExecuted: false,
+    localMirrorCleared: true,
+    title: 'Incoming Call Dismissed Locally (device not told to decline)',
+    replyEn: `Dismissed this call in the app only — ${detail.en}.`,
+    replyHi: `यह कॉल केवल ऐप में हटाई गई — ${detail.hi}।`,
+    replyHinglish: `Call sirf app mein dismiss hui, Sir — ${detail.hinglish}.`,
+  };
+}
+
 /**
  * Honest reply for the `human_handoff` intent. Transferring the caller to
  * clinic staff is telephony work; a provider being *configured* does not prove

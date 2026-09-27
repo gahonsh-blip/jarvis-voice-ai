@@ -6,6 +6,7 @@ import {
   offlineCallVerdict,
   offlineCallReply,
   offlineHumanHandoffReply,
+  offlineAndroidRejectVerdict,
 } from '../utils/computerOperator/offlineCallTruth';
 import { TelephonyProviderRegistry } from '../utils/telephonyAdapters';
 import { SIMULATION_PROVIDER_ID } from '../utils/telephonyGatewayTruth';
@@ -249,4 +250,37 @@ describe('the offline video upload never claims the video was staged', () => {
     expect(branch).not.toContain('Stage YouTube Video');
     expect(branch).not.toContain('actionsExecuted += 1');
   });
+
+// The Android-bridge reject branches (sections 0.52 and 7.4) claimed
+// "Call Declined via Android Bridge" and bumped the counter, but the bridge
+// exposes no call-decline command — the physical phone is never told to
+// decline. Only the local UI mirror is cleared, so it must never count as
+// executed device work.
+describe('the Android-bridge call decline never fakes a device-confirmed decline', () => {
+  it('never reports the decline as executed, connected or not', () => {
+    for (const connected of [true, false]) {
+      const v = offlineAndroidRejectVerdict(connected);
+      expect(v.actionExecuted).toBe(false);
+      expect(v.localMirrorCleared).toBe(true);
+      expect(v.title).toBe('Incoming Call Dismissed Locally (device not told to decline)');
+      expect(v.replyEn).not.toMatch(/declined|decline dispatched/i);
+      expect(v.replyHi).not.toContain('अस्वीकार कर दी गई');
+      expect(v.replyHinglish).not.toMatch(/decline kar di/i);
+      // Every reply must admit the device was not told to decline.
+      expect(v.replyEn).toContain('not told to decline');
+    }
+  });
+
+  it('pins the engine reject branches to the honest verdict, not a literal', () => {
+    const engineSrc = fs.readFileSync(
+      path.join(__dirname, '..', 'utils', 'localJarvisEngine.ts'),
+      'utf8',
+    );
+    expect(engineSrc).not.toContain("title: 'Call Declined via Android Bridge'");
+    expect(engineSrc).not.toContain("title: 'Call Declined'");
+    expect(engineSrc).not.toContain("'सर, कॉल अस्वीकार कर दी गई है।'");
+    expect(engineSrc).toContain('offlineAndroidRejectVerdict(');
+  });
+});
+
 });

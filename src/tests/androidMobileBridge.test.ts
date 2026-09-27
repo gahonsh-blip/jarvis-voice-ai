@@ -428,14 +428,23 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     unsubscribe();
   });
 
-  it('Scenario 14: Direct call decline command via voice declines and clears call', () => {
+  it('Scenario 14: Direct call decline clears the local mirror but never claims the device declined', () => {
     androidBridgeEngine.handleIncomingCall({ callerName: 'Kunal', callerNumber: '+91 9998886666' });
     expect(androidBridgeEngine.getPendingEvent()?.sender).toBe('Kunal');
+    const counterBefore = mockMemory.stats.actionsExecuted;
 
     const res = processOfflineCommand('कॉल काटो', mockMemory);
     expect(res.intent).toBe('reject_call');
-    expect(res.spokenText).toBe('सर, कॉल अस्वीकार कर दी गई है।');
-    expect(res.actionExecuted).toBe(true);
+    // The bridge exposes no call-decline command, so a real decline cannot be
+    // confirmed: the local UI mirror is cleared but nothing was executed.
+    expect(res.actionExecuted).toBe(false);
+    expect((res.actionDetail as any)?.title).toBe(
+      'Incoming Call Dismissed Locally (device not told to decline)',
+    );
+    expect(res.spokenText).not.toContain('अस्वीकार कर दी गई');
+    expect(res.spokenText).toContain('केवल ऐप में');
+    expect(mockMemory.stats.actionsExecuted).toBe(counterBefore);
+    // Only the local mirror is cleared — that part did happen.
     expect(androidBridgeEngine.getPendingEvent()).toBeNull();
   });
 

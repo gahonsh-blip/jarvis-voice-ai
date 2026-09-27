@@ -21,6 +21,7 @@ import {
 import {
   offlineCallVerdict,
   offlineHumanHandoffReply,
+  offlineAndroidRejectVerdict,
 } from './computerOperator/offlineCallTruth';
 import { offlineEmergencyVerdict, offlineEmergencyReply } from './computerOperator/offlineEmergencyTruth';
 import { telephonyEngineMode, type TelephonyEngineMode } from './telephonyGatewayTruth';
@@ -313,17 +314,27 @@ export function processOfflineCommand(
       }
     } else if (evaluation.decision === 'REJECT') {
       if (evaluation.targetType === 'CALL') {
+        const rejectVerdict = offlineAndroidRejectVerdict(
+          androidBridgeEngine.getCapabilities() !== null,
+        );
         androidBridgeEngine.clearPendingEvent();
         const reply = isHindi
-          ? 'सर, कॉल अस्वीकार कर दी गई है।'
-          : 'Sir, the incoming call has been declined.';
+          ? rejectVerdict.replyHi
+          : isHinglish
+          ? rejectVerdict.replyHinglish
+          : rejectVerdict.replyEn;
+        countAction(updatedMemory, rejectVerdict.actionExecuted);
 
         return {
           reply,
           spokenText: reply,
           intent: 'reject_call',
-          actionExecuted: true,
-          actionDetail: { type: 'reject_call', title: 'Call Declined' },
+          actionExecuted: rejectVerdict.actionExecuted,
+          actionDetail: {
+            type: 'reject_call',
+            title: rejectVerdict.title,
+            payload: { localMirrorCleared: true },
+          },
           updatedMemory,
           offline: true,
         };
@@ -416,14 +427,26 @@ export function processOfflineCommand(
     lower.includes('call mat uthao')
   ) {
     if (activePendingEvent && activePendingEvent.type === 'CALL') {
+      const rejectVerdict = offlineAndroidRejectVerdict(
+        androidBridgeEngine.getCapabilities() !== null,
+      );
       androidBridgeEngine.clearPendingEvent();
-      const reply = isHindi ? 'सर, कॉल अस्वीकार कर दी गई है।' : 'Sir, the call has been declined.';
+      const reply = isHindi
+        ? rejectVerdict.replyHi
+        : isHinglish
+        ? rejectVerdict.replyHinglish
+        : rejectVerdict.replyEn;
+      countAction(updatedMemory, rejectVerdict.actionExecuted);
       return {
         reply,
         spokenText: reply,
         intent: 'reject_call',
-        actionExecuted: true,
-        actionDetail: { type: 'reject_call', title: 'Call Declined via Android Bridge' },
+        actionExecuted: rejectVerdict.actionExecuted,
+        actionDetail: {
+          type: 'reject_call',
+          title: rejectVerdict.title,
+          payload: { localMirrorCleared: true },
+        },
         updatedMemory,
         offline: true,
       };
