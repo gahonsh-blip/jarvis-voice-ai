@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-28 02:12 IST (2026-09-27 20:42 UTC) — work slot 11: an unusable name clause is not executed work
+
+### Fixed
+- **The live `/api/chat` `set_name` case and the offline Local JARVIS Engine recorded an unusable payload as the owner's identity.** The classifier's name group is greedy over a whitespace class and accepts digits, so `"my name is hello how are you"` was stored verbatim as `memoryState.name`, `"my name is 123"` stored `123`, and each spoke a "recorded" success and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter — a success claim and a counter bump for a no-op. The offline engine's `(?:my name is|call me|i am)\s+([a-zA-Z0-9_\-\s]+)` branch had the same defect.
+- New `src/utils/identityTruth.ts` (`judgeSetNameIntent`, `canonicalizeNameCandidate`) accepts only a plausible name: after trimming surrounding punctuation and the trailing Hindi copula/honorific it must be letter-bearing, digit-free and at most three words (so "Tony Stark" still passes). Both call sites route through it — a genuine name is stored and counted as before; an unusable payload leaves the stored name untouched, does not advance the counter, and answers honestly with the inert `set_name_rejected` detail (Hindi reply included).
+
+### Tests
+- `src/tests/identityTruth.test.ts` — 9 tests: helper verdicts (accept single/full/Hindi names; reject sentence, digit-only and empty payloads; canonicalize punctuation and the copula/honorific), two `server.ts` source-pins, and the offline engine's unchanged name + zero counter on a sentence and its genuine-name positive control.
+- Negative-validated: disabling only the `MAX_NAME_WORDS` guard fails 2 of 7 (`2 failed | 5 passed`); restored → 7/7.
+- Live probe against a running `npm run dev`: before, `"my name is hello how are you"` → `actionExecuted=true`, name `hello how are you`; after, `actionExecuted=false`, name unchanged; `"my name is Ravi Kumar"` still `true`, name `ravi kumar`.
+- Gates observed this slot: lint (`tsc --noEmit`) exit 0; targeted 4 files / 81 passed; full suite **115 files / 1544 tests passed** (21.08 s); build exit 0 (`dist/server.cjs` 942642 bytes).
+
+### Notes
+- Item 13 remains `PARTIAL` — another real fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited (`UNKNOWN`), and the unrouted `time_inquiry` case remains to be handled. E2E: NOT RUN — no display session, no handset. Deploy: `NOT_CONFIGURED`.
+
 ## [Unreleased] - 2026-09-28 01:45 IST (2026-09-27 20:15 UTC) — work slot 10: a summary-less YouTube lookup is not executed work
 
 ### Fixed
