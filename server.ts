@@ -83,6 +83,7 @@ import {
 import { screenshotVerdict, screenshotReply } from './src/utils/computerOperator/screenshotDispatchTruth';
 import { volumeVerdict, volumeReply } from './src/utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from './src/utils/computerOperator/powerDispatchTruth';
+import { browserOpenVerdict } from './src/utils/browserDispatchTruth';
 import {
   fixProjectErrorReply,
   operatorTaskExecuted,
@@ -9071,28 +9072,21 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         };
         break;
       }
-      case 'open_google': {
-        spokenResponse = 'Opening the in-app Browser at Google. No external browser was launched.';
-        actionExecuted = true;
-        actionDetail = { type: 'open_google', title: 'In-App Browser: Google (external browser not launched)', target: 'https://www.google.com' };
-        break;
-      }
-      case 'open_youtube': {
-        spokenResponse = 'Opening the in-app Browser at YouTube. No external browser was launched.';
-        actionExecuted = true;
-        actionDetail = { type: 'open_youtube', title: 'In-App Browser: YouTube (external browser not launched)', target: 'https://www.youtube.com' };
-        break;
-      }
-      case 'open_gmail': {
-        spokenResponse = 'Opening the in-app Browser at Gmail. No external browser was launched.';
-        actionExecuted = true;
-        actionDetail = { type: 'open_gmail', title: 'In-App Browser: Gmail (external browser not launched)', target: 'https://mail.google.com' };
-        break;
-      }
+      case 'open_google':
+      case 'open_youtube':
+      case 'open_gmail':
       case 'open_chatgpt': {
-        spokenResponse = 'Opening the in-app Browser at ChatGPT. No external browser was launched.';
+        // The in-app Browser only leaves its Google home when the view is handed
+        // the destination URL; the reply, the card and that URL all come from
+        // one verdict so a named site is never claimed without being loaded.
+        const verdict = browserOpenVerdict(intentData.intent);
+        spokenResponse = language === 'hi' ? verdict.replyHi : verdict.replyEn;
         actionExecuted = true;
-        actionDetail = { type: 'open_chatgpt', title: 'In-App Browser: ChatGPT (external browser not launched)', target: 'https://chatgpt.com' };
+        actionDetail = {
+          type: intentData.intent,
+          title: verdict.title,
+          target: verdict.url,
+        };
         break;
       }
       case 'google_search': {

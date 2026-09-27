@@ -117,6 +117,7 @@ export default function App() {
   const [serverReachable, setServerReachable] = useState<boolean | null>(null);
   const [notepadInitialContent, setNotepadInitialContent] = useState<string>('');
   const [browserSearchQuery, setBrowserSearchQuery] = useState<string>('');
+  const [browserInitialUrl, setBrowserInitialUrl] = useState<string>('');
   const [speechDiagnostics, setSpeechDiagnostics] = useState<SpeechDiagnostics | null>(null);
 
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -1002,15 +1003,23 @@ export default function App() {
           setActiveApp('paint');
           break;
         case 'open_chrome':
+          setBrowserSearchQuery('');
+          setBrowserInitialUrl('');
+          setActiveApp('browser');
+          break;
         case 'open_google':
         case 'open_youtube':
         case 'open_gmail':
         case 'open_chatgpt':
+          // The action card carries the URL the view must load; without it
+          // BrowserModal stays on its Google home while naming another site.
           setBrowserSearchQuery('');
+          setBrowserInitialUrl(payload?.target || '');
           setActiveApp('browser');
           break;
         case 'google_search':
           setBrowserSearchQuery(payload?.query || '');
+          setBrowserInitialUrl('');
           setActiveApp('browser');
           break;
         case 'take_screenshot':
@@ -1868,6 +1877,7 @@ export default function App() {
         isOpen={activeApp === 'browser'}
         onClose={() => setActiveApp(null)}
         initialQuery={browserSearchQuery}
+        initialUrl={browserInitialUrl}
       />
 
       <ScreenshotModal
