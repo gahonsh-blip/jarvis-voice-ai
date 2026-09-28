@@ -348,6 +348,12 @@ class TelephonyAudioSynthesizer {
     this.getContext();
   }
 
+  /**
+   * Configures a telephone bandpass profile. This synthesizer only emits tones
+   * directly to `ctx.destination` and has no microphone/call-station input, so
+   * the node is created but NOT connected to any audio path: enabling this does
+   * not filter call audio. Callers must not surface it as "applied" or "ON".
+   */
   public enableTelephoneBandpass(enabled: boolean) {
     const ctx = this.getContext();
     if (!ctx) return;

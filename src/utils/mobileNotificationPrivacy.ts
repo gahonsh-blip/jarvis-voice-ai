@@ -23,7 +23,7 @@ const SENSITIVE_PATTERNS: Array<{ kind: 'OTP' | 'AUTH' | 'BANK' | 'HEALTH' | 'SE
       /\b(?:verification code|verification otp|verification pin)\b/i,
       /\b(?:passcode)\b/i,
       /\b(?:\d{4,})?\s*(?:code|\u0915\u094b\u0921|\u0935\u0947\u0930\u093f\u092b\u093f\u0915\u0947\u0936\u0928 \u0915\u094b\u0921)\b/i,
-      /\u0913\u091f\u0917\u0940\u092a\u0940\u092a|\u090f\u091f\u0940\u092a\u0940|\u0913\u091f\u092a\u0940/i,
+      /\u0913\u091f\u0940\u092a\u0940|\u0913\u091f\u092a\u0940|\u090f\u091f\u0940\u092a\u0940/i,
     ],
   },
   {
@@ -303,7 +303,7 @@ export function exposeNotificationContent(params: {
 
   return {
     contentAvailable: false,
-    bodyPreview: params.bodyPreview || (params.title ? undefined : undefined),
+    bodyPreview: params.bodyPreview,
     sensitive: false,
     permitted: true,
     reason: readContent ? 'ALLOWED' : 'CONTENT_OFF',

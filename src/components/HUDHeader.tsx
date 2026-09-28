@@ -22,11 +22,31 @@ import {
   Navigation,
 } from 'lucide-react';
 import { getLanguageOption } from '../utils/languages';
+import { locationFixBadge, type CoordsSource } from '../utils/locationService';
+import {
+  emergencyLiveness,
+  emergencyStatusKnown,
+  emergencyLivenessLabel,
+  type EmergencyStatusShape,
+} from '../utils/emergencyTruth';
+import { syncStatusLabel, type SyncLiveness } from '../utils/syncTruth';
+import { billingBadgeLabel } from '../utils/hardening/billingEntitlementTruth';
+import {
+  UNAVAILABLE_HUD_TELEMETRY,
+  fetchHudTelemetry,
+  formatHudPercent,
+  type HudTelemetrySnapshot,
+} from '../utils/hudTelemetry';
 
 interface HUDHeaderProps {
   userName?: string;
   geminiConnected: boolean;
-  isOnline?: boolean;
+  /**
+   * The sync pill's liveness. Derived by the caller from two observed facts —
+   * browser connectivity and whether the backend answered — so the pill can
+   * never print SYNCED on an unobserved backend.
+   */
+  syncLiveness?: SyncLiveness;
   language?: string;
   onOpenSettings: () => void;
   onOpenMemory: () => void;
@@ -41,12 +61,14 @@ interface HUDHeaderProps {
   onOpenPermissionGateway: () => void;
   onOpenMobileStatus?: () => void;
   onOpenLocation?: () => void;
+  /** Real provenance of the coordinates shown by the location surface. */
+  locationSource?: CoordsSource | null;
 }
 
 export const HUDHeader: React.FC<HUDHeaderProps> = ({
   userName,
   geminiConnected,
-  isOnline = true,
+  syncLiveness = 'OFFLINE_READY',
   language = 'en-US',
   onOpenSettings,
   onOpenMemory,
@@ -61,26 +83,49 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
   onOpenPermissionGateway,
   onOpenMobileStatus,
   onOpenLocation,
+  locationSource = null,
 }) => {
   const [time, setTime] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
-  const [cpuSim, setCpuSim] = useState<number>(14);
-  const [isKillSwitchActive, setIsKillSwitchActive] = useState<boolean>(false);
+  const [telemetry, setTelemetry] = useState<HudTelemetrySnapshot>(UNAVAILABLE_HUD_TELEMETRY);
+  const [telegramLive, setTelegramLive] = useState<boolean | null>(null);
+  const [securityLevel, setSecurityLevel] = useState<number | null>(null);
+  // Kill-switch state starts UNKNOWN, never "released". The previous seed of
+  // `false` plus the swallowed fetch error meant a header that could not reach
+  // /api/emergency/status rendered a normal, non-emergency control surface —
+  // an unqueried state presented as a safe one.
+  const [emergency, setEmergency] = useState<EmergencyStatusShape | null>(null);
   const [killSwitchReason, setKillSwitchReason] = useState<string>('');
   const [showKillModal, setShowKillModal] = useState<boolean>(false);
   const [killNotice, setKillNotice] = useState<string | null>(null);
   const [isOperatingKillSwitch, setIsOperatingKillSwitch] = useState<boolean>(false);
 
+  // The GPS pill used to be a fixed green label, asserting a device link the
+  // HUD never checked. Derive it from the real coordinate provenance instead;
+  // only a live fix may render as a live link.
+  const gpsFix = locationFixBadge(locationSource);
+
+  // Derived from the observed emergency status, never from a local default.
+  // UNKNOWN renders as its own state so an unanswered probe is never drawn as
+  // an armed-AND-released switch.
+  const liveness = emergencyLiveness(emergency);
+  const statusKnown = emergencyStatusKnown(emergency);
+  const isKillSwitchActive = liveness === 'ENGAGED';
+  const killSwitchUnknown = !statusKnown;
+
   const fetchEmergencyStatus = async () => {
     try {
       const res = await fetch('/api/emergency/status');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data && typeof data.emergencyPaused === 'boolean') {
-        setIsKillSwitchActive(data.emergencyPaused);
+        setEmergency(data);
         setKillSwitchReason(data.reason || '');
+      } else {
+        setEmergency(null);
       }
     } catch {
-      // Offline fallback
+      setEmergency(null);
     }
   };
 
@@ -100,7 +145,10 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        setIsKillSwitchActive(true);
+        // Only adopt a state the response actually confirmed; otherwise the
+        // next poll decides, so we never assert a switch position from a
+        // success flag alone.
+        setEmergency(emergencyStatusKnown(data.emergencyState) ? data.emergencyState : null);
         setKillNotice(`🚨 KILL SWITCH ENGAGED: Terminated all background tasks and cleared ${data.clearedTasksCount || 0} queue item(s).`);
         setShowKillModal(false);
       }
@@ -122,7 +170,7 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        setIsKillSwitchActive(false);
+        setEmergency(emergencyStatusKnown(data.emergencyState) ? data.emergencyState : null);
         setKillNotice('🟢 System resumed safely. Normal level 1-4 permission gating active.');
         setShowKillModal(false);
       }
@@ -143,13 +191,58 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
     updateClock();
     const interval = setInterval(updateClock, 1000);
 
-    const cpuInterval = setInterval(() => {
-      setCpuSim(Math.floor(10 + Math.random() * 8));
-    }, 3000);
+    // Real host telemetry only. The previous version invented the number with
+    // Math.random() and labelled it "ARM VM LOAD". A failed fetch leaves the
+    // reading null, rendered as "—".
+    let cancelled = false;
+    const readTelemetry = async () => {
+      const snapshot = await fetchHudTelemetry();
+      if (!cancelled) setTelemetry(snapshot);
+    };
+    readTelemetry();
+    const telemetryInterval = setInterval(readTelemetry, 10000);
+
+    // "TELEGRAM ONLINE" used to be hardcoded text, so the HUD asserted a live
+    // phone link even when no bot token was configured. Read the real
+    // connection flag; null (unknown) renders as "—".
+    const readTelegramStatus = async () => {
+      try {
+        const res = await fetch('/api/telegram/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setTelegramLive(data?.config?.isLiveConnected === true);
+      } catch {
+        if (!cancelled) setTelegramLive(null);
+      }
+    };
+    readTelegramStatus();
+    const telegramInterval = setInterval(readTelegramStatus, 15000);
+
+    // The header claimed a fixed "LEVEL 2 SAFE" in purple regardless of the
+    // real security matrix level. Read the actual level so the indicator cannot
+    // claim a safety state the backend is not in.
+    const readSecurityLevel = async () => {
+      try {
+        const res = await fetch('/api/security');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        const level = data?.currentLevel;
+        setSecurityLevel(typeof level === 'number' && Number.isFinite(level) ? level : null);
+      } catch {
+        if (!cancelled) setSecurityLevel(null);
+      }
+    };
+    readSecurityLevel();
+    const securityInterval = setInterval(readSecurityLevel, 20000);
 
     return () => {
+      cancelled = true;
       clearInterval(interval);
-      clearInterval(cpuInterval);
+      clearInterval(telemetryInterval);
+      clearInterval(telegramInterval);
+      clearInterval(securityInterval);
     };
   }, []);
 
@@ -173,6 +266,15 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
         </div>
       )}
 
+      {/* The status endpoint did not answer. Say so, and do not offer the
+          resume control whose effect we cannot predict. */}
+      {killSwitchUnknown && (
+        <div className="mb-2 p-2 rounded-xl bg-slate-900 border border-slate-600 text-slate-300 text-xs font-mono flex items-center gap-2">
+          <AlertOctagon className="w-4 h-4 text-slate-400 shrink-0" />
+          <span>⚠️ EMERGENCY STOP STATUS UNKNOWN — /api/emergency/status did not answer. Not asserting a switch position.</span>
+        </div>
+      )}
+
       {killNotice && (
         <div className="mb-2 p-2 rounded-xl bg-cyan-950 border border-cyan-600 text-cyan-200 text-xs font-mono flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-cyan-400" />
@@ -193,18 +295,26 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
                 <h1 className="text-base sm:text-lg font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-blue-200 to-teal-300">
                   HERMES JARVIS
                 </h1>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono font-bold">
-                  ₹0 Always Free
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono font-bold"
+                  title="Always Free is the declared plan; the billing/entitlement API is not queried, so this is not an observed charge state."
+                >
+                  {billingBadgeLabel(telemetry.billingEntitlement)}
                 </span>
-                {isOnline ? (
+                {syncLiveness === 'SYNCED' ? (
                   <span className="hidden sm:inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
                     SYNCED
                   </span>
-                ) : (
+                ) : syncLiveness === 'OFFLINE_READY' ? (
                   <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-500/50 text-amber-300 font-mono font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                     OFFLINE READY
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-600/60 text-slate-300 font-mono font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    {syncStatusLabel(syncLiveness)}
                   </span>
                 )}
               </div>
@@ -226,10 +336,21 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             <button
               onClick={onOpenOracle}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-cyan-500/50 transition-colors"
+              title={
+                telemetry.metricsSource === 'live_host'
+                  ? `Live sample of the daemon host at ${telemetry.sampledAt ?? 'unknown time'}. CPU ${formatHudPercent(telemetry.cpuUsage)}, RAM ${formatHudPercent(telemetry.ramUsage)}.`
+                  : 'No live host reading is available.'
+              }
             >
               <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-slate-400">ARM VM LOAD:</span>
-              <span className="text-cyan-300 font-semibold">{cpuSim}%</span>
+              <span className="text-slate-400">HOST LOAD:</span>
+              <span className={telemetry.cpuUsage == null ? 'text-slate-500' : 'text-cyan-300 font-semibold'}>
+                {formatHudPercent(telemetry.cpuUsage)}
+              </span>
+              <span className="text-slate-400">RAM:</span>
+              <span className={telemetry.ramUsage == null ? 'text-slate-500' : 'text-cyan-300 font-semibold'}>
+                {formatHudPercent(telemetry.ramUsage)}
+              </span>
             </button>
 
             <button
@@ -238,7 +359,24 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             >
               <Smartphone className="w-3.5 h-3.5 text-blue-400" />
               <span className="text-slate-400">MOBILE:</span>
-              <span className="text-emerald-400 font-semibold">TELEGRAM ONLINE</span>
+              <span
+                className={
+                  telegramLive === true
+                    ? 'text-emerald-400 font-semibold'
+                    : telegramLive === false
+                      ? 'text-amber-400 font-semibold'
+                      : 'text-slate-500 font-semibold'
+                }
+                title={
+                  telegramLive === true
+                    ? 'Telegram bot is live-connected.'
+                    : telegramLive === false
+                      ? 'Telegram bot is not live-connected (no token or polling down).'
+                      : 'Telegram connection state is unknown.'
+                }
+              >
+                {telegramLive === true ? 'TELEGRAM ONLINE' : telegramLive === false ? 'TELEGRAM OFFLINE' : 'TELEGRAM UNKNOWN'}
+              </span>
             </button>
 
             <button
@@ -247,18 +385,26 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
             >
               <Lock className="w-3.5 h-3.5 text-purple-400" />
               <span className="text-slate-400">SECURITY:</span>
-              <span className="text-purple-300 font-semibold">LEVEL 2 SAFE</span>
+              <span className={securityLevel == null ? 'text-slate-500 font-semibold' : 'text-purple-300 font-semibold'}>
+                {securityLevel == null ? 'UNKNOWN' : `LEVEL ${securityLevel}`}
+              </span>
             </button>
 
             {onOpenLocation && (
               <button
                 onClick={onOpenLocation}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-emerald-500/50 transition-colors"
-                title="Open Geolocation & Tactical Navigation Services"
+                title={
+                  gpsFix.live
+                    ? 'Live device GPS fix available.'
+                    : 'No live device GPS fix — opening the location surface shows the real provenance (cached, preset or manual).'
+                }
               >
-                <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                <Navigation className={`w-3.5 h-3.5 ${gpsFix.live ? 'text-emerald-400' : 'text-slate-500'}`} />
                 <span className="text-slate-400">GPS:</span>
-                <span className="text-emerald-400 font-semibold">GEO-SERVICES</span>
+                <span className={gpsFix.live ? 'text-emerald-400 font-semibold' : 'text-slate-500 font-semibold'}>
+                  {gpsFix.label}
+                </span>
               </button>
             )}
           </div>
@@ -275,6 +421,16 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
               >
                 <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="hidden sm:inline">RESUME SYSTEM</span>
+              </button>
+            ) : killSwitchUnknown ? (
+              <button
+                onClick={fetchEmergencyStatus}
+                disabled={isOperatingKillSwitch}
+                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-600 text-slate-300 text-xs font-mono font-bold flex items-center gap-1.5 transition-all"
+                title={`Emergency stop status ${emergencyLivenessLabel(liveness)} — click to retry the status probe`}
+              >
+                <Power className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline">{emergencyLivenessLabel(liveness)}</span>
               </button>
             ) : (
               <button

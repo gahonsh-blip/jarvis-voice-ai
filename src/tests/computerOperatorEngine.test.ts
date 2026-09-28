@@ -219,6 +219,20 @@ const result = await executeOperatorTask(adapter, 'browser kholo', plan, {
     assert.ok(redacted.includes('[REDACTED]'));
   });
 
+  it('redacts provider token families the shared engine covers', () => {
+    // The engine previously had its own weaker pattern set, so this path leaked
+    // provider tokens the shared redactor already caught. It now composes both.
+    const samples = [
+      'sk_' + 'live_' + '51H8xYzAbCdEfGhIjKlMnOpQrStUvWxYz0123456789',
+      ['xoxb', '123456789012', '1234567890123', 'AbCdEfGhIjKlMnOpQrStUvWx'].join('-'),
+      'npm_' + 'a'.repeat(40),
+      'hf_' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7',
+    ];
+    for (const token of samples) {
+      assert.ok(!redactSecrets(`stream ${token} tail`).includes(token), `leaked ${token.slice(0, 8)}`);
+    }
+  });
+
 
   it('not-configured adapter never fakes desktop access', async () => {
     const adapter = new NotConfiguredScreenOperator() as ScreenOperatorAdapter;

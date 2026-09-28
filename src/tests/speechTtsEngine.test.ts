@@ -3,6 +3,7 @@ import {
   determineTtsLocale,
   findBestVoiceForLocale,
   buildSpeechDiagnostics,
+  applySpeechErrorToDiagnostics,
   isHindiVoice,
   containsDevanagari,
   normalizeLanguageCode,
@@ -183,6 +184,53 @@ describe('HERMES JARVIS — Speech Synthesis & Hindi TTS Engine Audit', () => {
       expect(diag.selectedVoiceName).toBe('None / Platform Default');
       expect(diag.availableHindiVoiceCount).toBe(0);
       expect(diag.statusMessage).toBe('Hindi TTS voice unavailable on this device/browser.');
+    });
+
+    it('should never claim TTS is active once speech synthesis has errored', () => {
+      const resolution = findBestVoiceForLocale(allVoices, 'en-US');
+      const diag = buildSpeechDiagnostics('en-US', resolution, 'not-allowed');
+
+      expect(diag.ttsErrorState).toBe('not-allowed');
+      expect(diag.statusMessage).toBe('Speech error: not-allowed');
+      expect(diag.statusMessage).not.toContain('Active');
+      expect(diag.statusMessage).not.toContain('TTS Active');
+    });
+
+    it('should not claim a voice is active when synthesis is unsupported, even if one was selected', () => {
+      const resolution = findBestVoiceForLocale(allVoices, 'en-US');
+      const diag = buildSpeechDiagnostics('en-US', resolution, null, false);
+
+      expect(diag.speechSynthesisAvailable).toBe(false);
+      expect(diag.statusMessage).toBe('SpeechSynthesis API not supported on this browser platform.');
+      expect(diag.statusMessage).not.toContain('Active');
+    });
+
+    it('should describe a selected voice as pending playback, not as active', () => {
+      const resolution = findBestVoiceForLocale(allVoices, 'en-US');
+      const diag = buildSpeechDiagnostics('en-US', resolution, null, true);
+
+      expect(diag.selectedVoiceName).toBe('Google US English');
+      expect(diag.statusMessage).toContain('not yet confirmed by playback');
+      expect(diag.statusMessage).not.toContain('Active');
+    });
+
+    it('should clear a stale "TTS Active" status when a runtime error is applied', () => {
+      const resolution = findBestVoiceForLocale(allVoices, 'en-US');
+      const diag = buildSpeechDiagnostics('en-US', resolution, null, true);
+      expect(diag.statusMessage).not.toContain('Speech error');
+
+      const failed = applySpeechErrorToDiagnostics(diag, 'not-allowed');
+
+      expect(failed?.ttsErrorState).toBe('not-allowed');
+      expect(failed?.statusMessage).toBe('Speech error: not-allowed');
+      expect(failed?.statusMessage).not.toContain('Active');
+      // Other fields must be preserved, not dropped.
+      expect(failed?.selectedVoiceName).toBe('Google US English');
+      expect(failed?.availableHindiVoiceCount).toBe(2);
+    });
+
+    it('should return null when applying a speech error before any diagnostics exist', () => {
+      expect(applySpeechErrorToDiagnostics(null, 'not-allowed')).toBeNull();
     });
   });
 

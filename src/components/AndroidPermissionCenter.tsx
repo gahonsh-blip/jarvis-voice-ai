@@ -18,6 +18,7 @@ import {
   Radio,
   RefreshCw,
   Info,
+  MapPin,
 } from 'lucide-react';
 import {
   AndroidPermissionState,
@@ -106,6 +107,15 @@ const PERMISSION_DEFINITIONS: PermissionItemDef[] = [
     descriptionHi: 'हालिया सूचनाओं का संक्षिप्त सारांश और सुरक्षा ऑडिट लॉग रखने की अनुमति।',
     icon: History,
   },
+  {
+    key: 'location_access',
+    nameEn: 'Location / GPS Access',
+    nameHi: 'लोकेशन / GPS पहुंच',
+    descriptionEn: 'Allows the Android bridge to report real ACCESS_FINE_LOCATION telemetry. Without it, JARVIS reports location as PERMISSION_REQUIRED rather than guessing.',
+    descriptionHi: 'इसकी अनुमति के बिना JARVIS वास्तविक लोकेशन नहीं बता सकता और स्पष्ट रूप से PERMISSION_REQUIRED बताएगा।',
+    requiredRole: 'ACCESS_FINE_LOCATION',
+    icon: MapPin,
+  },
 ];
 
 export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = ({
@@ -146,6 +156,7 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
       message_reply: 'GRANTED',
       contacts_lookup: 'GRANTED',
       notification_history: 'GRANTED',
+      location_access: 'GRANTED',
     };
     for (const [k, v] of Object.entries(granted)) {
       androidBridgeEngine.updatePermission(k as keyof MobilePermissionMatrix, v);

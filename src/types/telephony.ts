@@ -64,7 +64,7 @@ export interface TelephonySettings {
   aiPersona: 'executive_assistant' | 'tech_specialist' | 'concierge' | 'friendly_receptionist';
   spamScreeningEnabled: boolean;
   spamThresholdScore: number; // e.g. 70
-  acousticFilterEnabled: boolean; // Telephony bandpass audio simulation
+  acousticFilterEnabled: boolean; // Configures a bandpass profile on the synthesizer; not applied to call audio
   dtmfAudioEnabled: boolean;
   recordingEnabled: boolean;
   forwardUrgentToTelegram: boolean;

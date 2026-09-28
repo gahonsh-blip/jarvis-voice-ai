@@ -30,6 +30,10 @@ import {
   getDisplayCallerName,
 } from '../types/telephony';
 import { telephonyAudio } from '../utils/telephonyAudio';
+import { resolveDisplayNumber, shouldMaskParty } from '../utils/telephonyPrivacyDisplay';
+import { callWaveformBars, callWaveformBarHeight } from '../utils/hardening/callWaveform';
+import { ACOUSTIC_FILTER_LABEL } from '../utils/hardening/acousticFilterTruth';
+import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
 
 interface ActiveCallHUDProps {
   activeCall: CallRecord | null;
@@ -145,7 +149,9 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 font-mono">{activeCall.callerNumber}</p>
+              <p className="text-xs text-slate-400 font-mono">
+                {resolveDisplayNumber(activeCall.callerNumber, effectiveContacts, isMaskActive)}
+              </p>
             </div>
           </div>
         </div>
@@ -254,7 +260,8 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
 
           {activeCall.followUpActions && activeCall.followUpActions.length > 0 && (
             <div className="rounded-xl bg-emerald-950/30 border border-emerald-800/40 p-3">
-              <div className="text-[11px] font-mono text-emerald-400 uppercase tracking-wider mb-1.5">Action Items & Next Steps</div>
+              <div className="text-[11px] font-mono text-emerald-400 uppercase tracking-wider mb-1.5">Recorded Action Items & Next Steps</div>
+              <p className="text-[10px] text-emerald-300/80 mb-1.5">{ACTION_ITEM_LIST_NOTE}</p>
               <ul className="space-y-1">
                 {activeCall.followUpActions.map((act, i) => (
                   <li key={i} className="flex items-center gap-2 text-xs text-emerald-200">
@@ -272,7 +279,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
 
   // 4. LIVE IN-CALL HUD
   const counterpart = activeCall.direction === 'outbound' ? activeCall.recipientName : effectiveInboundCallerName;
-  const counterpartNumber = activeCall.direction === 'outbound' ? activeCall.recipientNumber : activeCall.callerNumber;
+  const counterpartIsMasked = activeCall.direction === 'inbound' && shouldMaskParty(activeCall.callerNumber, effectiveContacts, isMaskActive);
 
   return (
     <div id="live-call-hud" className="fixed bottom-6 right-6 z-50 w-[440px] rounded-2xl border border-cyan-500/50 bg-slate-950/95 shadow-2xl backdrop-blur-2xl overflow-hidden animate-in slide-in-from-bottom-5">
@@ -301,7 +308,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <h4 className="text-sm font-bold text-white truncate max-w-[200px]">{counterpart}</h4>
-              {isMaskActive && isUnknownInbound && (
+              {counterpartIsMasked && (
                 <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950 border border-cyan-800/60 px-1 py-0.2 rounded">
                   MASKED
                 </span>
@@ -310,16 +317,16 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
           </div>
         </div>
 
-        {/* Audio Waveform Bars Simulation */}
+        {/* Decorative level bars — a fixed profile, not a live measurement */}
         <div className="flex items-center gap-1 h-5 px-2 py-1 rounded-md bg-slate-950 border border-slate-800">
-          {[...Array(6)].map((_, i) => (
+          {callWaveformBars.map((_, i) => (
             <div
               key={i}
               className={`w-1 rounded-full bg-cyan-400 transition-all duration-150 ${
                 isOnHold ? 'h-1 opacity-40' : 'animate-pulse'
               }`}
               style={{
-                height: isOnHold ? '4px' : `${Math.floor(Math.random() * 16 + 4)}px`,
+                height: isOnHold ? '4px' : `${callWaveformBarHeight(i)}px`,
                 animationDelay: `${i * 120}ms`,
               }}
             />
@@ -456,10 +463,10 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
                 ? 'bg-cyan-950/80 border-cyan-500 text-cyan-300'
                 : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
             }`}
-            title="Toggle Telephone Acoustic Bandpass Filter (300-3400Hz)"
+            title={`Toggle acoustic bandpass profile. ${ACOUSTIC_FILTER_LABEL}`}
           >
             <Radio className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{audioFilterActive ? '3G Filter' : 'HD Voice'}</span>
+            <span className="hidden sm:inline">{audioFilterActive ? 'Bandpass profile' : 'Full band'}</span>
           </button>
         </div>
 

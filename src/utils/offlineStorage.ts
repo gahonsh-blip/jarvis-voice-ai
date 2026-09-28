@@ -16,7 +16,7 @@ export const defaultInitialMessages: ChatMessage[] = [
   {
     id: 'init-1',
     role: 'system',
-    content: 'HERMES JARVIS PROTOCOL ACTIVE. Local offline storage initialized & synced with Oracle Cloud Always Free ARM node.',
+    content: 'HERMES JARVIS PROTOCOL ACTIVE. Local offline storage initialized. Cloud sync is NOT configured in this build.',
     timestamp: new Date().toISOString(),
   },
   {
@@ -38,9 +38,9 @@ export const defaultInitialMemory: MemoryStore = {
     },
   ],
   customKeyValues: {
-    system_engine: 'Oracle Always Free ARM64 + Local Hybrid Engine',
+    system_engine: 'Local Hybrid Engine (deployment target NOT configured)',
     voice_status: 'SpeechSynthesis + Web Audio API',
-    persistence_mode: 'Offline-First LocalStorage & Backend Sync',
+    persistence_mode: 'Offline-First LocalStorage (remote sync NOT configured)',
   },
   stats: {
     totalCommands: 0,
@@ -94,6 +94,8 @@ export function loadLocalMemory(): MemoryStore {
     if (!raw) return defaultInitialMemory;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
+      // Stored values win outright. Merging the seed defaults back in under the
+      // stored copy resurrected keys the user had deleted.
       return {
         ...defaultInitialMemory,
         ...parsed,
@@ -102,10 +104,10 @@ export function loadLocalMemory(): MemoryStore {
           ...(parsed.stats || {}),
         },
         notes: Array.isArray(parsed.notes) ? parsed.notes : defaultInitialMemory.notes,
-        customKeyValues: {
-          ...defaultInitialMemory.customKeyValues,
-          ...(parsed.customKeyValues || {}),
-        },
+        customKeyValues:
+          parsed.customKeyValues && typeof parsed.customKeyValues === 'object'
+            ? parsed.customKeyValues
+            : defaultInitialMemory.customKeyValues,
       };
     }
   } catch (err) {

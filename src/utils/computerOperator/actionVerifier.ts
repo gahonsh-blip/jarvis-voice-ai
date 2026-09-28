@@ -12,6 +12,20 @@ export class ActionVerifier {
   public static readonly MAX_RETRIES = 3;
 
   /**
+   * Only actions whose outcome could differ on a second attempt are retried.
+   * Actions we cannot confirm at all (synthetic input, test runs, edits) would
+   * fail identically every time, so retrying them just burns attempts and lets
+   * the engine report a misleading "retrying" message.
+   */
+  private static readonly RETRYABLE_ACTION_TYPES = new Set([
+    'CLICK',
+    'DOUBLE_CLICK',
+    'RIGHT_CLICK',
+    'LAUNCH_APP',
+    'SWITCH_WINDOW',
+  ]);
+
+  /**
    * Resets retry counter for an action ID
    */
   public static resetRetry(actionId: string) {
@@ -71,63 +85,88 @@ export class ActionVerifier {
       }
 
       case 'CLICK':
-      case 'DOUBLE_CLICK': {
-        // Did elements change, or did active window change, or did dialog disappear?
+      case 'DOUBLE_CLICK':
+      case 'RIGHT_CLICK': {
+        // A click can only be claimed when the screen actually changed. The
+        // previous version hardcoded `|| true`, which verified every click.
         const elementCountDiff = postObservation.visibleElements.length !== preObservation.visibleElements.length;
         const windowChanged = postObservation.windowTitle !== preObservation.windowTitle;
-        stateChangeDetected = elementCountDiff || windowChanged || true;
-        verified = true;
-        message = `Verified: Click registered at (${action.coordinates?.x || 0}, ${action.coordinates?.y || 0}). UI updated.`;
-        messageHi = `सत्यापित: क्लिक सफलतापूर्वक निष्पादित हुआ और स्क्रीन अपडेट हुई।`;
+        const appChanged = postObservation.activeApplication !== preObservation.activeApplication;
+        stateChangeDetected = elementCountDiff || windowChanged || appChanged;
+        verified = stateChangeDetected;
+        message = verified
+          ? `Verified: ${action.type} produced an observable screen change.`
+          : `Verification failure: no screen change was observed after ${action.type} at (${action.coordinates?.x || 0}, ${action.coordinates?.y || 0}).`;
+        messageHi = verified
+          ? `सत्यापित: क्लिक के बाद स्क्रीन में परिवर्तन देखा गया।`
+          : `सत्यापन विफल: क्लिक के बाद स्क्रीन में कोई परिवर्तन नहीं दिखा।`;
         break;
       }
 
-      case 'TYPE_TEXT': {
-        stateChangeDetected = true;
-        verified = true;
-        message = `Verified: Text entered into target field.`;
-        messageHi = `सत्यापित: टेक्स्ट सफलतापूर्वक दर्ज किया गया।`;
-        break;
-      }
-
-      case 'KEY_COMBINATION': {
-        stateChangeDetected = true;
-        verified = true;
-        message = `Verified: Keyboard shortcut [${action.key || 'Key'}] applied.`;
-        messageHi = `सत्यापित: कीबोर्ड शॉर्टकट लागू हुआ।`;
+      case 'TYPE_TEXT':
+      case 'KEY_COMBINATION':
+      case 'SCROLL':
+      case 'MOUSE_MOVE': {
+        // Synthetic input cannot be confirmed without a real input backend, so
+        // this must never report verified from observation alone.
+        stateChangeDetected = postObservation.windowTitle !== preObservation.windowTitle;
+        verified = false;
+        message = `Unverified: ${action.type} was dispatched, but no OS input backend can confirm delivery.`;
+        messageHi = `असत्यापित: ${action.type} भेजा गया, परंतु पुष्टि संभव नहीं।`;
         break;
       }
 
       case 'EDIT_FILE': {
-        stateChangeDetected = true;
-        verified = true;
-        message = `Verified: File "${action.filePath || 'file'}" surgical modification applied cleanly.`;
-        messageHi = `सत्यापित: फ़ाइल सफलतापूर्वक अपडेट की गई।`;
+        // The file is the evidence: confirm the edit is actually on disk and
+        // that the searched text is gone.
+        const target = action.fileDiff?.target || action.filePath;
+        if (!target) {
+          verified = false;
+          stateChangeDetected = false;
+          message = 'Verification failure: no file path was supplied for the edit.';
+          messageHi = 'सत्यापन विफल: संपादन हेतु फ़ाइल पथ नहीं दिया गया।';
+          break;
+        }
+        // Verification is delegated to on-disk checks performed by the caller.
+        stateChangeDetected = postObservation.windowTitle !== preObservation.windowTitle;
+        verified = false;
+        message = `Unverified: edit of "${target}" requires a filesystem re-read to confirm.`;
+        messageHi = `असत्यापित: "${target}" का संपादन डिस्क से सत्यापित करना आवश्यक है।`;
         break;
       }
 
       case 'RUN_TESTS': {
-        stateChangeDetected = true;
-        verified = true;
-        message = `Verified: Test execution succeeded with zero failures.`;
-        messageHi = `सत्यापित: सभी टेस्ट सफलतापूर्वक पास हुए।`;
+        // Exit status and parsed counts must come from the executor, not from
+        // the mere fact that a test action was requested.
+        stateChangeDetected = postObservation.windowTitle !== preObservation.windowTitle;
+        verified = false;
+        message = 'Unverified: test results require the runner exit status and parsed pass/fail counts.';
+        messageHi = 'असत्यापित: टेस्ट परिणाम हेतु रनर की वास्तविक स्थिति आवश्यक है।';
         break;
       }
 
       case 'INSPECT_SCREEN':
       case 'TAKE_SCREENSHOT': {
         stateChangeDetected = true;
-        verified = true;
-        message = `Verified: Screen inspected. Detected ${postObservation.visibleElements.length} elements.`;
-        messageHi = `सत्यापित: स्क्रीन का विश्लेषण पूर्ण हुआ।`;
+        // Only a real captured file counts as evidence.
+        if (postObservation.screenshot) {
+          verified = true;
+          message = `Verified: screen captured to ${postObservation.screenshot}.`;
+          messageHi = `सत्यापित: स्क्रीन कैप्चर ${postObservation.screenshot} पर सहेजा गया।`;
+        } else {
+          verified = false;
+          message = `Unverified: screen inspection produced no captured file for step ${stepIndex + 1}.`;
+          messageHi = `असत्यापित: स्क्रीन कैप्चर फ़ाइल उपलब्ध नहीं।`;
+        }
         break;
       }
 
       default: {
-        stateChangeDetected = true;
-        verified = true;
-        message = `Verified: Action ${action.type} completed nominal.`;
-        messageHi = `सत्यापित: कार्य पूरा हुआ।`;
+        // Unknown actions cannot be declared successful.
+        stateChangeDetected = postObservation.windowTitle !== preObservation.windowTitle;
+        verified = false;
+        message = `Unverified: no verification rule exists for action type ${action.type}.`;
+        messageHi = `असत्यापित: इस कार्य के लिए सत्यापन नियम उपलब्ध नहीं।`;
         break;
       }
     }
@@ -147,7 +186,24 @@ export class ActionVerifier {
     } else {
       const newRetries = currentRetries + 1;
       this.retryCounters.set(actionKey, newRetries);
-      const shouldRetry = newRetries < this.MAX_RETRIES;
+      const retryable = this.RETRYABLE_ACTION_TYPES.has(action.type);
+      const shouldRetry = retryable && newRetries < this.MAX_RETRIES;
+
+      if (!retryable) {
+        // Non-retryable: surface the concrete reason so the task fails cleanly
+        // instead of looping or implying a retry is happening.
+        return {
+          verified: false,
+          stateChangeDetected,
+          currentStepIndex: stepIndex,
+          shouldRetry: false,
+          retryCount: newRetries,
+          maxRetries: this.MAX_RETRIES,
+          error: redactSecrets(message),
+          message: redactSecrets(message),
+          messageHi: redactSecrets(messageHi),
+        };
+      }
 
       return {
         verified: false,

@@ -6,6 +6,8 @@
  * permission-gated, and strictly typed. No fake success.
  */
 
+import { redactSecrets as sharedRedactSecrets } from './computerOperator/credentialRedactor';
+
 export type OperatorIntent =
   | 'NORMAL_CONVERSATION'
   | 'SPECIAL_COMMAND'
@@ -177,8 +179,15 @@ export function resolveOperatorMode(preferred?: OperatorMode): OperatorMode {
 
 const SECRET_PATTERN = /((api[_-]?key|oauth[_-]?token|access[_-]?token|password|passcode|pin|cvv|bearer)[^\s,]{0,50})|(\beyJ[a-zA-Z0-9_-]{10,}\.[^\s]{10,}\.[^\s]{10,}\b)|(\b[A-Za-z0-9+/]{40,}={0,2}\b)/gi;
 
+/**
+ * The operator engine's own broad pattern runs first for legacy coverage, then
+ * the shared credential engine runs over the result. Keeping both means this
+ * path is a superset of the shared set — it additionally catches the Stripe,
+ * Slack, npm, Hugging Face and SendGrid families the shared engine now covers.
+ */
 export function redactSecrets(text: string): string {
-  return text.replace(SECRET_PATTERN, '[REDACTED]');
+  if (!text) return text;
+  return sharedRedactSecrets(text.replace(SECRET_PATTERN, '[REDACTED]'));
 }
 
 const MAX_PLAN_STEPS = 8;

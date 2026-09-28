@@ -15,6 +15,7 @@ import {
   Send,
 } from 'lucide-react';
 import { ProactiveReportItem } from '../types';
+import { telegramPushLabel, cronSchedulerLabel } from '../utils/checksumTruth';
 
 interface Props {
   isOpen: boolean;
@@ -33,12 +34,38 @@ export const ProactiveRoutinesModal: React.FC<Props> = ({ isOpen, onClose, onSpe
   const [routines, setRoutines] = useState<ProactiveReportItem[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<'morning' | 'midday' | 'evening' | 'night'>('morning');
   const [language, setLanguage] = useState<'bilingual' | 'english' | 'hindi'>('bilingual');
+  // null = not yet queried. Never render a readiness claim we have not observed.
+  const [telegramLive, setTelegramLive] = useState<boolean | null>(null);
+  // null = daemon status not queried yet.
+  const [daemonOnline, setDaemonOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchRoutines();
+      fetchTelegramStatus();
+      fetchDaemonStatus();
     }
   }, [isOpen]);
+
+  const fetchDaemonStatus = async () => {
+    try {
+      const res = await fetch('/api/daemon/status');
+      const data = await res.json();
+      setDaemonOnline(data?.daemon?.status === 'ONLINE');
+    } catch {
+      setDaemonOnline(null);
+    }
+  };
+
+  const fetchTelegramStatus = async () => {
+    try {
+      const res = await fetch('/api/telegram/status');
+      const data = await res.json();
+      setTelegramLive(data?.config?.isLiveConnected === true);
+    } catch {
+      setTelegramLive(null);
+    }
+  };
 
   const fetchRoutines = async () => {
     try {
@@ -198,20 +225,22 @@ export const ProactiveRoutinesModal: React.FC<Props> = ({ isOpen, onClose, onSpe
               </div>
             </div>
 
-            {/* Simulated Telegram Mobile Delivery status */}
+            {/* Telegram mobile delivery status, read from /api/telegram/status */}
             <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-800/40 text-xs font-mono text-blue-300 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-blue-400" />
                 Next automated cron broadcast: Scheduled at time slot
               </span>
-              <span className="text-emerald-400">Telegram Push Ready</span>
+              <span className={telegramLive === true ? 'text-emerald-400' : 'text-amber-400'}>
+                {telegramPushLabel(telegramLive !== null, telegramLive === true)}
+              </span>
             </div>
           </div>
         )}
 
         {/* Footer */}
         <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
-          <span>Cron Scheduler: Active on Oracle ARM Node</span>
+          <span>{`Host: self-reported, not verified · ${cronSchedulerLabel(daemonOnline !== null, daemonOnline === true)}`}</span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"

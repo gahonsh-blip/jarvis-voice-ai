@@ -18,6 +18,11 @@ export interface LocationAddress {
   postcode?: string;
   district?: string;
   road?: string;
+  // Whether a real reverse geocoder answered. `false` means `reverseGeocode`
+  // could not reach a service and the fields below are a coarse offline
+  // estimate keyed only on quadrant bounds — not a resolved civic address.
+  resolved?: boolean;
+  source?: 'nominatim' | 'offline_estimate';
 }
 
 export interface WaypointMarker {

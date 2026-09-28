@@ -30,13 +30,30 @@ import {
   getPendingQueue,
   clearPendingQueue,
   updatePendingEventStatus,
-  isExplicitApproval,
   getMobileAuditLog,
   clearMobileAuditLog,
   buildCallAnnouncement,
   buildNotificationAnnouncement,
   buildCallAnswerUnsupported,
+  logMobileAudit,
 } from '../utils/mobileBridgeEngine';
+import {
+  replyDispatchDecision,
+  replyDispatchOutcome,
+  replyDispatchSpeech,
+  replyRefusalSpeech,
+  replyEventStatusForOutcome,
+  replyAuditProjection,
+} from '../utils/mobileReplyDispatchTruth';
+
+const EVENT_STATUS_LABEL: Record<string, string> = {
+  PENDING_APPROVAL: 'PENDING APPROVAL',
+  AUTHORIZED: 'AUTHORIZED — AWAITING DEVICE CONFIRMATION',
+  EXECUTED: 'CONFIRMED BY DEVICE',
+  REJECTED: 'REJECTED',
+  FAILED: 'FAILED',
+  EXPIRED: 'EXPIRED',
+};
 
 function nextPolicy(current: MobileCategoryPolicy): MobileCategoryPolicy {
   if (current === 'ALLOW') return 'ASK';
@@ -87,6 +104,9 @@ export const MobileBridgeModal: React.FC<Props> = ({
   });
   const [simNotice, setSimNotice] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'permissions' | 'audit'>('overview');
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [approvedReplyIds, setApprovedReplyIds] = useState<Record<string, boolean>>({});
+  const [replyBusyId, setReplyBusyId] = useState<string | null>(null);
 
   const refresh = () => {
     setBridgeState(getBridgeConnectionState());
@@ -118,10 +138,76 @@ export const MobileBridgeModal: React.FC<Props> = ({
     refresh();
   };
 
-  const dispatchReply = (ev: PendingMobileEvent) => {
-    const note = isExplicitApproval('yes') ? 'REPLY_AUTHORIZED' : 'REPLY_AUTHORIZED';
-    updatePendingEventStatus(ev.eventId, 'AUTHORIZED');
-    onSpeak('Reply authorized, Sir. Dispatching via the Android bridge when connected.');
+  const dispatchReply = async (ev: PendingMobileEvent) => {
+    const reg = loadBridgeRegistration();
+    const notificationId =
+      ev.sourceEvent && 'notificationId' in ev.sourceEvent
+        ? String((ev.sourceEvent as { notificationId: number }).notificationId)
+        : '';
+    const decision = replyDispatchDecision(
+      {
+        kind: ev.kind,
+        notificationId,
+        replyText: replyDrafts[ev.eventId],
+        sensitive: ev.sensitive,
+      },
+      approvedReplyIds[ev.eventId] === true
+    );
+
+    if (!decision.ok) {
+      // Refuse before any request is sent. The event stays PENDING_APPROVAL —
+      // never AUTHORIZED — because no approval was observed.
+      updatePendingEventStatus(ev.eventId, 'PENDING_APPROVAL');
+      setSimNotice('REPLY REFUSED (' + decision.refusal + ') — nothing was sent.');
+      onSpeak(replyRefusalSpeech(decision.refusal, activeLanguage));
+      refresh();
+      return;
+    }
+
+    // The bridge token is not held in the UI. Without a real session token this
+    // would be an unauthenticated request the server is guaranteed to reject,
+    // so say so instead of reporting a dispatch that never happened.
+    if (!reg?.sessionTokenHash) {
+      setSimNotice('REPLY NOT SENT — no authenticated bridge session token is available to this view.');
+      onSpeak(replyDispatchSpeech('NOT_CONFIGURED', activeLanguage));
+      refresh();
+      return;
+    }
+
+    setReplyBusyId(ev.eventId);
+    let httpStatus = 0;
+    let body: any = null;
+    try {
+      const res = await fetch('/api/mobile/bridge/message/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notificationId: decision.notificationId,
+          replyText: decision.replyText,
+          approved: true,
+        }),
+      });
+      httpStatus = res.status;
+      body = await res.json().catch(() => null);
+    } catch {
+      httpStatus = 0;
+      body = null;
+    }
+
+    const outcome = replyDispatchOutcome(httpStatus, body);
+    // A handed-off reply is not EXECUTED (the device has not confirmed it), and
+    // an unconfirmed dispatch is not a SUCCESS in the audit log.
+    updatePendingEventStatus(ev.eventId, replyEventStatusForOutcome(outcome));
+    const auditProjection = replyAuditProjection(outcome);
+    logMobileAudit({
+      application: ev.appLabel || ev.displaySubtitle,
+      actionRequested: 'SEND_REPLY',
+      permissionState: 'GRANTED',
+      ...auditProjection,
+    });
+    setSimNotice('REPLY ' + outcome + ' (HTTP ' + httpStatus + ')');
+    onSpeak(replyDispatchSpeech(outcome, activeLanguage));
+    setReplyBusyId(null);
     refresh();
   };
 
@@ -165,7 +251,7 @@ export const MobileBridgeModal: React.FC<Props> = ({
               <div key={ev.eventId} className="p-3 rounded-xl border border-amber-700/50 bg-amber-950/20">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-mono font-bold text-amber-200 uppercase">{ev.kind.replace(/_/g, ' ')}</span>
-                  <span className="text-[9px] font-mono text-slate-400">{ev.status}</span>
+                  <span className={`text-[9px] font-mono ${ev.status === 'EXECUTED' ? 'text-emerald-300' : ev.status === 'AUTHORIZED' ? 'text-amber-300' : 'text-slate-400'}`}>{EVENT_STATUS_LABEL[ev.status] ?? ev.status}</span>
                 </div>
                 <p className="text-sm font-bold text-white font-mono">{ev.displayTitle}</p>
                 <p className="text-[11px] text-slate-400 font-mono mt-0.5">{ev.displaySubtitle}</p>
@@ -179,8 +265,35 @@ export const MobileBridgeModal: React.FC<Props> = ({
                     </>
                   ) : ev.kind === 'MESSAGE_REPLY' ? (
                     <>
-                      <button onClick={() => dispatchReply(ev)} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950">REPLY</button>
-                      <button onClick={() => dismissPending(ev)} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-600/40">DISMISS</button>
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={replyDrafts[ev.eventId] ?? ''}
+                          onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [ev.eventId]: e.target.value }))}
+                          placeholder="Type the reply body…"
+                          disabled={ev.sensitive || approvedReplyIds[ev.eventId] === true}
+                          className="w-full px-2 py-1.5 rounded-lg text-[11px] font-mono bg-slate-950 border border-slate-700 text-slate-200 disabled:opacity-40"
+                        />
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1 text-[9px] font-mono text-amber-200">
+                            <input
+                              type="checkbox"
+                              checked={approvedReplyIds[ev.eventId] === true}
+                              onChange={(e) => setApprovedReplyIds((prev) => ({ ...prev, [ev.eventId]: e.target.checked }))}
+                              disabled={ev.sensitive}
+                            />
+                            I APPROVE SENDING THIS REPLY
+                          </label>
+                          <button
+                            onClick={() => dispatchReply(ev)}
+                            disabled={ev.sensitive || replyBusyId === ev.eventId}
+                            className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 disabled:opacity-40"
+                          >
+                            {replyBusyId === ev.eventId ? 'SENDING…' : 'SEND REPLY'}
+                          </button>
+                          <button onClick={() => dismissPending(ev)} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-600/40">DISMISS</button>
+                        </div>
+                      </div>
                     </>
                   ) : (
                     <>

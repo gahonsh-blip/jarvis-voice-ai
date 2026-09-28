@@ -92,14 +92,17 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
       expect(sirCount).toBeLessThanOrEqual(2);
     });
 
-    it('should respond to "how are you" respectfully in Hinglish and Hindi', () => {
+    it('should answer "how are you" without asserting an unmeasured system health', () => {
       const resHinglish = processOfflineCommand('kaise ho jarvis', initialMemory, 'hi-IN');
       expect(resHinglish.intent).toBe('chat');
-      expect(resHinglish.reply).toContain('सुचारू');
+      // These used to assert सुचारू / कार्यरत ("all smooth" / "operational"),
+      // which the handler never measured.
+      expect(resHinglish.reply).not.toMatch(/सुचारू|कार्यरत/);
 
       const resHindi = processOfflineCommand('आप कैसे हैं', initialMemory, 'hi-IN');
       expect(resHindi.intent).toBe('chat');
-      expect(resHindi.reply).toContain('कार्यरत');
+      expect(resHindi.reply).not.toMatch(/सुचारू|कार्यरत/);
+      expect(resHindi.reply).toContain('स्वास्थ्य जाँच');
     });
 
     it('should respond to gratitude naturally in Hindi and English', () => {
@@ -117,7 +120,11 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
     it('should enforce Level-4 gate on public video upload requests', () => {
       const result = processOfflineCommand('Jarvis, upload this video publicly', initialMemory, 'en-US');
       expect(result.intent).toBe('youtube_upload_request');
-      expect(result.actionExecuted).toBe(true);
+      // Nothing is staged on the offline path (no staged-upload state, and the
+      // action handler has no youtube_upload_request case), so reporting the
+      // action as executed would be a fake success.
+      expect(result.actionExecuted).toBe(false);
+      expect(result.actionDetail?.payload?.staged).toBe(false);
       expect(result.reply).toContain('Level-4');
       expect(result.actionDetail?.payload?.requiresConfirmation).toBe(true);
     });
@@ -125,7 +132,7 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
     it('should enforce Level-4 gate on Hindi public video upload requests', () => {
       const result = processOfflineCommand('जार्विस, यूट्यूब पर वीडियो अपलोड करो', initialMemory, 'hi-IN');
       expect(result.intent).toBe('youtube_upload_request');
-      expect(result.actionExecuted).toBe(true);
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).toContain('Level-4');
     });
 
@@ -140,7 +147,8 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
     it('should return truthful YouTube channel status based on real connection state', () => {
       const result = processOfflineCommand('Jarvis, aaj YouTube ka kya status hai?', initialMemory, 'hi-IN');
       expect(result.intent).toBe('youtube_status_inquiry');
-      expect(result.actionExecuted).toBe(true);
+      // A status read is not an executed action; the counter must not advance.
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).toContain('YouTube');
     });
 
@@ -160,22 +168,24 @@ describe('HERMES JARVIS — Natural Voice, Hindi Mode, Interruption & Level-4 Se
   });
 
   describe('6. Emergency Kill Switch and Resumption', () => {
-    it('should recognize emergency stop commands in English and Hindi', () => {
+    it('should recognize emergency stop commands in English and Hindi without faking the freeze', () => {
       const stopEn = processOfflineCommand('emergency stop jarvis', initialMemory, 'en-US');
       expect(stopEn.intent).toBe('emergency_stop');
-      expect(stopEn.actionExecuted).toBe(true);
-      expect(stopEn.reply).toContain('Emergency Stop is now active');
+      // The offline tab cannot reach the server kill switch, so it must not
+      // claim the freeze happened.
+      expect(stopEn.actionExecuted).toBe(false);
+      expect(stopEn.reply).toContain('NOT engaged');
 
       const stopHi = processOfflineCommand('जार्विस तुरंत सब बंद करो', initialMemory, 'hi-IN');
       expect(stopHi.intent).toBe('emergency_stop');
-      expect(stopHi.actionExecuted).toBe(true);
+      expect(stopHi.actionExecuted).toBe(false);
     });
 
-    it('should recognize emergency resume commands', () => {
+    it('should recognize emergency resume commands without faking the release', () => {
       const resume = processOfflineCommand('emergency resume actions', initialMemory, 'en-US');
       expect(resume.intent).toBe('emergency_resume');
-      expect(resume.actionExecuted).toBe(true);
-      expect(resume.reply).toContain('Emergency Stop deactivated');
+      expect(resume.actionExecuted).toBe(false);
+      expect(resume.reply).toContain('NOT released');
     });
   });
 });

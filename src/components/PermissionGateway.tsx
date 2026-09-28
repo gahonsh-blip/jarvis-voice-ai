@@ -36,6 +36,12 @@ import {
   MOBILE_PERMISSION_DEFINITIONS,
 } from '../utils/mobileStatusEngine';
 import { AndroidPermissionCenter } from './AndroidPermissionCenter';
+import { payloadChecksumLine } from '../utils/checksumTruth';
+import {
+  emergencyLiveness,
+  emergencyLivenessLabel,
+  emergencyStatusKnown,
+} from '../utils/emergencyTruth';
 
 interface PermissionGatewayProps {
   isOpen?: boolean;
@@ -62,7 +68,7 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
   const [allRequests, setAllRequests] = useState<PermissionActionRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [emergency, setEmergency] = useState<EmergencyControlState>({ emergencyPaused: false });
+  const [emergency, setEmergency] = useState<EmergencyControlState | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [viewFormat, setViewFormat] = useState<'formatted' | 'raw_json'>('formatted');
@@ -92,23 +98,30 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
 
   const fetchData = async () => {
     try {
-      const [pendingRes, allRes, emergRes] = await Promise.all([
+      const [pendingRes, allRes] = await Promise.all([
         fetch('/api/approvals/pending').then((r) => r.json()),
         fetch('/api/approvals/all').then((r) => r.json()),
-        fetch('/api/emergency/status').then((r) => r.json()),
       ]);
 
       const pendingList: PermissionActionRequest[] = pendingRes.pending || [];
       setPendingRequests(pendingList);
       setAllRequests(allRes.requests || []);
-      setEmergency(emergRes);
 
       // Auto-select first pending if none selected
       if (!selectedRequestId && pendingList.length > 0) {
         setSelectedRequestId(pendingList[0].id);
       }
     } catch {
-      // Safe fallback
+      // Safe fallback for the queue lists only.
+    }
+
+    // Emergency status is fetched on its own: a network/parse failure here must
+    // leave the liveness UNKNOWN, never silently default to "not paused".
+    try {
+      const emergRes = await fetch('/api/emergency/status').then((r) => r.json());
+      setEmergency(emergRes);
+    } catch {
+      setEmergency(null);
     }
   };
 
@@ -116,6 +129,14 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
     setFeedback({ type, text });
     setTimeout(() => setFeedback(null), 5000);
   };
+
+  // Derived kill-switch liveness. UNKNOWN until a real status boolean arrived.
+  const liveness = emergencyLiveness(emergency);
+  const killSwitchEngaged = liveness === 'ENGAGED';
+  const statusKnown = emergencyStatusKnown(emergency);
+  // Approving is only safe when the switch is *known* to be released: an
+  // unqueried status must not permit a Level 4 dispatch.
+  const approvalBlocked = killSwitchEngaged || !statusKnown;
 
   // Find active request object
   const activeRequest: PermissionActionRequest | null =
@@ -126,9 +147,14 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
     null;
 
   const handleApprove = async (reqToApprove: PermissionActionRequest) => {
-    if (emergency.emergencyPaused) {
+    if (killSwitchEngaged) {
       showNotification('Cannot execute Level 4 action while Emergency Stop is active.', 'error');
       if (onSpeak) onSpeak('Action blocked. Emergency Stop is active, Sir.');
+      return;
+    }
+    if (!statusKnown) {
+      showNotification('Emergency Stop status is unknown. Approving is blocked until it is confirmed.', 'error');
+      if (onSpeak) onSpeak('Approval blocked. I could not confirm the Emergency Stop status, Sir.');
       return;
     }
 
@@ -150,6 +176,11 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
         if (data.success) {
           showNotification(`✅ Authorized & Executed: "${reqToApprove.exactAction}"`, 'success');
           if (onSpeak) onSpeak(`Level 4 permission granted. Action ${reqToApprove.exactAction} executed successfully, Sir.`);
+        } else if (data.outcome === 'UNVERIFIED') {
+          // Approval was recorded, but no provider confirmed the action. Never
+          // tell the operator it executed.
+          showNotification(`⚠️ Not confirmed: ${data.message || 'no provider confirmation received.'}`, 'error');
+          if (onSpeak) onSpeak('Approval recorded, but the action could not be confirmed as executed, Sir.');
         } else {
           showNotification(data.error || 'Execution halted', 'error');
           if (onSpeak) onSpeak(`Execution notice: ${data.error || 'Execution halted'}`);
@@ -265,13 +296,20 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
               <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950 border border-amber-500 text-amber-300 font-mono font-bold">
                 LEVEL 4 ACTION INTERCEPTOR
               </span>
-              {emergency.emergencyPaused ? (
+              {liveness === 'ENGAGED' ? (
                 <span className="text-[10px] px-2 py-0.5 rounded bg-rose-950 border border-rose-500 text-rose-300 font-mono font-bold animate-pulse">
-                  🚨 EMERGENCY STOP
+                  🚨 {emergencyLivenessLabel(liveness)}
+                </span>
+              ) : liveness === 'ACTIVE' ? (
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
+                  {emergencyLivenessLabel(liveness)}
                 </span>
               ) : (
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
-                  ACTIVE
+                <span
+                  id="permission-gateway-liveness-badge"
+                  className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-600 text-slate-300 font-mono font-bold"
+                >
+                  {emergencyLivenessLabel(liveness)}
                 </span>
               )}
             </div>
@@ -366,12 +404,26 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
       )}
 
       {/* 3. EMERGENCY STOP LOCKOUT WARNING */}
-      {emergency.emergencyPaused && (
+      {killSwitchEngaged && (
         <div className="px-4 py-3 bg-rose-950/90 border-b border-rose-800/80 flex items-center gap-3 text-rose-200 text-xs font-mono">
           <AlertOctagon className="w-5 h-5 text-rose-400 shrink-0 animate-pulse" />
           <div>
             <span className="font-bold uppercase tracking-wider block">EMERGENCY STOP PROTOCOL ACTIVE</span>
             <span>All Level 3 and Level 4 executions are blocked until Emergency Stop is deactivated by the operator.</span>
+          </div>
+        </div>
+      )}
+
+      {/* 3b. LIVENESS UNKNOWN — refuse to imply the gateway is armed. */}
+      {!statusKnown && (
+        <div
+          id="permission-gateway-liveness-warning"
+          className="px-4 py-3 bg-slate-900 border-b border-slate-700 flex items-center gap-3 text-slate-300 text-xs font-mono"
+        >
+          <Clock className="w-5 h-5 text-slate-400 shrink-0" />
+          <div>
+            <span className="font-bold uppercase tracking-wider block">EMERGENCY STOP STATUS UNKNOWN</span>
+            <span>The kill-switch state has not been confirmed. Approval is blocked until the status endpoint answers.</span>
           </div>
         </div>
       )}
@@ -639,7 +691,7 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
 
               <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
                 <span>Length: {(activeRequest.contentChanges || '').length} characters</span>
-                <span>Payload Checksum: Verified SHA-Safe</span>
+                <span>{payloadChecksumLine(activeRequest.contentChanges)}</span>
               </div>
             </div>
 
@@ -678,9 +730,9 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
                 <button
                   id="approve-permission-action-btn"
                   onClick={() => handleApprove(activeRequest)}
-                  disabled={loading || emergency.emergencyPaused}
+                  disabled={loading || approvalBlocked}
                   className={`px-6 py-2.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all shadow-lg ${
-                    emergency.emergencyPaused
+                    approvalBlocked
                       ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 shadow-emerald-950 hover:shadow-emerald-900'
                   }`}
@@ -695,10 +747,12 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
               <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-mono flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
-                  Action was authorized and executed successfully.
+                  Authorization recorded. Provider confirmation is required before this action can be reported as executed.
                 </span>
-                {activeRequest.resultUrn && (
+                {activeRequest.resultUrn ? (
                   <span className="text-[10px] text-emerald-400">Result: {activeRequest.resultUrn}</span>
+                ) : (
+                  <span className="text-[10px] text-amber-400">UNVERIFIED — no provider result</span>
                 )}
               </div>
             )}
@@ -800,7 +854,7 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
             <button
               id="stage-test-action-btn"
               onClick={handleStageTestAction}
-              disabled={loading || emergency.emergencyPaused}
+              disabled={loading || killSwitchEngaged}
               className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
             >
               <Send className="w-3.5 h-3.5" />

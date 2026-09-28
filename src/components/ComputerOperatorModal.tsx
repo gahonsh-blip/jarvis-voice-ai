@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   Monitor,
@@ -30,6 +30,19 @@ import {
   ScreenInterpreter,
   TaskTracker,
 } from '../utils/computerOperator';
+import {
+  observationAmbiguityNotice,
+  observationInterpretationNotice,
+  observationActiveAppLabel,
+  observationOperatorStateLabel,
+  observationStreamHeader,
+  observationPlatformLabel,
+  observationResolutionLabel,
+  observationWindowTitleLabel,
+  observationElementsParsedLabel,
+  screenSyncLabel,
+  screenSyncState,
+} from '../utils/computerOperator/observationTruth';
 
 interface ComputerOperatorModalProps {
   isOpen: boolean;
@@ -53,18 +66,48 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   const [targetApp, setTargetApp] = useState<'vscode' | 'terminal' | 'browser' | 'desktop'>('vscode');
   const [customDirective, setCustomDirective] = useState('');
   const [streamEvents, setStreamEvents] = useState<CommandStreamEvent[]>([]);
+  const [observationIsPreview, setObservationIsPreview] = useState(false);
   const streamEndRef = useRef<HTMLDivElement>(null);
 
   const isHindi = activeLanguage.startsWith('hi') || activeLanguage === 'hinglish';
+
+  /**
+   * Observes the screen.
+   *
+   * The agent host owns the real screen, so it gets asked first. The browser's
+   * own observer can only render an illustrative workspace view, so whatever it
+   * returns is marked as a preview and never presented as live screen state.
+   */
+  const observeScreen = useCallback(async (app: string) => {
+    try {
+      const res = await fetch('/api/computer-operator/observe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferredApp: app, includeScreenshot: false }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        if (body.observation) {
+          return { observation: body.observation as ScreenObservation, isPreview: false };
+        }
+      }
+    } catch {
+      // The host may not be reachable (e.g. static preview build).
+    }
+
+    const preview = await ScreenObserver.observeScreen({ mockWindow: app as any, includeScreenshot: false });
+    return { observation: preview, isPreview: true };
+  }, []);
 
   // Load initial screen observation and listen to task updates
   useEffect(() => {
     if (!isOpen) return;
 
     let mounted = true;
-    ScreenObserver.observeScreen({ mockWindow: targetApp, includeScreenshot: true }).then((obs) => {
+    observeScreen(targetApp).then(({ observation, isPreview }) => {
       if (mounted) {
-        setCurrentObservation(obs);
+        setCurrentObservation(observation);
+        setObservationIsPreview(isPreview);
       }
     });
 
@@ -74,6 +117,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
         setStreamEvents([...task.streamEvents]);
         if (task.currentObservation) {
           setCurrentObservation(task.currentObservation);
+          setObservationIsPreview(false);
         }
         if (task.status === 'COMPLETED' || task.status === 'FAILED' || task.status === 'CANCELLED' || task.status === 'BLOCKED') {
           setIsRunning(false);
@@ -85,7 +129,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
       mounted = false;
       unsubscribe();
     };
-  }, [isOpen, targetApp]);
+  }, [isOpen, targetApp, observeScreen]);
 
   // Auto scroll stream
   useEffect(() => {
@@ -121,17 +165,22 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   };
 
   const handleRefreshScreen = async () => {
-    const obs = await ScreenObserver.observeScreen({ mockWindow: targetApp, includeScreenshot: true });
-    setCurrentObservation(obs);
+    const { observation, isPreview } = await observeScreen(targetApp);
+    setCurrentObservation(observation);
+    setObservationIsPreview(isPreview);
   };
 
   const handleSwitchTarget = async (app: 'vscode' | 'terminal' | 'browser' | 'desktop') => {
     setTargetApp(app);
-    const obs = await ScreenObserver.observeScreen({ mockWindow: app, includeScreenshot: true });
-    setCurrentObservation(obs);
+    const { observation, isPreview } = await observeScreen(app);
+    setCurrentObservation(observation);
+    setObservationIsPreview(isPreview);
   };
 
   const interpretation = currentObservation ? ScreenInterpreter.interpret(currentObservation) : null;
+  const syncState = screenSyncState(currentObservation, observationIsPreview);
+  const ambiguityNotice = observationAmbiguityNotice(currentObservation, observationIsPreview);
+  const interpretationNotice = observationInterpretationNotice(currentObservation, observationIsPreview);
 
   return (
     <div
@@ -300,12 +349,18 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
                     <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
                   </div>
-                  <span className="truncate">{currentObservation?.windowTitle || 'Desktop Observation'}</span>
+                  <span className="truncate">{observationWindowTitleLabel(currentObservation, observationIsPreview)}</span>
                 </div>
                 <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-900">
-                  {currentObservation?.screenResolution.width}x{currentObservation?.screenResolution.height}
+                  {observationResolutionLabel(currentObservation)}
                 </div>
               </div>
+
+              {ambiguityNotice && (
+                <div className="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/40 text-amber-300 text-[11px] font-mono">
+                  {ambiguityNotice}
+                </div>
+              )}
 
               {/* Display Canvas View */}
               <div className="relative flex-1 p-3 flex flex-col justify-between font-mono text-xs overflow-hidden">
@@ -316,10 +371,10 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                 <div className="z-10 flex flex-col gap-2">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1">
                     <span className="text-cyan-400 font-semibold">
-                      ACTIVE APP: {currentObservation?.activeApplication || 'None'}
+                      {observationActiveAppLabel(currentObservation, observationIsPreview)}
                     </span>
                     <span>
-                      {currentObservation?.visibleElements.length || 0} UI Elements Parsed
+                      {observationElementsParsedLabel(currentObservation, observationIsPreview)}
                     </span>
                   </div>
 
@@ -381,15 +436,23 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <div
                       className={`w-2 h-2 rounded-full ${
-                        isRunning ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
+                        isRunning
+                          ? 'bg-amber-400 animate-pulse'
+                          : syncState === 'OBSERVED'
+                          ? 'bg-emerald-400'
+                          : syncState === 'UNOBSERVED'
+                          ? 'bg-red-400'
+                          : 'bg-slate-500'
                       }`}
                     />
                     <span>
-                      {isRunning ? 'OPERATOR ACTIVE: OBSERVING SCREEN' : 'STANDBY: SCREEN SYNCHRONIZED'}
+                      {isRunning
+                        ? observationOperatorStateLabel(currentObservation, observationIsPreview, true)
+                        : screenSyncLabel(currentObservation, observationIsPreview)}
                     </span>
                   </div>
                   <div className="text-slate-500">
-                    Resolution: {currentObservation?.platform || 'linux-arm64'}
+                    {observationPlatformLabel(currentObservation)}
                   </div>
                 </div>
               </div>
@@ -401,8 +464,8 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
                 <Eye className="w-3.5 h-3.5 text-cyan-400" />
                 <span>SEMANTIC SCREEN INTERPRETATION:</span>
               </div>
-              <p className="text-slate-300 leading-relaxed">
-                {isHindi ? interpretation?.summaryHi : interpretation?.summary}
+              <p className={`leading-relaxed ${interpretationNotice ? 'text-slate-500 italic' : 'text-slate-300'}`}>
+                {interpretationNotice ?? (isHindi ? interpretation?.summaryHi : interpretation?.summary)}
               </p>
             </div>
           </div>
@@ -413,7 +476,7 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
                 <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                <span>LIVE COMMAND STREAM & TELEMETRY</span>
+                <span>{observationStreamHeader(observationIsPreview)}</span>
               </div>
               {isRunning && (
                 <button

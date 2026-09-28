@@ -39,26 +39,34 @@ describe('HERMES JARVIS - Conversational Pipeline Regression Test Suite', () => 
       const input = 'अभी कितने बजे हैं?';
       const result = processOfflineCommand(input, initialMemory, 'hi-IN');
       expect(result.intent).toBe('time_inquiry');
-      expect(result.actionExecuted).toBe(true);
+      // Reading the clock is a question, not executed work, and
+      // `handleExecuteAction` only switches views for this intent. The counter
+      // must not advance (cases C and D above hold the same line).
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).not.toContain(CANNED_GREETING_SUBSTRING);
       expect(result.reply).toMatch(/समय|बजे/);
       expect(result.actionDetail?.payload?.timeStr).toBeDefined();
     });
 
-    it('C. "आज का मौसम बताओ" provides meteorological telemetry without canned greeting', () => {
+    it('C. "आज का मौसम बताओ" reports no reading when no weather source is connected', () => {
       const input = 'आज का मौसम बताओ';
       const result = processOfflineCommand(input, initialMemory, 'hi-IN');
       expect(result.intent).toBe('weather_inquiry');
-      expect(result.actionExecuted).toBe(true);
       expect(result.reply).not.toContain(CANNED_GREETING_SUBSTRING);
-      expect(result.reply).toMatch(/मौसम|तापमान|Sky|°C/);
+      // With no mobileStatus there is no weather source. The handler used to
+      // fill in 27°C / 48% / 'New Delhi' and print them as current conditions.
+      expect(result.actionExecuted).toBe(false);
+      expect(result.reply).toContain('मौसम स्रोत कनेक्टेड नहीं');
+      expect(result.reply).not.toMatch(/27°C|48%/);
     });
 
     it('D. "YouTube की स्थिति क्या है?" queries channel connectivity without canned greeting', () => {
       const input = 'YouTube की स्थिति क्या है?';
       const result = processOfflineCommand(input, initialMemory, 'hi-IN');
       expect(result.intent).toBe('youtube_status_inquiry');
-      expect(result.actionExecuted).toBe(true);
+      // Reading the stored YouTube record is not an executed action; the counter
+      // must not advance for a status answer.
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).not.toContain(CANNED_GREETING_SUBSTRING);
       expect(result.reply).toMatch(/YouTube|यूट्यूब/);
     });
@@ -67,7 +75,8 @@ describe('HERMES JARVIS - Conversational Pipeline Regression Test Suite', () => 
       const input = 'JARVIS क्या कर सकता है?';
       const result = processOfflineCommand(input, initialMemory, 'hi-IN');
       expect(result.intent).toBe('capabilities_inquiry');
-      expect(result.actionExecuted).toBe(true);
+      // Listing capabilities is informational; no action is executed.
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).not.toContain(CANNED_GREETING_SUBSTRING);
       expect(result.reply).toMatch(/HERMES JARVIS|क्षमताएं|Capabilities/i);
     });
@@ -133,12 +142,14 @@ describe('HERMES JARVIS - Conversational Pipeline Regression Test Suite', () => 
       expect(data.reply).toMatch(/समय|बजे/);
     });
 
-    it('Live /api/chat: C. "आज का मौसम बताओ" produces weather telemetry', async () => {
+    it('Live /api/chat: C. "आज का मौसम बताओ" does not invent weather telemetry', async () => {
       const data = await queryLiveApi('आज का मौसम बताओ', 'hi-IN');
       if (!data) return;
       expect(data.intent).toBe('weather_inquiry');
       expect(data.reply).not.toContain(CANNED_GREETING_SUBSTRING);
-      expect(data.reply).toMatch(/मौसम|तापमान|Sky|°C/);
+      // No weather provider is wired into this sandbox, so a real reading
+      // cannot exist; the reply must say so rather than print 27°C / 48%.
+      expect(data.reply).not.toMatch(/27°C|48%/);
     });
 
     it('Live /api/chat: D. "YouTube की स्थिति क्या है?" produces YouTube status', async () => {

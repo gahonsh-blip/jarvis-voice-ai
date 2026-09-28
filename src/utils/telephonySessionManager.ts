@@ -123,6 +123,21 @@ export class TelephonySessionManager {
     return this.activeSessions.get(callSessionId);
   }
 
+  /**
+   * The most recently updated session still believed active, or undefined when
+   * no live call exists. Callers must treat `undefined` as "no observation"
+   * rather than as a call in progress.
+   */
+  static getLatestActiveSession(): TelephonySession | undefined {
+    let latest: TelephonySession | undefined;
+    for (const session of this.activeSessions.values()) {
+      if (!latest || session.timestamps.initiatedAt > latest.timestamps.initiatedAt) {
+        latest = session;
+      }
+    }
+    return latest;
+  }
+
   static updateState(callSessionId: string, newState: TelephonyCallState): TelephonySession | undefined {
     const session = this.activeSessions.get(callSessionId);
     if (!session) return undefined;

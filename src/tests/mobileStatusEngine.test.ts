@@ -217,4 +217,133 @@ describe('Mobile Personal Status Engine & Hindi Morning Briefing Suite', () => {
       expect(briefing.spokenTextEn).not.toContain('calendar meetings');
     });
   });
+
+  describe('4. Zero-fake-success: no fixture or constant may be presented as a real reading', () => {
+    it('compileMobileStatusData flags device-backed sections that are SAMPLE fixtures', async () => {
+      const statusData = await compileMobileStatusData();
+
+      // Notifications/calendar/email/deviceHealth have no real device source here.
+      expect(statusData.notifications.isSample).toBe(true);
+      expect(statusData.calendar.isSample).toBe(true);
+      expect(statusData.email.isSample).toBe(true);
+      expect(statusData.deviceHealth.isSample).toBe(true);
+      expect(statusData.isSample).toBe(true);
+    });
+
+    it('never asserts Oracle server health or uptime that was not probed', () => {
+      const briefing = generateMorningBriefing(minimalStatus(), 'Sir');
+
+      expect(briefing.spokenTextEn).not.toMatch(/operational/i);
+      expect(briefing.spokenTextEn).not.toMatch(/100%\s*Uptime/i);
+      expect(briefing.spokenTextHi).not.toMatch(/सामान्य रूप से काम कर रहे/);
+      expect(briefing.keyHighlights.join('\n')).not.toMatch(/100% Uptime/i);
+
+      const serverHighlight = briefing.keyHighlights.find((h) => h.includes('Server'));
+      expect(serverHighlight).toMatch(/NOT CHECKED/);
+    });
+
+    it('labels sample notifications/calendar/email as sample in speech and highlights', () => {
+      const briefing = generateMorningBriefing(
+        { ...minimalStatus(), notifications: { ...minimalStatus().notifications, isSample: true } },
+        'Sir'
+      );
+
+      expect(briefing.spokenTextEn).toMatch(/sample notifications/i);
+      expect(briefing.keyHighlights.join('\n')).toMatch(/\(sample\)/);
+    });
+
+    it('reports unavailable weather as unavailable rather than speaking a fabricated temperature', () => {
+      const base = minimalStatus();
+      const briefing = generateMorningBriefing(
+        {
+          ...base,
+          weather: {
+            ...base.weather,
+            temperatureC: 27,
+            condition: 'SAMPLE — no weather source connected',
+            available: false,
+            isSample: true,
+          },
+        },
+        'Sir'
+      );
+
+      expect(briefing.spokenTextEn).toMatch(/Weather is unavailable/);
+      expect(briefing.keyHighlights.find((h) => h.includes('Weather'))).toMatch(/NOT AVAILABLE/);
+    });
+
+    it('flags a battery reading that came from no battery API', async () => {
+      const battery = await getRealOrSimulatedBattery();
+      if (!battery.available) {
+        expect(battery.isSample).toBe(true);
+        expect(battery.statusText).toMatch(/SAMPLE/);
+      } else {
+        // A real Web Battery API reading must never be marked as a sample,
+        // and must not invent a temperature the API does not expose.
+        expect(battery.isSample).toBe(false);
+        expect(Number.isNaN(battery.temperatureC)).toBe(true);
+      }
+    });
+
+    it('labels sample notifications/email counts as sample data, never as measured counts', () => {
+      const base = minimalStatus();
+      const briefing = generateMorningBriefing(base, 'Sir');
+
+      // minimalStatus carries fixture counts (2 notifications, 3 emails)
+      // flagged isSample. They may be mentioned, but only while labelled as
+      // sample content; the unlabelled phrasing claims a real device read.
+      expect(briefing.spokenTextEn).not.toMatch(/You have 2 priority notifications\./);
+      expect(briefing.spokenTextEn).not.toMatch(/inbox has 3 unread emails/);
+      expect(briefing.spokenTextEn).toContain('2 sample notifications');
+      expect(briefing.spokenTextEn).toContain('sample data, not read from this device');
+      expect(briefing.spokenTextEn).toMatch(/3 sample email summaries/);
+    });
+
+    it('does not claim the weather reading is for the user city when no location was supplied', async () => {
+      const statusData = await compileMobileStatusData();
+      expect(statusData.weather.location).toMatch(/fixed reference point/);
+    });
+  });
 });
+
+function minimalStatus(): MobileStatusData {
+  return {
+    lastUpdated: new Date().toISOString(),
+    battery: {
+      level: 50,
+      charging: false,
+      temperatureC: NaN,
+      powerMode: 'Normal',
+      statusText: 'Discharging (50%)',
+      available: true,
+      isSample: false,
+    },
+    weather: {
+      location: 'New Delhi',
+      temperatureC: 28,
+      condition: 'Clear',
+      conditionHi: 'साफ',
+      humidity: 50,
+      windKmh: 10,
+      feelsLikeC: 29,
+      available: true,
+      isSample: false,
+    },
+    notifications: { totalCount: 2, criticalCount: 1, items: [], available: true, isSample: true },
+    calendar: { todayEventsCount: 1, events: [], available: true, isSample: true },
+    email: { unreadCount: 3, importantCount: 1, summaries: [], available: true, isSample: true },
+    deviceHealth: {
+      ramUsageMb: 3840,
+      ramTotalMb: 8192,
+      storageFreeGb: 48.6,
+      storageTotalGb: 128,
+      deviceModel: 'Android ARM64 Device',
+      osVersion: 'Android 15',
+      networkType: 'WiFi',
+      available: true,
+      isSample: true,
+    },
+    permissions: DEFAULT_MOBILE_PERMISSIONS,
+    isSample: true,
+  };
+}

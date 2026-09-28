@@ -10,6 +10,13 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
+  const [captureStatus, setCaptureStatus] = useState<
+    | { kind: 'idle' }
+    | { kind: 'verified'; detail: string }
+    | { kind: 'simulated'; detail: string }
+    | { kind: 'unavailable'; detail: string }
+    | { kind: 'failed'; detail: string }
+  >({ kind: 'idle' });
 
   if (!isOpen) return null;
 
@@ -41,14 +48,25 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL('image/png');
           setCapturedImage(dataUrl);
+          setCaptureStatus({
+            kind: 'verified',
+            detail: `Live display captured at ${canvas.width}x${canvas.height} (${activeStream.getVideoTracks()[0]?.label || 'display'}).`,
+          });
+        } else {
+          setCaptureStatus({ kind: 'failed', detail: 'Canvas rendering context was unavailable.' });
         }
       } else {
-        // Fallback simulation screenshot using canvas
-        simulateScreenshot();
+        // The browser cannot capture the screen here. Ask the agent host to do it
+        // through the OS rather than drawing a placeholder and calling it a capture.
+        await requestHostCapture();
       }
-    } catch (err) {
-      console.warn('DisplayMedia capture denied or unsupported, using canvas snapshot fallback.', err);
-      simulateScreenshot();
+    } catch (err: any) {
+      // A denied permission is not a capture. Report it as such.
+      setCaptureStatus({
+        kind: 'unavailable',
+        detail: `Screen capture permission was denied or unsupported: ${err?.message || err}. Nothing was captured.`,
+      });
+      setCapturedImage(null);
     } finally {
       if (activeStream) {
         activeStream.getTracks().forEach((track) => {
@@ -63,44 +81,34 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
     }
   };
 
-  const simulateScreenshot = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 800;
-    canvas.height = 480;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      // Draw simulated HUD screenshot
-      ctx.fillStyle = '#020617';
-      ctx.fillRect(0, 0, 800, 480);
-
-      // Gradient grid
-      ctx.strokeStyle = 'rgba(6, 182, 212, 0.2)';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 800; i += 40) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, 480);
-        ctx.stroke();
+  /** Asks the agent host to capture through the OS and verify the file. */
+  const requestHostCapture = async () => {
+    try {
+      const res = await fetch('/api/computer-operator/screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'hud' }),
+      });
+      const data = await res.json();
+      if (data.outcome === 'VERIFIED' && data.file) {
+        setCaptureStatus({
+          kind: 'verified',
+          detail: `Host captured ${data.file.absolutePath} (${data.file.sizeBytes} bytes, ${data.file.width}x${data.file.height}).`,
+        });
+        setCapturedImage(null);
+        return;
       }
-      for (let j = 0; j < 480; j += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, j);
-        ctx.lineTo(800, j);
-        ctx.stroke();
-      }
-
-      ctx.fillStyle = '#00f0ff';
-      ctx.font = 'bold 20px Orbitron, monospace';
-      ctx.fillText('JARVIS HUD SNAPSHOT', 40, 60);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '14px monospace';
-      ctx.fillText(`TIMESTAMP: ${new Date().toISOString()}`, 40, 100);
-      ctx.fillText('STATUS: SYSTEMS NOMINAL', 40, 130);
-      ctx.fillText('FOLDER PATH: C:\\Jarvis\\Screenshots\\', 40, 160);
-
-      const dataUrl = canvas.toDataURL('image/png');
-      setCapturedImage(dataUrl);
+      setCaptureStatus({
+        kind: data.outcome === 'NOT_AVAILABLE' || data.outcome === 'NOT_CONFIGURED' ? 'unavailable' : 'failed',
+        detail: `${data.outcome || 'FAILED'}: ${data.receipt?.detailEn || data.error || 'No capture evidence.'}`,
+      });
+      setCapturedImage(null);
+    } catch (err: any) {
+      setCaptureStatus({
+        kind: 'failed',
+        detail: `Host capture request failed: ${err?.message || err}`,
+      });
+      setCapturedImage(null);
     }
   };
 
@@ -126,7 +134,7 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
             </div>
             <div>
               <h2 className="text-sm font-hud font-bold text-cyan-200 uppercase tracking-wider">
-                JARVIS SCREEN CAPTURE [C:\Jarvis\Screenshots]
+                JARVIS SCREEN CAPTURE
               </h2>
               <span className="text-[11px] font-mono text-slate-400">
                 Visual display frame capture unit
@@ -144,6 +152,20 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
 
         {/* Content Area */}
         <div className="p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[280px]">
+          {captureStatus.kind !== 'idle' && (
+            <div
+              className={`w-full mb-4 px-3 py-2 rounded-lg border font-mono text-[11px] ${
+                captureStatus.kind === 'verified'
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                  : captureStatus.kind === 'simulated'
+                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                  : 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+              }`}
+            >
+              <span className="font-bold uppercase">{captureStatus.kind}</span>
+              <span className="ml-2">{captureStatus.detail}</span>
+            </div>
+          )}
           {capturedImage ? (
             <div className="space-y-4 w-full flex flex-col items-center">
               <div className="relative rounded-xl overflow-hidden border border-cyan-500/40 glow-cyan-sm max-w-full">
