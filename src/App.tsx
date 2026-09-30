@@ -1017,9 +1017,12 @@ export default function App() {
           setBrowserInitialUrl(payload?.target || '');
           setActiveApp('browser');
           break;
+        // The server hands the search URL in `payload.target`; BrowserModal only
+        // runs the search when the view loads that URL, so it must not be left on
+        // a stale address (its effect ignores `initialQuery` when a URL is set).
         case 'google_search':
           setBrowserSearchQuery(payload?.query || '');
-          setBrowserInitialUrl('');
+          setBrowserInitialUrl(payload?.target || '');
           setActiveApp('browser');
           break;
         case 'take_screenshot':

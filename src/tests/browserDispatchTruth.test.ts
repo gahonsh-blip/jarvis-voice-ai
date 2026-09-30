@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { browserOpenVerdict, browserDestinationUrl, browserOpenActionDetail } from '../utils/browserDispatchTruth';
+import { browserOpenVerdict, browserDestinationUrl, browserOpenActionDetail, searchDispatch } from '../utils/browserDispatchTruth';
 
 // server.ts binds a port on import, so the route assertions read the source
 // text, matching the convention in launchDispatchTruth.test.ts.
@@ -83,9 +83,50 @@ describe('the action detail carries the destination where the app reads it', () 
   });
 });
 
+describe('a search request carries the URL the Browser must load', () => {
+  it('derives the Google search URL from the query', () => {
+    const dispatch = searchDispatch('latest TypeScript releases');
+    expect(dispatch.url).toBe('https://www.google.com/search?q=latest%20TypeScript%20releases');
+    expect(dispatch.query).toBe('latest TypeScript releases');
+    expect(dispatch.replyEn).toContain('latest TypeScript releases');
+    expect(dispatch.replyEn).toContain('No external browser was launched');
+  });
+
+  it('trims the query before deriving the URL', () => {
+    expect(searchDispatch('  spaced  ').query).toBe('spaced');
+    expect(searchDispatch('  spaced  ').url).toContain('spaced');
+  });
+
+  it('falls back to the default home for an empty query instead of a bare /search?q=', () => {
+    const dispatch = searchDispatch('   ');
+    expect(dispatch.query).toBe('');
+    expect(dispatch.url).toBe('https://www.google.com');
+    expect(dispatch.url).not.toContain('search?q=');
+  });
+
+  it('offers a Hindi reply that also names the query', () => {
+    const dispatch = searchDispatch('रिएक्ट हुक्स');
+    expect(dispatch.replyHi).toContain('रिएक्ट हुक्स');
+    expect(dispatch.replyHi).toContain('इन-ऐप ब्राउज़र');
+  });
+});
+
 describe('server + app wiring carry the destination through', () => {
+  it('server derives the search reply and target from searchDispatch', () => {
+    expect(serverFlat).toContain('import { browserOpenVerdict, browserOpenActionDetail, searchDispatch } from');
+    expect(serverFlat).toContain('const dispatch = searchDispatch(query);');
+    // The target rode at the top level before, where the app dispatcher never reads it.
+    expect(serverFlat).toContain('payload: { query: dispatch.query, target: dispatch.url }');
+    expect(serverFlat).not.toContain('target: `https://www.google.com/search?q=${encodeURIComponent(query)}`');
+  });
+
+  it('the app hands the search URL to the view from payload.target', () => {
+    expect(appFlat).toContain("case 'google_search': setBrowserSearchQuery(payload?.query || ''); setBrowserInitialUrl(payload?.target || ''); setActiveApp('browser');");
+    expect(appFlat).not.toContain("case 'google_search': setBrowserSearchQuery(payload?.query || ''); setBrowserInitialUrl('');");
+  });
+
   it('server derives the browser-open reply and target from browserOpenVerdict', () => {
-    expect(serverFlat).toContain('import { browserOpenVerdict, browserOpenActionDetail } from');
+    expect(serverFlat).toContain('import { browserOpenVerdict, browserOpenActionDetail, searchDispatch } from');
     expect(serverFlat).toContain("case 'open_google': case 'open_youtube': case 'open_gmail': case 'open_chatgpt': {");
     expect(serverFlat).toContain('const verdict = browserOpenVerdict(intentData.intent);');
     expect(serverFlat).toContain('actionDetail = browserOpenActionDetail(verdict);');

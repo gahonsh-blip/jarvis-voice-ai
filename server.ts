@@ -83,7 +83,7 @@ import {
 import { screenshotVerdict, screenshotReply } from './src/utils/computerOperator/screenshotDispatchTruth';
 import { volumeVerdict, volumeReply } from './src/utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from './src/utils/computerOperator/powerDispatchTruth';
-import { browserOpenVerdict, browserOpenActionDetail } from './src/utils/browserDispatchTruth';
+import { browserOpenVerdict, browserOpenActionDetail, searchDispatch } from './src/utils/browserDispatchTruth';
 import {
   fixProjectErrorReply,
   operatorTaskExecuted,
@@ -9106,13 +9106,17 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'google_search': {
         const query = intentData.actionPayload?.query || message.replace(/^search\s+/i, '').trim();
-        spokenResponse = `Searching Google for "${query}" in the in-app Browser. No external browser was launched.`;
+        // "Searching Google for X" asserts a lookup is under way. The in-app Browser
+        // only runs it when the view is handed the search URL in `payload.target`,
+        // so the reply and the target come from one verdict and defer to Hindi when
+        // the request was Hindi.
+        const dispatch = searchDispatch(query);
+        spokenResponse = language.startsWith('hi') ? dispatch.replyHi : dispatch.replyEn;
         actionExecuted = true;
         actionDetail = {
           type: 'google_search',
-          title: `In-App Browser Search: ${query} (external browser not launched)`,
-          target: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-          payload: { query },
+          title: dispatch.title,
+          payload: { query: dispatch.query, target: dispatch.url },
         };
         break;
       }

@@ -21,6 +21,12 @@ const appFlat = fs
   .readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8')
   .replace(/\s+/g, ' ');
 
+// The in-app Browser disclosures live in the browser truth helper rather than in
+// server.ts, so the routing guard reads that layer too.
+const browserTruthFlat = fs
+  .readFileSync(path.resolve(process.cwd(), 'src/utils/browserDispatchTruth.ts'), 'utf8')
+  .replace(/\s+/g, ' ');
+
 /**
  * The case body, bounded at the next block-opening case so it cannot leak into a
  * neighbour. `max` must exceed the longest reply string in the case (the
@@ -234,6 +240,9 @@ describe('the /api/chat dispatch cases use the truth helpers', () => {
   });
 
   it('the in-app routing cases disclose that no external app was opened', () => {
+    // The in-app Browser disclosures are emitted by the browser truth helper
+    // (`server.ts` delegates the reply to it), so the guard reads both layers.
+    const dispatchLayer = serverFlat + ' ' + browserTruthFlat;
     for (const marker of [
       'No external phone dialer was opened.',
       'No external calculator application was opened.',
@@ -241,7 +250,7 @@ describe('the /api/chat dispatch cases use the truth helpers', () => {
       'No external Chrome process was started.',
       'No external browser was launched.',
     ]) {
-      expect(serverFlat, marker).toContain(marker);
+      expect(dispatchLayer, marker).toContain(marker);
     }
   });
 });
