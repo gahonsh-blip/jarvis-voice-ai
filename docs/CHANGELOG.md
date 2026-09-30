@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 03:15 IST (2026-09-30 21:45 UTC) — window slot 15: the Computer Operator view the dispatcher opens is now mounted
+
+### Fixed
+- **`open_computer_operator` reported a view switch that never happened.** `offlineOperatorCountsAsHostWork('open_computer_operator')` returns `true` (it is the one offline operator intent credited as real page-local work), its reply says the HUD was activated, and `handleExecuteAction` in `src/App.tsx` does run `setActiveApp('computer_operator')` — but `App.tsx` had no render site for `activeApp === 'computer_operator'`, and the `ComputerOperatorModal` import was unused. The HUD therefore never opened while the spoken reply and the "Autonomous Actions Executed" counter both credited it. Mounted `ComputerOperatorModal` on `activeApp === 'computer_operator'` (`onClose` resets `activeApp`, `onSendToChat={handleSendCommand}`, `activeLanguage` from `voiceSettings`), matching the sibling modal wiring.
+
+### Tests
+- `src/tests/computerOperatorDispatchTruth.test.ts` — 3 tests. Derives the views `setActiveApp('...')` assigns and the views the JSX renders (`activeApp === '...'`), asserting the assigned set is a subset of the rendered set (a general invariant, so any future dangling view fails), plus an explicit pin that `open_computer_operator` routes to a mounted view. Negative-validated: reverting only `src/App.tsx` fails `3 failed`; restored → `3 passed`.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted `computerOperatorDispatchTruth` + `actionExecutedSweepAudit` + `launchDispatchTruth` 3 files / 25 tests passed; full suite **119 files / 1636 tests passed** (22.03 s); build exit 0 (`dist/server.cjs` 935.5 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-01 02:35 IST (2026-09-30 21:06 UTC) — window slot 14: three more provider secrets redacted
 
 ### Fixed
