@@ -228,4 +228,30 @@ describe('credential redaction', () => {
     expect(redactSecrets(token)).not.toContain(token);
     expect(redactSecrets('re_ this is a reply note')).toBe('re_ this is a reply note');
   });
+
+  it('redacts a Meta / Facebook Graph access token (EAA)', () => {
+    const token = 'EAA' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJkLmNoPqRsTuVwXaBcDeF';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets(token)).toContain('[REDACTED_META_TOKEN]');
+  });
+
+  it('redacts a Google OAuth refresh token (1//) but not a bare fraction', () => {
+    const token = '1//' + '04Zx9kQ2mN7pL3rT5vW8yA1bC6dE0fG4hJ2kM9nP7qR5sT';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets(token)).toContain('[REDACTED_GOOGLE_OAUTH_REFRESH_TOKEN]');
+    // A short "1//" prefix that is not a token must survive.
+    expect(redactSecrets('step 1// see below')).toBe('step 1// see below');
+  });
+
+  it('redacts a Google OAuth authorization code (4/0A)', () => {
+    const token = '4/0A' + 'eanS0bZx9kQ2mN7pL3rT5vW8yA1bC6dE0fG4hJ2kM9n';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets(token)).toContain('[REDACTED_GOOGLE_OAUTH_CODE]');
+  });
+
+  it('redacts a Google OAuth access token (ya29.)', () => {
+    const token = 'ya29.' + 'a0AfBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJkLmNoPqRsTuVwX';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets(token)).toContain('[REDACTED_GOOGLE_OAUTH_ACCESS_TOKEN]');
+  });
 });

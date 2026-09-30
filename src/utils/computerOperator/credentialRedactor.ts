@@ -228,6 +228,37 @@ const REDACTION_PATTERNS: {
     regex: /\bre_[A-Za-z0-9]{20,}\b/g,
     placeholder: '[REDACTED_RESEND_KEY]',
   },
+  // 32. Meta / Facebook Graph API access tokens (`EAA` + long body). These are
+  // what `FACEBOOK_PAGE_ACCESS_TOKEN` and `INSTAGRAM_ACCESS_TOKEN` carry; the
+  // `EAA` marker is stable across app and page tokens and does not occur in
+  // ordinary prose.
+  {
+    category: 'Meta Access Token',
+    regex: /\bEAA[A-Za-z0-9]{40,}\b/g,
+    placeholder: '[REDACTED_META_TOKEN]',
+  },
+  // 33. Google OAuth refresh tokens (`1//` + body). `YOUTUBE_REFRESH_TOKEN` and
+  // the Gmail/Calendar refresh tokens use this form. The `1//` marker is not a
+  // word boundary, so a lookbehind guards against matching inside a longer run.
+  {
+    category: 'Google OAuth Refresh Token',
+    regex: /(?<![A-Za-z0-9])1\/\/[0-9A-Za-z_-]{20,}/g,
+    placeholder: '[REDACTED_GOOGLE_OAUTH_REFRESH_TOKEN]',
+  },
+  // 34. Google OAuth authorization codes (`4/0A` + body). These are short-lived
+  // but exchangeable for refresh tokens, so they are treated as secrets.
+  {
+    category: 'Google OAuth Authorization Code',
+    regex: /(?<![A-Za-z0-9])4\/0A[A-Za-z0-9_-]{20,}/g,
+    placeholder: '[REDACTED_GOOGLE_OAUTH_CODE]',
+  },
+  // 35. Google OAuth access tokens (`ya29.` + body), issued in the auth-code
+  // exchange flow.
+  {
+    category: 'Google OAuth Access Token',
+    regex: /\bya29\.[A-Za-z0-9_-]{20,}\b/g,
+    placeholder: '[REDACTED_GOOGLE_OAUTH_ACCESS_TOKEN]',
+  },
 ];
 
 /**
