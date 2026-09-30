@@ -288,4 +288,32 @@ describe('credential redaction', () => {
     expect(out).not.toContain('mnop');
     expect(out).not.toContain('abcd efgh');
   });
+
+  // Regression: a fifth live probe (2026-10-01 02:35 IST slot) found three more
+  // provider secrets passing through redaction byte-for-byte. Each is a
+  // first-class credential in this project or a common provider format, and
+  // each test uses the token *bare* for the same reason as the earlier probes.
+  it('redacts a Slack app-level token (xapp-)', () => {
+    const token = ['xapp', '1', 'A0123456789', '1234567890123', 'a'.repeat(64)].join('-');
+    expect(redactSecrets(`raw ${token} pasted`)).not.toContain(token);
+    expect(redactSecrets(`raw ${token} pasted`)).toContain('[REDACTED_SLACK_APP_TOKEN]');
+  });
+
+  it('redacts a Stripe webhook signing secret (whsec_)', () => {
+    const secret = 'whsec_' + 'aBcDeFgHiJkLmNoPqRsTuVwXyZ012345';
+    expect(redactSecrets(`raw ${secret} pasted`)).not.toContain(secret);
+    expect(redactSecrets(`raw ${secret} pasted`)).toContain('[REDACTED_STRIPE_WEBHOOK_SECRET]');
+  });
+
+  it('redacts a Mailgun API key (key- + 32 hex) but not the English "key-" prefix', () => {
+    // Built by concatenation: a literal here trips GitHub push protection's
+    // Mailgun scanner even though it is synthetic (same reason the Slack and
+    // Stripe fixtures above are assembled rather than written out).
+    const key = 'key-' + 'deadbeef'.repeat(4);
+    expect(redactSecrets(`MAILGUN_API_KEY=${key}`)).not.toContain(key);
+    expect(redactSecrets(`raw ${key} pasted`)).not.toContain(key);
+    expect(redactSecrets(`raw ${key} pasted`)).toContain('[REDACTED_MAILGUN_KEY]');
+    // "key-" followed by non-hex text is prose, not a token.
+    expect(redactSecrets('the key-value store')).toBe('the key-value store');
+  });
 });

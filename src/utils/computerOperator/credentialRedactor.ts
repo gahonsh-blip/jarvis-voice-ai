@@ -288,6 +288,31 @@ const REDACTION_PATTERNS: {
     regex: /\bAQV[A-Za-z0-9_-]{20,}\b/g,
     placeholder: '[REDACTED_LINKEDIN_TOKEN]',
   },
+  // 38. Slack app-level tokens (`xapp-`). These are not covered by pattern 13,
+  // whose class is only `xox[baprs]-`. A bare `xapp-...` value in a screenshot
+  // or command stream is a provider-issued secret (it can mint `xoxp` tokens).
+  {
+    category: 'Slack App Token',
+    regex: /\bxapp-[A-Za-z0-9-]{10,}\b/g,
+    placeholder: '[REDACTED_SLACK_APP_TOKEN]',
+  },
+  // 39. Stripe webhook signing secrets (`whsec_` + body). Pattern 12 covers only
+  // the `sk_`/`rk_` API keys; a `whsec_...` value was observed surviving
+  // redaction byte-for-byte. It is a first-class Stripe secret (it signs and
+  // validates webhook payloads).
+  {
+    category: 'Stripe Webhook Secret',
+    regex: /\bwhsec_[A-Za-z0-9]{16,}\b/g,
+    placeholder: '[REDACTED_STRIPE_WEBHOOK_SECRET]',
+  },
+  // 40. Mailgun API keys (`key-` + 32 hex). Mailgun has no other stable marker;
+  // the trailing hex body keeps the ordinary English "key-" prefix from
+  // matching.
+  {
+    category: 'Mailgun Key',
+    regex: /\bkey-[a-f0-9]{32}\b/g,
+    placeholder: '[REDACTED_MAILGUN_KEY]',
+  },
 ];
 
 /**
