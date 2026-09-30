@@ -8252,3 +8252,68 @@ Next Slot:
 - इस स्लॉट में किसी नकली सफलता का दावा नहीं मिला, इसलिए 8 और क्रेडेंशियल
   परिवारों को redact किया गया — 11 नए टेस्ट पहले फेल हुए, फिर पास; पूरी सूट
   118 फ़ाइल / 1621 टेस्ट पास।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:05
+Window date: 2026-09-30   Window slots completed so far: 11
+
+Completed:
+- #54 Production Hardening — credential redaction (PARTIAL, one more slice).
+  Live probe of `redactSecrets()` (`src/utils/computerOperator/credentialRedactor.ts`)
+  found four provider-token families that this app itself carries passing through
+  byte-for-byte: Meta/Facebook Graph access tokens (`EAA` + body —
+  FACEBOOK_PAGE_ACCESS_TOKEN / INSTAGRAM_ACCESS_TOKEN), Google OAuth refresh
+  tokens (`1//` + body — YOUTUBE_REFRESH_TOKEN / Gmail / Calendar), Google OAuth
+  authorization codes (`4/0A` + body) and Google OAuth access tokens (`ya29.` +
+  body). Added pattern branches 32–35 and 4 regression tests (+1 non-token
+  preservation assertion) in `src/tests/credentialRedactor.test.ts`. Evidence:
+  targeted file 39/39 passed after the fix.
+
+Bugs Found (this slot):
+- `credentialRedactor.ts` did not match Meta Graph tokens, Google OAuth refresh
+  tokens, OAuth authorization codes, or Google OAuth access tokens — four
+  credential forms the project handles and could surface on screen / in logs.
+
+Bugs Fixed:
+- Added pattern branches for the four families above.
+
+Tests:    118 files / 1625 tests passed (full suite, observed)
+Lint:     tsc --noEmit exit 0 (observed)
+Build:    exit 0 (observed) — dist/server.cjs 953448 bytes
+E2E:      NOT RUN
+Security: `git check-ignore -v .env` → ignored (.gitignore:4). `git status` clean
+          after the state/docs commits. Diff-vs-main token scan matched only
+          prefix *mentions* in docs/tests, no real secrets. No node_modules/dist
+          staged.
+
+Documentation: docs/COMPLETION_STATUS.md (last-cycle + known-limitations),
+               automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  1ae65c1 (fix) then 3404f16 (docs)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         NONE OPEN — GitHub API query returned 0 open PRs for this head.
+            PR #4 (previous window) is CLOSED/merged. Opening the PR is the
+            finalization slot's job (Phase F.4).
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+
+Blocked:
+- #1 real Android bridge / #2 wake word — require physical device (NOT_AVAILABLE)
+- #8 computer-operator host execution — requires a live host session
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #54 — continue probing the redactor for more provider families (Twilio auth
+  token, Stripe webhook signing secret, X/Twitter consumer secret were named in
+  the prior state notes and are not yet confirmed covered); otherwise pick the
+  next advanceable backlog item.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में redactor की जाँच में चार और क्रेडेंशियल परिवार (Meta, Google OAuth
+  refresh/code/access) बिना redact हुए मिले — पैटर्न जोड़े, नए टेस्ट पास, पूरी सूट
+  118 फ़ाइल / 1625 टेस्ट पास।
