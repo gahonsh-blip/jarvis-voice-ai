@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-30",
   "window_started_at": "2026-09-30T15:35:00Z",
-  "last_slot_at": "2026-09-30T16:44:00Z",
-  "slots_completed": 5,
+  "last_slot_at": "2026-09-30T17:05:00Z",
+  "slots_completed": 6,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "463e242",
+  "last_commit": "f68c6c4",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -17,5 +17,5 @@
     "Real Android Bridge"
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "state_note": "WORK SLOT 5 (22:05 IST fire, fifth completed slot of the 2026-09-30 window). Item 13 PARTIAL: closed the Truth-in-Execution Integrations Matrix credential-presence fake-success. getIntegrationsAuditReport() in server_tools.ts set status REAL_WORKING for linkedin/telegram/github/facebook/instagram/youtube purely from env-var presence, with reasons asserting live state it never observes (OAuth engine authenticated / long-polling daemon active / REST API authenticated / API v3 active); the function makes no provider call. Renamed status to CREDENTIALS_PRESENT (summary.connected -> credentialsPresent), rewrote every credential-visible reason to a non-confirmation phrase; propagated through src/types.ts, AutonomousToolsModal.tsx, server.ts tools_audit. New guard in src/tests/integrationsAuditTruthfulness.test.ts (now 5 tests) forces all credential branches and forbids authenticated|verified|active|online|working; negative-validated (restore old GitHub reason -> 1 failed | 4 passed; restore fix -> 5/5). Full suite 118 files / 1593 tests passed; lint exit 0; build exit 0 (dist/server.cjs 946016). Commits: 5c5e1ac (fix+tests), 463e242 (docs). No PR open for post-merge commits; PR #4 was merged by a human 2026-09-28T05:13:29Z. Human decision required on a new PR."
+  "state_note": "WORK SLOT 6 (22:35 IST fire, sixth completed slot of the 2026-09-30 window). Item 13 PARTIAL: closed the dashboard radar pin fake-success. DashboardMapSnippet.tsx labelled its pin `isResolvedAddress(address) ? address?.city : 'CURRENT FIX'`, so a preset/manual/cache coordinate with no resolved address printed 'CURRENT FIX' (a live-fix claim) in the same card whose PRECISION field and provenance badge correctly read 'N/A - no GPS fix' / 'PRESET ONLY'. Label now gated on source === 'live'; every other provenance prints 'NO FIX'. New test in src/tests/locationServicesTruth.test.ts; negative-validated (revert component -> 1 failed | 16 passed; restore fix -> 17/17). Full suite 118 files / 1594 tests passed; lint exit 0; build exit 0 (dist/server.cjs 946016). Commits: 36c5466 (fix+test), f68c6c4 (docs+report). Still open for item 13: server.ts memoryState.stats.actionsExecuted counter and computer-operator actionExecuted verdicts. No PR open for post-merge commits; PR #4 was merged by a human 2026-09-28T05:13:29Z. Human decision required on a new PR."
 }
