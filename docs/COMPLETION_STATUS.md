@@ -4,7 +4,40 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 22:20 UTC (03:50 IST 2026-10-01) — **WORK SLOT 16** of the
+Last cycle: 2026-09-30 23:00 UTC (04:30 IST 2026-10-01) — **WORK SLOT 17** of the
+2026-09-30 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the offline briefing credited itself for work it did not do.**
+
+**A briefing with no device attached still advanced "Autonomous Actions
+Executed".** `processOfflineCommand` (`src/utils/localJarvisEngine.ts`) incremented
+`updatedMemory.stats.actionsExecuted` at the top of the morning-briefing branch
+before it knew whether any telemetry had been read. With no phone connected every
+telemetry section speaks a "no source connected" refusal, yet the user-visible
+counter still ticked up. A fixture `MobileStatusData` flagged `isSample` had the
+same effect: sample data is not a measurement, so it must not count as a read.
+The successful weather answer had the same defect: like the already-fixed
+`time_inquiry`, `weather_inquiry` only switches the app to the status view
+(`src/App.tsx` case `weather_inquiry`) and speaks a reading — it is an
+informational answer, not executed work.
+
+Fixed: the briefing now credits the counter only when `readAnyTelemetry`
+(battery/weather/notifications/calendar/mail availability, all false with no
+device) is true; the weather branch no longer increments and reports
+`actionExecuted: false`. Guarded by `src/tests/localJarvisEngine.test.ts`
+("should not speak sample fixture telemetry as measured readings" now pins
+`actionExecuted === false`) and `src/tests/remainingFakeSuccess.test.ts` (briefing
+counter block: no-telemetry → 0, one real telemetry section read → 1).
+
+**Negative-validated:** reverting only the source change (unconditional
+increment, `readAnyTelemetry = true`, weather credit restored) makes the guard
+fail (`2 files failed / 5 tests failed | 89 passed`); restored → `3 files / 109
+tests passed`. Gates observed on this commit: lint (`tsc --noEmit`) exit 0;
+targeted `remainingFakeSuccess` + `localJarvisEngine` + `conversationalPipelineRegression`
+**3 files / 109 tests passed**. Item 13 remains `PARTIAL` — another real
+fake-success class closed; the item still covers tool-level success flags not yet
+swept.
+
+Previous cycle: 2026-09-30 22:20 UTC (03:50 IST 2026-10-01) — **WORK SLOT 16** of the
 2026-09-30 window, the 03:35 IST fire. **Item 32 (`Call detection E2E`) — the
 live-call weather answer was fabricated.**
 

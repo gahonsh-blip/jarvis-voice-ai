@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 04:30 IST (2026-09-30 23:00 UTC) — window slot 17: an offline briefing no longer credits itself for work it did not do
+
+### Fixed
+- **The morning briefing advanced "Autonomous Actions Executed" with no device attached.** `processOfflineCommand` (`src/utils/localJarvisEngine.ts`) incremented `updatedMemory.stats.actionsExecuted` at the top of the briefing branch, before it knew whether any telemetry had actually been read. With no phone connected every telemetry section speaks a "no source connected" refusal, yet the counter still ticked up. Fixture data flagged `isSample` counted the same way — sample data is not a measurement. The briefing now credits the counter only when at least one real telemetry section was read (`readAnyTelemetry`).
+- **A successful weather answer advanced the counter.** Like the already-fixed `time_inquiry`, `weather_inquiry` only switches the app to the status view (`src/App.tsx`) and speaks a reading; it is an informational answer, not executed work. The branch no longer increments and reports `actionExecuted: false`.
+
+### Tests
+- `src/tests/localJarvisEngine.test.ts` — the sample-fixture briefing test now pins `actionExecuted === false` (sample telemetry is not a real read).
+- `src/tests/remainingFakeSuccess.test.ts` — briefing counter block: no-telemetry → `actionsExecuted` 0; one real telemetry section read → 1.
+- Negative-validated: reverting only the source change fails `2 files / 5 tests`; restored → `3 files / 109 tests passed`.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted `remainingFakeSuccess` + `localJarvisEngine` + `conversationalPipelineRegression` 3 files / 109 tests passed. Full suite and build: NOT RUN this slot (budget). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-01 03:15 IST (2026-09-30 21:45 UTC) — window slot 15: the Computer Operator view the dispatcher opens is now mounted
 
 ### Fixed
