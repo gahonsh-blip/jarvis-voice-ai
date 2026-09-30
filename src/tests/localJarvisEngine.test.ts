@@ -143,7 +143,10 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     it('should trigger mobile personal status briefing in English for "Good morning JARVIS"', () => {
       const result = processOfflineCommand('Good morning JARVIS', initialMemory, 'en-US');
       expect(result.intent).toBe('mobile_personal_status');
-      expect(result.actionExecuted).toBe(true);
+      // No device is attached, so every telemetry section is a "no source
+      // connected" refusal and the briefing read nothing: it must not be
+      // credited as executed work.
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).toContain('Good morning');
       expect(result.reply).toContain('battery');
     });
@@ -151,7 +154,7 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
     it('should trigger authentic Hindi briefing for "सुप्रभात जार्विस"', () => {
       const result = processOfflineCommand('सुप्रभात जार्विस', initialMemory, 'hi-IN');
       expect(result.intent).toBe('mobile_personal_status');
-      expect(result.actionExecuted).toBe(true);
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).toContain('सुप्रभात');
       expect(result.reply).toContain('बैटरी');
       expect(result.reply).toContain('मौसम');
@@ -178,7 +181,9 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       } as MobileStatusData;
 
       const result = processOfflineCommand('mobile status', initialMemory, 'en-US', sampleStatus);
-      expect(result.actionExecuted).toBe(true);
+      // Fixture telemetry is not a real reading, so the briefing read nothing and
+      // must not be credited as executed work.
+      expect(result.actionExecuted).toBe(false);
       expect(result.reply).not.toMatch(/91%|27°C|7 priority|4 events|9 unread/);
       expect(result.reply).toMatch(/No battery reading is available/);
       expect(result.reply).toMatch(/no weather source is connected/i);

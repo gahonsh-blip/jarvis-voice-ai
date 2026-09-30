@@ -935,7 +935,10 @@ export function processOfflineCommand(
     const humidity = weatherData.humidity;
     const location = weatherData.location || 'unknown location';
 
-    countAction(updatedMemory, true);
+    // Reading a connected weather source and speaking it is a status answer,
+    // not executed work; `handleExecuteAction` only switches to the status view
+    // for this intent. Same class as the fixed `time_inquiry` branch — the
+    // counter must not advance for an informational answer.
     const reply = isHindi
       ? `आज का मौसम ${condition === 'Clear Sky' ? 'साफ (Clear Sky)' : condition} है। वर्तमान तापमान लगभग ${tempC}°C (${location}) और आर्द्रता ${humidity}% है।`
       : isHinglish
@@ -946,7 +949,7 @@ export function processOfflineCommand(
       reply,
       spokenText: reply,
       intent: 'weather_inquiry',
-      actionExecuted: true,
+      actionExecuted: false,
       actionDetail: { type: 'weather_inquiry', title: `Weather: ${tempC}°C, ${condition}`, payload: { temperatureC: tempC, condition, location, humidity } },
       updatedMemory,
       offline: true,
@@ -967,7 +970,6 @@ export function processOfflineCommand(
     lower === '/briefing' ||
     lower === '/morning'
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const now = new Date();
     const hours = now.getHours();
     const mins = now.getMinutes();
@@ -1096,11 +1098,20 @@ export function processOfflineCommand(
       ? `${greetingHinglish} ${batteryAvailable ? `Battery ${batteryLvl}% hai.` : ''} ${weatherAvailable ? `Weather ${condition} hai.` : ''} ${notifsAvailable ? `${notifCount} new notifications hain.` : ''}`
       : `${greetingEn} ${batteryAvailable ? `Battery is at ${batteryLvl}%.` : ''} ${weatherAvailable ? `Weather is ${condition} at ${tempC} degrees.` : ''} ${notifsAvailable ? `You have ${notifCount} priority notifications.` : ''}`;
 
+    // With no device attached every section above is unavailable, so the
+    // briefing only spoke "no source connected" refusals and read no telemetry.
+    // Crediting that as executed work inflated the user-visible counter for a
+    // run that performed none; only a briefing that actually read telemetry may
+    // count as executed work.
+    const readAnyTelemetry =
+      batteryAvailable || weatherAvailable || notifsAvailable || calAvailable || mailAvailable;
+    countAction(updatedMemory, readAnyTelemetry);
+
     return {
       reply,
       spokenText,
       intent: 'mobile_personal_status',
-      actionExecuted: true,
+      actionExecuted: readAnyTelemetry,
       actionDetail: {
         type: 'mobile_personal_status',
         title: isHindi ? 'सुप्रभात दैनिक ब्रीफिंग' : isHinglish ? 'Morning Briefing' : 'Morning Briefing',

@@ -488,3 +488,61 @@ describe('a fetch-only YouTube summarization is not credited as executed work', 
   });
 });
 
+
+describe('a briefing that read no telemetry is not credited as executed work', () => {
+  // With no device attached, every section of the offline briefing is a "no
+  // source connected" refusal and the handler reads nothing, yet it advanced
+  // the user-visible "Autonomous Actions Executed" counter unconditionally.
+  const memory = {
+    userName: 'Sir',
+    name: 'Sir',
+    customKeyValues: {},
+    notes: [],
+    conversationHistory: [],
+    stats: { actionsExecuted: 0, tasksCompleted: 0, voiceCommands: 0 },
+  } as any;
+
+  it('does not advance the counter when no device telemetry is available', () => {
+    const result = processOfflineCommand('Good morning JARVIS', memory, 'en-US');
+    expect(result.intent).toBe('mobile_personal_status');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.updatedMemory?.stats.actionsExecuted).toBe(0);
+  });
+
+  it('advances the counter only when a real telemetry section was read', () => {
+    const status = {
+      lastUpdated: new Date().toISOString(),
+      permissions: { BATTERY_STATUS: true },
+      battery: { level: 64, charging: false, temperatureC: 31, powerMode: 'Normal', statusText: 'OK', available: true, isSample: false },
+    } as any;
+    const result = processOfflineCommand('Good morning JARVIS', memory, 'en-US', status);
+    expect(result.intent).toBe('mobile_personal_status');
+    expect(result.actionExecuted).toBe(true);
+    expect(result.updatedMemory?.stats.actionsExecuted).toBe(1);
+  });
+});
+
+describe('a successful weather read is a status answer, not executed work', () => {
+  const memory = {
+    userName: 'Sir',
+    name: 'Sir',
+    customKeyValues: {},
+    notes: [],
+    conversationHistory: [],
+    stats: { actionsExecuted: 0, tasksCompleted: 0, voiceCommands: 0 },
+  } as any;
+
+  it('reports the reading without advancing the counter', () => {
+    const status = {
+      lastUpdated: new Date().toISOString(),
+      permissions: { WEATHER_LOCATION: true },
+      weather: { location: 'New Delhi', temperatureC: 31, condition: 'Clear Sky', conditionHi: 'साफ', humidity: 40, windKmh: 8, feelsLikeC: 32, available: true, isSample: false },
+    } as any;
+    const result = processOfflineCommand('what is the weather', memory, 'en-US', status);
+    expect(result.intent).toBe('weather_inquiry');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.updatedMemory?.stats.actionsExecuted).toBe(0);
+    expect(result.reply).toContain('New Delhi');
+  });
+});
+
