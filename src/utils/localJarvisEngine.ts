@@ -752,9 +752,12 @@ export function processOfflineCommand(
       intent: 'operate_browser',
       actionExecuted: offlineOperatorCountsAsHostWork('operate_browser'),
       actionDetail: {
+        // The dispatcher is called as `handleExecuteAction(intent, payload)` and
+        // its `operate_browser` case reads `payload?.target`; a top-level `target`
+        // is dropped, so the in-app Browser view opens on its default home. The
+        // verdict's own `title` is the honest label and carries no destination.
         type: 'operate_browser',
         title: verdict.title,
-        target: 'Chrome',
         payload: { offlineHostWork: false },
       },
       updatedMemory,

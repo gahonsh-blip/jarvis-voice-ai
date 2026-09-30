@@ -101,6 +101,28 @@ describe('the /api/chat launch intents route through the real executor', () => {
   });
 });
 
+describe('the offline operate_browser action detail reaches the in-app view', () => {
+  const engine = fs
+    .readFileSync(path.resolve(process.cwd(), 'src/utils/localJarvisEngine.ts'), 'utf8')
+    .replace(/\s+/g, ' ');
+
+  it('carries no top-level target that the dispatcher would drop', () => {
+    const start = engine.indexOf("intent: 'operate_browser'");
+    expect(start, 'offline operate_browser branch missing').toBeGreaterThan(-1);
+    const nextBranch = engine.indexOf('// 1.5.7', start);
+    const branch = engine.slice(start, nextBranch === -1 ? start + 600 : nextBranch);
+    expect(branch).not.toContain("target: 'Chrome'");
+  });
+
+  it('the dispatcher is only ever handed payload, so a dropped target opens the default home', () => {
+    const app = fs
+      .readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8')
+      .replace(/\s+/g, ' ');
+    expect(app).toContain('handleExecuteAction(localResult.intent, localResult.actionDetail?.payload)');
+    expect(app).toContain('handleExecuteAction(data.intent, data.actionDetail?.payload)');
+  });
+});
+
 describe('offline browser engine does not claim OS-level launches', () => {
   const engine = fs
     .readFileSync(path.resolve(process.cwd(), 'src/utils/localJarvisEngine.ts'), 'utf8')
