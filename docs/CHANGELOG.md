@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-30 22:13 IST (2026-09-30 16:43 UTC) — work slot 5: credential presence no longer claims a working integration
+
+### Fixed
+- **The Truth-in-Execution Integrations Matrix fabricated success from env-var presence.** `getIntegrationsAuditReport()` (`server_tools.ts`) set `status: 'REAL_WORKING'` for LinkedIn, Telegram, GitHub, Facebook, Instagram and YouTube whenever their credential env vars were visible, with reasons asserting live state the function never observes — "OAuth 2.0 engine authenticated", "24/7 Long-Polling Daemon active", "GitHub REST API authenticated", "YouTube Data API v3 active". The function makes no provider call, so none of those claims were evidence-backed. Status renamed to `CREDENTIALS_PRESENT` and every credential-visible reason rewritten to state only that a credential string is present and no call was made. Summary field `connected` → `credentialsPresent`.
+- Propagated the rename through the API return type (`server_tools.ts`), the shared `IntegrationAuditItem` type (`src/types.ts`), the Autonomous Tools Modal (`src/components/AutonomousToolsModal.tsx` — badge now reads "Credentials Present"), and the spoken `tools_audit` line (`server.ts`). The `email` and `oracle_cloud` rows remain `NOT_AVAILABLE`.
+
+### Tests
+- `src/tests/integrationsAuditTruthfulness.test.ts` — extended to 5 tests. A new guard forces every credential-visible branch (all 9 integration env keys set) and asserts no reason matches `authenticated|verified|active|online|working`, while requiring an explicit non-confirmation phrase (`no … call is made` / `not confirmed` / `not measured`). Negative-validated: restoring the old GitHub reason fails `1 failed | 4 passed`; restoring the fix passes `5/5`. `src/tests/emailConduitTruthfulness.test.ts` updated to the new vocabulary.
+
+### Verified
+- Full suite `118 files / 1593 tests passed` (21.75s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 946016 bytes).
+
+---
+
 ## [Unreleased] - 2026-09-30 21:55 IST (2026-09-30 16:25 UTC) — work slot 3: the `actionExecuted = true` sweep is now pinned
 
 ### Added

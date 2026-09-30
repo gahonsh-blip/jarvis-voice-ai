@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 16:25 UTC (21:55 IST 2026-09-30) — **WORK SLOT 3** of the
+Last cycle: 2026-09-30 16:43 UTC (22:13 IST 2026-09-30) — **WORK SLOT 5** of the
+2026-09-30 window, the 22:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **Truth-in-Execution Integrations Matrix
+credential-presence claim** — a real fake-success surface, fixed and pinned.
+
+**The Integrations Matrix no longer turns env-var presence into a working
+integration.** `getIntegrationsAuditReport()` in `server_tools.ts` reported
+`status: 'REAL_WORKING'` for LinkedIn, Telegram, GitHub, Facebook, Instagram and
+YouTube purely because their credential env vars were visible, and dressed that up
+in reasons asserting state the matrix never observes — "OAuth 2.0 engine
+authenticated", "24/7 Long-Polling Daemon active", "GitHub REST API authenticated",
+"YouTube Data API v3 active". The function makes **no provider call**, so it cannot
+observe any of that. The status vocabulary is now `CREDENTIALS_PRESENT` (summary
+`connected` → `credentialsPresent`), and every credential-visible reason states only
+what is known: a credential string is present, no call was made, so authentication /
+liveness is not confirmed. Updated in lockstep: the API return type
+(`server_tools.ts`), the shared `IntegrationAuditItem` type (`src/types.ts`), the
+Autonomous Tools Modal rendering (`src/components/AutonomousToolsModal.tsx`), and the
+spoken `tools_audit` line (`server.ts`). The pre-existing `email` and `oracle_cloud`
+rows stay `NOT_AVAILABLE`. Guard: `src/tests/integrationsAuditTruthfulness.test.ts`
+now forces every credential-visible branch and asserts no reason matches
+`authenticated|verified|active|online|working`, while requiring an explicit
+non-confirmation phrase. Negative-validated: restoring the old GitHub reason makes it
+fail (`1 failed | 4 passed`); restoring the fix passes `5/5`. Item 13 stays `PARTIAL`
+— this closes one more named surface, but the item also covers tool-level success
+flags beyond this matrix (e.g. the hardcoded `LIVE GPS` label in
+`LocationServicesModal.tsx` and the `verificationStatus`/`finalTruthState` literals in
+`server.ts`), which remain open.
+
+Last cycle (previous): 2026-09-30 16:25 UTC (21:55 IST 2026-09-30) — **WORK SLOT 3** of the
 2026-09-30 window, the 21:35 IST fire (second run). Item 13
 (`Zero-fake-success for all tools`), the **`actionExecuted: true` sweep itself** —
 enumerated and pinned so the flag can no longer be `UNKNOWN`.
