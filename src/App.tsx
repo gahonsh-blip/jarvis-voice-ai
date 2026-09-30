@@ -1835,6 +1835,13 @@ export default function App() {
         onClose={() => setActiveApp(null)}
       />
 
+      <ComputerOperatorModal
+        isOpen={activeApp === 'computer_operator'}
+        onClose={() => setActiveApp(null)}
+        onSendToChat={handleSendCommand}
+        activeLanguage={voiceSettings.language || 'en-US'}
+      />
+
       <PermissionGateway
         isOpen={activeApp === 'permission_gateway'}
         onClose={() => setActiveApp(null)}
