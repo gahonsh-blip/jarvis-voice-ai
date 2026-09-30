@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 18:35 UTC (00:05 IST 2026-10-01) — **WORK SLOT 9** of the
+Last cycle: 2026-09-30 19:05 UTC (00:35 IST 2026-10-01) — **WORK SLOT 10** of the
+2026-09-30 window, the 00:35 IST fire. Item 13 (`Zero-fake-success for all tools`)
+was re-checked and found already complete on the paths reachable without a host
+session (the server tool path routes every result through `toolActionExecuted`,
+and every remaining offline-engine `actionExecuted: true` site maps to a real
+view handler in `src/App.tsx`). No unproven success claim was found to fix, so
+the slot advanced **Item 54 (Production Hardening) — credential redaction** with
+a genuine, verified bug hunt.
+
+**A live probe found eight provider token families that passed through
+`redactSecrets()` byte-for-byte.** `src/utils/computerOperator/credentialRedactor.ts`
+covered OpenAI/Anthropic/Google/GitHub/Telegram/AWS/Discord/GitLab/DigitalOcean/
+GOCSPX keys but not the providers this project actually integrates with: Groq
+(`gsk_`), Perplexity (`pplx-`), Notion (`ntn_` and legacy `secret_`), Shopify
+(`shpat_`/`shpss_`), Linear (`lin_api_`), Slack incoming-webhook URLs, Azure
+Storage `AccountKey=`, Firebase browser keys (`AIza…` without the `Sy` infix,
+which the existing Google pattern did not match) and Resend (`re_`). The redactor
+is wired into the computer-operator planner, action verifier, engine and screen
+interpreter, so a key visible on screen or in a task summary would have been
+surfaced unredacted. Added pattern branches 23–31 and 11 regression tests in
+`src/tests/credentialRedactor.test.ts`. **Negative-validated:** the 11 new tests
+fail against the previous code (`11 failed | 24 passed`) and pass after the fix
+(`35 passed`). Gates observed: lint (`tsc --noEmit`) exit 0; targeted file 35/35;
+full suite **118 files / 1621 tests passed**; build exit 0 (`dist/server.cjs`
+952094 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 remains `PARTIAL` — no advanceable slice was found this slot; Item 54
+remains `PARTIAL` — one more real leak class closed, the provider list is not
+provably exhaustive.
+
+Last cycle (previous): 2026-09-30 18:35 UTC (00:05 IST 2026-10-01) — **WORK SLOT 9** of the
 2026-09-30 window, the 00:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
 the **search-dispatch URL** and the **per-task safe-retry budget**.
 

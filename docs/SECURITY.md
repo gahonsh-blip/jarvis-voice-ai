@@ -203,6 +203,33 @@ probe. Six of those seven fail against the previous pattern set, and the seventh
 is a guard against over-redaction. Negative-validated: reverting only the source
 fix fails exactly those 6.
 
+A third probe (work slot 10, 2026-10-01 00:35 IST) found eight further families
+`redactSecrets` left untouched — and these are the providers the project actually
+integrates with, so the gap was live rather than theoretical:
+
+- Groq (`gsk_` + long body), Perplexity (`pplx-`), Linear (`lin_api_`),
+  Resend (`re_` + long body) API keys.
+- Notion integration tokens, both current (`ntn_`) and legacy (`secret_`).
+- Shopify access / shared-secret / private-app tokens (`shpat_`, `shpss_`,
+  `shpca_`, `shppa_`).
+- Slack incoming-webhook URLs (`https://hooks.slack.com/services/…`) — the whole
+  URL is the secret, so the `T`/`B` ids are redacted with it.
+- Azure Storage `AccountKey=` values and Firebase browser API keys. Firebase keys
+  carry the same `AIza` marker as Google server keys but not the `Sy` infix, so
+  the existing Google pattern did not match them; a separate branch covers the
+  family.
+
+All are covered by 11 new regression tests, each using the token bare (the form a
+key takes in a screenshot or terminal stream). Negative-validated: the 11 tests
+fail against the previous pattern set (`11 failed | 24 passed`) and pass after the
+fix (`35 passed`). Two over-redaction guards accompany them: an ordinary Slack
+URL (`app.slack.com/client/…`, no embedded secret) and the English `re_` prefix
+are left intact.
+
+The provider list is not provably exhaustive — a future probe may find more — so
+this class of gap is closed one verified family at a time rather than declared
+complete.
+
 `.gitignore` must contain a `.env` line and must be UTF-8. The committed file was
 UTF-16, so git honoured none of it; `git check-ignore .env` confirms the current
 file works.

@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 00:35 IST (2026-09-30 19:05 UTC) — work slot 10: eight more credential families redacted
+
+### Fixed
+- **Eight provider token families passed through `redactSecrets()` byte-for-byte.** `src/utils/computerOperator/credentialRedactor.ts` masked OpenAI/Anthropic/Google/GitHub/Telegram/AWS/Discord/GitLab/DigitalOcean/GOCSPX keys but missed the providers this project actually integrates with: Groq (`gsk_`), Perplexity (`pplx-`), Notion (`ntn_` and legacy `secret_`), Shopify (`shpat_`/`shpss_`), Linear (`lin_api_`), Slack incoming-webhook URLs, Azure Storage `AccountKey=`, Firebase browser keys (`AIza…` without the `Sy` infix the Google pattern required) and Resend (`re_`). The redactor sits on the computer-operator planner, action-verifier, engine and screen-interpreter output paths, so a key shown on screen or in a task summary was surfaced unredacted. Added pattern branches 23–31.
+
+### Tests
+- `src/tests/credentialRedactor.test.ts` — 11 new regression tests (bare-token form, as seen in a screenshot/terminal stream), plus two over-redaction guards (ordinary `app.slack.com` URL, English `re_` prefix). Negative-validated: the 11 new tests fail against the previous code (`11 failed | 24 passed`) and pass after the fix (`35 passed`).
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; `src/tests/credentialRedactor.test.ts` 35/35.
+
+---
+
 ## [Unreleased] - 2026-10-01 00:05 IST (2026-09-30 18:35 UTC) — work slot 9: searches dispatch truthfully; every task gets its own retry budget
 
 ### Fixed
