@@ -4,7 +4,28 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 19:05 UTC (00:35 IST 2026-10-01) — **WORK SLOT 10** of the
+Last cycle: 2026-09-30 19:35 UTC (01:05 IST 2026-10-01) — **WORK SLOT 11** of the
+2026-09-30 window, the 01:05 IST fire. Continued **Item 54 (Production Hardening)
+— credential redaction** with a second live probe of `redactSecrets()`.
+
+**A probe of four more provider-token families that this app itself carries found
+all four passing through the redactor byte-for-byte.** `credentialRedactor.ts`
+covered the providers added in slot 10 (Groq, Perplexity, Notion, Shopify, Linear,
+Slack webhooks, Azure, Firebase, Resend), but not Meta/Facebook Graph access
+tokens (`FACEBOOK_PAGE_ACCESS_TOKEN` / `INSTAGRAM_ACCESS_TOKEN`, `EAA` + body),
+Google OAuth refresh tokens (`YOUTUBE_REFRESH_TOKEN` / Gmail / Calendar, `1//` +
+body), Google OAuth authorization codes (`4/0A` + body) and Google OAuth access
+tokens (`ya29.` + body). A screen capture, task summary or audit log exposing any
+of these would have surfaced it unredacted. Added pattern branches 32–35 and 4
+regression tests (plus a non-token preservation assertion) in
+`src/tests/credentialRedactor.test.ts`. **Negative-validated:** stashing only the
+engine change fails exactly the four new cases (`4 failed | 35 passed`); restored
+→ `39 passed`. Gates observed: lint (`tsc --noEmit`) exit 0; targeted file 39/39;
+full suite and build results recorded in the report. E2E: NOT RUN. Deploy:
+NOT_CONFIGURED. Item 54 remains `PARTIAL` — another real leak class closed, the
+provider list is still not provably exhaustive.
+
+Last cycle (previous): 2026-09-30 19:05 UTC (00:35 IST 2026-10-01) — **WORK SLOT 10** of the
 2026-09-30 window, the 00:35 IST fire. Item 13 (`Zero-fake-success for all tools`)
 was re-checked and found already complete on the paths reachable without a host
 session (the server tool path routes every result through `toolActionExecuted`,
@@ -4471,6 +4492,15 @@ engine fix fails the new block (`3 failed | 20 passed`); restored → 23/23.
 ---
 
 ## Known limitations
+
+- **2026-09-30 19:35 UTC (01:05 IST 2026-10-01) — item 54, four more token
+  families; the list is still not provably exhaustive.** Meta (`EAA…`), Google
+  OAuth refresh (`1//`), authorization-code (`4/0A`) and access (`ya29.`) tokens
+  are now redacted, but item 54 remains `PARTIAL` — the redactor is a pattern
+  list, not a proof of absence, and new providers will keep appearing. The
+  patterns are matched against synthetic fixtures; no real leaked credential was
+  present in this sandbox. Live E2E (a real screen capture or log line carrying a
+  live key) is NOT RUN — no display session and no live provider credentials here.
 
 - **2026-09-30 18:07 UTC — no new backlog item advanced; item 13 slice only.**
   Item 13 (`Zero-fake-success for all tools`) stays `PARTIAL`. This slot closed
