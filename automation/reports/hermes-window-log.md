@@ -8291,7 +8291,7 @@ Security: `git check-ignore -v .env` → ignored (.gitignore:4). `git status` cl
 Documentation: docs/COMPLETION_STATUS.md (last-cycle + known-limitations),
                automation/reports/hermes-window-log.md
 Branch:  feature/hermes-full-completion
-Commit:  1ae65c1 (fix) then 3404f16 (docs)
+Commit:  1ae65c1 (fix) · 3404f16 (docs) · 5a690f9 (report) · f1be1d5 (report correction)
 Push:    succeeded → origin/feature/hermes-full-completion
 
 PR:         NONE OPEN — GitHub API query returned 0 open PRs for this head.
@@ -8315,8 +8315,8 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में redactor की जाँच में चार और क्रेडेंशियल परिवार (Meta, Google OAuth
-  refresh/code/access) बिना redact हुए मिले — पैटर्न जोड़े, नए टेस्ट पास, पूरी सूट
-  118 फ़ाइल / 1625 टेस्ट पास।
+  refresh/code/access) बिना redact हुए मिले — पैटर्न जोड़े। इस स्लॉट में टेस्ट नहीं
+  चलाए गए (कोई सोर्स बदलाव नहीं); पिछले स्लॉट में 118 फ़ाइल / 1625 टेस्ट पास थे।
 
 ---
 
@@ -8359,7 +8359,7 @@ Security: `git check-ignore -v .env` → ignored (.gitignore:4). `git status` cl
 Documentation: docs/COMPLETION_STATUS.md (last-cycle + known-limitations),
                automation/reports/hermes-window-log.md
 Branch:  feature/hermes-full-completion
-Commit:  1ae65c1 (fix) then 3404f16 (docs)
+Commit:  1ae65c1 (fix) · 3404f16 (docs) · 5a690f9 (report) · f1be1d5 (report correction)
 Push:    succeeded → origin/feature/hermes-full-completion
 
 PR:         NONE OPEN — GitHub API query returned 0 open PRs for this head.
@@ -8383,5 +8383,5 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में redactor की जाँच में चार और क्रेडेंशियल परिवार (Meta, Google OAuth
-  refresh/code/access) बिना redact हुए मिले — पैटर्न जोड़े, नए टेस्ट पास, पूरी सूट
-  118 फ़ाइल / 1625 टेस्ट पास।
+  refresh/code/access) बिना redact हुए मिले — पैटर्न जोड़े। इस स्लॉट में टेस्ट नहीं
+  चलाए गए (कोई सोर्स बदलाव नहीं); पिछले स्लॉट में 118 फ़ाइल / 1625 टेस्ट पास थे।
