@@ -7803,3 +7803,87 @@ Next Slot:
   (निगेटिव-वैलिडेटेड), पूरी टेस्ट सूट (1583 टेस्ट), lint और build पास हुए, लाइव E2E में चारों
   ब्राउज़र-ओपन इंटेंट सही URL देते पाए गए, और यह पता चला कि PR #4 किसी इंसान द्वारा 2026-09-28
   को merge हो चुका है — इसलिए नया PR खोलने के लिए मानव निर्णय चाहिए।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:35
+Window date: 2026-09-30   Window slots completed so far: 2 (this slot = #2)
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL. Finished the launch-case field fix
+  that slot 1 started. The offline engine was fixed in slot 1, but the live
+  `/api/chat` cases `operate_vscode`, `operate_browser`, `operate_terminal` still
+  emitted a top-level `actionDetail.target` the dispatcher drops
+  (`handleExecuteAction(intent, actionDetail?.payload)`). Removed the dead field from
+  all three (`server.ts` ~8625/8632/8639). Evidence: `server.ts`;
+  `src/tests/launchDispatchTruth.test.ts` (3 new guards, 18 passed targeted);
+  live E2E `open browser|vscode|terminal` → `actionDetail.keys=['payload','title','type']`,
+  no dropped `target`.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the `actionExecuted: true` sweep is still not
+  proven complete across every tool path. Remains PARTIAL.
+
+Remaining:
+- #13 is the gate for the rest of the mandated order; the Android Bridge / Real
+  Android E2E / Real Screenshot / live Computer Operator items are blocked on hardware.
+  Items 14+ (GitHub/Social/Communication/AI-Memory/Autonomous/Voice/Wake Word/
+  Production Hardening) all hang off item 13.
+
+Bugs Found:
+- The live `/api/chat` launch cases emitted a top-level `actionDetail.target` that the
+  app dispatcher never reads — the same class of bug slot 1 fixed in the offline
+  engine, but still present on the production server path. Found by re-probing the
+  built server after the slot-1 fix (the offline fix alone did not cover the live path).
+
+Bugs Fixed:
+- Removed the dead top-level `target` from the three server launch cases.
+  Verification: negative validation — restoring the top-level `target` to
+  `operate_browser` fails the new guard (`1 failed | 17 passed`); restored → 18/18.
+  Live re-probe confirms the field is gone in all three cases.
+
+Tests:    1588 passed / 117 files (full `npx vitest run`, 21.36s).
+          Targeted `launchDispatchTruth.test.ts`: 18 passed (was 15).
+Lint:     PASS — `npm run lint` (`tsc --noEmit`) exit 0.
+Build:    PASS — `npm run build` exit 0; `dist/server.cjs` 945471 bytes.
+E2E:      RUN — `node dist/server.cjs` on PORT 4189; `open browser`, `open vscode`,
+          `open terminal` each returned `actionExecuted false` with
+          `actionDetail.keys=['payload','title','type']` (no dropped `target`).
+Security: `.env` ignored (`.gitignore:4`); `git status --short` clean; no token/key in
+          the diff-vs-`main` scan; no `node_modules`/`dist` staged. Runtime
+          `jarvis_memory.json` churn from the probe was reverted.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md,
+               automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  01d6ce9 (source fix) + docs commit (this report)
+Push:    SUCCEEDED — `8ad55e3..01d6ce9` to origin/feature/hermes-full-completion
+
+PR:         NONE open for this branch. PR #4 (this branch) was merged by a human on
+            2026-09-28T05:13:29Z (GitHub API `merged_at` non-null). PR #3 is an
+            unrelated CI branch. A new PR to `main` needs a human decision (Phase F).
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this
+            environment; the verified artifact (`dist/server.cjs`) is the deployment unit.
+
+Blocked:
+- Real Android E2E — requires a physical Android device + ADB.
+- Real Screenshot — requires a display session / real device.
+- Live Computer Operator screen observation — requires a desktop/display session.
+- Real Android Bridge — requires hardware.
+
+Human Approval Required:
+- Decide whether to open a fresh PR to `main` for `feature/hermes-full-completion`
+  (PR #4 already merged; new work has accumulated since).
+
+Next Slot:
+- Continue item 13: sweep remaining tool paths for `actionExecuted` truthfulness and
+  any other field-shape mismatches between server `actionDetail` and the app
+  dispatcher, since the last two slots both found real instances of that class.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में लाइव `/api/chat` के तीन लॉन्च केस (operate_vscode/browser/terminal) से
+  वह डेड टॉप-लेवल `target` हटाया जो डिस्पैचर कभी पढ़ता ही नहीं था; 3 नए गार्ड टेस्ट जोड़े
+  (18 पास, निगेटिव-वैलिडेटेड), पूरी सूट 1588 टेस्ट पास, lint और build पास, लाइव E2E में
+  पुष्टि हुई। आइटम 13 अभी भी PARTIAL है।

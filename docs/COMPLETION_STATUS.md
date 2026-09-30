@@ -5,9 +5,27 @@ Authoritative status of the 60-item backlog. A feature is only marked
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
 Last cycle: 2026-09-30 16:10 UTC (21:35 IST 2026-09-30) — **WORK SLOT 2** of the
-2026-09-30 window, the 21:35 IST fire. No backlog item was advanced: every unblocked
-item still hangs off item 13's unproven `actionExecuted` sweep, so the slot was spent
-on repository hygiene plus a full independent re-verification of the merged tree.
+2026-09-30 window, the 21:35 IST fire. Item 13 (`Zero-fake-success for all tools`),
+completing the browser/editor/terminal **launch-case field** fix that slot 1 started.
+
+**The offline engine was fixed but the live `/api/chat` path still emitted the dead
+field.** Slot 1 fixed `localJarvisEngine.ts` so the destination rides inside
+`actionDetail.payload` — the only place the app dispatcher reads it
+(`handleExecuteAction(intent, actionDetail?.payload)` → launch cases read
+`payload?.target`). The live server `operate_vscode`, `operate_browser` and
+`operate_terminal` cases still wrote a **top-level** `actionDetail.target` that the
+dispatcher drops. Confirmed live against the built server before the fix: each of
+`open browser`, `open vscode`, `open terminal` returned
+`actionDetail.keys = ['payload','title','type']` after the fix, and the pre-fix shape
+carried the dropped `target`.
+
+Fixed: removed the dead top-level `target` from all three server launch cases
+(`server.ts` ~8625/8632/8639). The destination name already travels in
+`actionDetail.title`, and the app's `operate_vscode/operate_terminal` case only needs
+the intent to route to `computer_operator`. Added three source-text guards to
+`launchDispatchTruth.test.ts` asserting each server launch case carries no top-level
+`target` the dispatcher would drop. Item 13 stays `PARTIAL` — this closes one more
+real violation; the `actionExecuted: true` sweep is not proven complete.
 
 **Window-state record was stale.** The automation branch `automation/hermes-state`
 still described PR #4 as "open, awaiting human merge approval". PR #4 was in fact
@@ -21,16 +39,23 @@ was not covered by `.gitignore`. Added `.vite/` and pinned it in the existing
 `.gitignore` line fails the guard (`1 failed | 1 passed`), restoring it passes
 (`2 passed`).
 
-Evidence: `.gitignore`, `src/tests/gitignoreHygiene.test.ts` (commit `b5e8af8`).
-Full suite `117 files / 1583 tests passed` (20.99s); lint (`tsc --noEmit`) exit 0;
-build exit 0 (`dist/server.cjs` 945226 bytes, source map 1.7mb, only the chunk-size
+Evidence: `src/tests/launchDispatchTruth.test.ts` — 18 passed (targeted; was 15).
+Full suite `117 files / 1588 tests passed` (21.36s); lint (`tsc --noEmit`) exit 0;
+build exit 0 (`dist/server.cjs` 945471 bytes, source map 1.7mb, only the chunk-size
 warning). Live E2E against the fresh production build (`node dist/server.cjs`,
-PORT 4177): `/api/health` → `{"status":"online"}`; `open youtube` →
-`payload.target=https://www.youtube.com`; `open gmail` → `https://mail.google.com`;
-`open chatgpt` → `https://chatgpt.com`; `open google` → `https://www.google.com`.
+PORT 4189): `open browser` → intent `operate_browser`, `actionExecuted false`,
+`actionDetail.keys=['payload','title','type']`, `title="Launch Not Executed (no
+display session)"`; `open vscode` → same shape, intent `operate_vscode`; `open
+terminal` → same shape, intent `operate_terminal`. No `target` key in any case — the
+dropped field is gone. Negative-validated: restoring the top-level `target` to the
+`operate_browser` case fails the new guard (`1 failed | 17 passed`), then restored →
+18/18.
 Security: `.env` ignored (`.gitignore:4`), `git status --short` clean, no token/key in
 the diff-vs-`main` scan, no `node_modules`/`dist` staged. Item 13 remains `PARTIAL` —
 the `actionExecuted: true` sweep is still not proven complete.
+
+Window hygiene: the `jarvis_memory.json` runtime state touched by the live probe was
+reverted, so the diff carries only intended source/tests/docs.
 
 Last cycle (previous): 2026-09-30 15:51 UTC (21:05 IST 2026-09-30) — **WORK SLOT 1** of the
 2026-09-30 window, the 21:05 IST fire. Item 13 (`Zero-fake-success for all tools`),

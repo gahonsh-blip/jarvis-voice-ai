@@ -4,16 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-09-30 21:35 IST (2026-09-30 16:10 UTC) — work slot 2: repo hygiene, state correction, independent re-verification
+## [Unreleased] - 2026-09-30 21:35 IST (2026-09-30 16:10 UTC) — work slot 2: the live launch cases still emitted the dead field
 
 ### Fixed
-- **Untracked Vite cache.** `.vite/` was not covered by `.gitignore`. Added it and pinned the entry in the existing `gitignoreHygiene.test.ts` required-line list.
+- **The launch-case field fix only reached the offline engine.** Slot 1 fixed `localJarvisEngine.ts`, but the live `/api/chat` cases `operate_vscode`, `operate_browser` and `operate_terminal` still wrote a top-level `actionDetail.target` that the dispatcher drops (`handleExecuteAction(intent, actionDetail?.payload)`). Removed the dead `target` from all three (`server.ts` ~8625/8632/8639). The destination name already travels in `actionDetail.title`, and the app's launch case routes on the intent alone.
 
-### Documentation
-- `docs/COMPLETION_STATUS.md`: corrected the stale window state — PR #4 was **merged by a human** on 2026-09-28T05:13:29Z (GitHub API `merged: true`); this automation did not merge it. Recorded the full independent re-verification of the merged tree.
+### Tests
+- `src/tests/launchDispatchTruth.test.ts` — now 18 tests (was 15). Three source-text guards assert each server launch case carries no top-level `target` the dispatcher would drop. Negative-validated by restoring the top-level `target` to `operate_browser` (`1 failed | 17 passed`), restored → 18/18.
 
 ### Verified
-- Full suite `117 files / 1583 tests passed` (20.99s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 945226 bytes). Live E2E against the fresh production build on PORT 4177: `/api/health` → online; the four browser-open intents still emit their destination in `payload.target`.
+- Full suite `117 files / 1588 tests passed` (21.36s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 945471 bytes). Live E2E against the fresh production build on PORT 4189: `open browser`/`open vscode`/`open terminal` each return `actionExecuted false` with `actionDetail.keys=['payload','title','type']` — no dropped `target`.
+- `jarvis_memory.json` runtime churn from the live probe was reverted; the diff carries only intended source/tests/docs.
 
 ---
 
