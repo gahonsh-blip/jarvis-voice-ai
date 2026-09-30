@@ -188,3 +188,47 @@ describe('memory sync through a real server', () => {
     expect(contents).toContain('server version');
   });
 });
+
+describe('client-asserted counters through a real server', () => {
+  // Regression: POST /api/memory used to honor a caller-supplied
+  // `statUpdate.incrementAction`/`incrementCommand`, letting any client raise the
+  // user-visible "Autonomous Actions Executed" figure without the server
+  // observing any work.
+  it('does not advance the user-visible counters on a caller request', async () => {
+    const before = await (await fetch(`${base()}/api/memory`)).json();
+
+    const res = await fetch(`${base()}/api/memory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ statUpdate: { incrementAction: true, incrementCommand: true } }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body.memory.stats.actionsExecuted).toBe(before.stats.actionsExecuted);
+    expect(body.memory.stats.totalCommands).toBe(before.stats.totalCommands);
+
+    const after = await (await fetch(`${base()}/api/memory`)).json();
+    expect(after.stats.actionsExecuted).toBe(before.stats.actionsExecuted);
+    expect(after.stats.totalCommands).toBe(before.stats.totalCommands);
+  });
+
+  it('records the unapplied counter request instead of crediting it', async () => {
+    const res = await fetch(`${base()}/api/memory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ statUpdate: { incrementAction: true } }),
+    });
+    const body = await res.json();
+
+    const titles = body.memory.notes.map((n: any) => n.title);
+    expect(titles).toContain('Counter request not applied');
+
+    // Clean up so the inert marker does not leak into later assertions.
+    await fetch(`${base()}/api/memory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: [] }),
+    });
+  });
+});

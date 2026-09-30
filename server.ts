@@ -7914,9 +7914,25 @@ app.post('/api/memory', (req: Request, res: Response) => {
     if (customKeyValues !== undefined) {
       memoryState.customKeyValues = { ...memoryState.customKeyValues, ...customKeyValues };
     }
-    if (statUpdate) {
-      if (statUpdate.incrementCommand) memoryState.stats.totalCommands += 1;
-      if (statUpdate.incrementAction) memoryState.stats.actionsExecuted += 1;
+    // The "Autonomous Actions Executed" figure is user-visible (MemoryModal) and
+    // must only advance when the server itself observed work. A caller-supplied
+    // counter request used to bump it, so a POST with no command or action could
+    // raise the number. Record such requests as inert instead of crediting them.
+    const requestedStats = [];
+    if (statUpdate?.incrementCommand) requestedStats.push('incrementCommand');
+    if (statUpdate?.incrementAction) requestedStats.push('incrementAction');
+    if (requestedStats.length > 0) {
+      memoryState.notes = [
+        ...memoryState.notes,
+        {
+          id: `stat-assert-${Date.now()}`,
+          title: 'Counter request not applied',
+          content: `A caller asked to increment ${requestedStats.join(', ')} via POST /api/memory. The server did not observe that work, so no counter was advanced.`,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
+    if (name !== undefined || notes !== undefined || customKeyValues !== undefined || statUpdate) {
       memoryState.stats.lastActive = new Date().toISOString();
     }
 
