@@ -8079,8 +8079,7 @@ Those counters are the user-visible "Autonomous Actions Executed" / "Total Voice
 Text Commands" figures in `src/components/MemoryModal.tsx`, so any client could
 raise them without the server observing a command or an action. No in-repo caller
 ever sends `statUpdate`. The handler now ignores the request and appends an inert
-`Counter request not applied` note; `lastActive` advances only on a real field
-change.
+`Counter request not applied` note.
 
 New suite in `src/tests/memoryPersistence.e2e.test.ts` drives the **real HTTP
 route** against a spawned server: both counters stay flat across the POST, and the

@@ -19,7 +19,7 @@ any POST carrying the field raised them without the server observing a command o
 action. No in-repo caller (App.tsx, MemoryModal) ever sends `statUpdate`, so the
 field was a pure fabricated-success surface. The server now ignores those requests
 and appends an inert note (`Counter request not applied`) stating that no counter was
-advanced; `lastActive` only moves when a real field changed. Guard:
+advanced. Guard:
 `src/tests/memoryPersistence.e2e.test.ts` gains a `client-asserted counters` suite
 (2 tests) driving the **real HTTP route** against a spawned server — asserting both
 counters stay flat before/after (fresh GET) and that the request is recorded rather
