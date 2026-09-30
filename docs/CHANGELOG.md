@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-30 21:55 IST (2026-09-30 16:25 UTC) — work slot 3: the `actionExecuted = true` sweep is now pinned
+
+### Added
+- **The item-13 sweep was `UNKNOWN`; it is now enumerated and guarded.** Every literal `actionExecuted = true;` in `server.ts` was paired with its enclosing intent case and audited by reading the body: **21 sites, 21 distinct intents**. Nineteen are routed by `App.tsx` to a real in-app view; the two that open no view justify the flag with real work — `find_document` counts only when `realFsSearch()` returned matches, and `set_name` only after `memoryState.name = verdict.name` + `persistMemory()`. No site is a bare unconditional assignment.
+
+### Tests
+- `src/tests/actionExecutedSweepAudit.test.ts` — new, 4 tests. Asserts the full literal-site set matches the audited map, that every view-backed intent is actually routed by the dispatcher, that the two non-view intents contain their real-work calls, and that no case credits execution without a routed view or observable work. Negative-validated: injecting an un-audited `actionExecuted = true;` case fails `2 failed | 2 passed`; removed → 4/4.
+
+### Verified
+- Full suite `118 files / 1592 tests passed` (24.00s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 945471 bytes). Rebased onto the remote tip (`73f32ad`) before pushing; the audit was re-run after the rebase (4/4).
+
+---
+
 ## [Unreleased] - 2026-09-30 21:35 IST (2026-09-30 16:10 UTC) — work slot 2: the live launch cases still emitted the dead field
 
 ### Fixed
