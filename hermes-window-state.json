@@ -1,21 +1,19 @@
 {
   "window_date": "2026-09-30",
   "window_started_at": "2026-09-30T15:35:00Z",
-  "last_slot_at": "2026-09-30T17:45:00Z",
-  "slots_completed": 7,
+  "last_slot_at": "2026-09-30T18:18:16Z",
+  "slots_completed": 8,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "de9be98",
+  "last_commit": "727102d453a52dc6dd32c7ff5db41f9247c47b84",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    "Real Android E2E",
-    "Real Screenshot",
-    "Live Computer Operator screen observation",
-    "Real Android Bridge"
+    "real-android-e2e (hardware)",
+    "wake-word (hardware)",
+    "computer-operator-host-execution (host session)"
   ],
-  "last_report_path": "/tmp/hermes-window-report.md",
-  "state_note": "WORK SLOT 7 (23:05 IST fire, seventh completed slot). Item 13 PARTIAL: closed the POST /api/memory client-asserted counter fake-success. server.ts honored statUpdate.incrementAction/incrementCommand and ran memoryState.stats.actionsExecuted += 1 / totalCommands += 1 unconditionally; those counters are the user-visible 'Autonomous Actions Executed' / 'Total Voice / Text Commands' figures in src/components/MemoryModal.tsx, so any client could raise them without observed work. No in-repo caller ever sent statUpdate. Server now ignores the request and appends an inert 'Counter request not applied' note; lastActive advances only on a real field change. New suite in src/tests/memoryPersistence.e2e.test.ts drives the real HTTP route (2 tests); negative-validated (revert server branch -> 2 failed | 5 passed; fix -> 7/7). Full suite 118 files / 1596 tests passed; lint exit 0; build exit 0 (dist/server.cjs 946569). Commits: 0a5d728 (fix+test), ed294f3 (docs). Still open for item 13: computer-operator actionExecuted verdicts and other tool-level success flags."
+  "last_report_path": "/tmp/hermes-window-report.md"
 }
