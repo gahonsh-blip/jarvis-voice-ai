@@ -109,6 +109,16 @@ describe('DashboardMapSnippet does not assert an active fix or measured accuracy
     expect(src).toMatch(/source\??:\s*CoordsSource\s*\|\s*null/);
     expect(src).toContain('type CoordsSource');
   });
+
+  it('only prints CURRENT FIX for a live reading, never for a simulated point', () => {
+    // The radar pin label fell back to "CURRENT FIX" whenever no address was
+    // resolved, even for a preset/manual/cached coordinate, so a simulated
+    // point read as a live device fix.
+    expect(src).toContain('CURRENT FIX');
+    const idx = src.indexOf('CURRENT FIX');
+    const guard = src.slice(Math.max(0, idx - 200), idx);
+    expect(guard).toContain("source === 'live'");
+  });
 });
 
 describe('App surfaces the real coordinate provenance to the dashboard snippet', () => {
