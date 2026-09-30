@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 15:51 UTC (21:05 IST 2026-09-30) — **WORK SLOT 1** of the
+Last cycle: 2026-09-30 16:10 UTC (21:35 IST 2026-09-30) — **WORK SLOT 2** of the
+2026-09-30 window, the 21:35 IST fire. No backlog item was advanced: every unblocked
+item still hangs off item 13's unproven `actionExecuted` sweep, so the slot was spent
+on repository hygiene plus a full independent re-verification of the merged tree.
+
+**Window-state record was stale.** The automation branch `automation/hermes-state`
+still described PR #4 as "open, awaiting human merge approval". PR #4 was in fact
+**merged by a human on 2026-09-28T05:13:29Z** (GitHub API reads `merged: true`) — the
+outcome the owner's rule requires. This automation did not merge it and never touches
+`main`. The state file is corrected this slot; no branch was rewritten.
+
+**Untracked `.vite/` cache.** Vite's dependency cache directory appeared untracked and
+was not covered by `.gitignore`. Added `.vite/` and pinned it in the existing
+`gitignoreHygiene.test.ts` required-line list. Negative-validated: deleting the
+`.gitignore` line fails the guard (`1 failed | 1 passed`), restoring it passes
+(`2 passed`).
+
+Evidence: `.gitignore`, `src/tests/gitignoreHygiene.test.ts` (commit `b5e8af8`).
+Full suite `117 files / 1583 tests passed` (20.99s); lint (`tsc --noEmit`) exit 0;
+build exit 0 (`dist/server.cjs` 945226 bytes, source map 1.7mb, only the chunk-size
+warning). Live E2E against the fresh production build (`node dist/server.cjs`,
+PORT 4177): `/api/health` → `{"status":"online"}`; `open youtube` →
+`payload.target=https://www.youtube.com`; `open gmail` → `https://mail.google.com`;
+`open chatgpt` → `https://chatgpt.com`; `open google` → `https://www.google.com`.
+Security: `.env` ignored (`.gitignore:4`), `git status --short` clean, no token/key in
+the diff-vs-`main` scan, no `node_modules`/`dist` staged. Item 13 remains `PARTIAL` —
+the `actionExecuted: true` sweep is still not proven complete.
+
+Last cycle (previous): 2026-09-30 15:51 UTC (21:05 IST 2026-09-30) — **WORK SLOT 1** of the
 2026-09-30 window, the 21:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
 the browser-open destination that was emitted in the wrong field (commit `b473722`).
 

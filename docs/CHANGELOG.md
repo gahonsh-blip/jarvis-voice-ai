@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-30 21:35 IST (2026-09-30 16:10 UTC) — work slot 2: repo hygiene, state correction, independent re-verification
+
+### Fixed
+- **Untracked Vite cache.** `.vite/` was not covered by `.gitignore`. Added it and pinned the entry in the existing `gitignoreHygiene.test.ts` required-line list.
+
+### Documentation
+- `docs/COMPLETION_STATUS.md`: corrected the stale window state — PR #4 was **merged by a human** on 2026-09-28T05:13:29Z (GitHub API `merged: true`); this automation did not merge it. Recorded the full independent re-verification of the merged tree.
+
+### Verified
+- Full suite `117 files / 1583 tests passed` (20.99s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 945226 bytes). Live E2E against the fresh production build on PORT 4177: `/api/health` → online; the four browser-open intents still emit their destination in `payload.target`.
+
+---
+
 ## [Unreleased] - 2026-09-30 21:05 IST (2026-09-30 15:51 UTC) — work slot 1: the browser destination was emitted in the wrong field
 
 ### Fixed
