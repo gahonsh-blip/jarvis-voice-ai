@@ -1,12 +1,12 @@
 {
   "window_date": "2026-09-30",
   "window_started_at": "2026-09-30T15:35:00Z",
-  "last_slot_at": "2026-09-30T17:05:00Z",
-  "slots_completed": 6,
+  "last_slot_at": "2026-09-30T17:45:00Z",
+  "slots_completed": 7,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "f68c6c4",
+  "last_commit": "ed294f3",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -17,5 +17,5 @@
     "Real Android Bridge"
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "state_note": "WORK SLOT 6 (22:35 IST fire, sixth completed slot of the 2026-09-30 window). Item 13 PARTIAL: closed the dashboard radar pin fake-success. DashboardMapSnippet.tsx labelled its pin `isResolvedAddress(address) ? address?.city : 'CURRENT FIX'`, so a preset/manual/cache coordinate with no resolved address printed 'CURRENT FIX' (a live-fix claim) in the same card whose PRECISION field and provenance badge correctly read 'N/A - no GPS fix' / 'PRESET ONLY'. Label now gated on source === 'live'; every other provenance prints 'NO FIX'. New test in src/tests/locationServicesTruth.test.ts; negative-validated (revert component -> 1 failed | 16 passed; restore fix -> 17/17). Full suite 118 files / 1594 tests passed; lint exit 0; build exit 0 (dist/server.cjs 946016). Commits: 36c5466 (fix+test), f68c6c4 (docs+report). Still open for item 13: server.ts memoryState.stats.actionsExecuted counter and computer-operator actionExecuted verdicts. No PR open for post-merge commits; PR #4 was merged by a human 2026-09-28T05:13:29Z. Human decision required on a new PR."
+  "state_note": "WORK SLOT 7 (23:05 IST fire, seventh completed slot). Item 13 PARTIAL: closed the POST /api/memory client-asserted counter fake-success. server.ts honored statUpdate.incrementAction/incrementCommand and ran memoryState.stats.actionsExecuted += 1 / totalCommands += 1 unconditionally; those counters are the user-visible 'Autonomous Actions Executed' / 'Total Voice / Text Commands' figures in src/components/MemoryModal.tsx, so any client could raise them without observed work. No in-repo caller ever sent statUpdate. Server now ignores the request and appends an inert 'Counter request not applied' note; lastActive advances only on a real field change. New suite in src/tests/memoryPersistence.e2e.test.ts drives the real HTTP route (2 tests); negative-validated (revert server branch -> 2 failed | 5 passed; fix -> 7/7). Full suite 118 files / 1596 tests passed; lint exit 0; build exit 0 (dist/server.cjs 946569). Commits: 0a5d728 (fix+test), ed294f3 (docs). Still open for item 13: computer-operator actionExecuted verdicts and other tool-level success flags."
 }
