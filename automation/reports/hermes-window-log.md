@@ -8385,3 +8385,83 @@ Next Slot:
 - इस स्लॉट में redactor की जाँच में चार और क्रेडेंशियल परिवार (Meta, Google OAuth
   refresh/code/access) बिना redact हुए मिले — पैटर्न जोड़े। इस स्लॉट में टेस्ट नहीं
   चलाए गए (कोई सोर्स बदलाव नहीं); पिछले स्लॉट में 118 फ़ाइल / 1625 टेस्ट पास थे।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:35
+Window date: 2026-09-30 (window spans midnight; this fire is 2026-10-01 01:35 IST)
+Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools (offline Android message-reply decline) —
+  `src/utils/localJarvisEngine.ts` MESSAGE reject branch no longer returns
+  `actionExecuted: true` for declining a reply. New verdict
+  `offlineAndroidMessageRejectVerdict(connected)` in
+  `src/utils/computerOperator/offlineCallTruth.ts` returns `actionExecuted:false`,
+  title `Message Reply Declined Locally (nothing was sent)`, honest EN/HI/Hinglish
+  reply; branch counter routes through `countAction(updatedMemory,
+  rejectVerdict.actionExecuted)`; `reject_message` added to `IntentCategory`
+  (`src/types.ts`). Test: `src/tests/androidInquiryTruth.test.ts` — 2 files / 30
+  tests passed (observed). Item stays PARTIAL (item spans more tool surfaces).
+
+In Progress:
+- #13 Zero-fake-success for all tools — remaining unaudited branches (`UNKNOWN`).
+
+Remaining:
+- #14..#60 per docs/COMPLETION_STATUS.md; next unblocked item.
+- #54 Production Hardening (credential redaction) remains PARTIAL — continues.
+
+Bugs Found:
+- (this slot) The offline MESSAGE reject branch credited a decline as executed
+  work and incremented the "Autonomous Actions Executed" counter, with detail
+  `{ type: 'open_notepad', title: 'Message Dismissed' }`; the call-reject twin was
+  already honest (`false`). Also surfaced a latent `TS2322`: the branch emitted
+  intent `'reject_message'`, absent from `IntentCategory` — fixed in `src/types.ts`.
+
+Bugs Fixed:
+- (this slot) Declining an Android message reply is no longer counted/narrated as
+  executed. Verified by `androidInquiryTruth.test.ts` (asserts no
+  `answer_call`/`open_notepad` intent, never `actionExecuted: true`, pins
+  title/reply). Negative validation done earlier by temporarily flipping the
+  verdict; with the fix the full suite is green.
+
+Tests:    118 files / 1627 tests passed (22.35 s) — observed this run via `npx vitest run`
+Lint:     `tsc --noEmit` exit 0 — observed this run
+Build:    exit 0; `dist/server.cjs` 955360 bytes — observed this run
+E2E:      NOT RUN
+Security: NOT RUN (no security-tooling change this slot); `git status` clean of .env/node_modules/dist
+
+Also fixed in this slot: the local feature-branch push was rejected — the remote
+`feature/hermes-full-completion` was 34 commits ahead of the local base. Unshallowed
+the clone, reset to the real remote branch, and reapplied the fix as a clean commit
+(`3318722`) on top; then pushed. Docs pushed as `8d4c068`.
+
+Documentation: docs/COMPLETION_STATUS.md (header + item 13 row), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  8d4c068 (docs) after 3318722 (fix)
+Push:    succeeded → origin feature/hermes-full-completion
+
+PR:         NONE opened this slot (work slot; PR refresh is the finalization slot's job)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present; the verified build artifact `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- # real-android-e2e — requires physical Android device (hardware)
+- # wake-word — requires microphone hardware
+- # computer-operator-host-execution — requires a host desktop session
+
+Human Approval Required:
+- Any merge to `main` (never automated).
+- Validation of the Android bridge against real hardware.
+
+Next Slot:
+- Continue #13: audit the remaining `actionExecuted: true` / success-flag branches
+  in `localJarvisEngine.ts` and `server.ts` for fake-success, or pick the next
+  unblocked backlog item per the mandated order.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में ऑफ़लाइन Android मैसेज-रिप्लाई को ठुकराने को "executed action"
+  गिनने वाला झूठ बंद किया गया — अब ऐसा करने पर counter नहीं बढ़ता; lint/build हरे,
+  118 फ़ाइल/1627 टेस्ट पास।
