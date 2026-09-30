@@ -8100,3 +8100,35 @@ Still open for item 13: the computer-operator `actionExecuted` verdicts in
 **Main merge:** NOT MERGED — awaiting human approval.
 **Deploy:** NOT_CONFIGURED — no deployment target present.
 
+
+
+---
+
+## 2026-09-30 23:35 IST — WORK SLOT 8 (item 13, Computer Operator retry)
+
+**Fixed a fake-success in the Computer Operator engine's single safe retry.**
+`src/utils/computerOperator/computerOperatorEngine.ts`'s `verification.shouldRetry`
+branch re-executed the action with `await this.executor.executeAction(action);` —
+discarding the result and never re-observing the screen — then fell through to the
+loop tail and the `COMPLETED` summary claiming *"All N step(s) executed and verified
+against the host desktop"*. A retry that failed to execute, or that produced no
+observable change, was reported as a verified step. The retry is now re-executed
+**and re-verified**: a failed re-execution ends the task `FAILED` with the executor
+error, an unverified retry ends it `FAILED` with the verification message, and only a
+confirmed change adopts the retry as the step result.
+
+Three new cases in `src/tests/computerOperatorTaskStatus.test.ts` (file now 9 tests):
+unverified-retry -> `FAILED` (`calls() >= 2`), verified-retry -> `COMPLETED` with the
+host-backed claim, retry-exec-failure -> `FAILED` with `RETRY_EXECUTOR_REJECTED`.
+Negative-validated: reverting only the engine fix fails `2 failed | 7 passed`;
+restored -> `9/9`. The pre-existing host-backed-summary case used a stub observer
+whose screen never changed and had only passed because of this bug; its stub was
+corrected to genuinely transition.
+
+Full suite: 118 files / 1603 tests passed (22.10 s). Lint (`tsc --noEmit`) exit 0.
+Build exit 0 (`dist/server.cjs` 948625 bytes). Security: `.env` ignored
+(.gitignore:4), clean `git status`, no token in diff.
+
+**Branch:** feature/hermes-full-completion
+**Main merge:** NOT MERGED — awaiting human approval.
+**Deploy:** NOT_CONFIGURED — no deployment target present.

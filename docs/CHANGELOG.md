@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-30 23:46 IST (2026-09-30 18:16 UTC) — work slot 8: a retried operator step is no longer credited as verified
+
+### Fixed
+- **The Computer Operator engine's single safe retry discarded its result and skipped re-verification.** In `src/utils/computerOperator/computerOperatorEngine.ts`, the `verification.shouldRetry` branch called `await this.executor.executeAction(action);` without reading the outcome and without re-observing the screen, then continued to the loop tail and the `COMPLETED` summary that claims *"All N step(s) executed and verified against the host desktop"*. A retry that failed to execute, or that produced no observable change, was reported as a verified step. The retry is now re-executed **and re-verified**: a failed re-execution ends the task `FAILED` with the executor error, an unverified retry ends it `FAILED` with the verification message, and only a confirmed change adopts the retry as the step result (so the RESULT event and the completion summary describe the retry).
+
+### Tests
+- `src/tests/computerOperatorTaskStatus.test.ts` — new `the safe retry is re-verified, never credited on faith` suite (3 tests): unverified-retry → `FAILED` (with `calls() >= 2` proving the retry actually ran), verified-retry → `COMPLETED` with the host-backed claim, retry-execution-failure → `FAILED` with `RETRY_EXECUTOR_REJECTED`. The pre-existing host-backed-summary case used a stub observer whose screen never changed and had only passed because of this bug; its stub now genuinely transitions. Negative-validated: reverting only the engine fix fails `2 failed | 7 passed`, restored → `9/9`.
+
+### Verified
+- Targeted `src/tests/computerOperatorTaskStatus.test.ts` **9 passed**; full suite **118 files / 1603 tests passed** (22.10 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 948625 bytes).
+
+---
+
 ## [Unreleased] - 2026-09-30 23:10 IST (2026-09-30 17:40 UTC) — work slot 7: a client can no longer credit actions it did not perform
 
 ### Fixed
