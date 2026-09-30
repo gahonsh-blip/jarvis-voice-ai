@@ -4,7 +4,28 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 16:43 UTC (22:13 IST 2026-09-30) — **WORK SLOT 5** of the
+Last cycle: 2026-09-30 17:05 UTC (22:35 IST 2026-09-30) — **WORK SLOT 6** of the
+2026-09-30 window, the 22:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **dashboard radar pin's `CURRENT FIX`
+fallback** — a real fake-success surface, fixed and pinned.
+
+**The dashboard radar pin no longer claims a live fix for a simulated point.**
+`DashboardMapSnippet.tsx` rendered its pin label as
+`isResolvedAddress(address) ? address?.city : 'CURRENT FIX'`. The fallback ignored
+the coordinate provenance entirely, so a `preset`, `manual` or `cache` position that
+had no resolved address was labelled `CURRENT FIX` — a live-fix claim — in the very
+same card whose PRECISION field (via `accuracyDisplay`) and provenance badge (via
+`locationSourceLabel`) correctly read `N/A — no GPS fix` / `PRESET ONLY`. The label
+is now gated on the source: only `source === 'live'` (a real device GPS reading) may
+print `CURRENT FIX`; every other provenance prints `NO FIX`. Guard:
+`src/tests/locationServicesTruth.test.ts` gains a test asserting the `CURRENT FIX`
+literal is preceded by a `source === 'live'` guard. Negative-validated: reverting the
+component to the old fallback fails `1 failed | 16 passed`; with the fix it passes
+`17/17`. Item 13 stays `PARTIAL` — the sweep of remaining tool-level success flags
+(the `actionsExecuted` counter and computer-operator `actionExecuted` verdicts in
+`server.ts`) remains open.
+
+Last cycle (previous): 2026-09-30 16:43 UTC (22:13 IST 2026-09-30) — **WORK SLOT 5** of the
 2026-09-30 window, the 22:05 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **Truth-in-Execution Integrations Matrix
 credential-presence claim** — a real fake-success surface, fixed and pinned.

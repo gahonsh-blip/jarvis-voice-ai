@@ -8025,3 +8025,42 @@ Next Slot:
 - इंटीग्रेशन्स मैट्रिक्स सिर्फ़ env credential मौजूद होने पर "REAL_WORKING" बता रहा था
   और न होने वाली लाइव हालत का दावा कर रहा था; इसे ईमानदार "CREDENTIALS_PRESENT" में बदला,
   नए निगेटिव-वैलिडेटेड टेस्ट से पिन किया; पूरी सूट 1593 टेस्ट पास; आइटम अभी PARTIAL है।
+
+---
+
+## WORK SLOT 6 — 2026-09-30 22:35 IST (2026-09-30 17:05 UTC)
+
+**Item:** #13 Zero-fake-success for all tools (Truth-in-Execution Integrity) — stays `PARTIAL`.
+
+**Advanced:** the dashboard radar pin's `CURRENT FIX` fallback.
+
+**What was wrong.** `src/components/DashboardMapSnippet.tsx` computed its pin label as
+`isResolvedAddress(address) ? address?.city : 'CURRENT FIX'`. The fallback ignored the
+coordinate provenance, so a `preset` / `manual` / `cache` position with no resolved
+address was labelled `CURRENT FIX` — a live-fix claim — inside the same card whose
+PRECISION field (`accuracyDisplay`) and provenance badge (`locationSourceLabel`) already
+read `N/A — no GPS fix` / `PRESET ONLY`. A simulated point thus read as a live device fix.
+
+**Fix.** Label gated on source: only `source === 'live'` may print `CURRENT FIX`; every
+other provenance prints `NO FIX`.
+
+**Evidence.**
+- File: `src/components/DashboardMapSnippet.tsx` (label expression).
+- Test: `src/tests/locationServicesTruth.test.ts` — new test "only prints CURRENT FIX for
+  a live reading, never for a simulated point".
+- Targeted run: `17 passed (17)`.
+- Negative validation: reverting the component to the old fallback → `1 failed | 16 passed`;
+  restoring the fix → `17/17`.
+- Full suite: `118 files / 1594 tests passed` (22.48s).
+- Lint (`tsc --noEmit`): exit 0. Build: exit 0 (`dist/server.cjs` 946016 bytes).
+
+**Bugs found:** the `CURRENT FIX` fallback above (found by reading the component against
+the zero-fake-success intent).
+**Bugs fixed:** the same.
+
+**Still open for item 13:** the server-side `memoryState.stats.actionsExecuted` counter and
+the computer-operator `actionExecuted` verdicts in `server.ts` remain unswept for
+fake-success surfaces.
+
+**Branch:** feature/hermes-full-completion · **Commit:** 36c5466 (+ docs commit)
+**Main merge:** NOT MERGED — awaiting human approval.

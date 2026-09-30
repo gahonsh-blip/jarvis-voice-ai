@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-30 22:35 IST (2026-09-30 17:05 UTC) — work slot 6: dashboard radar pin no longer claims a live fix for a simulated point
+
+### Fixed
+- **The dashboard radar pin labelled any address-less point `CURRENT FIX`.** `src/components/DashboardMapSnippet.tsx` computed its pin label as `isResolvedAddress(address) ? address?.city : 'CURRENT FIX'`, ignoring the coordinate provenance. A `preset`, `manual` or `cache` position with no resolved address was therefore presented as a live fix — in the same card whose PRECISION field (`accuracyDisplay`) and provenance badge (`locationSourceLabel`) already read `N/A — no GPS fix` / `PRESET ONLY`. The label is now gated on `source === 'live'`; every other provenance prints `NO FIX`.
+
+### Tests
+- `src/tests/locationServicesTruth.test.ts` — new test asserts the `CURRENT FIX` literal in `DashboardMapSnippet.tsx` is preceded by a `source === 'live'` guard. Negative-validated: reverting the component to the old fallback fails `1 failed | 16 passed`; with the fix it passes `17/17`.
+
+### Verified
+- Targeted `src/tests/locationServicesTruth.test.ts` `17 passed`; full suite `118 files / 1594 tests passed` (22.48s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 946016 bytes).
+
+---
+
 ## [Unreleased] - 2026-09-30 22:13 IST (2026-09-30 16:43 UTC) — work slot 5: credential presence no longer claims a working integration
 
 ### Fixed
