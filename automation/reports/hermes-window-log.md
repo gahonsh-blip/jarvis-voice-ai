@@ -8132,3 +8132,43 @@ Build exit 0 (`dist/server.cjs` 948625 bytes). Security: `.env` ignored
 **Branch:** feature/hermes-full-completion
 **Main merge:** NOT MERGED — awaiting human approval.
 **Deploy:** NOT_CONFIGURED — no deployment target present.
+
+---
+
+## WORK SLOT 9 — 2026-10-01 00:05 IST (2026-09-30 18:35 UTC)
+
+Window date: 2026-09-30 · slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools — search dispatch truth: `server.ts` google_search case now carries the URL in `payload.target` derived from `src/utils/browserDispatchTruth.ts` (`searchDispatch()`), and `src/App.tsx` hands it to the view. Guard `src/tests/browserDispatchTruth.test.ts`; negative-validated by reverting the App wiring.
+- #13 Zero-fake-success for all tools — per-task safe-retry budget: `ActionVerifier.resetAllRetries()` (src/utils/computerOperator/actionVerifier.ts) now called at the start of `executeTask` (computerOperatorEngine.ts), so a spent retry budget no longer leaks across tasks. Regression case in `src/tests/computerOperatorTaskStatus.test.ts`; removes a real flake (was failing ~4 of 5, now 10/10 x 6 runs).
+
+In Progress:
+- #13 — still PARTIAL; remaining tool-level success flags beyond these surfaces.
+
+Bugs Found:
+- The "safe retry is re-verified" suite in computerOperatorTaskStatus.test.ts was flaky in full-file runs — static `retryCounters` keyed on action id/type leaked a spent budget from a prior task into the next, causing a FAILED verdict with no retry attempted.
+
+Bugs Fixed:
+- Retry-budget leak — fixed with resetAllRetries() at task start; negative-validated (removing the reset → 2 failed | 8 passed).
+
+Tests:    118 files / 1610 tests passed (full suite)
+Lint:     tsc --noEmit exit 0
+Build:    exit 0 (dist/server.cjs 949796 bytes)
+E2E:      NOT RUN
+Security: .env ignored; no secrets in diff; only a placeholder string present
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  278b1f2
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         existing
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present
+
+Blocked:
+- Real Android E2E / real screenshot / device bridge — requires physical device (NOT_AVAILABLE)
+
+Next Slot:
+- #13 — continue sweeping remaining tool-level success flags; verify the full suite stays green.

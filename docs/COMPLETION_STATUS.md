@@ -4,7 +4,39 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 18:16 UTC (23:46 IST 2026-09-30) — **WORK SLOT 8** of the
+Last cycle: 2026-09-30 18:35 UTC (00:05 IST 2026-10-01) — **WORK SLOT 9** of the
+2026-09-30 window, the 00:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
+the **search-dispatch URL** and the **per-task safe-retry budget**.
+
+**A search request could be narrated as running while loading nothing.** The
+`google_search` `/api/chat` case put the Google search URL at the top-level
+`target` of the action detail and cleared the in-app Browser's `initialUrl`, so
+the dispatcher (`payload.target || ''`) opened an empty address; and because
+`BrowserModal` ignores `initialQuery` whenever `initialUrl` is set, a search
+after any earlier page load ran nothing at all. Fixed by deriving URL, title and
+reply from one `searchDispatch()` verdict in `src/utils/browserDispatchTruth.ts`,
+carrying the URL in `payload.target`, and handing it to the view in `src/App.tsx`.
+Guarded in `src/tests/browserDispatchTruth.test.ts`; negative-validated (reverting
+the `App.tsx` wiring fails the guard).
+
+**A task could report a verification failure it never attempted.** In
+`src/utils/computerOperator/actionVerifier.ts`, `retryCounters` is static and
+keyed on action id/type, which repeat across tasks (the planner names steps
+`act-1-*`, `act-2-*`). A task that exhausted `MAX_RETRIES` left the counter set,
+so the next task with the same action shape saw `shouldRetry = false` and failed
+without a retry. This was the source of a real flake: the "safe retry is
+re-verified" suite in `src/tests/computerOperatorTaskStatus.test.ts` failed ~4
+runs in 5, and a full-suite run failed once. Fixed with `ActionVerifier.
+resetAllRetries()` called at the start of `executeTask`; new regression case runs
+a budget-exhausting task then a same-shaped task whose retry must still verify.
+Negative-validated (removing the reset → `2 failed | 8 passed`); file now 10/10
+across six consecutive runs. Gates observed: lint (`tsc --noEmit`) exit 0; full
+suite **118 files / 1610 tests passed**; build exit 0 (`dist/server.cjs`
+949796 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 remains `PARTIAL` — two more real fake-success/honesty classes closed;
+the item still spans tool-level success flags beyond these surfaces.
+
+Last cycle (previous): 2026-09-30 18:16 UTC (23:46 IST 2026-09-30) — **WORK SLOT 8** of the
 2026-09-30 window, the 23:35 IST fire. Item 13 (`Zero-fake-success for all tools`),
 the **Computer Operator engine's single safe retry**.
 

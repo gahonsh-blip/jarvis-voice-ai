@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 00:05 IST (2026-09-30 18:35 UTC) — work slot 9: searches dispatch truthfully; every task gets its own retry budget
+
+### Fixed
+- **A search could be narrated as running while loading nothing.** The `google_search` `/api/chat` case in `server.ts` put the Google search URL at the top-level `target` of the action detail and cleared the in-app Browser's `initialUrl`. The dispatcher opened `payload.target || ''` — an empty address — and `BrowserModal` ignores `initialQuery` whenever `initialUrl` is set, so a search issued after any earlier page load ran nothing. URL, title and reply now derive from one `searchDispatch()` verdict in `src/utils/browserDispatchTruth.ts`, the URL travels in `payload.target`, and `src/App.tsx` hands it to the view.
+- **A computer-operator task could report a verification failure it never attempted.** `ActionVerifier.retryCounters` (`src/utils/computerOperator/actionVerifier.ts`) is a static map keyed on action id/type, which repeat across tasks. A task that exhausted `MAX_RETRIES` left the counter set, so the next same-shaped task saw `shouldRetry = false` and failed without its retry. `ActionVerifier.resetAllRetries()` is now called at the start of `executeTask`.
+
+### Tests
+- `src/tests/browserDispatchTruth.test.ts` — guards the search URL carried to the view; negative-validated by reverting the `src/App.tsx` wiring.
+- `src/tests/computerOperatorTaskStatus.test.ts` — new case `gives each task its own retry budget, so an earlier failure cannot fail a later task`. This also removes a real flake (the "safe retry is re-verified" suite failed ~4 runs in 5; now 10/10 across six consecutive runs). Negative-validated: removing the reset fails `2 failed | 8 passed`.
+
+### Verified
+- Full suite **118 files / 1610 tests passed**; lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 949796 bytes).
+
+---
+
 ## [Unreleased] - 2026-09-30 23:46 IST (2026-09-30 18:16 UTC) — work slot 8: a retried operator step is no longer credited as verified
 
 ### Fixed
