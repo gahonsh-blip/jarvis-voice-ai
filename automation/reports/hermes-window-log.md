@@ -8584,3 +8584,36 @@ Item #54 Secret/token protection audit — advanced (`PARTIAL`).
 - Commits: `78abda5` (code+test), `c3f3a61` (docs). State branch `2f4477b`.
 - PR: NONE. Main merge: NOT MERGED — awaiting human approval.
 
+
+
+---
+
+## WORK SLOT 16 — 2026-10-01 03:35 IST (2026-09-30 22:07 UTC) — window date 2026-09-30
+
+Item: **#32 Call detection E2E** — the live-call weather answer was fabricated.
+
+- `TelephonySessionManager.processTurn` (`src/utils/telephonySessionManager.ts`) is
+  wired to the real TwiML turn endpoint `/api/telephony/twiml/turn` in `server.ts`,
+  so its `replyText` is spoken to a caller. With no connected weather source its
+  weather branch answered "temperatures around 25 to 28 degrees Celsius" as if that
+  were a current reading. A supplied `weatherData` object with no `temp` also fell
+  through to invented defaults (`26°C`, `Clear`, `Gurugram / SFO`).
+- Fix: the no-reading branch now states no weather source is connected to the call
+  and speaks no reading; a partial telemetry object counts as no reading; the
+  connected-source branch still speaks the real reading and names an unknown
+  location as unknown.
+- Guard: `src/tests/telephonyWeatherHonesty.test.ts` (4 tests: no-source Hindi and
+  English, empty telemetry object, connected source).
+- Negative-validated: reverting only the reply branch fails the guard
+  (`3 failed | 1 passed`); restored -> `4 passed`.
+- Gates observed: lint (`tsc --noEmit`) exit 0; targeted 2 files / 10 tests passed;
+  full suite **120 files / 1640 tests passed** (22.80 s); build exit 0
+  (`dist/server.cjs` 958168 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+- Security: `.env` ignored (`.gitignore:4`); clean tree; no `node_modules`/`dist` staged.
+- Item 32 remains **PARTIAL** — telemetry chain honest on the live call path; no
+  physical call has reached this host.
+- Commits: `b2c30e9` (code+test+docs). Push: origin/feature/hermes-full-completion.
+- PR: NONE (work slot). Main merge: NOT MERGED — awaiting human approval.
+
+हिंदी सारांश: लाइव कॉल के मौसम जवाब से गढ़ा गया तापमान हटाया; 4 टेस्ट, नेगेटिव-
+वैलिडेशन, पूरे गेट हरे।
