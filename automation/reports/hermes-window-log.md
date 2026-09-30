@@ -8729,3 +8729,5 @@ Next Slot:
   मर्ज नहीं — मानवीय स्वीकृति प्रतीक्षित।
 
 ```
+
+> Header correction: "Window date" is the window *start* date (2026-09-30 IST); the IST clock at run time was 2026-10-01 04:36 (the window spans midnight).
