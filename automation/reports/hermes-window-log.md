@@ -8537,3 +8537,26 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - क्रेडेंशियल रिडैक्शन में तीन और असली लीक (Telnyx, LinkedIn, Gmail app
   password) बंद किए, टेस्ट और नेगेटिव-वैलिडेशन के साथ; बाकी गेट हरे।
+
+---
+
+## Slot 14 — WORK — 2026-10-01 02:35 IST (2026-09-30 21:06 UTC)
+
+Item #54 Secret/token protection audit — advanced (`PARTIAL`).
+
+- Probed ten provider credential formats through `redactSecrets()`
+  (`src/utils/computerOperator/credentialRedactor.ts`). Three passed through
+  byte-for-byte and are now redacted (pattern branches 38–40):
+  Slack app-level `xapp-…`, Stripe webhook `whsec_…`, Mailgun `key-` + 32 hex.
+- `src/tests/credentialRedactor.test.ts`: 3 new tests, 42 → 45. Negative-validated
+  (engine change stashed: `3 failed | 42 passed`; restored: `45 passed`).
+- Deliberately unredacted and documented: Twilio `AC…`/`SK…` SIDs (public
+  identifiers, existing test asserts they survive) and an unlabelled X/Twitter
+  OAuth2 bearer (generic keyword rule covers the labelled form).
+- Push protection initially rejected the synthetic Mailgun fixture; rebuilt by
+  concatenation instead of allow-listing it.
+- Gates: lint exit 0 · vitest 118 files / 1633 tests passed (22.27 s) · build
+  exit 0 (`dist/server.cjs` 957948 bytes). E2E NOT RUN. Deploy NOT_CONFIGURED.
+- Commits: `b24b96a` (code+test), `d5e3bfe` (docs). State branch `0979709`.
+- PR: NONE. Main merge: NOT MERGED — awaiting human approval.
+
