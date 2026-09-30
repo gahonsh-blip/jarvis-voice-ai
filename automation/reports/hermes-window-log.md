@@ -8064,3 +8064,40 @@ fake-success surfaces.
 
 **Branch:** feature/hermes-full-completion · **Commit:** 36c5466 (+ docs commit)
 **Main merge:** NOT MERGED — awaiting human approval.
+
+---
+
+## WORK SLOT 7 — 2026-09-30 23:05 IST (17:40 UTC)
+
+**Item #13 `Zero-fake-success for all tools` — PARTIAL.** Closed the
+`POST /api/memory` client-asserted counter fake-success.
+
+`server.ts` /api/memory POST honored a caller-supplied
+`statUpdate.incrementAction` / `statUpdate.incrementCommand` and ran
+`memoryState.stats.actionsExecuted += 1` / `totalCommands += 1` unconditionally.
+Those counters are the user-visible "Autonomous Actions Executed" / "Total Voice /
+Text Commands" figures in `src/components/MemoryModal.tsx`, so any client could
+raise them without the server observing a command or an action. No in-repo caller
+ever sends `statUpdate`. The handler now ignores the request and appends an inert
+`Counter request not applied` note; `lastActive` advances only on a real field
+change.
+
+New suite in `src/tests/memoryPersistence.e2e.test.ts` drives the **real HTTP
+route** against a spawned server: both counters stay flat across the POST, and the
+request is recorded as an inert note rather than credited. Negative-validated:
+restoring the old `statUpdate` branch -> `2 failed | 5 passed`; with the fix -> `7/7`.
+
+Full suite: 118 files / 1596 tests passed (22.01s). Lint (`tsc --noEmit`) exit 0.
+Build exit 0 (`dist/server.cjs` 946569 bytes). Security: `.env` ignored
+(.gitignore:4), clean `git status`, no token in diff.
+
+Commits: `0a5d728` (fix+test), `ed294f3` (docs). State branch
+`automation/hermes-state` updated (`slots_completed` 7).
+
+Still open for item 13: the computer-operator `actionExecuted` verdicts in
+`server.ts`, and other tool-level success flags.
+
+**Branch:** feature/hermes-full-completion - **Commit:** ed294f3
+**Main merge:** NOT MERGED — awaiting human approval.
+**Deploy:** NOT_CONFIGURED — no deployment target present.
+
