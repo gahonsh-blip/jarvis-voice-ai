@@ -8622,21 +8622,21 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const verdict = await evaluateLaunchDispatch('Visual Studio Code', 'code');
         spokenResponse = launchReply('Visual Studio Code', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_vscode', title: verdict.title, target: 'VS Code', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_vscode', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_browser': {
         const verdict = await evaluateLaunchDispatch('Chrome browser', 'google-chrome');
         spokenResponse = launchReply('Chrome browser', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_browser', title: verdict.title, target: 'Chrome', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_browser', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_terminal': {
         const verdict = await evaluateLaunchDispatch('Terminal', 'x-terminal-emulator');
         spokenResponse = launchReply('Terminal', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_terminal', title: verdict.title, target: 'Terminal', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_terminal', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'open_computer_operator': {
