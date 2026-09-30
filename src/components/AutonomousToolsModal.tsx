@@ -111,7 +111,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
 
   // Integrations Audit State
   const [auditReport, setAuditReport] = useState<{
-    summary: { total: number; connected: number; notConfigured: number; notAvailable: number };
+    summary: { total: number; credentialsPresent: number; notConfigured: number; notAvailable: number };
     items: IntegrationAuditItem[];
   } | null>(null);
 
@@ -1404,7 +1404,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                 </div>
                 <div className="flex items-center gap-2 font-mono text-xs">
                   <span className="px-2.5 py-1 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300">
-                    {auditReport.summary.connected} Connected
+                    {auditReport.summary.credentialsPresent} Credentials Present
                   </span>
                   <span className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300">
                     {auditReport.summary.notAvailable} Not Available Here
@@ -1425,7 +1425,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                       <span className="text-white font-bold text-sm">{item.name}</span>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                          item.status === 'REAL_WORKING'
+                          item.status === 'CREDENTIALS_PRESENT'
                             ? 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
                             : 'bg-amber-950 border border-amber-500/40 text-amber-300'
                         }`}

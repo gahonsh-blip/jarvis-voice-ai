@@ -8773,7 +8773,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'tools_audit': {
         const audit = getIntegrationsAuditReport();
-        spokenResponse = `Integrations audit: ${audit.summary.connected} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
+        spokenResponse = `Integrations audit: ${audit.summary.credentialsPresent} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
         actionExecuted = true;
         actionDetail = { type: 'tools_audit', title: 'Integrations Matrix', payload: audit };
         break;

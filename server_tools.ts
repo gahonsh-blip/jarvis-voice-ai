@@ -1179,16 +1179,17 @@ export function buildYouTubeSummary(params: {
 // 10. INTEGRATIONS DIAGNOSTICS MATRIX (TRUTH-IN-EXECUTION AUDITOR)
 // ==============================================================================
 export function getIntegrationsAuditReport(): {
-  summary: { total: number; connected: number; notConfigured: number; notAvailable: number };
+  summary: { total: number; credentialsPresent: number; notConfigured: number; notAvailable: number };
   items: {
     id: string;
     name: string;
     category: string;
-    // REAL_WORKING is only ever used when this process can actually see the
-    // integration's credentials. NOT_AVAILABLE means the integration cannot be
-    // configured in this environment at all, so it must never be counted as a
-    // "verified real integration online".
-    status: 'REAL_WORKING' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
+    // CREDENTIALS_PRESENT means this process can see the integration's
+    // credentials in its environment — nothing more. It is not a live
+    // connection, a token validation, or a working integration; no provider
+    // call is made here, so no status may claim one succeeded. NOT_AVAILABLE
+    // means the integration cannot be configured in this environment at all.
+    status: 'CREDENTIALS_PRESENT' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
     reason: string;
     requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean }[];
     capabilities: string[];
@@ -1229,9 +1230,9 @@ export function getIntegrationsAuditReport(): {
       id: 'linkedin',
       name: 'LinkedIn Personal Profile (Member Posts API)',
       category: 'Professional Social',
-      status: linkedInConnected ? ('REAL_WORKING' as const) : ('NOT_CONNECTED' as const),
+      status: linkedInConnected ? ('CREDENTIALS_PRESENT' as const) : ('NOT_CONNECTED' as const),
       reason: linkedInConnected
-        ? 'OAuth 2.0 3-legged engine authenticated / ready. REST Posts API active.'
+        ? 'Credentials are present in this environment. No provider call is made here, so authentication is not confirmed.'
         : 'Missing LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET. Configure in Settings.',
       requiredEnvVars: [
         { key: 'LINKEDIN_CLIENT_ID', label: 'OAuth 2.0 Client ID', configured: linkedInClientId, isSecret: false },
@@ -1243,9 +1244,9 @@ export function getIntegrationsAuditReport(): {
       id: 'telegram',
       name: 'Telegram Bot Mobile Controller',
       category: 'Mobile Gateway',
-      status: tgConnected ? ('REAL_WORKING' as const) : ('NOT_CONNECTED' as const),
+      status: tgConnected ? ('CREDENTIALS_PRESENT' as const) : ('NOT_CONNECTED' as const),
       reason: tgConnected
-        ? '24/7 Long-Polling Daemon active with mobile command dispatch.'
+        ? 'A bot token is present in this environment. Polling liveness is not measured here, so a running daemon is not confirmed.'
         : 'TELEGRAM_BOT_TOKEN is missing. Provide Bot Token from @BotFather.',
       requiredEnvVars: [
         { key: 'TELEGRAM_BOT_TOKEN', label: 'Telegram Bot Token', configured: tgConnected, isSecret: true },
@@ -1257,9 +1258,9 @@ export function getIntegrationsAuditReport(): {
       id: 'github',
       name: 'GitHub Repositories & Issue Manager',
       category: 'Code & Version Control',
-      status: ghToken ? ('REAL_WORKING' as const) : ('NOT_CONNECTED' as const),
+      status: ghToken ? ('CREDENTIALS_PRESENT' as const) : ('NOT_CONNECTED' as const),
       reason: ghToken
-        ? 'GitHub REST API authenticated for user repo and issue operations.'
+        ? 'A GitHub token is present in this environment. No API call is made here, so authentication is not confirmed.'
         : 'GITHUB_TOKEN is missing. Add Personal Access Token in Settings.',
       requiredEnvVars: [
         { key: 'GITHUB_TOKEN', label: 'GitHub Personal Access Token', configured: ghToken, isSecret: true },
@@ -1270,11 +1271,11 @@ export function getIntegrationsAuditReport(): {
       id: 'email',
       name: 'Email Outbound Service (SMTP / Google Workspace)',
       category: 'Communications',
-      // Credential presence was reported as REAL_WORKING with the reason "SMTP
-      // Conduit verified for client notifications and quotations", but no SMTP
-      // client or send route exists in this build. A sender that does not exist
-      // cannot be REAL_WORKING, so the status is pinned to NOT_AVAILABLE and is
-      // never derived from the env vars.
+      // Credential presence was reported as a working integration with the
+      // reason "SMTP Conduit verified for client notifications and quotations",
+      // but no SMTP client or send route exists in this build. A sender that
+      // does not exist cannot be a working integration, so the status is pinned
+      // to NOT_AVAILABLE and is never derived from the env vars.
       status: 'NOT_AVAILABLE' as const,
       reason: emailConnected
         ? `SMTP credentials are present, but ${EMAIL_CAPABILITY_NOTE}`
@@ -1292,8 +1293,9 @@ export function getIntegrationsAuditReport(): {
       // This process runs in a container, not on the Oracle ARM VM. The VM shape,
       // public IP and uptime are deployment metadata constants, not a measurement
       // of any live host, and no Oracle API credential is available here, so the
-      // integration cannot be confirmed at all. Reporting REAL_WORKING here was a
-      // fabrication that inflated the "verified real integrations" count.
+      // integration cannot be confirmed at all. Reporting it as a working
+      // integration was a fabrication that inflated the "verified real
+      // integrations" count.
       status: 'NOT_AVAILABLE' as const,
       reason:
         'No Oracle Cloud API credential or VM-level telemetry source is available in this environment; this process runs in a container, not on the Oracle ARM VM. The only live figures available describe the daemon host and are reported with metricsSource=live_host.',
@@ -1304,9 +1306,9 @@ export function getIntegrationsAuditReport(): {
       id: 'facebook',
       name: 'Facebook Page Graph API',
       category: 'Social Media',
-      status: fbToken ? ('REAL_WORKING' as const) : ('NOT_CONNECTED' as const),
+      status: fbToken ? ('CREDENTIALS_PRESENT' as const) : ('NOT_CONNECTED' as const),
       reason: fbToken
-        ? 'Facebook Page Graph API configured.'
+        ? 'Facebook Page credentials are present in this environment. No Graph API call is made here, so the page is not confirmed reachable.'
         : 'FACEBOOK_PAGE_ACCESS_TOKEN or FACEBOOK_PAGE_ID missing.',
       requiredEnvVars: [
         { key: 'FACEBOOK_PAGE_ACCESS_TOKEN', label: 'Page Token', configured: Boolean(process.env.FACEBOOK_PAGE_ACCESS_TOKEN), isSecret: true },
@@ -1318,9 +1320,9 @@ export function getIntegrationsAuditReport(): {
       id: 'instagram',
       name: 'Instagram Business Graph API',
       category: 'Visual Social',
-      status: igToken ? ('REAL_WORKING' as const) : ('NOT_CONNECTED' as const),
+      status: igToken ? ('CREDENTIALS_PRESENT' as const) : ('NOT_CONNECTED' as const),
       reason: igToken
-        ? 'Instagram Business Account API configured.'
+        ? 'Instagram Business credentials are present in this environment. No Graph API call is made here, so the account is not confirmed reachable.'
         : 'INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_BUSINESS_ACCOUNT_ID missing.',
       requiredEnvVars: [
         { key: 'INSTAGRAM_ACCESS_TOKEN', label: 'Access Token', configured: Boolean(process.env.INSTAGRAM_ACCESS_TOKEN), isSecret: true },
@@ -1332,8 +1334,10 @@ export function getIntegrationsAuditReport(): {
       id: 'youtube',
       name: 'YouTube Data API v3',
       category: 'Video Portal',
-      status: ytConnected ? ('REAL_WORKING' as const) : ('NOT_CONNECTED' as const),
-      reason: ytConnected ? 'YouTube Data API v3 active.' : 'YOUTUBE_API_KEY or YOUTUBE_ACCESS_TOKEN missing.',
+      status: ytConnected ? ('CREDENTIALS_PRESENT' as const) : ('NOT_CONNECTED' as const),
+      reason: ytConnected
+        ? 'A YouTube API credential is present in this environment. No API call is made here, so the key is not confirmed valid.'
+        : 'YOUTUBE_API_KEY or YOUTUBE_ACCESS_TOKEN missing.',
       requiredEnvVars: [
         { key: 'YOUTUBE_API_KEY', label: 'Google API Key', configured: Boolean(process.env.YOUTUBE_API_KEY), isSecret: true },
       ],
@@ -1341,13 +1345,13 @@ export function getIntegrationsAuditReport(): {
     },
   ];
 
-  const connectedCount = items.filter((i) => i.status === 'REAL_WORKING').length;
+  const credentialsPresentCount = items.filter((i) => i.status === 'CREDENTIALS_PRESENT').length;
   const notConfiguredCount = items.filter((i) => i.status === 'NOT_CONNECTED').length;
   const notAvailableCount = items.filter((i) => i.status === 'NOT_AVAILABLE').length;
   return {
     summary: {
       total: items.length,
-      connected: connectedCount,
+      credentialsPresent: credentialsPresentCount,
       notConfigured: notConfiguredCount,
       notAvailable: notAvailableCount,
     },

@@ -621,7 +621,7 @@ export interface IntegrationAuditItem {
   id: string;
   name: string;
   service: string;
-  status: 'REAL_WORKING' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
+  status: 'CREDENTIALS_PRESENT' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
   reason?: string;
   requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean; placeholder: string }[];
   scopesOrPermissions: string[];
