@@ -163,6 +163,71 @@ const REDACTION_PATTERNS: {
     placeholder: '$1:[REDACTED_SECRET]@',
     replacer: (match, schemeUser, password) => `${schemeUser}:[REDACTED_SECRET]@`,
   },
+  // 23. Groq API keys (`gsk_` + long body)
+  {
+    category: 'Groq Key',
+    regex: /\bgsk_[A-Za-z0-9]{40,}\b/g,
+    placeholder: '[REDACTED_GROQ_KEY]',
+  },
+  // 24. Perplexity API keys (`pplx-` + body)
+  {
+    category: 'Perplexity Key',
+    regex: /\bpplx-[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_PERPLEXITY_KEY]',
+  },
+  // 25. Notion integration tokens. Current `ntn_` tokens and the legacy
+  // `secret_` internal-integration tokens are both provider-issued secrets.
+  {
+    category: 'Notion Token',
+    regex: /\bntn_[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_NOTION_TOKEN]',
+  },
+  {
+    category: 'Notion Legacy Token',
+    regex: /\bsecret_[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_NOTION_TOKEN]',
+  },
+  // 26. Shopify access / shared-secret / private-app tokens
+  {
+    category: 'Shopify Token',
+    regex: /\bshp(?:at|ss|ca|pa)_[A-Za-z0-9]{16,}\b/g,
+    placeholder: '[REDACTED_SHOPIFY_TOKEN]',
+  },
+  // 27. Linear API keys (`lin_api_` + body)
+  {
+    category: 'Linear API Key',
+    regex: /\blin_api_[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_LINEAR_KEY]',
+  },
+  // 28. Slack incoming-webhook URLs. The whole `/services/...` path is the
+  // secret; redacting it also removes the T/B channel ids, which is correct —
+  // the URL alone is enough to post to the workspace.
+  {
+    category: 'Slack Webhook URL',
+    regex: /https?:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/_-]{20,}/g,
+    placeholder: '[REDACTED_SLACK_WEBHOOK_URL]',
+  },
+  // 29. Azure Storage / Cosmos connection-string account keys
+  {
+    category: 'Azure Account Key',
+    regex: /AccountKey=[A-Za-z0-9+/=]{40,}/g,
+    placeholder: '[REDACTED_AZURE_ACCOUNT_KEY]',
+  },
+  // 30. Firebase / Google browser API keys. The specific `AIzaSy` pattern above
+  // only covers server keys; a Firebase web config key uses the same `AIza`
+  // marker but not the `Sy` infix, so it needs its own branch.
+  {
+    category: 'Firebase API Key',
+    regex: /\bAIza[A-Za-z0-9_\-]{30,}\b/g,
+    placeholder: '[REDACTED_FIREBASE_KEY]',
+  },
+  // 31. Resend API keys (`re_` + body). The body length floor keeps the ordinary
+  // English "re" prefix and short identifiers from matching.
+  {
+    category: 'Resend Key',
+    regex: /\bre_[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_RESEND_KEY]',
+  },
 ];
 
 /**

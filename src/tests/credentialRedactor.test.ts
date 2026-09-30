@@ -156,4 +156,76 @@ describe('credential redaction', () => {
     );
     expect(redactSecrets('please read this and that page')).toBe('please read this and that page');
   });
+
+  // Regression: a third live probe (2026-10-01 00:35 IST slot) found eight more
+  // providers whose keys passed through redaction byte-for-byte. These are the
+  // services this project actually integrates with (Twilio telephony, Groq/
+  // Perplexity model calls, Notion, Shopify, Linear, Slack webhooks, Azure
+  // storage, Oracle Cloud). Each value is used *bare* — the form a key takes in
+  // a screenshot or terminal stream, which is the path this function protects.
+  // A labelled `NAME=` form would be caught by the generic keyword rule and
+  // would not prove the token-family pattern itself works.
+  it('redacts a Groq API key (gsk_)', () => {
+    const key = 'gsk_' + 'aBcDeFgHiJkLmNoPqRsTuVwX'.repeat(2); // 48 chars
+    expect(redactSecrets(key)).not.toContain(key);
+  });
+
+  it('redacts a Perplexity API key (pplx-)', () => {
+    const key = 'pplx-' + 'aBcDeFgHiJkLmNoPqRsTuVwX';
+    expect(redactSecrets(key)).not.toContain(key);
+  });
+
+  it('redacts a Notion integration token (ntn_)', () => {
+    const token = 'ntn_' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgH';
+    expect(redactSecrets(`notion ${token} pasted`)).not.toContain(token);
+  });
+
+  it('redacts a legacy Notion internal integration token (secret_)', () => {
+    const token = 'secret_' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgH';
+    expect(redactSecrets(token)).not.toContain(token);
+  });
+
+  it('redacts a Shopify access token (shpat_)', () => {
+    const token = 'shpat_' + '0123456789abcdef'.repeat(2);
+    expect(redactSecrets(token)).not.toContain(token);
+  });
+
+  it('redacts a Shopify shared secret (shpss_)', () => {
+    const token = 'shpss_' + '0123456789abcdef'.repeat(2);
+    expect(redactSecrets(token)).not.toContain(token);
+  });
+
+  it('redacts a Linear API key (lin_api_)', () => {
+    const token = 'lin_api_' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgH';
+    expect(redactSecrets(token)).not.toContain(token);
+  });
+
+  it('redacts a Slack incoming-webhook URL but leaves an ordinary Slack URL alone', () => {
+    const secretPart = 'aBcDeFgHiJkLmNoPqRsTuVwX';
+    const hook = `https://hooks.slack.com/services/T00000000/B00000000/${secretPart}`;
+    expect(redactSecrets(hook)).not.toContain(secretPart);
+    // An ordinary Slack URL carries no embedded secret and must survive.
+    expect(redactSecrets('https://app.slack.com/client/T00000000/C00000000')).toBe(
+      'https://app.slack.com/client/T00000000/C00000000',
+    );
+  });
+
+  it('redacts an Azure Storage AccountKey', () => {
+    const key = 'AccountKey=' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJkLmNoPqRsTuVwX==';
+    expect(redactSecrets(key)).not.toContain('aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJkLmNoPqRsTuVwX');
+    expect(redactSecrets(key)).toContain('[REDACTED_AZURE_ACCOUNT_KEY]');
+  });
+
+  it('redacts a Firebase API key (the second segment of a Google key)', () => {
+    // Firebase keys are `AIza` + 33 chars, i.e. an AIzaSy-adjacent form; the
+    // leading AIza marker alone is what distinguishes them from arbitrary text.
+    const key = 'AIza' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJ';
+    expect(redactSecrets(key)).not.toContain(key);
+  });
+
+  it('redacts a Resend API key (re_) but not the ordinary English prefix "re"', () => {
+    const token = 're_' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeF';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets('re_ this is a reply note')).toBe('re_ this is a reply note');
+  });
 });
