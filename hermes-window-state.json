@@ -1,15 +1,19 @@
 {
   "window_date": "2026-09-30",
   "window_started_at": "2026-09-30T15:35:00Z",
-  "last_slot_at": "2026-09-30T20:11:00Z",
-  "slots_completed": 12,
-  "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools — offline Android message-reply decline",
+  "last_slot_at": "2026-10-01T20:45:00Z",
+  "slots_completed": 13,
+  "current_item": 54,
+  "current_item_title": "Production Hardening - credential redaction (Telnyx, LinkedIn, Gmail app passwords)",
   "current_item_status": "PARTIAL",
-  "last_commit": "8d4c068",
+  "last_commit": "dbfc316",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": ["real-android-e2e (hardware)", "wake-word (hardware)", "computer-operator-host-execution (host session)"],
+  "blocked_items": [
+    "real-android-e2e (hardware)",
+    "wake-word (hardware)",
+    "computer-operator-host-execution (host session)"
+  ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
