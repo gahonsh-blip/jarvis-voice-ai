@@ -19,7 +19,7 @@ describe('Repository hygiene — .gitignore integrity', () => {
 
   it('ignores secrets, build artifacts, and cache directories', () => {
     const lines = raw.toString('utf-8').split(/\r?\n/).map((l) => l.trim());
-    for (const required of ['.env', '.env.local', 'node_modules/', 'dist/', '__pycache__/']) {
+    for (const required of ['.env', '.env.local', 'node_modules/', 'dist/', '__pycache__/', '.vite/']) {
       expect(lines).toContain(required);
     }
   });
