@@ -226,13 +226,13 @@ export class ComputerOperatorEngine {
           messageHi: `चरण ${i + 1} के पश्चात स्क्रीन स्थिति का सत्यापन किया जा रहा है...`,
         });
 
-        const postObservation = await ScreenObserver.observeScreen({
+        let postObservation = await ScreenObserver.observeScreen({
           preferredApp: action.targetApp,
           includeScreenshot: true,
         });
         task.currentObservation = postObservation;
 
-        const verification = ActionVerifier.verifyAction(action, currentObservation, postObservation, i);
+        let verification = ActionVerifier.verifyAction(action, currentObservation, postObservation, i);
         task.lastVerification = verification;
 
         if (!verification.verified) {
@@ -246,8 +246,56 @@ export class ComputerOperatorEngine {
               message: verification.message,
               messageHi: verification.messageHi,
             });
-            // Re-execute once
-            await this.executor.executeAction(action);
+
+            // Re-execute once, then RE-VERIFY. The previous version discarded the
+            // retry result and never re-checked the screen, so a retry that failed
+            // — or that produced no observable change — still fell through to the
+            // COMPLETED summary claiming every step was verified.
+            const retryExec = await this.executor.executeAction(action);
+            if (!retryExec.success) {
+              TaskTracker.emitEvent(task, {
+                id: `evt-${Date.now()}-retry-fail-${i}`,
+                taskId: task.taskId,
+                timestamp: new Date().toISOString(),
+                stage: 'BLOCKED',
+                message: `Retry failed at step ${i + 1}: ${retryExec.error || retryExec.message}`,
+                messageHi: `पुनः प्रयास चरण ${i + 1} पर विफल: ${retryExec.error || retryExec.message}`,
+                error: retryExec.error,
+              });
+              task.status = 'FAILED';
+              task.error = retryExec.error || retryExec.message;
+              return task;
+            }
+
+            const retryObservation = await ScreenObserver.observeScreen({
+              preferredApp: action.targetApp,
+              includeScreenshot: true,
+            });
+            const retryVerification = ActionVerifier.verifyAction(action, currentObservation, retryObservation, i);
+
+            if (!retryVerification.verified) {
+              task.currentObservation = retryObservation;
+              task.lastVerification = retryVerification;
+              TaskTracker.emitEvent(task, {
+                id: `evt-${Date.now()}-retry-verif-fail-${i}`,
+                taskId: task.taskId,
+                timestamp: new Date().toISOString(),
+                stage: 'BLOCKED',
+                message: retryVerification.message,
+                messageHi: retryVerification.messageHi,
+                error: retryVerification.error || retryVerification.message,
+              });
+              task.status = 'FAILED';
+              task.error = retryVerification.error || retryVerification.message;
+              return task;
+            }
+
+            // The retry produced a confirmed change; adopt it as this step's result
+            // so the RESULT event and the completion summary describe the retry.
+            postObservation = retryObservation;
+            verification = retryVerification;
+            task.currentObservation = postObservation;
+            task.lastVerification = verification;
           } else {
             TaskTracker.emitEvent(task, {
               id: `evt-${Date.now()}-verif-fail-${i}`,
