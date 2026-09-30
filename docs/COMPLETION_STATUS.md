@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-01 20:11 UTC (01:41 IST 2026-10-01) — **SLOT** of the
+Last cycle: 2026-10-01 20:42 UTC (02:12 IST 2026-10-01) — **WORK SLOT 13** of the
+2026-10-01 window, the 02:05 IST fire. Continued **Item 54 (Production Hardening)
+— credential redaction** with a third live probe of `redactSecrets()`.
+
+**A probe of three more credential families this app itself carries found all
+three leaking through the redactor byte-for-byte.** (1) Telnyx API keys
+(`KEY` + 32 hex) — `TELNYX_API_KEY` is read by the Telnyx telephony adapter
+(`src/utils/telephonyAdapters.ts`); the labelled form was caught by the generic
+keyword rule but the **bare** key (the form in a screenshot or terminal stream)
+passed through unchanged. (2) LinkedIn OAuth access tokens (`AQV` + body) —
+`LINKEDIN_ACCESS_TOKEN` is a first-class integration credential. (3) Gmail app
+passwords — the generic `Password Assignment` rule stops at the first space, so
+`GMAIL_APP_PASSWORD=abcd efgh ijkl mnop` redacted only the first group and left
+12 of the 16 characters in the clear. Added pattern branches 36–37 (Telnyx,
+LinkedIn) plus a dedicated Gmail-app-password rule (6b) ordered **before** the
+generic rule so the whole value is consumed, and 3 regression tests in
+`src/tests/credentialRedactor.test.ts`. Each test uses the **bare** token form —
+the path this function exists to protect — and asserts a non-token prose case is
+preserved (e.g. `press the KEY button`, an `AQV` mnemonic).
+
+**Negative-validated:** stashing only the engine change fails exactly the three
+new cases (`3 failed | 39 passed`); restored → `42 passed`. Gates observed: lint
+(`tsc --noEmit`) exit 0; targeted `credentialRedactor` **1 file / 42 tests
+passed**; full suite **118 files / 1630 tests passed** (22.05 s); build exit 0
+(`dist/server.cjs` 956883 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 54
+remains `PARTIAL` — another real leak class closed; the provider list is still
+not provably exhaustive.
+
+Previous cycle: 2026-10-01 20:11 UTC (01:41 IST 2026-10-01) — **SLOT** of the
 2026-10-01 window. **Item 13 (`Zero-fake-success for all tools`) — the offline
 Android message-reply decline branch.**
 
