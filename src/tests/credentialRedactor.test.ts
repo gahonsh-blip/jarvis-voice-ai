@@ -254,4 +254,38 @@ describe('credential redaction', () => {
     expect(redactSecrets(token)).not.toContain(token);
     expect(redactSecrets(token)).toContain('[REDACTED_GOOGLE_OAUTH_ACCESS_TOKEN]');
   });
+
+  // Regression: a fourth live probe (2026-10-01 02:05 IST slot) found three
+  // more credential families this project actually handles leaking through
+  // redaction. Telnyx is a telephony provider (`TELNYX_API_KEY`), LinkedIn is
+  // an OAuth integration (`LINKEDIN_ACCESS_TOKEN`), and Google app passwords
+  // authenticate the Gmail conduit (`GMAIL_APP_PASSWORD`).
+  it('redacts a Telnyx API key (KEY + 32 hex) but not the word "KEY" in prose', () => {
+    const key = 'KEY0123456789ABCDEF0123456789ABCDEF';
+    expect(redactSecrets(`TELNYX_API_KEY=${key}`)).not.toContain(key);
+    expect(redactSecrets(`raw ${key} pasted`)).not.toContain(key);
+    expect(redactSecrets(`raw ${key} pasted`)).toContain('[REDACTED_TELNYX_KEY]');
+    // A "KEY" that is not followed by a hex body must survive.
+    expect(redactSecrets('press the KEY button to continue')).toBe('press the KEY button to continue');
+  });
+
+  it('redacts a LinkedIn OAuth access token (AQV) but not an AQV opcode', () => {
+    const token = 'AQVt3n0k9Jm2XyZabcDEF1234567890abcdefg';
+    expect(redactSecrets(`LINKEDIN_ACCESS_TOKEN=${token}`)).not.toContain(token);
+    expect(redactSecrets(`raw ${token} pasted`)).not.toContain(token);
+    expect(redactSecrets(`raw ${token} pasted`)).toContain('[REDACTED_LINKEDIN_TOKEN]');
+    // A short "AQV" mnemonic in an assembly listing is not a token.
+    expect(redactSecrets('AQV is a mnemonic')).toBe('AQV is a mnemonic');
+  });
+
+  it('redacts the whole Gmail app password, not just its first group', () => {
+    // Google app passwords are "abcd efgh ijkl mnop". The generic keyword rule
+    // stops at the first space; without the dedicated rule the final three
+    // groups leaked verbatim.
+    const out = redactSecrets('GMAIL_APP_PASSWORD=abcd efgh ijkl mnop');
+    expect(out).not.toContain('efgh');
+    expect(out).not.toContain('ijkl');
+    expect(out).not.toContain('mnop');
+    expect(out).not.toContain('abcd efgh');
+  });
 });

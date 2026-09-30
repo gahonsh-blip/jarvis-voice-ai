@@ -58,6 +58,16 @@ const REDACTION_PATTERNS: {
     regex: /Bearer\s+[a-zA-Z0-9_\-\.]{20,}/gi,
     placeholder: 'Bearer [REDACTED_AUTH_TOKEN]',
   },
+  // 6b. Gmail / Google app passwords. Google issues these as exactly 16
+  // lowercase letters in four space-separated groups. The generic Password
+  // Assignment rule below stops at the first space and redacts only the first
+  // group, leaving 12 of the 16 characters (three of four groups) in the clear.
+  // This rule must precede that one so the whole value is consumed.
+  {
+    category: 'Gmail App Password',
+    regex: /\b(gmail_app_password|app_password)\s*[:=]\s*["']?[a-z]{4}(?:\s+[a-z]{4}){3}["']?/gi,
+    placeholder: '$1: [REDACTED_SECRET]',
+  },
   // 7. Passwords in URLs or Configs
   {
     category: 'Password Assignment',
@@ -258,6 +268,25 @@ const REDACTION_PATTERNS: {
     category: 'Google OAuth Access Token',
     regex: /\bya29\.[A-Za-z0-9_-]{20,}\b/g,
     placeholder: '[REDACTED_GOOGLE_OAUTH_ACCESS_TOKEN]',
+  },
+  // 36. Telnyx API keys (`KEY` + 32 hex). `TELNYX_API_KEY` is a first-class
+  // credential in this project (the Telnyx telephony adapter reads it), and a
+  // live probe showed the bare key passing through redaction unchanged. The
+  // lowercase `key` alternative is anchored on `KEY` followed immediately by
+  // hex, so ordinary prose like "press the KEY button" does not match.
+  {
+    category: 'Telnyx API Key',
+    regex: /(?<![A-Za-z0-9])(?:KEY|key)[0-9A-Fa-f]{32}\b/g,
+    placeholder: '[REDACTED_TELNYX_KEY]',
+  },
+  // 37. LinkedIn OAuth access tokens (`AQV` + body). LinkedIn issues the
+  // member-token family used by `LINKEDIN_ACCESS_TOKEN`; a live probe showed it
+  // surviving redaction byte-for-byte. Requires a long body so the ordinary
+  // "AQV" opcode rendered in a disassembler listing is not redacted.
+  {
+    category: 'LinkedIn Access Token',
+    regex: /\bAQV[A-Za-z0-9_-]{20,}\b/g,
+    placeholder: '[REDACTED_LINKEDIN_TOKEN]',
   },
 ];
 
