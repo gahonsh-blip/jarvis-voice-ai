@@ -8560,3 +8560,27 @@ Item #54 Secret/token protection audit — advanced (`PARTIAL`).
 - Commits: `b24b96a` (code+test), `d5e3bfe` (docs). State branch `0979709`.
 - PR: NONE. Main merge: NOT MERGED — awaiting human approval.
 
+
+---
+
+## WORK SLOT 15 — 2026-10-01 03:05 IST (2026-09-30 21:45 UTC) — window date 2026-09-30
+
+- Item: **#13 Zero-fake-success for all tools** — the Computer Operator view the
+  dispatcher opens was never mounted. `offlineOperatorCountsAsHostWork('open_computer_operator')`
+  is `true` and `handleExecuteAction` runs `setActiveApp('computer_operator')`, but
+  `src/App.tsx` had no `activeApp === 'computer_operator'` render site (the
+  `ComputerOperatorModal` import was unused), so the HUD never opened while the reply
+  and the "Autonomous Actions Executed" counter credited it.
+- Fix: mounted `<ComputerOperatorModal isOpen={activeApp === 'computer_operator'} ... />`
+  with sibling modal wiring. New guard `src/tests/computerOperatorDispatchTruth.test.ts`
+  (3 tests) asserts the set of `setActiveApp('...')` values is a subset of the
+  `activeApp === '...'` render sites — a general invariant, not a one-off pin.
+- Negative-validated: reverting only `src/App.tsx` fails `3 failed`; restored → `3 passed`.
+- Gates observed: lint (`tsc --noEmit`) exit 0; targeted 3 files / 25 tests passed;
+  full suite **119 files / 1636 tests passed** (22.03 s); build exit 0
+  (`dist/server.cjs` 935.5 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+- Security: `.env` ignored (`.gitignore:4`); clean tree; no `node_modules`/`dist` staged.
+- Item 13 remains **PARTIAL** — another real fake-success class closed.
+- Commits: `78abda5` (code+test), `c3f3a61` (docs). State branch `2f4477b`.
+- PR: NONE. Main merge: NOT MERGED — awaiting human approval.
+
