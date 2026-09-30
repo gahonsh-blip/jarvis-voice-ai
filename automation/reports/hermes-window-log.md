@@ -8172,3 +8172,79 @@ Blocked:
 
 Next Slot:
 - #13 — continue sweeping remaining tool-level success flags; verify the full suite stays green.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35 (fire 00:35)
+Window date: 2026-09-30 (IST 2026-10-01)   Window slots completed so far: 10
+
+Completed:
+- #54 Production Hardening (credential redaction) — PARTIAL, advanced.
+  Evidence: `src/utils/computerOperator/credentialRedactor.ts` (pattern
+  branches 23–31) + `src/tests/credentialRedactor.test.ts` (11 new tests,
+  35/35 in the file). Negative-validated: the 11 new tests fail against the
+  previous code (`11 failed | 24 passed`) and pass after the fix.
+
+In Progress:
+- #13 Zero-fake-success for all tools — re-checked this slot; the server tool
+  path routes every result through `toolActionExecuted` and every remaining
+  offline-engine `actionExecuted: true` site maps to a real view handler in
+  `src/App.tsx`. No unproven success claim was found to fix, so no further
+  change was made and the item stays PARTIAL.
+
+Remaining (summarised):
+- #1/#2/#8 Android bridge / wake word / computer-operator host execution —
+  BLOCKED (hardware or host session).
+- Most other backlog items are already VERIFIED or have no advanceable slice
+  reachable in this sandbox.
+
+Bugs Found:
+- Live probe found eight provider token families that `redactSecrets()` passed
+  through byte-for-byte: Groq `gsk_`, Perplexity `pplx-`, Notion `ntn_`/`secret_`,
+  Shopify `shpat_`/`shpss_`, Linear `lin_api_`, Slack incoming-webhook URLs,
+  Azure Storage `AccountKey=`, Firebase `AIza…` (no `Sy` infix, so the Google
+  pattern missed it) and Resend `re_`. The redactor sits on the computer-operator
+  planner/verifier/engine/screen-interpreter paths, so a key shown on screen or
+  in a task summary was surfaced unredacted.
+
+Bugs Fixed:
+- The eight families above are now redacted. Verification: 11 new regression
+  tests fail pre-fix (`11 failed | 24 passed`) and pass post-fix (`35 passed`);
+  over-redaction guards (ordinary `app.slack.com` URL, English `re_` prefix)
+  stay green.
+
+Tests:    118 files / 1621 tests passed (full suite, observed)
+Lint:     tsc --noEmit exit 0 (observed)
+Build:    exit 0 (observed) — dist/server.cjs 952094 bytes
+E2E:      NOT RUN
+Security: `git check-ignore -v .env` → ignored (.gitignore:4). `git status
+          --short` clean. Diff-vs-main scan for live token shapes matched only
+          prefix *mentions* in docs/tests, no real secrets. No node_modules/dist
+          staged.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, docs/SECURITY.md,
+               automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  43680c9
+Push:    succeeded → origin/feature/hermes-full-completion (9bac2b2 then 43680c9)
+
+PR:         existing (feature/hermes-full-completion → main)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+
+Blocked:
+- #1 real Android bridge / #2 wake word — require physical device (NOT_AVAILABLE)
+- #8 computer-operator host execution — requires a live host session
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13 — re-scan remaining offline-engine success flags for any not yet mapped to a
+  real view handler; if none remain, fall back to the next advanceable item.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में किसी नकली सफलता का दावा नहीं मिला, इसलिए 8 और क्रेडेंशियल
+  परिवारों को redact किया गया — 11 नए टेस्ट पहले फेल हुए, फिर पास; पूरी सूट
+  118 फ़ाइल / 1621 टेस्ट पास।
