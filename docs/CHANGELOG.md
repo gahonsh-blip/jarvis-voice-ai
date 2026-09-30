@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-30 23:10 IST (2026-09-30 17:40 UTC) — work slot 7: a client can no longer credit actions it did not perform
+
+### Fixed
+- **`POST /api/memory` honored a caller-asserted counter.** The handler in `server.ts` ran `memoryState.stats.actionsExecuted += 1` / `totalCommands += 1` whenever the request body carried `statUpdate.incrementAction` / `statUpdate.incrementCommand`. Those counters are the user-visible "Autonomous Actions Executed" and "Total Voice / Text Commands" figures in `src/components/MemoryModal.tsx`, so any client could raise them without the server observing a command or an action. No in-repo caller ever sends `statUpdate`, so the field was a pure fake-success surface. The server now ignores the request and appends an inert note (`Counter request not applied`) stating no counter was advanced; `lastActive` advances only when a real field changed.
+
+### Tests
+- `src/tests/memoryPersistence.e2e.test.ts` — new `client-asserted counters` suite (2 tests) drives the real HTTP route against a spawned server: both counters stay flat across the POST (verified with a fresh GET), and the request is recorded as an inert note instead of credited. Negative-validated: restoring the old `statUpdate` branch fails `2 failed | 5 passed`; with the fix the file passes `7/7`.
+
+### Verified
+- Targeted `src/tests/memoryPersistence.e2e.test.ts` `7 passed`; lint (`tsc --noEmit`) exit 0.
+
+---
+
 ## [Unreleased] - 2026-09-30 22:35 IST (2026-09-30 17:05 UTC) — work slot 6: dashboard radar pin no longer claims a live fix for a simulated point
 
 ### Fixed

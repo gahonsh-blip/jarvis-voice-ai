@@ -4,7 +4,32 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 17:05 UTC (22:35 IST 2026-09-30) — **WORK SLOT 6** of the
+Last cycle: 2026-09-30 17:40 UTC (23:10 IST 2026-09-30) — **WORK SLOT 7** of the
+2026-09-30 window, the 23:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **`POST /api/memory` client-asserted
+counter** — a real fake-success surface, fixed and pinned.
+
+**A client can no longer credit work it did not perform.** The `POST /api/memory`
+handler in `server.ts` honored a caller-supplied
+`statUpdate.incrementAction` / `statUpdate.incrementCommand`, unconditionally doing
+`memoryState.stats.actionsExecuted += 1` / `totalCommands += 1`. Those counters are
+the user-visible **"Autonomous Actions Executed"** and **"Total Voice / Text
+Commands"** figures rendered by `src/components/MemoryModal.tsx` (lines 190/202), so
+any POST carrying the field raised them without the server observing a command or an
+action. No in-repo caller (App.tsx, MemoryModal) ever sends `statUpdate`, so the
+field was a pure fabricated-success surface. The server now ignores those requests
+and appends an inert note (`Counter request not applied`) stating that no counter was
+advanced; `lastActive` only moves when a real field changed. Guard:
+`src/tests/memoryPersistence.e2e.test.ts` gains a `client-asserted counters` suite
+(2 tests) driving the **real HTTP route** against a spawned server — asserting both
+counters stay flat before/after (fresh GET) and that the request is recorded rather
+than credited. Negative-validated: restoring the old `statUpdate` branch fails
+`2 failed | 5 passed`; with the fix the file passes `7/7` and `npm run lint`
+(`tsc --noEmit`) exits `0`. Item 13 stays `PARTIAL` — this closes another named
+surface, but the item also covers computer-operator `actionExecuted` verdicts and
+other tool-level success flags, which remain open.
+
+Last cycle (previous): 2026-09-30 17:05 UTC (22:35 IST 2026-09-30) — **WORK SLOT 6** of the
 2026-09-30 window, the 22:35 IST fire. Item 13
 (`Zero-fake-success for all tools`), the **dashboard radar pin's `CURRENT FIX`
 fallback** — a real fake-success surface, fixed and pinned.
