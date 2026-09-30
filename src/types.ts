@@ -50,6 +50,7 @@ export type IntentCategory =
   | 'answer_call'
   | 'hangup_call'
   | 'reject_call'
+  | 'reject_message'
   | 'telephony_hub'
   | 'call_history'
   | 'caller_inquiry'

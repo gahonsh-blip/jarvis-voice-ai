@@ -238,6 +238,55 @@ export function offlineAndroidRejectVerdict(connected: boolean): OfflineAndroidR
   };
 }
 
+// ---------------------------------------------------------------------------
+// Android-bridge message-reject truth
+//
+// The sibling MESSAGE reject branch in localJarvisEngine (owner declines a
+// pending notification reply) cleared the locally mirrored pending event and
+// returned `actionExecuted: true` with the detail `{ type: 'open_notepad',
+// title: 'Message Dismissed' }` — a green "Action: Message Dismissed" banner and
+// a bump to the user-visible "Autonomous Actions Executed" counter. But the
+// branch only drops a local approval prompt: the reply was already refused, so
+// it was never handed to the device, and no notepad view is opened for a
+// decline. Unlike the call-reject twin (`offlineAndroidRejectVerdict`, always
+// `false`), this branch credited the cancel as executed work. Cancelling a
+// prompt is not performed work.
+// ---------------------------------------------------------------------------
+
+export interface OfflineAndroidMessageRejectVerdict {
+  /** Always false: refusing to send a reply is not an executed action. */
+  actionExecuted: boolean;
+  /** True when only the locally mirrored pending event was cleared. */
+  localMirrorCleared: boolean;
+  title: string;
+  replyEn: string;
+  replyHi: string;
+  replyHinglish: string;
+}
+
+export function offlineAndroidMessageRejectVerdict(connected: boolean): OfflineAndroidMessageRejectVerdict {
+  const detail = connected
+    ? {
+        en: 'the connected Android device was never told to send anything',
+        hi: 'कनेक्टेड Android डिवाइस को कुछ भेजने के लिए कहा ही नहीं गया',
+        hinglish: 'connected Android device ko kuch bhejne ko kaha hi nahi gaya',
+      }
+    : {
+        en: 'no Android device is connected, so the physical phone was not told to send anything',
+        hi: 'कोई Android डिवाइस कनेक्टेड नहीं है, इसलिए असली फोन को कुछ भेजने के लिए नहीं कहा गया',
+        hinglish: 'koi Android device connected nahi hai, isliye asli phone ko kuch bhejne ko nahi kaha gaya',
+      };
+
+  return {
+    actionExecuted: false,
+    localMirrorCleared: true,
+    title: 'Message Reply Declined Locally (nothing was sent)',
+    replyEn: `Declined this message reply in the app only — ${detail.en}.`,
+    replyHi: `यह संदेश उत्तर केवल ऐप में अस्वीकार किया गया — ${detail.hi}।`,
+    replyHinglish: `Message reply sirf app mein decline ki, Sir — ${detail.hinglish}.`,
+  };
+}
+
 /**
  * Honest reply for the `human_handoff` intent. Transferring the caller to
  * clinic staff is telephony work; a provider being *configured* does not prove

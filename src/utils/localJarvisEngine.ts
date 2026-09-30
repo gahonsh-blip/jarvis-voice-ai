@@ -23,6 +23,7 @@ import {
   offlineCallVerdict,
   offlineHumanHandoffReply,
   offlineAndroidRejectVerdict,
+  offlineAndroidMessageRejectVerdict,
   offlineOutboundCancelVerdict,
 } from './computerOperator/offlineCallTruth';
 import { offlineEmergencyVerdict, offlineEmergencyReply } from './computerOperator/offlineEmergencyTruth';
@@ -348,16 +349,27 @@ export function processOfflineCommand(
           offline: true,
         };
       } else if (evaluation.targetType === 'MESSAGE') {
+        const rejectVerdict = offlineAndroidMessageRejectVerdict(
+          androidBridgeEngine.getCapabilities() !== null,
+        );
         androidBridgeEngine.clearPendingEvent();
         const reply = isHindi
-          ? 'सर, संदेश का उत्तर रद्द कर दिया गया है।'
-          : 'Sir, message reply cancelled.';
+          ? rejectVerdict.replyHi
+          : isHinglish
+          ? rejectVerdict.replyHinglish
+          : rejectVerdict.replyEn;
+        countAction(updatedMemory, rejectVerdict.actionExecuted);
 
         return {
           reply,
           spokenText: reply,
-          actionExecuted: true,
-          actionDetail: { type: 'open_notepad', title: 'Message Dismissed' },
+          intent: 'reject_message',
+          actionExecuted: rejectVerdict.actionExecuted,
+          actionDetail: {
+            type: 'reject_message',
+            title: rejectVerdict.title,
+            payload: { localMirrorCleared: true },
+          },
           updatedMemory,
           offline: true,
         };
