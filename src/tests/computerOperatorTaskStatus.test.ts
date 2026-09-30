@@ -209,4 +209,23 @@ describe('the safe retry is re-verified, never credited on faith', () => {
     expect(task.error).toBe('RETRY_EXECUTOR_REJECTED');
     expect(task.resultSummary ?? '').not.toMatch(/verified against the host desktop/i);
   });
+
+  it('gives each task its own retry budget, so an earlier failure cannot fail a later task', async () => {
+    // Task 1 exhausts the safe-retry budget: the switch never takes effect.
+    ScreenObserver.setSource(sequencedHostSource(['Terminal', 'Terminal', 'Terminal', 'Terminal']));
+    ComputerOperatorEngine.setExecutor(sequencedExecutor([{ success: true }, { success: true }]).backend);
+    const failed = await ComputerOperatorEngine.executeTask(SWITCH_OBJECTIVE, 'hybrid', false);
+    expect(failed.status).toBe('FAILED');
+
+    // Task 2 uses the same action id/type. Its retry must still run and verify;
+    // a leaked counter would skip the retry and report a failure it never tried.
+    ScreenObserver.setSource(sequencedHostSource(['Terminal', 'Terminal', 'Chrome']));
+    const exec2 = sequencedExecutor([{ success: true }, { success: true }]);
+    ComputerOperatorEngine.setExecutor(exec2.backend);
+    const retried = await ComputerOperatorEngine.executeTask(SWITCH_OBJECTIVE, 'hybrid', false);
+
+    expect(exec2.calls()).toBeGreaterThanOrEqual(2);
+    expect(retried.status).toBe('COMPLETED');
+    expect(retried.resultSummary).toMatch(/verified against the host desktop/i);
+  });
 });

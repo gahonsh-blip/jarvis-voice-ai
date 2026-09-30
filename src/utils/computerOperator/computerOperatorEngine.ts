@@ -88,6 +88,11 @@ export class ComputerOperatorEngine {
     const isHindi = /[\u0900-\u097F]/.test(objective);
     const intentClass = ActionPlanner.classifyIntent(objective);
 
+    // Retry counters key on action id/type, which repeat across tasks. Clear
+    // them so a spent budget from a previous task cannot suppress this task's
+    // own safe retry and report a verification failure never attempted.
+    ActionVerifier.resetAllRetries();
+
     // 1. Create task & emit COMMAND_RECEIVED event
     const task = TaskTracker.createTask({
       objective,
