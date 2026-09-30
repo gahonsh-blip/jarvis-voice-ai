@@ -1,16 +1,19 @@
 {
-  "window_date": "2026-09-28",
-  "window_started_at": "2026-09-27T15:35:00Z",
-  "last_slot_at": "2026-09-27T23:05:00Z",
-  "slots_completed": 4,
+  "window_date": "2026-09-30",
+  "window_started_at": "2026-09-30T15:35:00Z",
+  "last_slot_at": "2026-09-30T16:10:00Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "09508cc",
+  "last_commit": "783ef22",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "Window 2026-09-28 closed at the 04:35 IST finalization slot. No new backlog item advanced. Verified on f2991b2: lint (tsc --noEmit) exit 0; vitest 117 files / 1577 tests passed (21.79s); build exit 0, dist/server.cjs 944934 bytes. Added regression guard src/tests/gitignoreHygiene.test.ts (commit c334491, negative-validated). Security: .env ignored, tree clean, no secret in diff-vs-main scan. E2E NOT RUN (no handset/display); deploy NOT_CONFIGURED. PR #4 open, non-draft, mergeable_state clean, awaiting human merge approval.",
-  "blocked_items": [1, 2, 8, 50, 55],
-  "last_report_path": "/tmp/hermes-window-report.md",
-  "state_note": "FINALIZATION SLOT (schedule slot 16 of 16, 04:35 IST). This was the last fire of the 2026-09-28 window. slots_completed counter incremented 3->4. Feature branch tip f2991b2 pushed; PR #4 body refreshed with finalization evidence. Window over: do not re-run. Item 13 remains PARTIAL (unaudited actionExecuted:true sites in server.ts)."
+  "finalized": false,
+  "finalization_result": null,
+  "blocked_items": [
+    "Real Android E2E",
+    "Real Screenshot",
+    "Live Computer Operator screen observation"
+  ],
+  "last_report_path": "/tmp/hermes-window-report.md"
 }
