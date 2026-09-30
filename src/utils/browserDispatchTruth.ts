@@ -100,3 +100,33 @@ export function browserOpenVerdict(intent: string, targetUrl?: string | null): B
     title: `In-App Browser: ${site} (external browser not launched)`,
   };
 }
+
+export interface BrowserOpenActionDetail {
+  type: string;
+  title: string;
+  payload: { target: string };
+}
+
+/**
+ * The `actionDetail` the `/api/chat` browser-open case must emit.
+ *
+ * The app dispatcher (`handleExecuteAction`) reads the destination from
+ * `actionDetail.payload.target`; a destination carried anywhere else (e.g. a
+ * top-level `target`) never reaches `BrowserModal`, which then stays on its
+ * Google home while the reply and the action card name another site. Keeping the
+ * URL inside `payload.target` is what makes the spoken line true.
+ */
+export function browserOpenActionDetail(verdict: BrowserOpenVerdict): BrowserOpenActionDetail {
+  return {
+    type: verdict.site ? SITE_LABEL_TO_INTENT[verdict.site] ?? verdict.title : verdict.title,
+    title: verdict.title,
+    payload: { target: verdict.url ?? GENERIC_HOME },
+  };
+}
+
+const SITE_LABEL_TO_INTENT: Record<string, string> = {
+  Google: 'open_google',
+  YouTube: 'open_youtube',
+  Gmail: 'open_gmail',
+  ChatGPT: 'open_chatgpt',
+};

@@ -83,7 +83,7 @@ import {
 import { screenshotVerdict, screenshotReply } from './src/utils/computerOperator/screenshotDispatchTruth';
 import { volumeVerdict, volumeReply } from './src/utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from './src/utils/computerOperator/powerDispatchTruth';
-import { browserOpenVerdict } from './src/utils/browserDispatchTruth';
+import { browserOpenVerdict, browserOpenActionDetail } from './src/utils/browserDispatchTruth';
 import {
   fixProjectErrorReply,
   operatorTaskExecuted,
@@ -9082,11 +9082,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const verdict = browserOpenVerdict(intentData.intent);
         spokenResponse = language === 'hi' ? verdict.replyHi : verdict.replyEn;
         actionExecuted = true;
-        actionDetail = {
-          type: intentData.intent,
-          title: verdict.title,
-          target: verdict.url,
-        };
+        // The URL must ride inside `payload.target`: the app dispatcher reads the
+        // destination only from `actionDetail.payload`, so a top-level `target`
+        // would never reach the view.
+        actionDetail = browserOpenActionDetail(verdict);
         break;
       }
       case 'google_search': {
