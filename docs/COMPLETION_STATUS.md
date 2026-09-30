@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-30 21:45 UTC (03:15 IST 2026-10-01) — **WORK SLOT 15** of the
+Last cycle: 2026-09-30 22:20 UTC (03:50 IST 2026-10-01) — **WORK SLOT 16** of the
+2026-09-30 window, the 03:35 IST fire. **Item 32 (`Call detection E2E`) — the
+live-call weather answer was fabricated.**
+
+**A live call answered a weather question with an invented temperature band.**
+`TelephonySessionManager.processTurn` (`src/utils/telephonySessionManager.ts`) is
+the turn handler wired to the real TwiML endpoint `/api/telephony/twiml/turn` in
+`server.ts`, so its `replyText` is spoken to a caller. Its weather branch, when
+no `weatherData` was supplied, answered "temperatures around 25 to 28 degrees
+Celsius" as if that were a current reading — a fabricated telemetry claim on a
+live call. A supplied `weatherData` object with no `temp` also fell through to
+invented per-field defaults (`26°C`, `Clear`, `Gurugram / SFO`).
+
+Fixed: the no-reading branch now states that no weather source is connected to
+the call and that no current temperature or conditions are available; a partial
+telemetry object is treated as no reading rather than filled with invented
+defaults; the connected-source branch still speaks the real reading and names an
+unknown location as unknown instead of inventing `Gurugram / SFO`. Guarded by
+`src/tests/telephonyWeatherHonesty.test.ts` (4 tests): no-source Hindi and
+English, an empty telemetry object, and the connected-source case.
+
+**Negative-validated:** with only the reply branch reverted to the fabricated
+band the guard fails (`3 failed | 1 passed`); restored → `4 passed`. Gates
+observed on this commit: lint (`tsc --noEmit`) exit 0; targeted
+`telephonyWeatherHonesty` + `telephonyProviderHonesty` **2 files / 10 tests
+passed**. Item 32 remains `PARTIAL` — the telemetry chain is now honest on the
+live call path; no physical call has reached this host.
+
+Previous cycle: 2026-09-30 21:45 UTC (03:15 IST 2026-10-01) — **WORK SLOT 15** of the
 2026-09-30 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the Computer Operator view the dispatcher opens was never mounted.**
 
@@ -4107,7 +4135,7 @@ Bugs found and fixed while building this:
 | :--- | :--- | :--- | :--- |
 | 30 | Real Telegram delivery | `PARTIAL` | Delivery is now verified against Telegram's returned `message_id`. A confirmed send is `VERIFIED`; a 2xx without an id is `UNVERIFIED`; a blocked bot reports `PERMISSION_REQUIRED`. Evidence: `src/utils/communication/telegramDelivery.ts`, `src/tests/telegramDelivery.test.ts` (10 tests), `src/tests/telegramDelivery.e2e.test.ts` (3 tests against a real server with a local Telegram stand-in). The physical leg ŌĆö a message reaching a real phone over api.telegram.org ŌĆö still needs the operator's bot token and a real send. |
 | 31 | Real notification reply | `PARTIAL` | Reply route requires an explicit `approved: true` and reports `DISPATCHED`, never success, until the device confirms. Delivery on a real handset is unverified. **2026-09-23 19:35 UTC (01:05 IST 2026-09-24)** ŌĆö the real adapter depended entirely on the server for the approval gate and flattened the server's `outcome` (`DISPATCHED`/`BLOCKED`/`NOT_CONFIGURED`) into `FAILED`; it now refuses an unapproved reply locally with `AUTHORIZATION_REQUIRED` and surfaces the real verdict. Guarded by `src/tests/realAndroidBridgeAdapter.test.ts`. **2026-09-22 03:35 IST ŌĆö the pending-approval REPLY button on the bridge screen no longer fabricates the approval or the dispatch.** `MobileBridgeModal.tsx` `dispatchReply` asked for no approval, sent no request, and set the event `AUTHORIZED` while speaking "Dispatching via the Android bridge"; its approval ternary had two identical branches, so the computed answer was discarded, and the route it claimed to have reached refuses every request without `approved: true`. The decision is now `src/utils/mobileReplyDispatchTruth.ts` (`replyDispatchDecision` refuses `NOT_REPLY_EVENT` / `SENSITIVE_CONTENT` / `NO_REPLY_TEXT` / `NO_DISTINCT_APPROVAL`; `replyDispatchOutcome` never infers success from an HTTP status), the UI takes a reply body plus a distinct `I APPROVE SENDING THIS REPLY` checkbox, leaves the event `PENDING_APPROVAL` on refusal, reports `NOT_CONFIGURED` without a paired session token, and drives status/audit/speech from the observed response. Guarded by `src/tests/mobileReplyDispatchTruth.test.ts` (16 tests; negative-validated ŌĆö restoring the old component fails exactly the 3 source guards, `3 failed \| 13 passed`, restored ŌåÆ 16/16, full suite 68 files / 979 tests passed). **2026-09-22 04:05 IST ŌĆö the dispatch outcome is no longer read as a delivery.** The same `dispatchReply` still marked a positive outcome `EXECUTED` and wrote `result: 'SUCCESS'` into the audit log, but the only response that produces a positive outcome is the server's `DISPATCHED, verified: false` ŌĆö the reply was handed to the bridge, not confirmed by the device, which reports separately via `action/confirm`. Status and audit now come from `replyEventStatusForOutcome` / `replyAuditProjection` in the same helper: `DISPATCHED`/`UNVERIFIED` ŌåÆ event `AUTHORIZED`, audit `UNVERIFIED`; `BLOCKED` ŌåÆ `REJECTED` / `DENIED`; `NOT_CONFIGURED` ŌåÆ `PENDING_APPROVAL`; only `action/confirm` may record `EXECUTED`/`SUCCESS`. The queue label reads `AUTHORIZED ŌĆö AWAITING DEVICE CONFIRMATION` and `EXECUTED` renders as `CONFIRMED BY DEVICE`, so the screen states which of the two is known. `MobileAuditEntry.result` gained `UNVERIFIED` as a legitimate value. Test file now 21 tests; negative-validated (`1 failed \| 20 passed` with the old expressions restored). Still `PARTIAL`: no real handset and no paired device received a reply, so device-side delivery remains unconfirmed. |
-| 32 | Call detection E2E | `PARTIAL` | Call state is reported from device telemetry, and the E2E suite covers the telemetry chain. No physical call has been detected by this host. |
+| 32 | Call detection E2E | `PARTIAL` | Call state is reported from device telemetry, and the E2E suite covers the telemetry chain. No physical call has been detected by this host. **2026-10-01 03:35 IST** — the live-call turn handler no longer fabricates weather: `TelephonySessionManager.processTurn` (wired to `/api/telephony/twiml/turn` in `server.ts`) answered a weather question with an invented "25 to 28 degrees Celsius" band when no source was connected, and filled missing telemetry fields with `26°C`/`Clear`/`Gurugram / SFO`. The no-source branch now reports that no weather source is connected and speaks no reading; a partial telemetry object counts as no reading. Guarded by `src/tests/telephonyWeatherHonesty.test.ts` (4 tests), negative-validated (`3 failed \| 1 passed` on the reverted branch; `4 passed` restored). |
 | 33 | Call answering | `PERMISSION_REQUIRED` | Answering is refused unless the device holds the dialer role; the refusal names the required grant. No real call has been answered. |
 | 34 | Message sending with approval | `PARTIAL` | Approval gate verified server-side (`approved: true` required, kill switch honoured). Real-device delivery unverified. **2026-09-21 22:06 IST** ŌĆö the shared `evaluateOwnerApproval` parser read Hindi refusals as consent for both calls and messages: the bare verb stem `ÓżēÓżĀÓżŠ` was an approval keyword and Devanagari matching used a prefix fallback, so `ÓżĢÓźēÓż▓ Óż«Óżż ÓżēÓżĀÓżŠÓżō` returned `APPROVE`. Stem dropped, whole-token matching enforced, rejection evaluated first. Guarded by `src/tests/androidMobileBridge.test.ts` (18 assertions), negative-validated (**7 tests fail** with the fix reverted, measured 22:47 IST). |
 

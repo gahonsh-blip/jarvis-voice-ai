@@ -398,18 +398,22 @@ export class TelephonySessionManager {
     // 6. Weather Telemetry Intent (Section C & Q)
     const weatherKeywords = ['मौसम', 'weather', 'बारिश', 'तापमान', 'rain', 'forecast', 'खराब है', 'धूप'];
     if (weatherKeywords.some((k) => lower.includes(k))) {
+      // No connected weather source means no reading. The previous default
+      // spoke an invented temperature band ("25 to 28 degrees Celsius") as if
+      // it were current conditions on a live call. Report the gap instead.
+      const weatherTemp = params.weatherData?.temp;
+      const hasWeatherTemp = weatherTemp !== undefined && weatherTemp !== null && weatherTemp !== '';
       let weatherReply = '';
-      if (params.weatherData) {
-        const temp = params.weatherData.temp || '26°C';
-        const cond = params.weatherData.condition || 'Clear';
-        const city = params.weatherData.city || 'Gurugram / SFO';
+      if (hasWeatherTemp) {
+        const cond = params.weatherData.condition || 'Unknown';
+        const city = params.weatherData.city || 'Unknown location';
         weatherReply = isHindi
-          ? `वर्तमान मौसम डेटा के अनुसार ${city} में तापमान ${temp} है और मौसम ${cond} है। कोई गंभीर मौसम चेतावनी नहीं है।`
-          : `According to current meteorological telemetry for ${city}, it is currently ${temp} with ${cond} conditions.`;
+          ? `वर्तमान मौसम डेटा के अनुसार ${city} में तापमान ${weatherTemp} है और मौसम ${cond} है। कोई गंभीर मौसम चेतावनी नहीं है।`
+          : `According to current meteorological telemetry for ${city}, it is currently ${weatherTemp} with ${cond} conditions.`;
       } else {
         weatherReply = isHindi
-          ? 'वर्तमान मौसम साफ और सामान्य है, तापमान लगभग 25 से 28 डिग्री सेल्सियस के आसपास है।'
-          : 'Current weather conditions are normal and clear with temperatures around 25 to 28 degrees Celsius.';
+          ? 'इस कॉल में कोई मौसम स्रोत कनेक्टेड नहीं है, इसलिए वर्तमान तापमान या मौसम की जानकारी उपलब्ध नहीं है।'
+          : 'No weather source is connected to this call, so no current temperature or conditions are available.';
       }
 
       if (session) {
