@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Camera, Download, RefreshCw, CheckCircle, Image as ImageIcon } from 'lucide-react';
+import { browserCaptureVerdict } from '../utils/computerOperator/screenshotDispatchTruth';
 
 interface ScreenshotModalProps {
   isOpen: boolean;
@@ -40,20 +41,28 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
           setTimeout(resolve, 800);
         });
 
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth || 1280;
-        canvas.height = video.videoHeight || 720;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/png');
-          setCapturedImage(dataUrl);
-          setCaptureStatus({
-            kind: 'verified',
-            detail: `Live display captured at ${canvas.width}x${canvas.height} (${activeStream.getVideoTracks()[0]?.label || 'display'}).`,
-          });
+        const verdict = browserCaptureVerdict(
+          video.videoWidth,
+          video.videoHeight,
+          activeStream.getVideoTracks()[0]?.label
+        );
+        if (!verdict.captured) {
+          // No decoded frame — do not draw a blank canvas and call it a capture.
+          setCaptureStatus({ kind: 'failed', detail: verdict.detailEn });
+          setCapturedImage(null);
         } else {
-          setCaptureStatus({ kind: 'failed', detail: 'Canvas rendering context was unavailable.' });
+          const canvas = document.createElement('canvas');
+          canvas.width = verdict.width as number;
+          canvas.height = verdict.height as number;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/png');
+            setCapturedImage(dataUrl);
+            setCaptureStatus({ kind: 'verified', detail: verdict.detailEn });
+          } else {
+            setCaptureStatus({ kind: 'failed', detail: 'Canvas rendering context was unavailable.' });
+          }
         }
       } else {
         // The browser cannot capture the screen here. Ask the agent host to do it

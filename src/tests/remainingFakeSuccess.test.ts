@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { screenshotVerdict, screenshotReply } from '../utils/computerOperator/screenshotDispatchTruth';
+import { screenshotVerdict, screenshotReply, browserCaptureVerdict } from '../utils/computerOperator/screenshotDispatchTruth';
 import { volumeVerdict, volumeReply } from '../utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from '../utils/computerOperator/powerDispatchTruth';
 import { processOfflineCommand } from '../utils/localJarvisEngine';
@@ -164,6 +164,38 @@ describe('power verdict is never executed and always requests approval', () => {
       expect(verdict.actionExecuted).toBe(false);
       expect(verdict.title).toMatch(/Not Implemented/);
     }
+  });
+});
+
+describe('a browser display capture without a decoded frame is not a capture', () => {
+  it('refuses to credit a frame when the video reports no dimensions', () => {
+    const verdict = browserCaptureVerdict(0, 0, 'Screen 1');
+    expect(verdict.captured).toBe(false);
+    expect(verdict.width).toBeNull();
+    expect(verdict.height).toBeNull();
+    expect(verdict.detailEn).toMatch(/no decoded frame/i);
+  });
+
+  it('still credits a real decoded frame at its true dimensions', () => {
+    const verdict = browserCaptureVerdict(1920, 1080, 'Screen 1');
+    expect(verdict.captured).toBe(true);
+    expect(verdict.width).toBe(1920);
+    expect(verdict.height).toBe(1080);
+    expect(verdict.detailEn).toContain('1920x1080');
+  });
+
+  it('does not substitute a placeholder size when only one dimension is missing', () => {
+    expect(browserCaptureVerdict(1920, 0).captured).toBe(false);
+    expect(browserCaptureVerdict(0, 1080).captured).toBe(false);
+  });
+
+  it('the ScreenshotModal routes its live capture through the verdict, not a 1280x720 fallback', () => {
+    const modalFlat = fs
+      .readFileSync(path.resolve(process.cwd(), 'src/components/ScreenshotModal.tsx'), 'utf8')
+      .replace(/\s+/g, ' ');
+    expect(modalFlat).toContain('browserCaptureVerdict(');
+    expect(modalFlat).not.toContain('video.videoWidth || 1280');
+    expect(modalFlat).not.toContain('video.videoHeight || 720');
   });
 });
 
