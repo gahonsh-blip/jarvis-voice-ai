@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 01:41 IST (2026-09-30 20:11 UTC) — window slot: an Android message-reply decline is no longer credited as executed work
+
+### Fixed
+- **Declining a pending message reply was counted as completed work.** The MESSAGE reject branch in `src/utils/localJarvisEngine.ts` returned `actionExecuted: true` with the action detail `{ type: 'open_notepad', title: 'Message Dismissed' }` and advanced the user-visible "Autonomous Actions Executed" counter. Declining a reply performs no work — `androidBridgeEngine.clearPendingEvent()` only drops a locally mirrored approval prompt, nothing is handed to the Android device, and no notepad view opens for a decline. The call-reject twin (`offlineAndroidRejectVerdict`) already reported `false`; this branch was the outlier. A new `offlineAndroidMessageRejectVerdict(connected)` in `src/utils/computerOperator/offlineCallTruth.ts` returns `actionExecuted: false` with title `Message Reply Declined Locally (nothing was sent)` and an honest EN/HI/Hinglish reply; the branch routes its counter through `countAction(updatedMemory, rejectVerdict.actionExecuted)`. `reject_message` was added to `IntentCategory` in `src/types.ts` so the typed intent matches the emitted intent (it previously tripped `TS2322`).
+
+### Tests
+- `src/tests/androidInquiryTruth.test.ts` — added coverage asserting the reject branch emits no `answer_call`/`open_notepad` intent, never sets `actionExecuted: true`, and pins the title and reply. Negative-validated by flipping the verdict to credit the decline (guard fails), restored → green.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted `androidInquiryTruth` + `offlineCallTruth` 2 files / 30 tests passed; full suite **118 files / 1627 tests passed** (22.35 s); build exit 0 (`dist/server.cjs` 955360 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-01 00:35 IST (2026-09-30 19:05 UTC) — work slot 10: eight more credential families redacted
 
 ### Fixed
