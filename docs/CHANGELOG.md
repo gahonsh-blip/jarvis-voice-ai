@@ -4,6 +4,24 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-09-30 21:05 IST (2026-09-30 15:51 UTC) — work slot 1: the browser destination was emitted in the wrong field
+
+### Fixed
+- **The previous slot's browser-open fix never reached the view.** `server.ts` emitted the destination as a top-level `actionDetail.target`, but the app dispatcher is called as `handleExecuteAction(data.intent, data.actionDetail?.payload)` and its `open_google/open_youtube/open_gmail/open_chatgpt` case reads `payload?.target`. A top-level `target` is dropped, `setBrowserInitialUrl('')` runs and `BrowserModal` stays on its Google home — so "open YouTube", "open Gmail" and "open ChatGPT" still loaded the Google home page while the reply and action card named another site. Confirmed live: `actionDetail` was `{type, title, target}` with no `payload`.
+- `src/utils/browserDispatchTruth.ts` gains `browserOpenActionDetail(verdict)`, returning the action detail with the URL inside `payload.target` — the only field the dispatcher reads. `server.ts` uses it.
+
+### Tests
+- `src/tests/browserDispatchTruth.test.ts` — now 16 tests. Unit coverage of `payload.target`, absence of a top-level `target`, and the default-home fallback, plus a wiring guard that reads the real dispatcher call. Negative-validated by reverting `server.ts` to the top-level shape (`1 failed | 15 passed`), restored → 16/16.
+
+### Verification (this slot)
+- Live E2E against the production build (`node dist/server.cjs`, PORT 4011): `open youtube` → `payload.target=https://www.youtube.com`; `open gmail` → `https://mail.google.com`; `open chatgpt` → `https://chatgpt.com`; `open google` → `https://www.google.com`.
+- `npm run lint` (`tsc --noEmit`) — exit 0.
+- `npx vitest run` — **117 files / 1583 tests passed** (21.07 s).
+- `npm run build` — exit 0, `dist/server.cjs` 923.1kb.
+- Security: `.env` ignored, working tree clean of secrets. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-09-28 04:35 IST (2026-09-27 23:05 UTC) — finalization slot: guard .gitignore encoding
 
 ### Added

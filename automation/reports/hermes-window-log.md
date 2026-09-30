@@ -7660,3 +7660,70 @@ Next Slot:
 - यह अंतिम (finalization) स्लॉट था — कोई नया बैकलॉग आइटम आगे नहीं बढ़ा; पूरी वेरिफिकेशन दोहराई
   — lint पास, 1577 टेस्ट पास, build पास; `.gitignore` की UTF-8 एंकोडिंग के लिए एक रिग्रेशन टेस्ट जोड़ा गया।
   PR #4 मर्ज के लिए तैयार है परन्तु इंसान की अनुमति का इंतजार है।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:05
+Window date: 2026-09-30   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — closed the browser-open destination emitted in the wrong field.
+  Evidence: server.ts:9088 now `actionDetail = browserOpenActionDetail(verdict)`; new builder in
+  src/utils/browserDispatchTruth.ts; src/tests/browserDispatchTruth.test.ts 16 passed.
+  Live E2E (node dist/server.cjs, PORT 4011): open youtube → payload.target=https://www.youtube.com,
+  gmail → https://mail.google.com, chatgpt → https://chatgpt.com, google → https://www.google.com.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. The remaining `actionExecuted: true` sites in
+  server.ts are still not individually audited (UNKNOWN); the sweep is not proven complete.
+
+Remaining:
+- Mandated order continues: Android Bridge / Real Android E2E / Real Screenshot / Computer Operator
+  hardware-dependent items are BLOCKED (no device/host screen); GitHub Automation, Social Automation,
+  Communication, AI/Memory, Autonomous Tasks, Voice, Wake Word, Production Hardening remain.
+
+Bugs Found:
+- The 2026-09-28 slot-15 browser-open fix was a no-op: it emitted the destination as a top-level
+  `actionDetail.target`, but the app dispatcher reads `actionDetail.payload` only, so BrowserModal never
+  received the URL. Found by probing the live server (`actionDetail` had no `payload`) and tracing
+  App.tsx:1270 `handleExecuteAction(data.intent, data.actionDetail?.payload)`.
+- The prior slot's source-text test asserted the wrong shape (`target: verdict.url,`) and passed over the bug.
+
+Bugs Fixed:
+- server.ts browser-open case + browserDispatchTruth.browserOpenActionDetail. Verified by:
+  (a) 16/16 targeted tests; (b) live E2E against the built server returning `payload.target` for all four
+  sites; (c) negative validation — reverting server.ts to the top-level shape fails the new wiring guard
+  (1 failed | 15 passed), restored → 16/16.
+
+Tests:    117 files / 1583 tests passed (npx vitest run, 21.07 s). Targeted: browserDispatchTruth 16 passed.
+Lint:     pass — `npm run lint` (tsc --noEmit) exit 0.
+Build:    pass — `npm run build` exit 0, dist/server.cjs 923.1kb.
+E2E:      RAN — production build served on PORT 4011, four browser-open intents probed over HTTP.
+Security: `.env` ignored; no secret in the working tree; only the three intended files committed.
+Documentation: docs/COMPLETION_STATUS.md (item 13 row + Last cycle), docs/CHANGELOG.md,
+               automation/reports/hermes-window-log.md.
+Branch:  feature/hermes-full-completion
+Commit:  b473722
+Push:    succeeded → origin/feature/hermes-full-completion (09508cc..b473722)
+
+PR:         #4 (existing) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/4
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present in this environment;
+            the verified artifact is dist/server.cjs.
+
+Blocked:
+- Real Android E2E / real screenshot / live Computer Operator screen observation — require a device,
+  emulator, or host screen not present in this sandbox.
+
+Human Approval Required:
+- Merge of PR #4 to `main` — owner must read this report and approve.
+
+Next Slot:
+- Continue #13: audit the next unaudited `actionExecuted: true` site in server.ts (the sweep is not
+  proven complete), or move to the next non-VERIFIED item in the mandated order if the sweep is exhausted.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में ब्राउज़र-ओपन बग ठीक किया गया — डेस्टिनेशन URL अब `payload.target` में भेजा जाता है
+  जहाँ ऐप उसे पढ़ता है; लाइव E2E में चारों साइटें सही URL लोड करती हैं, 1583 टेस्ट और build पास;
+  बैकलॉग आइटम #13 अभी भी PARTIAL है।
