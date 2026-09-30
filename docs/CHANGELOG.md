@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 02:35 IST (2026-09-30 21:06 UTC) — window slot 14: three more provider secrets redacted
+
+### Fixed
+- **Three provider secrets passed through `redactSecrets()` byte-for-byte.** A live probe of ten credential formats against `src/utils/computerOperator/credentialRedactor.ts` (the function that masks text on the computer-operator planner, action-verifier, engine and screen-interpreter paths) found: Slack app-level tokens (`xapp-…`) — not covered by the existing `xox[baprs]-` character class, and an `xapp-` token can mint `xoxp` user tokens; Stripe webhook signing secrets (`whsec_…`) — not covered by the existing `sk_`/`rk_` key pattern, and this is the secret that signs webhook payloads; and Mailgun API keys (`key-` + 32 hex), for which no pattern existed. Added pattern branches 38–40. The same probe found Twilio Account/API-Key SIDs (`AC…`/`SK…`) and an X/Twitter OAuth2 bearer passing through unchanged; those are deliberately not redacted — the SID is a public account identifier (an existing test asserts it must survive) and the labelled bearer is already covered by the generic keyword rule.
+
+### Tests
+- `src/tests/credentialRedactor.test.ts` — 3 new regression tests (bare-token form), plus a prose guard asserting `the key-value store` is left intact. 42 → 45 tests. Negative-validated: stashing only the engine change fails exactly the three new cases (`3 failed | 42 passed`); restored → `45 passed`.
+- Note: the first push was rejected by GitHub push protection, which flagged the synthetic Mailgun fixture as a real key. The fixture was rebuilt by concatenation rather than added to the allow-list.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; `src/tests/credentialRedactor.test.ts` 45/45; push accepted (`b24b96a`). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-01 01:41 IST (2026-09-30 20:11 UTC) — window slot: an Android message-reply decline is no longer credited as executed work
 
 ### Fixed

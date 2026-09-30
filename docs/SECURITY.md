@@ -226,6 +226,27 @@ fix (`35 passed`). Two over-redaction guards accompany them: an ordinary Slack
 URL (`app.slack.com/client/…`, no embedded secret) and the English `re_` prefix
 are left intact.
 
+A fourth probe (work slot 13, 2026-10-01 02:05 IST) found three more families the
+project itself carries: Telnyx API keys (`KEY` + 32 hex, read by the Telnyx
+telephony adapter), LinkedIn OAuth access tokens (`AQV` + body) and Gmail app
+passwords (`abcd efgh ijkl mnop`, which the generic keyword rule truncated at the
+first space). A fifth probe (work slot 14, 2026-10-01 02:35 IST) of ten provider
+formats found three more passing through byte-for-byte:
+
+- Slack app-level tokens (`xapp-…`) — the existing pattern's character class is
+  only `xox[baprs]-`, and an `xapp-` token can mint `xoxp` user tokens.
+- Stripe webhook signing secrets (`whsec_…`) — the existing Stripe pattern covers
+  only `sk_`/`rk_` API keys; this is the secret that signs webhook payloads.
+- Mailgun API keys (`key-` + 32 hex) — no pattern existed.
+
+All are covered by new regression tests using the bare token form. The fifth
+probe deliberately leaves two observed values unredacted: the Twilio
+Account/API-Key SIDs (`AC…`/`SK…`) are public account identifiers (an existing
+test asserts the SID must survive), and an X/Twitter OAuth2 bearer key is covered
+by the generic keyword rule when it is labelled, which is how it appears in a
+config or log. Each addition is negative-validated (the new tests fail against
+the prior pattern set).
+
 The provider list is not provably exhaustive — a future probe may find more — so
 this class of gap is closed one verified family at a time rather than declared
 complete.
