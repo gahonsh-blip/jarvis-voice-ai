@@ -15,6 +15,10 @@ import {
   checkHumanHandoffIntent,
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
+import {
+  telephonyEngineMode,
+  telephonyEngineCanObserveCall,
+} from './telephonyGatewayTruth';
 
 export class TelephonySessionManager {
   private static activeSessions: Map<string, TelephonySession> = new Map();
@@ -285,8 +289,17 @@ export class TelephonySessionManager {
         };
       }
 
-      // If simulated or provider configured, attempt transfer
-      if (provider.isConfigured() || session?.isSimulated) {
+      // A transfer may only be CONFIRMED when a real carrier gateway can
+      // observe it. The simulator's transferCall() is hardcoded
+      // `providerConfirmed: true`, and a transfer request with no provider
+      // configured cannot be observed at all, so neither may advance the
+      // handoff to CONFIRMED.
+      const activeEngine = TelephonyProviderRegistry.getProvider();
+      const engineCanObserve = telephonyEngineCanObserveCall(
+        telephonyEngineMode(activeEngine.id, activeEngine.isConfigured()),
+      );
+
+      if (engineCanObserve && (provider.isConfigured() || session?.isSimulated)) {
         const transferRes = await provider.transferCall({
           callSessionId: params.callSessionId,
           targetNumber: clinic.phone,
@@ -317,10 +330,11 @@ export class TelephonySessionManager {
         }
       }
 
-      // If transfer unavailable or provider unconfirmed, truthfully take message
+      // Transfer could not be confirmed against a live carrier. Say so plainly
+      // rather than asserting a busy line that was never observed.
       const unavailableReply = isHindi
-        ? 'माफ़ कीजिए, वर्तमान में क्लिनिक स्टाफ उपलब्ध नहीं है या लाइन व्यस्त है। क्या आप कोई संदेश छोड़ना चाहेंगे?'
-        : 'I apologize, all staff members are currently occupied on another line. Would you like to leave a message?';
+        ? 'माफ़ कीजिए, कॉल ट्रांसफर की पुष्टि नहीं हो सकी (लाइव कैरियर उपलब्ध नहीं)। क्या आप कोई संदेश छोड़ना चाहेंगे?'
+        : 'I apologize, the call transfer could not be confirmed (no live carrier available). Would you like to leave a message?';
       if (session) {
         session.state = 'WAITING_FOR_CALLER';
         session.handoffStatus = 'FAILED';

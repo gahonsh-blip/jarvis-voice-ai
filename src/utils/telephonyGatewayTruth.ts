@@ -85,3 +85,14 @@ export function telephonySelectionApplied(
   const wanted = telephonyEngineProviderId(selectedEngine);
   return wanted !== null && wanted === activeProviderId;
 }
+
+/**
+ * Whether the active engine can be consulted for a live call action. Only a
+ * real carrier gateway can observe one: the simulator's `isConfigured()` is
+ * unconditionally true by design, and an unconfigured carrier has nothing to
+ * ask. A caller must not treat a simulated or absent engine as an observation
+ * source for a transfer, answer or hangup.
+ */
+export function telephonyEngineCanObserveCall(mode: TelephonyEngineMode): boolean {
+  return mode === 'LIVE_GATEWAY';
+}
