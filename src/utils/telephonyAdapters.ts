@@ -4,6 +4,7 @@ import {
   TelephonyStatus,
 } from '../types/telephonyProvider';
 import { TELEPHONY_TWIML_TURN_PATH } from './telephonyEndpointTruth';
+import { SIMULATION_PROVIDER_ID } from './telephonyGatewayTruth';
 
 /**
  * Base abstract or utility functions for Telephony Adapters
@@ -543,6 +544,13 @@ export class TelephonyProviderRegistry {
 
   static getActiveStatus(): TelephonyStatus {
     const active = this.getProvider();
+    // A simulation adapter has no PSTN carrier, so it is never a usable
+    // telephony status no matter what its isConfigured() claims ("always ready
+    // for tests"). Reporting READY here is what let the offline engine dial
+    // through the simulator believing a carrier was configured.
+    if (active.id === SIMULATION_PROVIDER_ID) {
+      return 'NOT_CONFIGURED';
+    }
     if (!active.isConfigured()) {
       return 'NOT_CONFIGURED';
     }

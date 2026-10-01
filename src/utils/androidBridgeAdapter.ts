@@ -94,10 +94,21 @@ export class RealAndroidBridgeAdapter implements AndroidBridgeAdapter {
         );
       }
 
+      // `success` must mean "a live, fully-permitted device is connected". The
+      // engine derives the honest status from the reported capabilities (a
+      // simulated/testbed device or one missing call-answer capability is
+      // LIMITED_CAPABILITY; one with no notification/call-detection grant is
+      // PERMISSION_REQUIRED). Reporting `success: true` off a bare HTTP 200
+      // would tell a caller a live device had connected when the status says
+      // otherwise, so the flag follows the status the engine actually observed.
+      const status = androidBridgeEngine.getStatus();
       return {
-        success: true,
-        status: data.status || androidBridgeEngine.getStatus(),
-        message: 'Real Android Bridge connected successfully.',
+        success: status === 'CONNECTED',
+        status,
+        message:
+          status === 'CONNECTED'
+            ? 'Real Android Bridge connected successfully.'
+            : `Bridge responded, but the device is not a live fully-permitted connection (status: ${status}).`,
       };
     } catch (err: any) {
       return {
