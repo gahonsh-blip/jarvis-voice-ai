@@ -7,7 +7,7 @@ import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
-import { isTelephonyHubRequest, isCallHistoryRequest } from './src/utils/telephonyIntentRouting';
+import { isTelephonyHubRequest, isCallHistoryRequest, isAnswerCallRequest, isHangupCallRequest, isRejectCallRequest, isTelephonyControlRequest } from './src/utils/telephonyIntentRouting';
 import { judgeSetNameIntent } from './src/utils/identityTruth';
 import { freelanceLeadsReply } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
@@ -860,14 +860,14 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
   // classified below.
   if (
     ((lower.startsWith('call ') || lower.startsWith('dial ')) &&
-      !isTelephonyHubRequest(lower) &&
-      !isCallHistoryRequest(lower)) ||
-    lower.includes('make a call') ||
-    lower.includes('phone call') ||
-    lower.includes('place a call') ||
-    lower.includes('कॉल करो') ||
-    lower.includes('फोन करो') ||
-    lower.includes('call lagao')
+      !isTelephonyControlRequest(lower)) ||
+    ((lower.includes('phone call') ||
+      lower.includes('make a call') ||
+      lower.includes('place a call') ||
+      lower.includes('कॉल करो') ||
+      lower.includes('फोन करो') ||
+      lower.includes('call lagao')) &&
+      !isTelephonyControlRequest(lower))
   ) {
     const targetMatch = text.match(/(?:call|dial|फोन करो|कॉल करो|call lagao)\s+(.+)/i);
     const target = targetMatch ? targetMatch[1].trim() : 'Contact';
@@ -878,59 +878,23 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
     };
   }
 
-  if (
-    lower.includes('answer call') ||
-    lower.includes('pick up the phone') ||
-    lower.includes('pick up the call') ||
-    lower.includes('answer the phone') ||
-    lower.includes('कॉल उठाओ') ||
-    lower.includes('फोन उठाओ') ||
-    lower.includes('phone uthao')
-  ) {
+  if (isAnswerCallRequest(lower)) {
     return { intent: 'answer_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('hang up') ||
-    lower.includes('end call') ||
-    lower.includes('cut the call') ||
-    lower.includes('disconnect call') ||
-    lower.includes('कॉल काटो') ||
-    lower.includes('फोन काटो') ||
-    lower.includes('call kato')
-  ) {
+  if (isHangupCallRequest(lower)) {
     return { intent: 'hangup_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('reject call') ||
-    lower.includes('decline call') ||
-    lower.includes('कॉल रिजेक्ट करो')
-  ) {
+  if (isRejectCallRequest(lower)) {
     return { intent: 'reject_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('call hub') ||
-    lower.includes('open dialer') ||
-    lower.includes('open phone') ||
-    lower.includes('phone dialer') ||
-    lower.includes('telephony hub') ||
-    lower.includes('telephony system') ||
-    lower.includes('कॉल हब') ||
-    lower.includes('फोन डायलर')
-  ) {
+  if (isTelephonyHubRequest(lower)) {
     return { intent: 'telephony_hub', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('call history') ||
-    lower.includes('call logs') ||
-    lower.includes('recent calls') ||
-    lower.includes('who called') ||
-    lower.includes('कॉल हिस्ट्री') ||
-    lower.includes('किसका कॉल आया')
-  ) {
+  if (isCallHistoryRequest(lower)) {
     return { intent: 'call_history', confidence: 0.95 };
   }
 

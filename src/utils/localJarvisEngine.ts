@@ -8,7 +8,7 @@ import {
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
 import { judgeSetNameIntent } from './identityTruth';
-import { isTelephonyHubRequest, isCallHistoryRequest } from './telephonyIntentRouting';
+import { isTelephonyHubRequest, isCallHistoryRequest, isAnswerCallRequest, isHangupCallRequest, isRejectCallRequest, isTelephonyControlRequest } from './telephonyIntentRouting';
 import { androidBridgeEngine } from './androidBridgeEngine';
 import {
   youtubeOfflineStatusReply,
@@ -1354,14 +1354,14 @@ export function processOfflineCommand(
   // outbound dial to the literal target "hub". Their own branches follow below.
   if (
     ((lower.startsWith('call ') || lower.startsWith('dial ')) &&
-      !isTelephonyHubRequest(lower) &&
-      !isCallHistoryRequest(lower)) ||
-    lower.includes('phone call') ||
-    lower.includes('make a call') ||
-    lower.includes('कॉल करो') ||
-    lower.includes('फोन करो') ||
-    lower.includes('call lagao') ||
-    lower.includes('इस नंबर पर फोन करो')
+      !isTelephonyControlRequest(lower)) ||
+    ((lower.includes('phone call') ||
+      lower.includes('make a call') ||
+      lower.includes('कॉल करो') ||
+      lower.includes('फोन करो') ||
+      lower.includes('call lagao') ||
+      lower.includes('इस नंबर पर फोन करो')) &&
+      !isTelephonyControlRequest(lower))
   ) {
     const targetMatch = clean.match(/(?:call|dial|फोन करो|कॉल करो|call lagao|इस नंबर पर फोन करो)\s+(.+)/i);
     const target = targetMatch ? targetMatch[1].trim() : '+91 9876543210';
@@ -1458,14 +1458,7 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('answer call') ||
-    lower.includes('pick up the phone') ||
-    lower.includes('pick up the call') ||
-    lower.includes('कॉल उठाओ') ||
-    lower.includes('फोन उठाओ') ||
-    lower.includes('phone uthao')
-  ) {
+  if (isAnswerCallRequest(lower)) {
     const verdict = offlineCallVerdict('answer', activeTelephonyEngineMode());
     countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
@@ -1480,15 +1473,7 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('hang up') ||
-    lower.includes('end call') ||
-    lower.includes('cut the call') ||
-    lower.includes('disconnect call') ||
-    lower.includes('कॉल काटो') ||
-    lower.includes('फोन काटो') ||
-    lower.includes('call kato')
-  ) {
+  if (isHangupCallRequest(lower)) {
     const verdict = offlineCallVerdict('hangup', activeTelephonyEngineMode());
     countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
@@ -1503,11 +1488,7 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('reject call') ||
-    lower.includes('decline call') ||
-    lower.includes('कॉल रिजेक्ट करो')
-  ) {
+  if (isRejectCallRequest(lower)) {
     const verdict = offlineCallVerdict('reject', activeTelephonyEngineMode());
     countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
@@ -1522,15 +1503,7 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('call hub') ||
-    lower.includes('open dialer') ||
-    lower.includes('open phone') ||
-    lower.includes('phone dialer') ||
-    lower.includes('telephony') ||
-    lower.includes('कॉल हब') ||
-    lower.includes('फोन डायलर')
-  ) {
+  if (isTelephonyHubRequest(lower)) {
     updatedMemory.stats.actionsExecuted += 1;
     const reply = isHindi ? 'टेलीफोनी हब खोला जा रहा है।' : isHinglish ? 'Telephony Hub open ho raha hai.' : 'Opening the in-app Voice AI Telephony Hub. No external phone dialer is opened.';
     return {
@@ -1544,13 +1517,7 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('call history') ||
-    lower.includes('call logs') ||
-    lower.includes('recent calls') ||
-    lower.includes('who called') ||
-    lower.includes('कॉल हिस्ट्री')
-  ) {
+  if (isCallHistoryRequest(lower)) {
     updatedMemory.stats.actionsExecuted += 1;
     const reply = isHindi ? 'इस ऐप में दर्ज कॉल हिस्ट्री दिखाई जा रही है।' : 'Showing the call logs and transcripts recorded in this app.';
     return {
