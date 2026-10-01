@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { screenshotVerdict, screenshotReply, browserCaptureVerdict } from '../utils/computerOperator/screenshotDispatchTruth';
+import { ActionExecutor } from '../utils/computerOperator/actionExecutor';
+import { ScreenObserver } from '../utils/computerOperator/screenObserver';
 import { volumeVerdict, volumeReply } from '../utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from '../utils/computerOperator/powerDispatchTruth';
 import { processOfflineCommand } from '../utils/localJarvisEngine';
@@ -546,3 +548,95 @@ describe('a successful weather read is a status answer, not executed work', () =
   });
 });
 
+
+function makeObservation(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'obs-test',
+    timestamp: new Date().toISOString(),
+    activeWindow: 'Visual Studio Code',
+    activeApplication: 'VS Code',
+    windowTitle: 'server.ts',
+    visibleElements: [],
+    detectedErrors: [],
+    screenResolution: { width: 1920, height: 1080 },
+    isAmbiguous: false,
+    platform: 'browser' as const,
+    ...overrides,
+  };
+}
+
+function inspectAction(type: 'INSPECT_SCREEN' | 'TAKE_SCREENSHOT') {
+  return {
+    id: 'act-1',
+    type,
+    description: 'inspect the screen',
+    securityLevel: 1 as const,
+    requiresHumanApproval: false,
+  } as any;
+}
+
+describe('computer-operator screen capture is credited only from a host-backed observer', () => {
+  it('refuses an illustrative observation even when it returns a synthetic image', async () => {
+    ScreenObserver.setSource(null);
+    // Reproduce the browser path: the illustrative observer draws a synthetic
+    // canvas image of a screen it never saw. Without the gate this action
+    // reports VERIFIED for that fabricated image.
+    const originalWindow = (globalThis as any).window;
+    const originalCreate = (globalThis as any).document;
+    const stubCanvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({ fillRect: () => {}, fillText: () => {}, fillStyle: '', font: '' }),
+      toDataURL: () => 'data:image/png;base64,ILLUSTRATIVE',
+    };
+    (globalThis as any).document = { createElement: () => stubCanvas };
+    (globalThis as any).window = { fetch: () => {} };
+    try {
+      const observation = await ScreenObserver.observeScreen({ mockWindow: 'vscode', includeScreenshot: true });
+      expect(observation.screenshotBase64).toBe('data:image/png;base64,ILLUSTRATIVE');
+
+      const result = await ActionExecutor.executeAction(inspectAction('INSPECT_SCREEN'));
+      expect(result.outcome).toBe('NOT_AVAILABLE');
+      expect(result.success).toBe(false);
+      expect(result.receipt.verified).toBe(false);
+      expect(result.receipt.failureReason).toBe('ILLUSTRATIVE_OBSERVATION_SOURCE');
+      expect(result.message).toContain('Nothing was captured');
+    } finally {
+      (globalThis as any).window = originalWindow;
+      (globalThis as any).document = originalCreate;
+    }
+  });
+
+  it('refuses a TAKE_SCREENSHOT request against the illustrative observer too', async () => {
+    ScreenObserver.setSource(null);
+    const result = await ActionExecutor.executeAction(inspectAction('TAKE_SCREENSHOT'));
+    expect(result.outcome).toBe('NOT_AVAILABLE');
+    expect(result.success).toBe(false);
+  });
+
+  it('credits a host-backed observation that carries image data', async () => {
+    ScreenObserver.setSource(async () =>
+      makeObservation({ screenshotBase64: 'data:image/png;base64,AAAA' }) as any
+    );
+    try {
+      const result = await ActionExecutor.executeAction(inspectAction('INSPECT_SCREEN'));
+      expect(result.outcome).toBe('VERIFIED');
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Captured the current view');
+    } finally {
+      ScreenObserver.setSource(null);
+    }
+  });
+
+  it('does not credit a host-backed observation that produced no image', async () => {
+    ScreenObserver.setSource(async () => makeObservation() as any);
+    try {
+      const result = await ActionExecutor.executeAction(inspectAction('INSPECT_SCREEN'));
+      expect(result.outcome).toBe('NOT_AVAILABLE');
+      expect(result.success).toBe(false);
+      expect(result.receipt.failureReason).toBe('NO_CAPTURE_PRODUCED');
+    } finally {
+      ScreenObserver.setSource(null);
+    }
+  });
+});
