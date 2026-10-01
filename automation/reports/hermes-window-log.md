@@ -9180,3 +9180,19 @@ Next Slot:
 - ऑफ़लाइन इंजन के सभी 14 `actionExecuted: true` इंटेंट्स को एक नए टेस्ट से पिन किया;
   निगेटिव-वैलिडेशन सहित टेस्ट, lint और build सब पास — कोई नकली सफलता नहीं, पूरा सबूत।
 
+
+## 2026-10-02 02:35 IST — WORK SLOT 12 (item 13)
+
+Fixed `AndroidBridgeManager.connectDevice` (`src/utils/androidBridgeEngine.ts`):
+return is now `{ success: this.status === 'CONNECTED', status: this.status }`.
+Previously `success: true` was returned even when status was `LIMITED_CAPABILITY`
+or `PERMISSION_REQUIRED` — a fake success. No in-repo consumer read the flag
+(grep). New `src/tests/actionExecutedRemainingSites.test.ts` (5 tests) pins the
+telephony authorization flag, the simulated adapter (`SIMULATION_ONLY`, never
+`CONNECTED`), the real adapter's server-rejection propagation, the fixed engine
+behaviour, and the `success: true` counts (adapter 2 / engine 0 / telephony 2).
+Negative-validated: old code -> 2 failed | 3 passed; fixed -> 5/5.
+
+Gates: lint exit 0; targeted bridge suite 6 files / 71 passed; full suite
+126 files / 1703 passed (22.68s); build exit 0 (`dist/server.cjs` 942.0 kb).
+E2E NOT RUN (no Android hardware). Deploy NOT_CONFIGURED. Item 13 stays PARTIAL.
