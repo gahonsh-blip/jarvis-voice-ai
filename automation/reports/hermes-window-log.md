@@ -8925,3 +8925,32 @@ E2E: NOT RUN. Deploy: NOT_CONFIGURED. Commits c3ea591 (docs) / fa97358 (fix).
 
 **Next slot:** item 13 continued — `SocialMediaModal.tsx` YouTube upload-draft
 flow and the synthetic `telephonyAdapters.ts` `success: true` returns.
+
+---
+
+## Slot — 2026-10-02 00:35 IST (WORK, slots_completed 7)
+
+**Item #13 Zero-fake-success for all tools — PARTIAL (advanced).**
+Closed the outbound-dial fake success: `POST /api/telephony/outbound/authorize`
+(`server.ts`) gated its dial on the raw `provider.isConfigured()` boolean, then
+called `startOutboundCall()`. The `simulation_test_provider`'s `isConfigured()`
+is unconditionally `true` and its `startOutboundCall()` returns a fabricated
+`providerCallId`, so once the simulator was the active engine the route answered
+`success: true` with a `providerCallId` although no carrier saw a call.
+Fixed: `telephonyEngineCanObserveCall(mode)` in `src/utils/telephonyGatewayTruth.ts`;
+the route derives the active engine mode via `telephonyEngineMode()` and refuses
+any dial the engine cannot place (SIMULATION_ONLY / TELEPHONY_NOT_CONFIGURED /
+TELEPHONY_ENGINE_UNSUPPORTED).
+
+Evidence: `src/tests/telephonyOutboundDialTruth.test.ts` (9 tests); targeted
+`telephonyOutboundDialTruth`+`telephonyGatewayTruth` 2 files / 19 passed; full
+suite **124 files / 1690 tests passed** (22.42 s); lint (`tsc --noEmit`) exit 0;
+build exit 0 (`dist/server.cjs` 963512 bytes). Negative-validated: reverting the
+gate -> `2 failed | 7 passed`; restored -> 9/9. Live E2E on `node dist/server.cjs`
+(PORT 4013): simulator selected (`engineApplied: true`) -> authorize HTTP 400
+`status: SIMULATION_ONLY`; default twilio engine -> HTTP 400 `status:
+NOT_CONFIGURED`. Security: `.env` ignored, tree clean, no token in diff.
+Deploy: NOT_CONFIGURED. Commits b4e6c9e (fix) / bf89b21 (docs).
+
+**Next slot:** item 13 continued — `SocialMediaModal.tsx` YouTube upload-draft
+flow and the synthetic `telephonyAdapters.ts` `success: true` returns.
