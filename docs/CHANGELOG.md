@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 23:50 IST (2026-10-01 18:20 UTC) — window slot 6: the offline blueprint branch no longer claims phases 0-9 are active
+
+### Fixed
+- **The offline `check_project` branch spoke a readiness claim it never measured.** `src/utils/localJarvisEngine.ts` (the fallback engine used when the server is unreachable) answered a "project"/"blueprint"/"roadmap" request with `Displaying Master Blueprint Phase 0 to 9.` / `All phases active hain.` / `मास्टर ब्लूप्रिंट खोला जा रहा है। फेज 0 से 9 सक्रिय हैं।`. That path never reads `/api/blueprint`, so it cannot know the phase list or whether any phase is active — the identical readiness claim the blueprint-truth work removed from `BlueprintRoadmapModal.tsx`, still alive one layer down in the spoken reply. The reply now comes from `blueprintRoadmapReply(lang)` in `src/utils/blueprintTruth.ts`, which states the view is opening and that the phase list is unconfirmed (English, Hindi and Hinglish).
+
+### Tests
+- `src/tests/blueprintProgressTruth.test.ts` (+3 cases +1 engine source guard): every language reply is free of "phase 0 to 9" / "all phases active" and names `/api/blueprint` as unread; the engine source must call `blueprintRoadmapReply(` and contain none of the hardcoded claims.
+- Negative-validated: restoring the hardcoded phase claim fails the engine source guard → `1 failed | 12 passed`; restored → 13/13.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted `blueprintProgressTruth`+`localJarvisEngine` 2 files / 59 passed; full suite **123 files / 1681 tests passed** (22.55 s); build exit 0 (`dist/server.cjs` 962913 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-01 23:19 IST (2026-10-01 17:49 UTC) — window slot 5: the telephony agent no longer recites unverified clinic facts on live calls
 
 ### Fixed
