@@ -9228,3 +9228,25 @@ push succeeded. Main merge: NOT MERGED — awaiting human approval.
 
 हिंदी सारांश: मोबाइल ब्रिज बैज अब झूठा हरा "कनेक्टेड" नहीं दिखाता; 11 टेस्ट पास,
 पूरा सूट 1714 पास, lint/build हरे।
+
+---
+
+## 2026-10-02 03:35 IST (WORK slot 14) — real bridge adapter + telephony simulator stop faking success
+
+Item 13 `Zero-fake-success for all tools` (still `PARTIAL`). Two more real defects closed.
+
+- `RealAndroidBridgeAdapter.connect()` (`src/utils/androidBridgeAdapter.ts`) returned
+  `success: true` on any HTTP 200 and discarded the `androidBridgeEngine.connectDevice(...)`
+  result, re-faking the honest `LIMITED_CAPABILITY`/`PERMISSION_REQUIRED` verdict. Now
+  `success: status === 'CONNECTED'`; degraded connects report `success: false`.
+- `TelephonyProviderRegistry.getActiveStatus()` (`src/utils/telephonyAdapters.ts`) returned
+  `READY` off the simulator's unconditional `isConfigured()`; now `NOT_CONFIGURED` for
+  `SIMULATION_PROVIDER_ID`.
+
+Tests added: `src/tests/realAndroidBridgeAdapter.test.ts` (+2), `src/tests/telephonyGatewayTruth.test.ts` (+2).
+Negative-validated: restore adapter `success: true` -> `2 failed | 7 passed`; remove simulator guard -> `1 failed | 11 passed`; both restored green.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted 2 files / 21 passed; full suite **127 files / 1718 tests passed** (23.23 s); build exit 0 (`dist/server.cjs` 964691 bytes).
+E2E: NOT RUN (no Android hardware). Deploy: NOT_CONFIGURED. Commit 7bb76d3 on `feature/hermes-full-completion`.
+
+हिंदी सारांश: असली ब्रिज अडैप्टर और टेलीफोनी सिम्युलेटर की झूठी सफलता हटाई; 127 फ़ाइलें / 1718 टेस्ट पास, lint/build हरे; आइटम 13 अभी PARTIAL।

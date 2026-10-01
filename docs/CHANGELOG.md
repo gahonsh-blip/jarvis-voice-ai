@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 03:47 IST (2026-10-01 22:17 UTC) — window slot 14: real bridge adapter and telephony simulator stop faking success
+
+### Fixed
+- **`RealAndroidBridgeAdapter.connect()` (`src/utils/androidBridgeAdapter.ts`) returned `success: true` on any HTTP 200.** It called `androidBridgeEngine.connectDevice(...)` — whose honest status is `LIMITED_CAPABILITY` for a simulated/testbed device or one missing the call-answer capability, and `PERMISSION_REQUIRED` when no notification-access/call-detection grant exists — then discarded that result and reported flat success. A caller reading `.success` would believe a live, fully-permitted device had connected. The flag now follows the observed status: `success: status === 'CONNECTED'`, with a message that names the degraded status otherwise.
+- **`TelephonyProviderRegistry.getActiveStatus()` (`src/utils/telephonyAdapters.ts`) reported the simulator as `READY`.** It returned `READY` whenever the active provider's `isConfigured()` was true, and `SimulatedTestTelephonyProvider.isConfigured()` is unconditionally `true`. A simulator has no PSTN carrier, so the active `SIMULATION_PROVIDER_ID` is now reported `NOT_CONFIGURED`, consistent with the `SIMULATION_ONLY` mode/label the gateway-truth module already uses.
+
+### Tests
+- `src/tests/realAndroidBridgeAdapter.test.ts` (+2 cases) — a 200 with a simulated device and a 200 with a device that cannot answer calls both yield `success: false` with status `LIMITED_CAPABILITY`.
+- `src/tests/telephonyGatewayTruth.test.ts` (+2 cases) — the active simulator is `NOT_CONFIGURED`; a real configured carrier is still `READY`.
+- Negative-validated: restoring the adapter's `success: true` fails exactly the 2 new adapter cases (`2 failed | 7 passed`); removing the simulator guard fails exactly the 1 new `getActiveStatus` case (`1 failed | 11 passed`); both restored green.
+
+### Verified
+- Targeted `realAndroidBridgeAdapter` + `telephonyGatewayTruth` 2 files / 21 passed; full suite **127 files / 1718 tests passed** (23.23 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964691 bytes). E2E: NOT RUN (no Android hardware, no carrier credentials). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 03:22 IST (2026-10-01 21:52 UTC) — window slot 13: bridge status badge no longer fakes a green connection
 
 ### Fixed
