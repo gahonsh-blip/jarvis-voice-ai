@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 01:43 IST (2026-10-01 20:13 UTC) — window slot 10: offline search branch points the in-app Browser at the query
+
+### Fixed
+- **The offline `google_search` branch (`src/utils/localJarvisEngine.ts`) named a search the in-app Browser never loaded.** It emitted only `payload.query`. The client (`src/App.tsx` `handleExecuteAction`) reads the destination from `payload.target` and hands it to `BrowserModal` as `initialUrl`; `BrowserModal` ignores `initialQuery` whenever `initialUrl` is set, so the view stayed on its Google home while the action card and reply named the query. The branch now routes through the same `searchDispatch()` helper the `/api/chat` path uses and emits `payload: { query, target: dispatch.url }`, so the Browser loads `https://www.google.com/search?q=<query>`.
+
+### Tests
+- `src/tests/localJarvisEngine.test.ts` — a new case (`carries the search URL in payload.target so the in-app Browser loads it`) asserts the derived search URL.
+- Negative-validated: reverting the payload to `{ query }` fails exactly that case (`1 failed | 46 skipped`); restored → green.
+
+### Verified
+- Targeted `localJarvisEngine` + `browserDispatchTruth` 2 files / 70 passed; full suite **124 files / 1694 tests passed** (24.26 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964583 bytes). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 01:16 IST (2026-10-01 19:46 UTC) — window slot 9: browser-open dispatch answers Hindi users in Hindi
 
 ### Fixed
