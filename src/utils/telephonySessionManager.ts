@@ -180,6 +180,12 @@ export class TelephonySessionManager {
   }> {
     const session = this.activeSessions.get(params.callSessionId);
     const clinic = params.clinicData || DEFAULT_CLINIC_CONFIG;
+    // Clinic facts (hours, doctor availability, booking process) may only be
+    // recited as fact when a deployment has supplied verified values. The
+    // shipped DEFAULT_CLINIC_CONFIG is sample data (configured: false), so an
+    // unconfigured clinic is answered with a "not verified" reply instead of a
+    // confident recital of a real business's details.
+    const clinicVerified = clinic.configured === true;
     const utterance = (params.utterance || '').trim();
     const lower = utterance.toLowerCase();
 
@@ -359,7 +365,11 @@ export class TelephonySessionManager {
     const hoursKeywords = ['खुलेगा', 'खोलेगा', 'समय', 'कितने बजे', 'hours', 'timing', 'open', 'close', 'schedule', 'opening time'];
     if (hoursKeywords.some((k) => lower.includes(k))) {
       let hoursText = '';
-      if (isHindi) {
+      if (!clinicVerified) {
+        hoursText = isHindi
+          ? 'इस क्लिनिक के खुलने का समय इस कॉल में सत्यापित नहीं है। कृपया क्लिनिक स्टाफ से पुष्टि करें, मैं आपके लिए संदेश ले सकता हूँ।'
+          : 'The clinic opening hours are not verified for this call. Please confirm with clinic staff; I can take a message for them.';
+      } else if (isHindi) {
         hoursText = `क्लिनिक सोमवार से शुक्रवार सुबह 9:00 बजे से शाम 6:00 बजे तक और शनिवार को सुबह 9:00 बजे से दोपहर 2:00 बजे तक खुला रहता है। रविवार को नियमित ओपीडी बंद रहती है।`;
       } else {
         hoursText = `Our clinic is open Monday to Friday from 9:00 AM to 6:00 PM, and on Saturday from 9:00 AM to 2:00 PM. We are closed on Sunday for routine consultations.`;
@@ -388,7 +398,11 @@ export class TelephonySessionManager {
     // 5. Appointment Process / Booking Intent
     const appointmentKeywords = ['अपॉइंटमेंट', 'appointment', 'booking', 'बुक', 'मिलना है', 'स्लॉट', 'slot', 'मिलेंगे'];
     if (appointmentKeywords.some((k) => lower.includes(k))) {
-      const apptText = isHindi ? clinic.appointmentProcess.hi : clinic.appointmentProcess.en;
+      const apptText = !clinicVerified
+        ? (isHindi
+          ? 'इस क्लिनिक की अपॉइंटमेंट प्रक्रिया इस कॉल में सत्यापित नहीं है। कृपया क्लिनिक स्टाफ से पुष्टि करें, मैं आपके लिए संदेश ले सकता हूँ।'
+          : 'The clinic appointment process is not verified for this call. Please confirm with clinic staff; I can take a message for them.')
+        : (isHindi ? clinic.appointmentProcess.hi : clinic.appointmentProcess.en);
       if (session) {
         session.state = 'WAITING_FOR_CALLER';
         session.currentIntent = 'appointment_process';
@@ -459,9 +473,13 @@ export class TelephonySessionManager {
     // 7. Doctor Availability Intent
     const doctorAvailKeywords = ['उपलब्ध', 'available', 'बैठे हैं', 'डॉक्टर हैं', 'in clinic', 'doctor present'];
     if (doctorAvailKeywords.some((k) => lower.includes(k))) {
-      const availReply = isHindi
-        ? `${clinic.doctorName} निर्धारित समय अनुसार क्लिनिक में परामर्श के लिए उपस्थित हैं। क्या आप उनके साथ अपॉइंटमेंट बुक करना चाहते हैं?`
-        : `${clinic.doctorName} is available for scheduled consultations during operating hours. Would you like to book an appointment slot?`;
+      const availReply = !clinicVerified
+        ? (isHindi
+          ? 'डॉक्टर की उपलब्धता इस कॉल में सत्यापित नहीं है। कृपया क्लिनिक स्टाफ से पुष्टि करें, मैं आपके लिए संदेश ले सकता हूँ।'
+          : 'The doctor\u2019s availability is not verified for this call. Please confirm with clinic staff; I can take a message for them.')
+        : (isHindi
+          ? `${clinic.doctorName} निर्धारित समय अनुसार क्लिनिक में परामर्श के लिए उपस्थित हैं। क्या आप उनके साथ अपॉइंटमेंट बुक करना चाहते हैं?`
+          : `${clinic.doctorName} is available for scheduled consultations during operating hours. Would you like to book an appointment slot?`);
       if (session) {
         session.state = 'WAITING_FOR_CALLER';
         session.currentIntent = 'doctor_availability';
