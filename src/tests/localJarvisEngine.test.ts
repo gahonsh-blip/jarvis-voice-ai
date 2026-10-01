@@ -263,6 +263,17 @@ describe('Local Jarvis Offline Engine - Core Command Processing', () => {
       expect(result.intent).toBe('google_search');
       expect(result.actionDetail?.payload?.query).toBe('रिएक्ट हुक्स');
     });
+
+    it('carries the search URL in payload.target so the in-app Browser loads it', () => {
+      // The reply names the query, but `handleExecuteAction` reads the
+      // destination from `payload.target`; without it BrowserModal stayed on its
+      // Google home while the action card named a search that never ran.
+      const result = processOfflineCommand('search for latest TypeScript releases', initialMemory, 'en-US');
+      expect(result.intent).toBe('google_search');
+      expect(result.actionDetail?.payload?.target).toBe(
+        'https://www.google.com/search?q=latest%20TypeScript%20releases',
+      );
+    });
   });
 
   describe('8. Conversational Greetings, Inquiries, and Offline Fallbacks', () => {

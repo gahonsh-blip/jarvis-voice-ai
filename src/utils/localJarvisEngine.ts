@@ -30,6 +30,7 @@ import {
 import { offlineEmergencyVerdict, offlineEmergencyReply } from './computerOperator/offlineEmergencyTruth';
 import { telephonyEngineMode, type TelephonyEngineMode } from './telephonyGatewayTruth';
 import { blueprintRoadmapReply } from './blueprintTruth';
+import { searchDispatch } from './browserDispatchTruth';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
@@ -1734,7 +1735,12 @@ export function processOfflineCommand(
 
     // Offline there is no search backend, so no results exist. Saying only
     // "Searching Google..." presented a request as a completed lookup; the
-    // query is handed to the in-app Browser instead.
+    // query is handed to the in-app Browser instead. The reply names the query
+    // but the Browser only runs the search when the view is handed the search
+    // URL, and `handleExecuteAction` reads that URL from `payload.target`. The
+    // server path carries it (`searchDispatch`); without it here the offline
+    // action card named a search that `BrowserModal` never loaded.
+    const dispatch = searchDispatch(query);
     const reply = isHindi
       ? `इन-ऐप ब्राउज़र के लिए "${query}" क्वेरी तैयार है। ऑफ़लाइन मोड में कोई सर्च बैकएंड नहीं है, इसलिए कोई परिणाम नहीं लाया गया।`
       : isHinglish
@@ -1748,7 +1754,7 @@ export function processOfflineCommand(
       actionDetail: {
         type: 'google_search',
         title: `In-App Browser Query: ${query} (no results retrieved offline)`,
-        payload: { query },
+        payload: { query, target: dispatch.url },
       },
       updatedMemory,
       offline: true,
