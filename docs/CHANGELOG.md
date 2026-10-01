@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 22:27 IST (2026-10-01 16:57 UTC) — window slot 3: the telephony handoff no longer confirms a transfer no carrier observed
+
+### Fixed
+- **A staff handoff reported "Transferring your call to our clinic staff now, please hold the line" with no carrier.** `TelephonySessionManager.processTurn`'s handoff branch confirmed the transfer whenever `provider.isConfigured() || session?.isSimulated` and the adapter returned `providerConfirmed: true`. The simulator's `transferCall()` (`src/utils/telephonyAdapters.ts`) is hardcoded `providerConfirmed: true`, and an unconfigured real carrier cannot be observed at all, so a call nothing handled read as a confirmed handoff and the session advanced to `CONFIRMED`. The branch now derives the active engine mode from the registry and only attempts the transfer when `telephonyEngineCanObserveCall()` — a live gateway. An unconfirmed transfer is reported as unconfirmed.
+- **The unconfirmed-transfer fallback invented a busy line.** It answered "all staff members are currently occupied on another line" — a state never observed. It now states the transfer could not be confirmed (no live carrier).
+
+### Tests
+- `src/tests/telephonyHandoffTruth.test.ts` (new, 4 tests): simulated session → not `handoff_confirmed`, `handoffStatus FAILED`, no "hold the line" claim; no "occupied on another line" / "लाइन व्यस्त"; unconfigured real carrier → not `handoff_confirmed`; message-taking still offered and the call not ended.
+- Negative-validated: reverting the gate → `2 failed | 2 passed`; restored → `4/4`.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; full suite **122 files / 1667 tests passed** (23.07 s); build exit 0 (`dist/server.cjs` 958584 bytes). E2E: NOT RUN (no handset/SIM/Twilio). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-01 04:30 IST (2026-09-30 23:00 UTC) — window slot 17: an offline briefing no longer credits itself for work it did not do
 
 ### Fixed
