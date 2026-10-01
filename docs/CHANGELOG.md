@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 01:16 IST (2026-10-01 19:46 UTC) — window slot 9: browser-open dispatch answers Hindi users in Hindi
+
+### Fixed
+- **The `open_google` / `open_youtube` / `open_gmail` / `open_chatgpt` dispatch case (`server.ts`) gated its Hindi reply on `language === 'hi'`.** The client (`src/App.tsx`) posts `voiceSettings.language` — a locale such as `hi-IN` or `hinglish`, never a bare `hi` — so the comparison was dead code and every Hindi user got the English `verdict.replyEn`. It is the only bare-`hi` comparison in `server.ts`; every other language gate uses `language.startsWith('hi')`. Now uses `language.startsWith('hi')`.
+
+### Tests
+- `src/tests/browserDispatchTruth.test.ts` — a new case bounds the `open_google` case body and asserts the `startsWith('hi')` form is present and the `language === 'hi'` form is absent.
+- Negative-validated: restoring the bare `hi` comparison fails exactly that case (`1 failed | 10 passed`); restored → 11/11.
+
+### Verified
+- Full suite **124 files / 1693 tests passed** (22.24 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964517 bytes). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 01:02 IST (2026-10-01 19:32 UTC) — window slot 8: telephony adapters stop reporting undelivered provider documents as success
 
 ### Fixed
