@@ -8875,3 +8875,30 @@ restored -> `52/52`. E2E: NOT RUN. Deploy: NOT_CONFIGURED.
 `src/utils/telephonyAdapters.ts` lines 51/65/79/124/135 (synthetic
 `collectSpeech` / `getCallRecordingStatus` values) and `SocialMediaModal`
 ~360-410. Item 1 physical-device Android bridge leg remains unverifiable here.
+
+---
+
+## 2026-10-01 23:05 IST — WORK SLOT 5 (item 13: unverified clinic facts recited as fact)
+
+**Item #13 `Zero-fake-success for all tools` — telephony clinic-fact intents.**
+
+`TelephonySessionManager.processTurn` (`src/utils/telephonySessionManager.ts`)
+answered `clinic_hours`, `doctor_availability` and `appointment_process` from
+`DEFAULT_CLINIC_CONFIG` (`src/utils/telephonyPermissions.ts`) — a hardcoded
+sample dataset ("Apollo Health & Wellness Clinic", "Dr. Julian Wayne, MD",
+"Mon-Fri 9:00 AM-6:00 PM") no human verified for any deployment, which
+`/api/telephony/twiml/turn` passes to `processTurn` on every real inbound call.
+A caller to a real clinic heard another business's details as this clinic's own.
+
+Fix: added `ClinicConfig.configured` (shipped sample `false`). The three intents
+report the fact as *not verified* and offer to take a message unless
+`configured === true`; a deployment supplying verified data still answers.
+
+Evidence: `src/tests/telephonyClinicFactsHonesty.test.ts` — 6 passed; + handoff +
+weather honesty — 3 files / 14 passed; full suite **123 files / 1677 tests
+passed** (23.02 s); lint exit 0; build exit 0 (`dist/server.cjs` 962168 bytes).
+Negative-validated: `configured: true` -> `5 failed | 1 passed`; restored -> 6/6.
+E2E: NOT RUN. Deploy: NOT_CONFIGURED. Commit 47cc5db (fix d01c42f).
+
+**Next slot:** item 13 continued — `SocialMediaModal` (~360-410) and the
+synthetic `telephonyAdapters` `collectSpeech` / `getCallRecordingStatus` returns.
