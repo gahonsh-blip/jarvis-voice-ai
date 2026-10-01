@@ -8764,3 +8764,43 @@ phrases swallowed by the outbound-call branch.
 Blocked: none this slot.
 Next slot: item 13 — continue the fake-success/misrouting sweep; next candidate
 is a classifyIntentLocally prefix collision outside telephony.
+
+## 2026-10-01 window — WORK SLOT 2 (21:35 IST fire)
+
+IST time: 21:53 | Window date: 2026-10-01 | Slots completed so far: 2
+Commit: 4bb5c54 (fix) + 550eb29 (docs)
+
+Item 13 (`Zero-fake-success for all tools`) — call-control phrases containing
+"phone call" were dialled as outbound calls in both classifiers.
+
+- Bug found: the outbound branch also keys on the substring "phone call",
+  which appears inside call-control phrases. `end phone call`, `disconnect
+  phone call`, `reject phone call`, `hang up the phone call` and `phone call
+  history` were each classified outbound_call_authorization and staged a dial
+  to the default contact instead of answering, hanging up, rejecting, or
+  opening the call log. Slot 1 closed the "call "-prefix class; this is the
+  sibling substring class.
+- Fix: src/utils/telephonyIntentRouting.ts now exports isAnswerCallRequest(),
+  isHangupCallRequest(), isRejectCallRequest() and the umbrella
+  isTelephonyControlRequest(); the outbound branch in server.ts (~861) and
+  src/utils/localJarvisEngine.ts (~1355) excludes the whole control family
+  (!isTelephonyControlRequest(lower)), and the answer/hangup/reject branches
+  route through the shared predicates.
+- Tests: src/tests/telephonyIntentRouting.test.ts — 20 passed (targeted).
+- Negative-validated: removing the engine guard -> 14 failed | 6 passed;
+  restored -> 20/20.
+- Live E2E: `node dist/server.cjs` PORT 4012, POST /api/chat —
+  `end phone call`->hangup_call, `disconnect phone call`->hangup_call,
+  `reject phone call`->reject_call, `phone call history`->call_history,
+  `call hub`->telephony_hub, `call Dr Wayne`->make_call target Dr Wayne.
+  No dial target on any control phrase.
+- Gates observed: lint (tsc --noEmit) exit 0; full suite 121 files / 1663
+  tests passed (22.56 s); build exit 0 (dist/server.cjs 958252 bytes).
+- Carrier path: NOT RUN (no handset/SIM/Twilio here).
+- Deploy: NOT_CONFIGURED.
+- Item 13 remains PARTIAL.
+
+Blocked: none this slot.
+Next slot: item 13 — continue the fake-success/misrouting sweep; audit the
+remaining bare-substring collisions in classifyIntentLocally (e.g. phrases
+that overlap "call ", "message ", "play ") against their dedicated branches.
