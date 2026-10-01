@@ -25,7 +25,7 @@ drift apart again; the outbound branch in both now excludes those phrases and
 lets their own branches below handle them.
 
 Evidence: `src/tests/telephonyIntentRouting.test.ts` — 6 passed (targeted).
-Live `/api/chat` probe confirmed the same routing before/after. Full suite
+A live `/api/chat` probe was NOT RUN in this slot. Full suite
 **121 files / 1649 tests passed** (22.04 s); lint exit 0; build exit 0
 (`dist/server.cjs` 959143 bytes). Negative-validated — removing the guard from
 `src/utils/localJarvisEngine.ts` fails exactly the two routing tests
