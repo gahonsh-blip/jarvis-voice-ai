@@ -545,7 +545,10 @@ export class AndroidBridgeManager {
       notes: `Device: ${caps.model} (${caps.deviceName}), OS: ${caps.osVersion}${caps.isSimulation ? ' [SIMULATION_ONLY - not a live device]' : ''}`,
     });
 
-    return { success: true, status: this.status };
+    // `success` must mean "a live, fully-permitted device is connected" — a
+    // simulated or permission-starved device is registered for inspection but
+    // is not a successful live connection, so the flag follows the status.
+    return { success: this.status === 'CONNECTED', status: this.status };
   }
 
   /**
