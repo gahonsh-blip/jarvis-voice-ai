@@ -8954,3 +8954,40 @@ Deploy: NOT_CONFIGURED. Commits b4e6c9e (fix) / bf89b21 (docs).
 
 **Next slot:** item 13 continued — `SocialMediaModal.tsx` YouTube upload-draft
 flow and the synthetic `telephonyAdapters.ts` `success: true` returns.
+
+---
+
+## Slot — 2026-10-02 01:03 IST (WORK, slots_completed 8)
+
+**Item #13 Zero-fake-success for all tools — PARTIAL (advanced).**
+Closed the telephony-adapter fake success. `src/utils/telephonyAdapters.ts`
+(Twilio / Telnyx / Plivo) returned `{ success: true }` from `answerIncomingCall`,
+`rejectIncomingCall`, `endCall`, `playAudio`, `streamAudio` and `collectSpeech`
+while only *building* a provider document (TwiML / provider command / Plivo XML)
+and never delivering it to the carrier or an HTTP client. A caller reading
+`success` would believe an audio prompt had played, speech collection had
+started, or a call had ended, when nothing left the machine — the exact
+fake-success shape item 13 exists to eliminate. The methods are exported but
+have no in-repo consumers, so no runtime behaviour changed; the fix is confined
+to the returned verdict.
+
+Fixed via a shared `TELEPHONY_DOCUMENT_NOT_DELIVERED` reason constant returned by
+all six methods (`success: false`), naming that the document was produced but not
+delivered. Document fields are still returned so callers can transmit them
+explicitly.
+
+Also audited this slot: `SocialMediaModal.tsx` YouTube upload-draft flow is
+already guarded by a real `providerUrn` check — **not** a fake-success site, so
+item 13's remaining named candidate list is now essentially exhausted.
+
+Evidence: `src/tests/telephonyProviderHonesty.test.ts` (8 tests). Targeted 8/8
+passed; full suite **124 files / 1692 tests passed** (22.40 s); lint
+(`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964509 bytes).
+Negative-validated: reverting the adapter verdicts to `success: true` fails
+`1 failed | 7 passed`; restored → 8/8. Security: `.env` ignored, tree clean, no
+token in diff. E2E: NOT RUN (no in-repo consumer). Deploy: NOT_CONFIGURED.
+Commits 08dc17f (fix) / 9f035b0 (docs).
+
+**Next slot:** item 13 continued — sweep any remaining tool-level
+`success: true` / `actionExecuted: true` sites; if none, move to the next
+unblocked backlog item (Computer Operator, per the mandated order).
