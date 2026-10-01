@@ -8804,3 +8804,41 @@ Blocked: none this slot.
 Next slot: item 13 — continue the fake-success/misrouting sweep; audit the
 remaining bare-substring collisions in classifyIntentLocally (e.g. phrases
 that overlap "call ", "message ", "play ") against their dedicated branches.
+
+## 2026-10-01 window — WORK SLOT 3 (22:05 IST fire)
+
+IST time: 22:27 | Window date: 2026-10-01 | Slots completed so far: 3
+Commit: 774a473 (fix) + 5e2c1dc (docs)
+
+Item 13 (`Zero-fake-success for all tools`) — the telephony human-handoff
+confirmed a staff transfer no carrier ever observed.
+
+- Bug found: `TelephonySessionManager.processTurn`'s handoff branch confirmed
+  the transfer whenever `provider.isConfigured() || session?.isSimulated` and
+  the adapter returned `providerConfirmed: true`. The simulator's
+  `transferCall()` (src/utils/telephonyAdapters.ts) is hardcoded
+  `providerConfirmed: true`, and an unconfigured real carrier cannot be observed
+  at all — so `transfer me to a doctor` was answered "Transferring your call to
+  our clinic staff now, please hold the line" and the session advanced to
+  CONFIRMED although nothing handled the call. The fallback also invented "all
+  staff members are currently occupied on another line" — a state never observed.
+- Fix: the branch derives the active engine mode from the registry
+  (`telephonyEngineMode(activeEngine.id, activeEngine.isConfigured())`) and only
+  attempts a transfer when `telephonyEngineCanObserveCall()` (live gateway);
+  the unconfirmed fallback now says the transfer could not be confirmed (no live
+  carrier).
+- Tests: src/tests/telephonyHandoffTruth.test.ts (new) — 4 passed (targeted);
+  related telephony suites 5 files / 39 passed.
+- Negative-validated: reverting the gate -> 2 failed | 2 passed; restored -> 4/4.
+- Gates observed: lint (tsc --noEmit) exit 0; full suite 122 files / 1667
+  tests passed (23.07 s); build exit 0 (dist/server.cjs 958584 bytes).
+- E2E: NOT RUN (no handset/SIM/Twilio).
+- Deploy: NOT_CONFIGURED.
+- Item 13 remains PARTIAL.
+
+Blocked: none this slot.
+Next slot: item 13 — continue the fake-success sweep. Candidates: the remaining
+`actionExecuted: true` sites in server.ts (still not individually audited,
+UNKNOWN), and other adapters whose `success`/`confirmed` flags are hardcoded
+(e.g. telephony collectSpeech / getCallRecordingStatus return synthetic values).
+
