@@ -4,7 +4,41 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-01 17:21 UTC (22:51 IST 2026-10-01) — **WORK SLOT 4** of the
+Last cycle: 2026-10-01 17:49 UTC (23:19 IST 2026-10-01) — **WORK SLOT 5** of the
+2026-10-01 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the telephony agent recited unverified clinic facts on live calls.**
+
+`TelephonySessionManager.processTurn` (`src/utils/telephonySessionManager.ts`)
+answered "clinic hours", "is the doctor available" and "how do I get an
+appointment" by reading `DEFAULT_CLINIC_CONFIG` and speaking the values as fact.
+That config (`src/utils/telephonyPermissions.ts`) is a hardcoded sample dataset —
+"Apollo Health & Wellness Clinic", "Dr. Julian Wayne, MD (Physician)", "Monday to
+Friday 9:00 AM to 6:00 PM" — that no human verified for any deployment, yet the
+`/api/telephony/twiml/turn` route passes it to `processTurn` on every real
+inbound call. A caller to a real clinic heard another business's hours, doctor
+name and booking process presented as this clinic's own, and the `doctor_
+availability` branch asserted a named doctor was present in clinic. This is the
+same fake-success class as the previous telephony slots (handoff, weather),
+one level up.
+
+Fixed: added `ClinicConfig.configured` (the shipped `DEFAULT_CLINIC_CONFIG` sets
+it `false`). The three clinic-fact intents now check `clinic.configured === true`;
+an unconfigured clinic reports the fact as *not verified* and offers to take a
+message, while a deployment that supplies verified data (its own `ClinicConfig`
+with `configured: true`) still answers normally.
+
+Evidence: `src/tests/telephonyClinicFactsHonesty.test.ts` — **6 passed**;
+`telephonyClinicFactsHonesty` + `telephonyHandoffTruth` + `telephonyWeather
+Honesty` — **3 files / 14 passed**; full suite **123 files / 1677 tests passed**
+(23.02 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 962168
+bytes). Negative-validated — flipping `configured` to `true` restores the recital
+and the new suite goes `5 failed | 1 passed`; restored → 6/6. E2E: NOT RUN.
+Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — another real fake-success class closed; the item still
+spans tool-level success flags not yet swept (`SocialMediaModal` and the
+telephony adapter `success: true` returns remain candidates).
+
+Last cycle (previous): 2026-10-01 17:21 UTC (22:51 IST 2026-10-01) — **WORK SLOT 4** of the
 2026-10-01 window, the 22:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the Computer Operator credited a screen capture of a screen it never
 saw.**

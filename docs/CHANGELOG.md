@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 23:19 IST (2026-10-01 17:49 UTC) — window slot 5: the telephony agent no longer recites unverified clinic facts on live calls
+
+### Fixed
+- **Clinic hours, doctor availability and the booking process were spoken as fact from a hardcoded sample dataset.** `TelephonySessionManager.processTurn` (`src/utils/telephonySessionManager.ts`) answered the `clinic_hours`, `doctor_availability` and `appointment_process` intents by reading `DEFAULT_CLINIC_CONFIG` (`src/utils/telephonyPermissions.ts`) — the sample data "Apollo Health & Wellness Clinic", "Dr. Julian Wayne, MD (Physician)", "Monday to Friday 9:00 AM to 6:00 PM" — which no human verified for any deployment, and which `/api/telephony/twiml/turn` passes to `processTurn` on every real inbound call. A caller to a real clinic heard another business's details presented as this clinic's own. Added `ClinicConfig.configured` (the shipped sample sets it `false`); the three intents now report the fact as *not verified* and offer to take a message unless `configured === true`, while a deployment that supplies verified data still answers normally.
+
+### Tests
+- `src/tests/telephonyClinicFactsHonesty.test.ts` (+6 tests): unconfigured config → hours/booking/availability reported as not verified, no "9:00", no "Julian Wayne"; verified config → normal answers preserved.
+- Negative-validated: flipping `configured` to `true` restores the recital → `5 failed | 1 passed`; restored → `6/6`.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; full suite **123 files / 1677 tests passed** (23.02 s); build exit 0 (`dist/server.cjs` 962168 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-01 22:51 IST (2026-10-01 17:21 UTC) — window slot 4: the Computer Operator no longer credits a screen capture it never made
 
 ### Fixed
