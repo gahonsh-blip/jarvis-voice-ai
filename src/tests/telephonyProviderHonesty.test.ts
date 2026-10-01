@@ -3,6 +3,7 @@ import {
   TwilioTelephonyProvider,
   TelnyxTelephonyProvider,
   PlivoTelephonyProvider,
+  TELEPHONY_WEBHOOK_BASE_URL_MISSING,
 } from '../utils/telephonyAdapters';
 
 // Zero-fake-success guard for the telephony providers.
@@ -28,6 +29,7 @@ const ENV_KEYS = [
   'TELEPHONY_AUTH_SECRET',
   'TELEPHONY_ACCOUNT_ID',
   'TELEPHONY_PHONE_NUMBER',
+  'TELEPHONY_WEBHOOK_BASE_URL',
 ] as const;
 
 const saved: Record<string, string | undefined> = {};
@@ -179,5 +181,34 @@ describe('telephony providers never fabricate confirmed provider actions', () =>
     const plivo = new PlivoTelephonyProvider();
     const stream = await plivo.streamAudio({ callSessionId: 'sess_doc', streamUrl: 'wss://x' });
     expect(stream.raw?.plivoXml).toContain('<Stream>');
+  });
+
+  // The carrier is given the callback URL and calls back on it for every turn.
+  // A fabricated or private host means the call is accepted but can never
+  // connect, so the dial must be refused rather than reported as placed.
+  it('Twilio refuses an outbound dial when no carrier-reachable callback URL is configured', async () => {
+    const provider = new TwilioTelephonyProvider();
+    expect(provider.isConfigured()).toBe(true);
+    // No TELEPHONY_WEBHOOK_BASE_URL is set, so the adapter must not fall back
+    // to a fabricated host.
+    const res = await provider.startOutboundCall({
+      callSessionId: 'sess_no_callback',
+      destinationNumber: '+15551117777',
+    });
+    expect(res.success).toBe(false);
+    expect(res.providerCallId).toBeUndefined();
+    expect(res.error).toContain(TELEPHONY_WEBHOOK_BASE_URL_MISSING);
+  });
+
+  it('Twilio still refuses a dial when the configured callback host is private', async () => {
+    process.env.TELEPHONY_WEBHOOK_BASE_URL = 'https://192.168.0.5';
+    const provider = new TwilioTelephonyProvider();
+    expect(provider.isConfigured()).toBe(true);
+    const res = await provider.startOutboundCall({
+      callSessionId: 'sess_private_callback',
+      destinationNumber: '+15551118888',
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain(TELEPHONY_WEBHOOK_BASE_URL_MISSING);
   });
 });

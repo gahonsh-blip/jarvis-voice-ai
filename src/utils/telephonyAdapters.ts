@@ -21,6 +21,41 @@ export const TELEPHONY_DOCUMENT_NOT_DELIVERED =
   'TELEPHONY_DOCUMENT_NOT_DELIVERED: this adapter built the provider document but did not deliver it to the carrier in a live response, so the action is unconfirmed.';
 
 /**
+ * Returned by an outbound dial that cannot name a carrier-reachable callback
+ * URL. The carrier is given this URL to reach back on for every call turn; a
+ * fabricated or private host makes the provider accept a call it can never
+ * complete, so the dial is refused rather than reported as placed.
+ */
+export const TELEPHONY_WEBHOOK_BASE_URL_MISSING =
+  'TELEPHONY_WEBHOOK_BASE_URL_MISSING: no carrier-reachable webhook base URL is configured (set TELEPHONY_WEBHOOK_BASE_URL to a public https URL), so the call-answer callback cannot be given to the provider.';
+
+/**
+ * Whether a webhook base URL is one a PSTN carrier could actually reach back
+ * on: an absolute `https` URL whose host is not loopback, a `.local` name, or a
+ * private (RFC 1918) address. `http`, `localhost`, `127.0.0.1`, `0.0.0.0`,
+ * `10/8`, `192.168/16` and `172.16/12` are all unreachable from the public
+ * internet and must not be handed to a carrier as a callback.
+ */
+export function isCarrierReachableWebhookBaseUrl(raw: string | undefined | null): boolean {
+  const value = (raw || '').trim();
+  if (!value) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') return false;
+  if (host.endsWith('.local')) return false;
+  if (/^10\./.test(host)) return false;
+  if (/^192\.168\./.test(host)) return false;
+  if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)) return false;
+  return true;
+}
+
+/**
  * 1. Twilio Telephony Provider Adapter
  */
 export class TwilioTelephonyProvider implements TelephonyProvider {
@@ -109,9 +144,17 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       return { success: false, error: 'TELEPHONY_NOT_CONFIGURED: Cannot place outbound PSTN call without valid credentials.' };
     }
 
+    // The carrier is handed this URL and calls back on it for every turn. A
+    // fabricated default or a private host cannot be reached, so the call would
+    // be accepted by the provider but never complete — refuse instead of
+    // reporting a placed call that could never connect.
+    if (!isCarrierReachableWebhookBaseUrl(this.webhookBaseUrl)) {
+      return { success: false, error: TELEPHONY_WEBHOOK_BASE_URL_MISSING };
+    }
+
     try {
       const from = params.fromNumber || this.phoneNumber;
-      const callbackUrl = `${this.webhookBaseUrl || 'https://hermes-jarvis.local'}${TELEPHONY_TWIML_TURN_PATH}`;
+      const callbackUrl = `${this.webhookBaseUrl}${TELEPHONY_TWIML_TURN_PATH}`;
       
       const auth = Buffer.from(`${this.accountSid}:${this.authToken}`).toString('base64');
       const body = new URLSearchParams({

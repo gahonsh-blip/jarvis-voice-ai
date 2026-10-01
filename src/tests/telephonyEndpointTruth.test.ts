@@ -12,6 +12,7 @@ import {
   voiceAgentLabel,
   receptionistLabel,
 } from '../utils/telephonyEndpointTruth';
+import { isCarrierReachableWebhookBaseUrl } from '../utils/telephonyAdapters';
 
 // Regression guard for the Telephony Hub endpoint panel.
 //
@@ -141,5 +142,53 @@ describe('the UI and adapters stop overstating telephony status', () => {
   it('BlueprintRoadmapModal stops asserting a Security Matrix it never queried', () => {
     const src = readSrc('components/BlueprintRoadmapModal.tsx');
     expect(src).not.toContain('Security Matrix: Active');
+  });
+});
+
+// A PSTN carrier reaches back on the callback URL for every call turn. An
+// outbound dial must not hand the carrier a URL no one can reach: the previous
+// code fell back to the fabricated host `https://hermes-jarvis.local`, which
+// resolves nowhere, so the provider would accept the call and it could never
+// connect. The dial is now refused unless a real public https base URL is set.
+describe('outbound dial refuses a callback URL no carrier could reach', () => {
+  it('rejects an absent or blank webhook base URL', () => {
+    expect(isCarrierReachableWebhookBaseUrl('')).toBe(false);
+    expect(isCarrierReachableWebhookBaseUrl('   ')).toBe(false);
+    expect(isCarrierReachableWebhookBaseUrl(undefined)).toBe(false);
+    expect(isCarrierReachableWebhookBaseUrl(null)).toBe(false);
+  });
+
+  it('rejects the fabricated host and every private/loopback host', () => {
+    for (const url of [
+      'https://hermes-jarvis.local',
+      'https://localhost',
+      'https://127.0.0.1',
+      'https://0.0.0.0',
+      'https://10.1.2.3',
+      'https://192.168.1.10',
+      'https://172.16.5.4',
+      'https://172.31.255.1',
+    ]) {
+      expect(isCarrierReachableWebhookBaseUrl(url), url).toBe(false);
+    }
+  });
+
+  it('rejects a non-https or non-absolute URL', () => {
+    expect(isCarrierReachableWebhookBaseUrl('http://jarvis.example.com')).toBe(false);
+    expect(isCarrierReachableWebhookBaseUrl('jarvis.example.com')).toBe(false);
+    expect(isCarrierReachableWebhookBaseUrl('not a url')).toBe(false);
+  });
+
+  it('accepts a public https host', () => {
+    expect(isCarrierReachableWebhookBaseUrl('https://jarvis.example.com')).toBe(true);
+    expect(isCarrierReachableWebhookBaseUrl('https://jarvis.example.com/')).toBe(true);
+    expect(isCarrierReachableWebhookBaseUrl('https://172.32.0.1')).toBe(true);
+  });
+
+  it('the Twilio adapter no longer ships the fabricated callback host', () => {
+    const src = readSrc('utils/telephonyAdapters.ts');
+    expect(src).not.toContain('hermes-jarvis.local');
+    expect(src).toContain('isCarrierReachableWebhookBaseUrl');
+    expect(src).toContain('TELEPHONY_WEBHOOK_BASE_URL_MISSING');
   });
 });
