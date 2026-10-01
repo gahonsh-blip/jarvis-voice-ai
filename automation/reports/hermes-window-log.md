@@ -9196,3 +9196,35 @@ Negative-validated: old code -> 2 failed | 3 passed; fixed -> 5/5.
 Gates: lint exit 0; targeted bridge suite 6 files / 71 passed; full suite
 126 files / 1703 passed (22.68s); build exit 0 (`dist/server.cjs` 942.0 kb).
 E2E NOT RUN (no Android hardware). Deploy NOT_CONFIGURED. Item 13 stays PARTIAL.
+
+
+## 2026-10-02 03:05 IST — WORK SLOT 13 (item 13)
+
+Closed the false-green bridge status badge in `MobileBridgeModal`
+(`src/components/MobileBridgeModal.tsx`): its `bridgeConnected` expression was
+true for `CONNECTED`, `PERMISSION_REQUIRED` **and** `LIMITED_CAPABILITY`, so a
+device that had refused (no permissions) or been downgraded still showed the
+live green style — the UI claiming a connection the honest status denied.
+
+Added `bridgeStatusTone()` to `src/utils/mobileBridgeEngine.ts`: only
+`CONNECTED` is `live` (green); `PARTIALLY_CONNECTED` / `LIMITED_CAPABILITY` /
+`PERMISSION_REQUIRED` are `degraded` (amber); `MOBILE_NOT_CONNECTED` / `ERROR` /
+anything unrecognised are `inactive` (grey). The badge now keys off that tone.
+
+New `src/tests/bridgeStatusTone.test.ts` (11 tests) pins the tone of every
+`AndroidBridgeStatus`, asserts `CONNECTED` is the only live status in the union,
+treats an unknown status as inactive, and guards the component wiring (the old
+expression and per-status equality checks are gone; the green class is gated on
+the live tone). Negative-validated: mapping `LIMITED_CAPABILITY` /
+`PERMISSION_REQUIRED` back to `live` -> 4 failed | 7 passed; restored -> 11/11.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted `bridgeStatusTone` 1 file / 11
+passed; full suite 127 files / 1714 passed (22.67s); build exit 0
+(`dist/server.cjs` 964606 bytes / 942.0 kb). E2E NOT RUN (no Android hardware).
+Deploy NOT_CONFIGURED. Item 13 stays PARTIAL.
+
+Branch: feature/hermes-full-completion; commits 8750a18 (fix) + 6978866 (docs);
+push succeeded. Main merge: NOT MERGED — awaiting human approval.
+
+हिंदी सारांश: मोबाइल ब्रिज बैज अब झूठा हरा "कनेक्टेड" नहीं दिखाता; 11 टेस्ट पास,
+पूरा सूट 1714 पास, lint/build हरे।
