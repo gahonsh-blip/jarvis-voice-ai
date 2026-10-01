@@ -8,6 +8,7 @@ import {
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
 import { judgeSetNameIntent } from './identityTruth';
+import { isTelephonyHubRequest, isCallHistoryRequest } from './telephonyIntentRouting';
 import { androidBridgeEngine } from './androidBridgeEngine';
 import {
   youtubeOfflineStatusReply,
@@ -1348,9 +1349,13 @@ export function processOfflineCommand(
   }
 
   // Outbound call command - Requires Level-4 Human Authorization (Section H)
+  // The console/history phrases also begin with "call " (and "call history"
+  // contains it), so they must be excluded here or "call hub" is staged as an
+  // outbound dial to the literal target "hub". Their own branches follow below.
   if (
-    lower.startsWith('call ') ||
-    lower.startsWith('dial ') ||
+    ((lower.startsWith('call ') || lower.startsWith('dial ')) &&
+      !isTelephonyHubRequest(lower) &&
+      !isCallHistoryRequest(lower)) ||
     lower.includes('phone call') ||
     lower.includes('make a call') ||
     lower.includes('कॉल करो') ||

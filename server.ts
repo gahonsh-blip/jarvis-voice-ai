@@ -7,6 +7,7 @@ import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
+import { isTelephonyHubRequest, isCallHistoryRequest } from './src/utils/telephonyIntentRouting';
 import { judgeSetNameIntent } from './src/utils/identityTruth';
 import { freelanceLeadsReply } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
@@ -854,9 +855,13 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
   }
 
   // Telephony & Voice Calling Commands ("call Dr. Wayne", "answer call", "hang up", "open dialer", etc.)
+  // Console/history phrases also begin with "call " and must not be read as an
+  // outbound dial to a literal target ("call hub" -> call "hub"). They are
+  // classified below.
   if (
-    lower.startsWith('call ') ||
-    lower.startsWith('dial ') ||
+    ((lower.startsWith('call ') || lower.startsWith('dial ')) &&
+      !isTelephonyHubRequest(lower) &&
+      !isCallHistoryRequest(lower)) ||
     lower.includes('make a call') ||
     lower.includes('phone call') ||
     lower.includes('place a call') ||
