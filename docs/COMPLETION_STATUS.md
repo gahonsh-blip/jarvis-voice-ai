@@ -4,7 +4,38 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-01 20:13 UTC (01:43 IST 2026-10-02) — **WORK SLOT 10** of the
+Last cycle: 2026-10-01 20:52 UTC (02:22 IST 2026-10-02) — **WORK SLOT 11** of the
+2026-10-02 window, the 02:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the offline engine's `actionExecuted: true` sites were enumerated but
+not pinned by any test.**
+
+Item 13 has swept `server.ts` (`src/tests/actionExecutedSweepAudit.test.ts`) but
+the offline fallback in `src/utils/localJarvisEngine.ts` also returns
+`actionExecuted: true` from 16 return literals across 14 unique intents
+(`language_switch`, `set_name`, `location_services`, `open_calculator`,
+`open_notepad`, `telephony_hub`, `call_history`, `open_paint`, `check_project`,
+`generate_quotation`, `create_social_post`, `security_audit`, `cloud_telemetry`,
+`schedule_morning_report`, `google_search`). No test asserted that the set stays
+audited, so a future edit could add an unaudited `true` (the exact fake-success
+shape item 13 exists to prevent) without any failure.
+
+Audited each of the 14 intents: 13 are credited because `handleExecuteAction` in
+`src/App.tsx` routes them to a real in-app view via `setActiveApp(...)`; the
+14th, `set_name`, opens no view but writes a validated name into the returned
+memory (`judgeSetNameIntent` guard → `name: extractedName`) which App.tsx
+persists. Both are real, user-observable work, so the flags are truthful — no
+source change was needed.
+
+Added `src/tests/offlineActionExecutedSweep.test.ts`: it enumerates every
+same-return literal `actionExecuted: true`, asserts the set equals the audited
+allow-list, asserts each view-backed intent is actually routed by App.tsx, and
+asserts `set_name`'s validated persisted write. Negative-validated: flipping
+`time_inquiry` to `true` fails the sweep (`1 failed | 3 passed`); restored →
+green. Full suite **125 files / 1698 tests passed** (22.57 s); lint
+(`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 942.0kb). Item 13 stays
+`PARTIAL` — this closes a coverage gap, not a code defect.
+
+Last cycle (previous): 2026-10-01 20:13 UTC (01:43 IST 2026-10-02) — **WORK SLOT 10** of the
 2026-10-02 window, the 01:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the offline search branch named a lookup the in-app Browser never
 loaded.**
