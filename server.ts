@@ -67,6 +67,8 @@ import {
   telephonyEngineMode,
   telephonyEngineLabel,
   telephonySelectionApplied,
+  telephonyEngineCanDial,
+  telephonyDialRefusal,
   SIMULATION_PROVIDER_ID,
 } from './src/utils/telephonyGatewayTruth';
 import {
@@ -8394,13 +8396,20 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
     const authRes = TelephonySessionManager.authorizeOutboundRequest(requestId, 'APPROVE', approverName);
     if (actionId) updateActionRequestStatus(actionId, 'APPROVED', approverName);
 
-    // Verify provider configuration before connecting (Section V)
+    // Verify the active engine can actually place a PSTN call before
+    // connecting (Section V). The raw `isConfigured()` boolean is not enough:
+    // the simulator's is unconditionally true and its startOutboundCall()
+    // returns a fabricated providerCallId, so gating on the boolean alone let
+    // a simulated engine through and the route reported a "placed" call that
+    // no carrier saw. Derive the honest mode from the active provider id.
     const provider = TelephonyProviderRegistry.getProvider();
-    if (!provider.isConfigured() && req.body.isSimulated !== true) {
+    const dialEngineMode = telephonyEngineMode(provider.id, provider.isConfigured());
+    if (!telephonyEngineCanDial(dialEngineMode)) {
       return res.status(400).json({
         success: false,
-        status: 'TELEPHONY_NOT_CONFIGURED',
-        error: 'Cannot place outbound telephone call because carrier provider credentials are missing (TELEPHONY_NOT_CONFIGURED).',
+        authorized: true,
+        status: dialEngineMode,
+        error: telephonyDialRefusal(dialEngineMode),
       });
     }
 

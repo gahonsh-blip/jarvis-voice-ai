@@ -96,3 +96,29 @@ export function telephonySelectionApplied(
 export function telephonyEngineCanObserveCall(mode: TelephonyEngineMode): boolean {
   return mode === 'LIVE_GATEWAY';
 }
+
+/**
+ * Whether a dial may be handed to the carrier for this engine mode. Only a
+ * live gateway places a PSTN call. The simulator's `isConfigured()` is
+ * unconditionally true and its `startOutboundCall()` returns a fabricated
+ * `providerCallId`, so a route that gates on the raw boolean alone lets a
+ * simulated engine through and reports a "placed" call that no carrier saw.
+ */
+export function telephonyEngineCanDial(mode: TelephonyEngineMode): boolean {
+  return mode === 'LIVE_GATEWAY';
+}
+
+/**
+ * Honest refusal for a dial attempt the active engine cannot make. Names the
+ * observed engine mode so the caller never reports an unplaced call as placed.
+ */
+export function telephonyDialRefusal(mode: TelephonyEngineMode): string {
+  switch (mode) {
+    case 'SIMULATION_ONLY':
+      return 'SIMULATION_ONLY: the active telephony engine is a test simulator with no PSTN carrier, so no outbound call was placed.';
+    case 'UNSUPPORTED_ENGINE':
+      return 'TELEPHONY_ENGINE_UNSUPPORTED: the selected engine is not routable in this build, so no outbound call was placed.';
+    default:
+      return 'TELEPHONY_NOT_CONFIGURED: no carrier provider credentials are configured, so no outbound call was placed.';
+  }
+}
