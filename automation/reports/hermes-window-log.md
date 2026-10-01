@@ -8842,3 +8842,36 @@ Next slot: item 13 — continue the fake-success sweep. Candidates: the remainin
 UNKNOWN), and other adapters whose `success`/`confirmed` flags are hardcoded
 (e.g. telephony collectSpeech / getCallRecordingStatus return synthetic values).
 
+
+---
+
+## Slot 2026-10-01 22:35 IST (2026-10-01 17:21 UTC) — WORK SLOT 4
+
+**Item:** #13 `Zero-fake-success for all tools` — stays `PARTIAL`.
+
+**Found:** `ActionExecutor.inspectScreen` (`src/utils/computerOperator/actionExecutor.ts`)
+returned `outcome: 'VERIFIED'`, `success: true`, message *"Captured the current
+view"* whenever the observation carried `screenshotBase64`. The non-host-backed
+`ScreenObserver` (`src/utils/computerOperator/screenObserver.ts`) draws a canvas
+image of an imagined VS Code / Chrome / Terminal desktop and returns it as
+`screenshotBase64`. In a browser context that fabricated image was reported as a
+verified capture of the current screen.
+
+**Fixed:** `inspectScreen` refuses locally with `NOT_AVAILABLE` /
+`ILLUSTRATIVE_OBSERVATION_SOURCE` unless `ScreenObserver.isHostBacked()`. A
+host-backed observation carrying image data still verifies; one that produced no
+image is `NO_CAPTURE_PRODUCED`.
+
+**Evidence:** `src/tests/remainingFakeSuccess.test.ts` **52 passed** (targeted);
+`screenObserver` + `computerOperatorTaskStatus` + `remainingFakeSuccess` **3
+files / 68 passed**; full suite **122 files / 1671 tests passed** (22.97 s);
+lint `tsc --noEmit` exit 0; build exit 0 (`dist/server.cjs` 959709 bytes).
+Negative-validated: disabling the `isHostBacked()` gate -> `1 failed | 51 passed`;
+restored -> `52/52`. E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+**Commit:** 63510be on `feature/hermes-full-completion` (pushed).
+
+**Next slot:** item 13 — continue the fake-success sweep. Candidates:
+`src/utils/telephonyAdapters.ts` lines 51/65/79/124/135 (synthetic
+`collectSpeech` / `getCallRecordingStatus` values) and `SocialMediaModal`
+~360-410. Item 1 physical-device Android bridge leg remains unverifiable here.

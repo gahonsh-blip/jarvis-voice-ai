@@ -4,7 +4,40 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-01 16:57 UTC (22:27 IST 2026-10-01) — **WORK SLOT 3** of the
+Last cycle: 2026-10-01 17:21 UTC (22:51 IST 2026-10-01) — **WORK SLOT 4** of the
+2026-10-01 window, the 22:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the Computer Operator credited a screen capture of a screen it never
+saw.**
+
+`ActionExecutor.inspectScreen` (`src/utils/computerOperator/actionExecutor.ts`)
+returned `outcome: 'VERIFIED'`, `success: true`, message *"Captured the current
+view"* whenever the observation carried `screenshotBase64`. The non-host-backed
+`ScreenObserver` (`src/utils/computerOperator/screenObserver.ts`) draws a
+synthetic canvas image of an imagined VS Code / Chrome / Terminal desktop and
+returns it as `screenshotBase64`. So in a browser context — the exact place the
+screen-inspection action is meant to be useful — a picture of a screen this
+process never observed was reported as a verified capture. This is the precise
+fake-success shape item 13 exists to eliminate, one level up from the telephony
+work of the previous three slots.
+
+Fixed: `inspectScreen` now refuses locally with `outcome: 'NOT_AVAILABLE'`,
+`success: false`, `receipt.verified: false`, `failureReason:
+'ILLUSTRATIVE_OBSERVATION_SOURCE'` unless `ScreenObserver.isHostBacked()`. A
+host-backed observation that carries image data still verifies; a host-backed
+observation that produced no image is `NO_CAPTURE_PRODUCED`.
+
+Evidence: `src/tests/remainingFakeSuccess.test.ts` — **52 passed** (targeted);
+`screenObserver` + `computerOperatorTaskStatus` + `remainingFakeSuccess` —
+**3 files / 68 passed**; full suite **122 files / 1671 tests passed** (22.97 s);
+lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 959709 bytes).
+Negative-validated — disabling the `isHostBacked()` gate makes the illustrative
+observation report `VERIFIED` (`1 failed | 51 passed`), restored → 52/52.
+E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — another real fake-success class closed; the item still
+spans tool-level success flags not yet swept (telephony adapters and
+`SocialMediaModal` remain candidates).
+
+Last cycle (previous): 2026-10-01 16:57 UTC (22:27 IST 2026-10-01) — **WORK SLOT 3** of the
 2026-10-01 window, the 22:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the telephony human-handoff confirmed a staff transfer that no carrier
 ever observed.**

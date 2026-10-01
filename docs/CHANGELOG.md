@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-01 22:51 IST (2026-10-01 17:21 UTC) — window slot 4: the Computer Operator no longer credits a screen capture it never made
+
+### Fixed
+- **`inspectScreen` reported "Captured the current view" from a synthetic image.** `ActionExecutor.inspectScreen` (`src/utils/computerOperator/actionExecutor.ts`) returned `outcome: 'VERIFIED'`, `success: true` whenever the observation carried `screenshotBase64`. The non-host-backed `ScreenObserver` (`src/utils/computerOperator/screenObserver.ts`) draws a canvas image of an imagined VS Code / Chrome / Terminal desktop and returns it as `screenshotBase64`, so in a browser context a picture of a screen this process never observed was reported as a verified capture. `inspectScreen` now refuses locally with `NOT_AVAILABLE` / `ILLUSTRATIVE_OBSERVATION_SOURCE` unless `ScreenObserver.isHostBacked()`; a host-backed observation with image data still verifies, and one with no image is `NO_CAPTURE_PRODUCED`.
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts` (+4 tests): illustrative observation carrying a synthetic image → `NOT_AVAILABLE`, `success: false`, `receipt.verified: false`, `ILLUSTRATIVE_OBSERVATION_SOURCE`; `TAKE_SCREENSHOT` against the illustrative observer → `NOT_AVAILABLE`; host-backed observation with image → `VERIFIED`; host-backed observation with no image → `NO_CAPTURE_PRODUCED`.
+- Negative-validated: disabling the `isHostBacked()` gate → `1 failed | 51 passed`; restored → `52/52`.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; full suite **122 files / 1671 tests passed** (22.97 s); build exit 0 (`dist/server.cjs` 959709 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-01 22:27 IST (2026-10-01 16:57 UTC) — window slot 3: the telephony handoff no longer confirms a transfer no carrier observed
 
 ### Fixed
