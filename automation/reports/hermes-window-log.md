@@ -8731,3 +8731,36 @@ Next Slot:
 ```
 
 > Header correction: "Window date" is the window *start* date (2026-09-30 IST); the IST clock at run time was 2026-10-01 04:36 (the window spans midnight).
+
+
+---
+
+## 2026-10-01 window — WORK SLOT 1 (21:05 IST fire)
+
+IST time: 21:32 | Window date: 2026-10-01 | Slots completed so far: 1
+Commit: 44efe82 (fix) + docs commit
+
+Item 13 (`Zero-fake-success for all tools`) — telephony console/history
+phrases swallowed by the outbound-call branch.
+
+- Bug found: the outbound-call branch in server.ts classifyIntentLocally()
+  (~833) and src/utils/localJarvisEngine.ts (~1329) keyed on the bare prefix
+  "call ". "call hub" (in-app Telephony Hub) and "call history" (call log) also
+  match that prefix, so they were classified outbound_call_authorization,
+  staged an outbound request to the literal strings "hub"/"history" behind a
+  Level-4 prompt, and never opened the console/history view. "open dialer" was
+  already excluded, which is why the gap was missed.
+- Fix: new src/utils/telephonyIntentRouting.ts (isTelephonyHubRequest(),
+  isCallHistoryRequest()), shared by both surfaces; the outbound branch in
+  both now excludes those phrases.
+- Tests: src/tests/telephonyIntentRouting.test.ts — 6 passed (targeted).
+- Negative-validated: removing the engine guard -> 2 failed | 4 passed;
+  restored -> 6/6.
+- Gates observed: lint exit 0; full suite 121 files / 1649 tests passed
+  (22.04 s); build exit 0 (dist/server.cjs 959143 bytes).
+- E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+- Item 13 remains PARTIAL.
+
+Blocked: none this slot.
+Next slot: item 13 — continue the fake-success/misrouting sweep; next candidate
+is a classifyIntentLocally prefix collision outside telephony.
