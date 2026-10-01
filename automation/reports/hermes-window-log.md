@@ -8981,7 +8981,7 @@ already guarded by a real `providerUrn` check — **not** a fake-success site, s
 item 13's remaining named candidate list is now essentially exhausted.
 
 Evidence: `src/tests/telephonyProviderHonesty.test.ts` (8 tests). Targeted 8/8
-passed; full suite **124 files / 1692 tests passed** (22.40 s); lint
+passed; full suite **124 files / 1692 tests passed** (21.66 s); lint
 (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964509 bytes).
 Negative-validated: reverting the adapter verdicts to `success: true` fails
 `1 failed | 7 passed`; restored → 8/8. Security: `.env` ignored, tree clean, no
