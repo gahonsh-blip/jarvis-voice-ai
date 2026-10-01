@@ -4,7 +4,42 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-01 21:05 UTC (02:35 IST 2026-10-02) — **WORK SLOT 12** of the
+Last cycle: 2026-10-01 21:52 UTC (03:22 IST 2026-10-02) — **WORK SLOT 13** of the
+2026-10-02 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — a false-green bridge status badge.**
+
+`MobileBridgeModal` (`src/components/MobileBridgeModal.tsx`) computed
+`bridgeConnected = status === 'CONNECTED' || status === 'PERMISSION_REQUIRED' ||
+status === 'LIMITED_CAPABILITY'` and rendered its header badge in the live
+(green) style for any of those three. A device that had been downgraded to
+`LIMITED_CAPABILITY`, or that had refused with `PERMISSION_REQUIRED`, therefore
+still showed a green "connected" badge — the UI claiming a live connection the
+status did not support. This is the visual form of the fake-success shape item 13
+exists to prevent.
+
+Fixed: added `bridgeStatusTone()` to `src/utils/mobileBridgeEngine.ts`, which
+classifies every `AndroidBridgeStatus`. Only `CONNECTED` is `live` (green);
+`PARTIALLY_CONNECTED`, `LIMITED_CAPABILITY` and `PERMISSION_REQUIRED` are
+`degraded` (amber); `MOBILE_NOT_CONNECTED`, `ERROR` and anything unrecognised are
+`inactive` (grey). The badge now keys off that tone instead of the old
+`bridgeConnected` expression. No status can be promoted to green by default.
+
+Added `src/tests/bridgeStatusTone.test.ts` (11 tests): it pins the tone of every
+status, asserts `CONNECTED` is the *only* live status across the whole union,
+treats an unknown status as inactive, and guards the component wiring (the old
+`bridgeConnected` expression and the per-status equality checks are gone; the
+green class is gated on the live tone).
+
+Negative-validated: mapping `LIMITED_CAPABILITY`/`PERMISSION_REQUIRED` back to
+`live` fails 4 of the 11 tests (`4 failed | 7 passed`); restored → 11/11 green.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted suite `bridgeStatusTone` **1 file /
+11 tests passed**; full suite **127 files / 1714 tests passed**; build exit 0
+(`dist/server.cjs` 942.0 kb). E2E: NOT RUN (no Android hardware). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — another real defect closed, but the
+item spans tool-level success flags beyond the bridge family.
+
+Last cycle (previous): 2026-10-01 21:05 UTC (02:35 IST 2026-10-02) — **WORK SLOT 12** of the
 2026-10-02 window, the 02:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — a real fake-success defect on the Android bridge connect path.**
 

@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 03:22 IST (2026-10-01 21:52 UTC) — window slot 13: bridge status badge no longer fakes a green connection
+
+### Fixed
+- **`MobileBridgeModal` (`src/components/MobileBridgeModal.tsx`) rendered its header badge green for `CONNECTED`, `PERMISSION_REQUIRED` and `LIMITED_CAPABILITY` alike.** A device downgraded to limited capability, or one that had refused with no permissions, therefore showed the live green style — the UI claiming a connection the status did not support. Added `bridgeStatusTone()` to `src/utils/mobileBridgeEngine.ts`: only `CONNECTED` is `live` (green), `PARTIALLY_CONNECTED` / `LIMITED_CAPABILITY` / `PERMISSION_REQUIRED` are `degraded` (amber), the rest plus anything unrecognised are `inactive` (grey). The badge now keys off that tone.
+
+### Tests
+- `src/tests/bridgeStatusTone.test.ts` (new, 11 tests) — pins the tone of every `AndroidBridgeStatus`, asserts `CONNECTED` is the only live status in the union, treats an unknown status as inactive, and guards the component wiring.
+- Negative-validated: mapping `LIMITED_CAPABILITY`/`PERMISSION_REQUIRED` back to `live` fails 4 of 11 (`4 failed | 7 passed`); restored → 11/11 green.
+
+### Verified
+- Targeted `bridgeStatusTone` 1 file / 11 passed; full suite **127 files / 1714 tests passed** (22.67 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964606 bytes). E2E: NOT RUN (no Android hardware). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 01:43 IST (2026-10-01 20:13 UTC) — window slot 10: offline search branch points the in-app Browser at the query
 
 ### Fixed
