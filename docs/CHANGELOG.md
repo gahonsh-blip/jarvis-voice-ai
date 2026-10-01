@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 00:56 IST (2026-10-01 19:26 UTC) — window slot 7: the outbound-dial authorize route no longer dials through the simulator
+
+### Fixed
+- **`POST /api/telephony/outbound/authorize` reported a placed call that no carrier saw.** The route (`server.ts`) gated its dial on the raw `provider.isConfigured()` boolean and then called `startOutboundCall()`. The `simulation_test_provider`'s `isConfigured()` is unconditionally `true` and its `startOutboundCall()` returns a fabricated `providerCallId`, so once the simulator was the selected engine the route answered `success: true` with a `providerCallId` although nothing left the machine — the same fake-success class as the earlier telephony-handoff fix, on the adjacent route. The route now derives the active engine mode from the registry via the existing `telephonyEngineMode()` and refuses any dial the engine cannot actually place, naming the mode (`SIMULATION_ONLY` / `TELEPHONY_NOT_CONFIGURED` / `TELEPHONY_ENGINE_UNSUPPORTED`) with the matching refusal text. A new `telephonyEngineCanObserveCall(mode)` in `src/utils/telephonyGatewayTruth.ts` is the single predicate for "this engine can place a real PSTN call".
+
+### Tests
+- `src/tests/telephonyOutboundDialTruth.test.ts` (9 tests): source guards on the route and behavioural checks of the shared verdict functions.
+- Negative-validated: reverting the route gate to `!provider.isConfigured() && req.body.isSimulated !== true` fails `2 failed | 7 passed`; restored → 9/9.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted `telephonyOutboundDialTruth`+`telephonyGatewayTruth` 2 files / 19 passed; full suite **124 files / 1690 tests passed** (22.42 s); build exit 0 (`dist/server.cjs` 963512 bytes). Live E2E on `node dist/server.cjs` (PORT 4013): simulator selected (`engineApplied: true`) → authorize HTTP 400 `status: SIMULATION_ONLY`; default twilio engine → authorize HTTP 400 `status: NOT_CONFIGURED`. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-01 23:50 IST (2026-10-01 18:20 UTC) — window slot 6: the offline blueprint branch no longer claims phases 0-9 are active
 
 ### Fixed
