@@ -9074,7 +9074,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         // the destination URL; the reply, the card and that URL all come from
         // one verdict so a named site is never claimed without being loaded.
         const verdict = browserOpenVerdict(intentData.intent);
-        spokenResponse = language === 'hi' ? verdict.replyHi : verdict.replyEn;
+        // The client sends a locale (`hi-IN`, `hinglish`), never a bare `hi`, so
+        // this must use the same `startsWith('hi')` test as every other case or
+        // the Hindi reply is unreachable and Hindi users are answered in English.
+        spokenResponse = language.startsWith('hi') ? verdict.replyHi : verdict.replyEn;
         actionExecuted = true;
         // The URL must ride inside `payload.target`: the app dispatcher reads the
         // destination only from `actionDetail.payload`, so a top-level `target`

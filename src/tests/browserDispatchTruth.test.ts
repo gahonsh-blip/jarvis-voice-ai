@@ -13,6 +13,18 @@ const appFlat = fs
   .readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8')
   .replace(/\s+/g, ' ');
 
+/** The `open_*` case body, bounded at the next block-opening case. */
+function caseBody(intent: string): string {
+  const label = serverFlat.indexOf(`case '${intent}':`);
+  expect(label, `${intent} case missing`).toBeGreaterThan(-1);
+  const blockOpen = serverFlat.indexOf('{', label);
+  expect(blockOpen, `${intent} case has no block`).toBeGreaterThan(-1);
+  const rest = serverFlat.slice(blockOpen + 1);
+  const nextMatch = /case '[a-z_]+': \{/.exec(rest);
+  const end = nextMatch ? blockOpen + 1 + nextMatch.index : serverFlat.length;
+  return serverFlat.slice(label, end);
+}
+
 describe('browser-open verdict names a site only when the view loads it', () => {
   it('points YouTube at youtube.com, not the Google home', () => {
     const verdict = browserOpenVerdict('open_youtube');
@@ -138,5 +150,14 @@ describe('server + app wiring carry the destination through', () => {
     expect(appFlat).toContain('setBrowserInitialUrl(payload?.target || \'\');');
     expect(appFlat).toContain('handleExecuteAction(data.intent, data.actionDetail?.payload);');
     expect(appFlat).toContain('initialUrl={browserInitialUrl}');
+  });
+
+  it('selects the Hindi reply from the locale the client actually sends', () => {
+    // The client posts `voiceSettings.language`, a locale such as `hi-IN` or
+    // `hinglish`, never a bare `hi`. A `language === 'hi'` test is therefore
+    // dead code and answers Hindi users in English.
+    const body = caseBody('open_google');
+    expect(body).toContain("language.startsWith('hi')");
+    expect(body).not.toContain("language === 'hi'");
   });
 });
