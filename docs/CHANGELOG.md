@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 01:02 IST (2026-10-01 19:32 UTC) — window slot 8: telephony adapters stop reporting undelivered provider documents as success
+
+### Fixed
+- **The Twilio / Telnyx / Plivo adapters (`src/utils/telephonyAdapters.ts`) returned `{ success: true }` for actions no carrier ever received.** `answerIncomingCall`, `rejectIncomingCall`, `endCall`, `playAudio`, `streamAudio` and `collectSpeech` only built a provider document (TwiML, a provider command, or Plivo XML) and returned `success: true` without delivering it. A caller reading `success` would believe an audio prompt had played, speech collection had started, or a call had ended. All six methods now return `success: false` with the shared `TELEPHONY_DOCUMENT_NOT_DELIVERED` reason, while still returning the document fields so a caller can transmit them explicitly. The methods have no in-repo consumers, so no runtime behaviour changed.
+
+### Tests
+- `src/tests/telephonyProviderHonesty.test.ts` (8 tests): source guards on the shared constant and per-provider honest verdicts.
+- Negative-validated: reverting the adapter verdicts to `success: true` fails `1 failed | 7 passed`; restored → 8/8.
+
+### Verified
+- Full suite **124 files / 1692 tests passed** (22.40 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964509 bytes). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 00:56 IST (2026-10-01 19:26 UTC) — window slot 7: the outbound-dial authorize route no longer dials through the simulator
 
 ### Fixed

@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-01 19:26 UTC (00:56 IST 2026-10-02) — **WORK SLOT 7** of the
+Last cycle: 2026-10-01 19:32 UTC (01:02 IST 2026-10-02) — **WORK SLOT 8** of the
+2026-10-01 window, the 01:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the telephony adapter family reported `success: true` for provider
+documents it never delivered to a carrier.**
+
+`src/utils/telephonyAdapters.ts` (Twilio / Telnyx / Plivo adapters) returned
+`{ success: true }` from `answerIncomingCall`, `rejectIncomingCall`, `endCall`,
+`playAudio`, `streamAudio` and `collectSpeech` while only *building* a provider
+document (TwiML / a provider command / Plivo XML) and never handing it to the
+carrier or an HTTP client. A caller reading `success` would believe an audio
+prompt had played, speech collection had started, or a call had ended, when
+nothing left the machine — the exact fake-success shape item 13 exists to
+eliminate. The methods are exported but have no in-repo consumers, so no runtime
+behaviour changed; the fix is confined to the returned verdict.
+
+Fixed: a shared `TELEPHONY_DOCUMENT_NOT_DELIVERED` reason constant is now
+returned by all six methods (`success: false`), naming that the provider document
+was produced but not delivered. The document fields are still returned so callers
+can transmit them explicitly.
+
+Evidence: `src/tests/telephonyProviderHonesty.test.ts` — **8 tests** (source
+guards on the shared constant and per-provider honest verdicts). Negative-
+validated: reverting the adapter verdicts to `success: true` fails `1 failed | 7
+passed`; restored → 8/8. Full suite **124 files / 1692 tests passed** (22.40 s);
+lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964509 bytes).
+Item 13 stays `PARTIAL` — another real fake-success class closed; `SocialMediaModal`
+remains the one named candidate (its YouTube upload-draft flow is already guarded
+by a real `providerUrn` check) plus any tool-level success flags not yet swept.
+
+Last cycle (previous): 2026-10-01 19:26 UTC (00:56 IST 2026-10-02) — **WORK SLOT 7** of the
 2026-10-01 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the outbound-dial authorize route dialled through the simulator.**
 
