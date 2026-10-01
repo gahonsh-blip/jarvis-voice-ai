@@ -8991,3 +8991,12 @@ Commits 08dc17f (fix) / 9f035b0 (docs).
 **Next slot:** item 13 continued — sweep any remaining tool-level
 `success: true` / `actionExecuted: true` sites; if none, move to the next
 unblocked backlog item (Computer Operator, per the mandated order).
+
+**Slot 8 addendum (2026-10-01 19:37 UTC):** slot-8 doc tip advanced to `d649046`
+(observed test duration corrected to 21.66 s in the log/CHANGELOG/status to match
+the run I actually executed). PR **#5** (`feature/hermes-full-completion` → `main`)
+confirmed **open, non-draft, `mergeable_state=clean`**; body and title refreshed to
+window **2026-10-01** with this slot's observed gates (lint exit 0; 124 files /
+1692 tests passed; build exit 0, `dist/server.cjs` 964509 bytes). State branch
+`automation/hermes-state` tip `095f447` (`last_commit` = `d649046`). Main merge:
+**NOT MERGED — awaiting human approval**.
