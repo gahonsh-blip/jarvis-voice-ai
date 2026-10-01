@@ -9000,3 +9000,41 @@ window **2026-10-01** with this slot's observed gates (lint exit 0; 124 files /
 1692 tests passed; build exit 0, `dist/server.cjs` 964509 bytes). State branch
 `automation/hermes-state` tip `095f447` (`last_commit` = `d649046`). Main merge:
 **NOT MERGED — awaiting human approval**.
+
+---
+
+## Slot 9 -- 2026-10-02 01:16 IST (2026-10-01 19:46 UTC) -- WORK SLOT (01:35 IST fire)
+
+**Item 13 (`Zero-fake-success for all tools`) -- the browser-open dispatch case
+answered Hindi users in English.**
+
+While continuing the item-13 sweep of `actionExecuted: true` sites in
+`server.ts`, the `open_google` / `open_youtube` / `open_gmail` / `open_chatgpt`
+case was found gating its Hindi reply on `language === 'hi'`. The client
+(`src/App.tsx`) posts `voiceSettings.language` to `/api/chat` -- a locale such as
+`hi-IN` or `hinglish`, never a bare `hi` -- so the comparison was dead code and
+every Hindi user received the English `verdict.replyEn`. It is the only bare-`hi`
+comparison in `server.ts`; every other language gate uses
+`language.startsWith('hi')`. Fixed: `server.ts` now uses
+`language.startsWith('hi')`, matching the rest of the file.
+
+Guarded by a new case in `src/tests/browserDispatchTruth.test.ts` (bounds the
+`open_google` case body and asserts the `startsWith('hi')` form is present and
+the `language === 'hi'` form is absent). Negative-validated: restoring the bare
+`hi` comparison fails exactly that case (`1 failed | 10 passed`); restored ->
+11/11.
+
+Evidence: targeted `src/tests/browserDispatchTruth.test.ts` -- 23 passed (the
+remote branch carries additional cases). Full suite **124 files / 1693 tests
+passed** (22.24 s); lint (`tsc --noEmit`) exit 0; build exit 0
+(`dist/server.cjs` 964517 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Security: `.env` ignored, tree clean, no token in diff. Commits `cd54b54` (fix) /
+`76158bc` (docs). Item 13 stays `PARTIAL`.
+
+Note on the run: this slot began with a local fix commit that had not yet been
+pushed; it was rebased onto the real remote tip `6f1d1c0` (no force-push) and
+pushed as `6f1d1c0..cd54b54` before any long verification ran.
+
+**Next slot:** item 13 continued -- sweep any remaining tool-level `success: true`
+/ `actionExecuted: true` sites; if none remain, move to the next unblocked
+backlog item (Computer Operator, per the mandated order).
