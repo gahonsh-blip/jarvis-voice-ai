@@ -29,6 +29,7 @@ import {
 } from './computerOperator/offlineCallTruth';
 import { offlineEmergencyVerdict, offlineEmergencyReply } from './computerOperator/offlineEmergencyTruth';
 import { telephonyEngineMode, type TelephonyEngineMode } from './telephonyGatewayTruth';
+import { blueprintRoadmapReply } from './blueprintTruth';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
@@ -1575,11 +1576,7 @@ export function processOfflineCommand(
   // 9. Master Blueprint / Project Roadmap
   if (lower.includes('project') || lower.includes('blueprint') || lower.includes('प्रोजेक्ट') || lower.includes('ब्लूप्रिंट') || lower.includes('roadmap') || lower.includes('git audit')) {
     updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'मास्टर ब्लूप्रिंट खोला जा रहा है। फेज 0 से 9 सक्रिय हैं।'
-      : isHinglish
-      ? 'Master Blueprint open ho raha hai. All phases active hain.'
-      : 'Displaying Master Blueprint Phase 0 to 9.';
+    const reply = blueprintRoadmapReply(isHindi ? 'hindi' : isHinglish ? 'hinglish' : 'english');
     return {
       reply,
       spokenText: reply,
