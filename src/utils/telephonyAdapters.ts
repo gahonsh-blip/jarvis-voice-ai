@@ -10,6 +10,16 @@ import { TELEPHONY_TWIML_TURN_PATH } from './telephonyEndpointTruth';
  */
 
 /**
+ * Returned by the adapter methods that only build a provider document. None of
+ * them issues a carrier API call, and the document is handed back to a caller
+ * that discards it rather than returned to the provider in a live response, so
+ * the action cannot be reported as done. `raw` still carries the document for a
+ * live webhook response to use.
+ */
+export const TELEPHONY_DOCUMENT_NOT_DELIVERED =
+  'TELEPHONY_DOCUMENT_NOT_DELIVERED: this adapter built the provider document but did not deliver it to the carrier in a live response, so the action is unconfirmed.';
+
+/**
  * 1. Twilio Telephony Provider Adapter
  */
 export class TwilioTelephonyProvider implements TelephonyProvider {
@@ -48,7 +58,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       return { success: false, error: 'TELEPHONY_NOT_CONFIGURED: Twilio credentials missing' };
     }
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         action: 'TwiML_ANSWER',
         callSessionId: params.callSessionId,
@@ -62,7 +73,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
     }
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         action: 'TwiML_REJECT',
         reason: params.reason || 'busy',
@@ -76,7 +88,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
     }
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         action: 'TwiML_HANGUP',
         callSessionId: params.callSessionId,
@@ -132,7 +145,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
     const voice = isHindi ? 'Polly.Aditi' : 'Polly.Matthew';
     const lang = isHindi ? 'hi-IN' : 'en-IN';
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         twiml: `<Response><Say voice="${voice}" language="${lang}">${params.audioUrlOrText}</Say></Response>`,
       },
@@ -141,7 +155,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
 
   async streamAudio(params: { callSessionId: string; streamUrl: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         twiml: `<Response><Connect><Stream url="${params.streamUrl}" /></Connect></Response>`,
       },
@@ -152,7 +167,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
     const lang = params.language || 'hi-IN';
     const timeoutSec = Math.round((params.timeoutMs || 5000) / 1000);
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         twiml: `<Response>${params.promptText ? `<Say language="${lang}">${params.promptText}</Say>` : ''}<Gather input="speech" language="${lang}" timeout="${timeoutSec}" action="/api/telephony/twiml/turn"/></Response>`,
       },
@@ -220,17 +236,17 @@ export class TelnyxTelephonyProvider implements TelephonyProvider {
 
   async answerIncomingCall(params: { callSessionId: string; greeting?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { command: 'answer', callSessionId: params.callSessionId } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'answer', callSessionId: params.callSessionId } };
   }
 
   async rejectIncomingCall(params: { callSessionId: string; reason?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { command: 'reject', callSessionId: params.callSessionId } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'reject', callSessionId: params.callSessionId } };
   }
 
   async endCall(params: { callSessionId: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { command: 'hangup', callSessionId: params.callSessionId } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'hangup', callSessionId: params.callSessionId } };
   }
 
   async startOutboundCall(params: {
@@ -248,15 +264,15 @@ export class TelnyxTelephonyProvider implements TelephonyProvider {
   }
 
   async playAudio(params: { callSessionId: string; audioUrlOrText: string; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { command: 'speak', text: params.audioUrlOrText } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'speak', text: params.audioUrlOrText } };
   }
 
   async streamAudio(params: { callSessionId: string; streamUrl: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { command: 'streaming_start', url: params.streamUrl } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'streaming_start', url: params.streamUrl } };
   }
 
   async collectSpeech(params: { callSessionId: string; promptText?: string; timeoutMs?: number; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { command: 'gather_using_speak', language: params.language || 'hi-IN' } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'gather_using_speak', language: params.language || 'hi-IN' } };
   }
 
   async transferCall(params: { callSessionId: string; targetNumber: string }): Promise<{ success: boolean; providerConfirmed: boolean; message?: string; raw?: any; error?: string }> {
@@ -305,17 +321,17 @@ export class PlivoTelephonyProvider implements TelephonyProvider {
 
   async answerIncomingCall(params: { callSessionId: string; greeting?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { plivoXml: `<Response><Speak>${params.greeting || 'Hello'}</Speak></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Speak>${params.greeting || 'Hello'}</Speak></Response>` } };
   }
 
   async rejectIncomingCall(params: { callSessionId: string; reason?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { plivoXml: `<Response><Hangup reason="busy"/></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Hangup reason="busy"/></Response>` } };
   }
 
   async endCall(params: { callSessionId: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { plivoXml: `<Response><Hangup/></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Hangup/></Response>` } };
   }
 
   async startOutboundCall(params: {
@@ -331,15 +347,15 @@ export class PlivoTelephonyProvider implements TelephonyProvider {
   }
 
   async playAudio(params: { callSessionId: string; audioUrlOrText: string; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { plivoXml: `<Response><Speak>${params.audioUrlOrText}</Speak></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Speak>${params.audioUrlOrText}</Speak></Response>` } };
   }
 
   async streamAudio(params: { callSessionId: string; streamUrl: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { plivoXml: `<Response><Stream>${params.streamUrl}</Stream></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Stream>${params.streamUrl}</Stream></Response>` } };
   }
 
   async collectSpeech(params: { callSessionId: string; promptText?: string; timeoutMs?: number; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { plivoXml: `<Response><GetDigits action="/api/telephony/plivo/digits"/></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><GetDigits action="/api/telephony/plivo/digits"/></Response>` } };
   }
 
   async transferCall(params: { callSessionId: string; targetNumber: string }): Promise<{ success: boolean; providerConfirmed: boolean; message?: string; raw?: any; error?: string }> {
