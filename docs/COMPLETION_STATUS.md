@@ -4,7 +4,47 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-01 22:17 UTC (03:47 IST 2026-10-02) — **WORK SLOT 14** of the
+Last cycle: 2026-10-01 22:57 UTC (04:27 IST 2026-10-02) — **WORK SLOT 15** of the
+2026-10-02 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the Twilio outbound-dial callback URL.**
+
+A genuine fake-success shape was found and closed on the outbound PSTN path.
+`TwilioTelephonyProvider.startOutboundCall()` (`src/utils/telephonyAdapters.ts`)
+built the call-answer callback URL as
+`${this.webhookBaseUrl || 'https://hermes-jarvis.local'}${TELEPHONY_TWIML_TURN_PATH}`.
+The carrier is handed that URL and calls back on it for *every* call turn, so when
+`TELEPHONY_WEBHOOK_BASE_URL` was unset the adapter silently substituted the fabricated
+host `https://hermes-jarvis.local`, which resolves nowhere. Twilio would accept the
+call and the call could never connect — a placed call reported as success that cannot
+work. A private/loopback base URL (e.g. `https://192.168.x.x`) had the same effect.
+
+The dial now refuses unless the base URL is one a carrier could actually reach:
+`isCarrierReachableWebhookBaseUrl()` requires an absolute `https` URL whose host is not
+loopback (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`), a `.local` name, or an RFC 1918
+private address (`10/8`, `192.168/16`, `172.16/12`). On failure it returns
+`TELEPHONY_WEBHOOK_BASE_URL_MISSING` and never falls back to a fabricated host. The
+`callbackUrl` now uses `this.webhookBaseUrl` directly, which the guard has already
+proven non-empty.
+
+Tests: four helper cases in `src/tests/telephonyEndpointTruth.test.ts` (blank/absent →
+false; fabricated host + every loopback/private host → false; non-https or relative →
+false; public https → true; source no longer contains `hermes-jarvis.local`) and two
+behavioral cases in `src/tests/telephonyProviderHonesty.test.ts` (no callback URL set →
+`success: false` with no `providerCallId`; a private `TELEPHONY_WEBHOOK_BASE_URL` →
+`success: false`).
+
+Negative-validated: forcing the new guard to `false` fails exactly the 2 new behavioral
+cases (`2 failed | 8 passed`), and the captured failure shows the adapter reached the
+real Twilio API and was rejected with a 401 — proof the dial genuinely left the adapter
+before the guard was added; restored green.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted `telephonyEndpointTruth` +
+`telephonyProviderHonesty` **2 files / 30 tests passed**; full suite **127 files / 1725
+tests passed** (23.84 s); build exit 0 (`dist/server.cjs` 965667 bytes / 943.0 kb).
+E2E: NOT RUN (no carrier credentials, no public webhook host). Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — another real defect closed, but the sweep is not exhausted.
+
+Last cycle (previous): 2026-10-01 22:17 UTC (03:47 IST 2026-10-02) — **WORK SLOT 14** of the
 2026-10-02 window, the 03:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the real bridge adapter, and the telephony simulator status.**
 

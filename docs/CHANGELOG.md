@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 04:27 IST (2026-10-01 22:57 UTC) — window slot 15: outbound dial no longer hands the carrier a callback URL nobody can reach
+
+### Fixed
+- **`TwilioTelephonyProvider.startOutboundCall()` (`src/utils/telephonyAdapters.ts`) fabricated the call-answer callback host.** It built the URL as `${this.webhookBaseUrl || 'https://hermes-jarvis.local'}${TELEPHONY_TWIML_TURN_PATH}`. The carrier calls back on that URL for every call turn, so with `TELEPHONY_WEBHOOK_BASE_URL` unset the adapter substituted the fabricated host `https://hermes-jarvis.local`, which resolves nowhere: Twilio would accept the call and the call could never connect — a placed call reported as success that cannot work. A private/loopback base URL had the same effect. The dial now refuses unless the base URL is one a carrier could actually reach, via `isCarrierReachableWebhookBaseUrl()` (absolute `https`, host not loopback, `.local`, or RFC 1918 private). On failure it returns `TELEPHONY_WEBHOOK_BASE_URL_MISSING`; there is no fabricated fallback.
+
+### Tests
+- `src/tests/telephonyEndpointTruth.test.ts` (+4 cases) — blank/absent, the fabricated host, every loopback/private host, and non-https/relative URLs all reject; a public https host accepts; the adapter source no longer contains `hermes-jarvis.local`.
+- `src/tests/telephonyProviderHonesty.test.ts` (+2 cases) — no callback URL set → `success: false` with no `providerCallId`; a private `TELEPHONY_WEBHOOK_BASE_URL` → `success: false`.
+- Negative-validated: forcing the guard to `false` fails exactly the 2 new behavioral cases (`2 failed | 8 passed`); the captured failure shows a real Twilio API 401, proving the dial left the adapter before the guard; restored green.
+
+### Verified
+- Targeted `telephonyEndpointTruth` + `telephonyProviderHonesty` 2 files / 30 passed; full suite **127 files / 1725 tests passed** (23.84 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 965667 bytes). E2E: NOT RUN (no carrier credentials, no public webhook host). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 03:47 IST (2026-10-01 22:17 UTC) — window slot 14: real bridge adapter and telephony simulator stop faking success
 
 ### Fixed

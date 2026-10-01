@@ -9250,3 +9250,24 @@ Gates: lint (`tsc --noEmit`) exit 0; targeted 2 files / 21 passed; full suite **
 E2E: NOT RUN (no Android hardware). Deploy: NOT_CONFIGURED. Commit 7bb76d3 on `feature/hermes-full-completion`.
 
 हिंदी सारांश: असली ब्रिज अडैप्टर और टेलीफोनी सिम्युलेटर की झूठी सफलता हटाई; 127 फ़ाइलें / 1718 टेस्ट पास, lint/build हरे; आइटम 13 अभी PARTIAL।
+
+## 2026-10-02 04:05 IST (WORK slot 15) — Twilio outbound dial stops handing the carrier an unreachable callback URL
+
+Item 13 `Zero-fake-success for all tools` (still `PARTIAL`). One more real defect closed.
+
+- `TwilioTelephonyProvider.startOutboundCall()` (`src/utils/telephonyAdapters.ts`) built the
+  call-answer callback URL as `${this.webhookBaseUrl || 'https://hermes-jarvis.local'}…`.
+  The carrier calls back on that URL for every turn, so with `TELEPHONY_WEBHOOK_BASE_URL`
+  unset the adapter substituted the fabricated host `https://hermes-jarvis.local` (resolves
+  nowhere): Twilio accepts the call and it can never connect. A private/loopback base URL
+  had the same effect. The dial now refuses unless `isCarrierReachableWebhookBaseUrl()`
+  passes (absolute https, host not loopback/.local/RFC 1918) and returns
+  `TELEPHONY_WEBHOOK_BASE_URL_MISSING`; no fabricated fallback.
+
+Tests added: `src/tests/telephonyEndpointTruth.test.ts` (+4 cases), `src/tests/telephonyProviderHonesty.test.ts` (+2 behavioral cases).
+Negative-validated: force the guard to `false` -> `2 failed | 8 passed`, and the captured failure is a real Twilio 401 (code 20003) proving the dial left the adapter; restored green.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted 2 files / 30 passed; full suite **127 files / 1725 tests passed** (23.84 s); build exit 0 (`dist/server.cjs` 965667 bytes).
+E2E: NOT RUN (no carrier credentials / public webhook host). Deploy: NOT_CONFIGURED. Commit b11e7e0 on `feature/hermes-full-completion`.
+
+हिंदी सारांश: ट्विलियो आउटबाउंड कॉल अब कैरियर को अनपहुँच्य कॉलबैक URL नहीं देता; 127 फ़ाइलें / 1725 टेस्ट पास, lint/build हरे; आइटम 13 अभी PARTIAL।
