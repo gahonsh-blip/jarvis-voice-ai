@@ -9919,3 +9919,19 @@ Audited the server.ts `/api/chat` intent dispatch for the remaining named fake-s
 - `math_computation`: credits only a finite numeric result; non-numeric / error -> `actionExecuted = false`. TRUTHFUL.
 
 Conclusion: the named server.ts dispatch targets are already honest. Next slot should sweep `server_tools.ts` itself for remaining unclassified `success: true` sites (the doc's stated tail), not re-audit these.
+
+
+### Slot 13 — WORK (2026-10-03 03:35 IST / 2026-10-02 22:12 UTC) — item 13: telephony call-history delete routes
+
+Fixed two unconditional fake-success returns in `server.ts`:
+- `DELETE /api/telephony/calls` always answered `{ success: true, message: 'Telephony call history cleared' }`, so clearing an already-empty history read as a completed deletion.
+- `DELETE /api/telephony/calls/:id` answered `{ success: true }` unconditionally, so deleting an unknown id read as removed.
+
+New `classifyTelephonyCallDeletion(removed, targetId?)` (`src/utils/hardening/telephonyCallDeleteTruth.ts`) derives the verdict from the real removed count: `DELETED` (success true + count), `NOTHING_TO_CLEAR` (empty clear, success false), `NOT_FOUND` (unknown id, success false, names the id). Both routes return it.
+
+Evidence: `src/tests/telephonyCallDeleteTruth.test.ts` — 8 cases (real/empty clear, real/unknown id, non-finite removed, plus source guards that both routes call the classifier and neither old `success: true` literal survives). Negative-validated: restoring the two literals fails exactly the three route guards (`3 failed | 5 passed`); restored → 8/8.
+Gates: lint exit 0; targeted 1 file / 8 passed; full suite 140 files / 1840 tests passed (23.95 s); build exit 0 (`dist/server.cjs` 963.2 kb). E2E NOT RUN. Item 13 remains PARTIAL.
+
+Audit addendum: the two other delete sites named by the prior slot are already truthful — `/api/tools/fs/delete` returns `realFsDelete()`'s real result, and `DELETE /api/autonomous/schedule/:id` 404s an unknown id. No change needed.
+
+Next Slot: continue the item 13 sweep on the next unclassified `success: true` site in `server.ts` / `server_tools.ts` (rotating), keeping the helper+test convention.
