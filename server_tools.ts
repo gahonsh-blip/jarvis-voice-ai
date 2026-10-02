@@ -835,6 +835,58 @@ function decodeXmlEntities(str: string): string {
     .trim();
 }
 
+export interface YouTubePageMetadata {
+  title: string | null;
+  channel: string | null;
+  durationSeconds: number | null;
+  description: string;
+  playerResponse: any | null;
+  hasPlayerResponse: boolean;
+  // `ogTitle` only exists on a real watch page. A consent/bot-check page answers
+  // HTTP 200 with a generic Chrome-y `<title>` and no `og:title`, which is how an
+  // unparseable page is told apart from a real one without inventing a title.
+  hadOpenGraphTitle: boolean;
+}
+
+/**
+ * Resolve the video metadata that a fetched watch-page actually exposes.
+ * Returns `null` for title/channel/duration when they were not observed — the
+ * caller must then refuse the request rather than narrate a placeholder. A page
+ * that parsed no `ytInitialPlayerResponse` and carries no `og:title` is treated
+ * as a bot-check/consent interstitial and never as a real video.
+ */
+export function resolveYouTubePageMetadata(html: string, playerResponse: any | null): YouTubePageMetadata {
+  const hasPlayerResponse = Boolean(playerResponse);
+  const playerDetails = hasPlayerResponse ? playerResponse?.videoDetails : null;
+  const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]*)"/i);
+  const hadOpenGraphTitle = Boolean(ogTitleMatch && ogTitleMatch[1].trim());
+
+  let title: string | null = null;
+  let channel: string | null = null;
+  let durationSeconds: number | null = null;
+  let description = '';
+
+  if (playerDetails) {
+    const rawTitle = typeof playerDetails.title === 'string' ? playerDetails.title.trim() : '';
+    const rawAuthor = typeof playerDetails.author === 'string' ? playerDetails.author.trim() : '';
+    const rawDuration = parseInt(playerDetails.lengthSeconds || '', 10);
+    const rawDesc = typeof playerDetails.shortDescription === 'string' ? playerDetails.shortDescription : '';
+    title = rawTitle || null;
+    channel = rawAuthor || null;
+    durationSeconds = Number.isFinite(rawDuration) ? rawDuration : null;
+    description = rawDesc;
+  } else if (hadOpenGraphTitle) {
+    // A real watch page whose player-response JSON failed to parse but which
+    // still exposes its own title. This is genuine page metadata, not a claim
+    // about the video's channel or length, so only the title is taken.
+    title = ogTitleMatch![1].replace(/ - YouTube$/, '').trim() || null;
+    const descMatch = html.match(/<meta\s+name="description"\s+content="([^"]*)"/i);
+    if (descMatch) description = descMatch[1];
+  }
+
+  return { title, channel, durationSeconds, description, playerResponse, hasPlayerResponse, hadOpenGraphTitle };
+}
+
 export async function fetchYouTubeTranscriptData(
   videoIdOrUrl: string,
   preferredLang: string = 'en'
@@ -901,35 +953,36 @@ export async function fetchYouTubeTranscriptData(
     }
 
     // 2. Extract Title and Metadata
-    let title = 'YouTube Video';
-    let channel = 'YouTube Creator';
-    let durationSeconds = 0;
-    let description = '';
+    const metadata = resolveYouTubePageMetadata(html, playerResponse);
 
-    if (playerResponse && playerResponse.videoDetails) {
-      title = playerResponse.videoDetails.title || title;
-      channel = playerResponse.videoDetails.author || channel;
-      durationSeconds = parseInt(playerResponse.videoDetails.lengthSeconds || '0', 10);
-      description = playerResponse.videoDetails.shortDescription || '';
-    } else {
-      const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
-      if (titleMatch) {
-        title = titleMatch[1].replace(/ - YouTube$/, '').trim();
-      }
-      const descMatch = html.match(/<meta\s+name="description"\s+content="([^"]*)"/i);
-      if (descMatch) {
-        description = descMatch[1];
-      }
+    // A page that parsed no player response and exposes no og:title is a
+    // consent/bot-check interstitial, not a video. Refuse it instead of
+    // narrating a placeholder title and a duration nobody measured.
+    if (!metadata.hasPlayerResponse && !metadata.hadOpenGraphTitle) {
+      return {
+        success: false,
+        error:
+          `YouTube did not return video metadata for "${videoId}" — the page was a consent or bot-check interstitial, ` +
+          `not the video. No title, channel or duration was observed, so no summary can be produced.`,
+      };
     }
+    if (!metadata.title) {
+      return {
+        success: false,
+        error: `YouTube returned a page for "${videoId}" without a usable video title; refusing to narrate a placeholder.`,
+      };
+    }
+
+    const durationSeconds = metadata.durationSeconds ?? 0;
 
     const videoInfo: YouTubeVideoInfo = {
       videoId,
       url: watchUrl,
-      title,
-      channel,
+      title: metadata.title,
+      channel: metadata.channel ?? 'Unknown creator',
       durationSeconds,
       durationFormatted: formatDuration(durationSeconds),
-      description,
+      description: metadata.description,
       thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       hasTranscript: false,
       transcriptLength: 0,
@@ -1031,9 +1084,9 @@ export async function fetchYouTubeTranscriptData(
       videoInfo.transcriptLength = segments.length;
     } else {
       // If closed captions are disabled on the video, use the comprehensive description and metadata
-      fullTranscript = `[Video Metadata & Outline]\nTitle: ${title}\nChannel: ${channel}\nDuration: ${formatDuration(durationSeconds)}\n\nDescription & Chapters:\n${description}`;
+      fullTranscript = `[Video Metadata & Outline]\nTitle: ${videoInfo.title}\nChannel: ${videoInfo.channel}\nDuration: ${videoInfo.durationFormatted}\n\nDescription & Chapters:\n${videoInfo.description}`;
       videoInfo.hasTranscript = false;
-      videoInfo.transcriptLength = description.length;
+      videoInfo.transcriptLength = videoInfo.description.length;
     }
 
     return {
