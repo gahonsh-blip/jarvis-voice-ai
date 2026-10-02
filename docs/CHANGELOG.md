@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 03:42 IST (2026-10-02 22:12 UTC) — window slot 13: the telephony call-history delete routes stop reporting a deletion that never happened
+
+### Fixed
+- **`DELETE /api/telephony/calls` and `DELETE /api/telephony/calls/:id` (`server.ts`) answered `{ success: true, message: … }` unconditionally.** Clearing an already-empty history, or deleting an id that was never recorded, read as a completed deletion while the in-memory store was unchanged, so a caller could not distinguish a real removal from a no-op. New `classifyTelephonyCallDeletion(removed, targetId?)` (`src/utils/hardening/telephonyCallDeleteTruth.ts`) derives the verdict from the actual removed count: a real removal reports `success: true` with the count and `outcome: 'DELETED'`; an empty clear reports `success: false` / `outcome: 'NOTHING_TO_CLEAR'`; an unknown id reports `success: false` / `outcome: 'NOT_FOUND'` and names the id. Both routes now return that verdict.
+
+### Tests
+- `src/tests/telephonyCallDeleteTruth.test.ts` — 8 cases: real clear with count; empty clear refused; real id deleted; unknown id refused and named; non-finite/negative removed treated as nothing; plus source guards that both routes call the classifier and that neither the old `success: true` literal nor `res.json({ success: true` survives on either delete route.
+- Negative-validated: restoring the two unconditional `success: true` literals fails exactly the three route guards (`3 failed | 5 passed`); restored → 8/8.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 8 passed; full suite 140 files / 1840 tests passed (23.95 s); build exit 0 (`dist/server.cjs` 963.2 kb). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-03 03:10 IST (2026-10-02 21:40 UTC) — window slot 12: the web-fetch route stops reporting an unreadable page as a successful fetch
 
 ### Fixed
