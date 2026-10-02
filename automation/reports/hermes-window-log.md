@@ -9909,3 +9909,13 @@ Next Slot:
 - वेब-फ़ेच रूट अब 2xx होने भर से सफलता नहीं दिखाता; पढ़ने योग्य सामग्री न हो या
   शीर्षक न हो तो `success: false`/`null` लौटाता है — 7/7 टेस्ट पास,
   नेगेटिव-वैलिडेटेड, पूरा सूट 1832 पास।
+
+### Slot 12 audit addendum — item 13 named dispatch targets
+
+Audited the server.ts `/api/chat` intent dispatch for the remaining named fake-success suspects:
+- `list_files_tool` -> `realFsList` (server_tools.ts:322): returns `success: true` only after a real `readdirSync`; missing dir / throw -> `success: false`. Dispatch credits via `toolActionExecuted(fsResult)`. TRUTHFUL.
+- `github_status_tool` / `github_repos_tool` -> `realGithubStatus` / `realGithubRepos` (server_tools.ts:521,570): `success` only on `res.ok`; no token / HTTP error -> failure. Dispatch credits repo listing via `toolActionExecuted(repos)`, status check itself via `connected`. TRUTHFUL.
+- `summarize_youtube_video` -> `summarizeYouTubeVideoCore`: dispatch credits only a non-empty `summary` (`hasSummary`). TRUTHFUL.
+- `math_computation`: credits only a finite numeric result; non-numeric / error -> `actionExecuted = false`. TRUTHFUL.
+
+Conclusion: the named server.ts dispatch targets are already honest. Next slot should sweep `server_tools.ts` itself for remaining unclassified `success: true` sites (the doc's stated tail), not re-audit these.
