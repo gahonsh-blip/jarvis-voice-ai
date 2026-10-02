@@ -4,7 +4,39 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-02 22:12 UTC (03:42 IST 2026-10-03) — **WORK SLOT 13** of the
+Last cycle: 2026-10-02 22:38 UTC (04:08 IST 2026-10-03) — **WORK SLOT 14** of the
+2026-10-02 → 2026-10-03 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the global kill-switch route.**
+
+`POST /api/system/kill-switch` (`server.ts`) always answered `{ success: true,
+message: 'Global Kill Switch engaged. All background processes terminated and
+queue cleared.' }` and always wrote a `🚨 GLOBAL KILL SWITCH TRIGGERED … cleared
+N pending …` Level 4 audit row, whatever the pre-transition state. Engaging the
+switch while the system was already frozen cleared no queue (there are no
+`PENDING_APPROVAL` requests left to reject) yet still read as a fresh
+termination of it. New `killSwitchVerdict(pre, clearedTasksCount)`
+(`src/utils/emergencyTruth.ts`) derives the verdict from the state observed
+*before* the activation and the real cleared count: a genuine engagement reports
+`actionExecuted: true`, `outcome: 'ENGAGED'`; a re-engagement of a paused or
+latched system reports `outcome: 'ALREADY_ENGAGED'`, `actionExecuted: false`; an
+unobserved state reports `outcome: 'UNKNOWN'` and never claims an engagement.
+The route now returns that verdict, gates both the audit row and the Telegram
+notice on `actionExecuted`, and answers `503` for the unknown case.
+
+Evidence: new `src/tests/killSwitchTruth.test.ts` (9 cases: fresh engagement with
+count; engagement clearing no queue does not invent a count; re-engagement of a
+paused system refused; re-engagement of a latched switch refused; unobserved
+state never engaged; non-finite cleared count treated as nothing; plus source
+guards that the route calls the classifier with the pre-transition state, that
+the old success literal is gone, and that the audit and Telegram branches are
+gated on `actionExecuted`). Negative-validated: restoring the original route
+fails exactly the three source guards (`3 failed | 6 passed`); restored → 9/9.
+Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 9 passed; full suite
+**141 files / 1849 tests passed** (23.62 s); build exit 0 (`dist/server.cjs`
+964.8 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the
+sweep is not exhausted; `server.ts` still holds a tail of unclassified
+`success: true` sites.
+
+Previous cycle: 2026-10-02 22:12 UTC (03:42 IST 2026-10-03) — **WORK SLOT 13** of the
 2026-10-02 → 2026-10-03 window, the 03:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the telephony call-history delete routes.**
 
 `DELETE /api/telephony/calls` and `DELETE /api/telephony/calls/:id` (`server.ts`)

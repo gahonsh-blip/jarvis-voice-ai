@@ -9935,3 +9935,14 @@ Gates: lint exit 0; targeted 1 file / 8 passed; full suite 140 files / 1840 test
 Audit addendum: the two other delete sites named by the prior slot are already truthful — `/api/tools/fs/delete` returns `realFsDelete()`'s real result, and `DELETE /api/autonomous/schedule/:id` 404s an unknown id. No change needed.
 
 Next Slot: continue the item 13 sweep on the next unclassified `success: true` site in `server.ts` / `server_tools.ts` (rotating), keeping the helper+test convention.
+
+### Slot 14 — WORK (2026-10-03 04:05 IST / 2026-10-02 22:38 UTC) — item 13: global kill-switch route
+
+`POST /api/system/kill-switch` (`server.ts`) answered `{ success: true, message: 'Global Kill Switch engaged. All background processes terminated and queue cleared.' }` unconditionally and always wrote the `🚨 GLOBAL KILL SWITCH TRIGGERED … cleared N pending …` Level 4 audit row, whatever the pre-transition state. Re-engaging the switch while the system was already frozen/latched cleared no queue but still read as a fresh termination.
+
+New `killSwitchVerdict(pre, clearedTasksCount)` (`src/utils/emergencyTruth.ts`) derives the outcome from the state observed *before* activation and the real cleared count: `ENGAGED` (actionExecuted true) for a genuine engagement; `ALREADY_ENGAGED` (actionExecuted false) for a paused/latched system re-engaged; `UNKNOWN` (actionExecuted false) when the state was never observed. The route returns that verdict, gates the audit row and Telegram notice on `actionExecuted`, and answers 503 for `UNKNOWN`.
+
+Evidence: `src/tests/killSwitchTruth.test.ts` — 9 cases (fresh engagement with count; engagement clearing no queue does not invent a count; paused re-engagement refused; latched re-engagement refused; unobserved state never engaged; non-finite count treated as nothing; plus source guards that the route calls the classifier with the pre-transition state, the old success literal is gone, and the audit/Telegram branches are gated on `actionExecuted`). Negative-validated: restoring the original route fails exactly the three source guards (`3 failed | 6 passed`); restored → 9/9.
+Gates: lint exit 0; targeted 1 file / 9 passed; full suite 141 files / 1849 tests passed (23.62 s); build exit 0 (`dist/server.cjs` 964.8 kb). E2E NOT RUN. Item 13 remains PARTIAL.
+
+Next Slot: FINALIZATION (04:35 IST) — full verification, security checks, refresh PR, finalize state. No new development.
