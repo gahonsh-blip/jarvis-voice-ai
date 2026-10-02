@@ -314,6 +314,21 @@ spacing normalised (`'+91-9876543210'` → `'+91 ******3210'`). Guarded by
 (`2 failed | 37 passed` with the pre-fix body restored). `telephonyPermissions.ts`
 never shared the digit-free defect — it already returns `'Unknown / Private'`.
 
+**Update 2026-10-03 01:00 IST — the permission route accepted changes it never applied.**
+`POST /api/telephony/permissions` merged any caller-supplied object over the stored
+matrix (`{ ...current, ...req.body }`) and answered `success: true` unconditionally.
+A body naming a key that does not exist — a typo, or a key from a stale client — was
+reported as an applied change, and an empty body read as a successful save. These
+permissions gate outbound calling, private-data access and call recording, so the
+operator could believe a grant or revocation had taken effect when nothing changed.
+`classifyPhonePermissionUpdate()` (`src/utils/hardening/phonePermissionUpdateTruth.ts`)
+now accepts only keys present in the real `PHONE_PERMISSION_DEFINITIONS` and only
+values carrying a valid state; the route applies just the classified keys and answers
+`success: false`, `applied: false` with a naming reason when nothing real was supplied.
+`TelephonyHubModal.tsx` reverts a rejected toggle rather than showing a permission that
+was never persisted. Guarded by `src/tests/telephonyPermissionUpdateTruth.test.ts`
+(11 tests); negative-validated (`3 failed | 8 passed` with the pre-fix route restored).
+
 **Update 2026-09-23 03:13 IST — a correct mask that the UI did not use.** The
 helper was sound by this point, but a component could still render the raw field
 next to a badge asserting the opposite. `ActiveCallHUD.tsx` drew a `MASKED` badge

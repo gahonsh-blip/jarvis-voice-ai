@@ -9614,3 +9614,38 @@ Item #13 (Zero-fake-success for all tools) — the social OAuth disconnect route
 - Commit: daf243c (code+test), then docs.
 - Item 13 stays PARTIAL — sweep not exhausted; server_tools.ts still has 16
   unclassified `success: true` sites.
+
+## 2026-10-03 01:00 IST — WORK SLOT 8 (window 2026-10-02 → 2026-10-03)
+
+Item #13 (Zero-fake-success for all tools) — the telephony permission-update route.
+
+- Found: `POST /api/telephony/permissions` (`server.ts`) merged any caller-supplied
+  object over the stored matrix (`{ ...current, ...req.body }`) and answered
+  `success: true` unconditionally. A body naming a permission key that does not
+  exist — a typo, or a key from a stale client — was reported as an applied change,
+  and an empty body read as a successful save. These permissions gate outbound
+  calling, private-data access and call recording, so the operator could believe a
+  grant or revocation had taken effect when nothing changed.
+- Fixed: new `classifyPhonePermissionUpdate(body, PHONE_PERMISSION_DEFINITIONS)`
+  (`src/utils/hardening/phonePermissionUpdateTruth.ts`) accepts only keys present in
+  the real definitions and only values carrying a valid
+  `NOT_CONFIGURED|DENIED|ASK|GRANTED` state. The route applies just
+  `verdict.applied` and answers `success:false`, `applied:false` with a naming
+  `reason` (`NO_KEYS` / `ALL_UNKNOWN`) when nothing real was supplied, naming any
+  ignored keys. `TelephonyHubModal.tsx` `handleTogglePermission` awaits the response,
+  reverts the toggle on rejection, and surfaces a notice rather than leaving a
+  permission shown as granted that was never persisted.
+- Evidence: `src/tests/telephonyPermissionUpdateTruth.test.ts` — 11 cases (known key
+  applied; all four documented states accepted; unknown key rejected; empty body
+  rejected; non-object body rejected; invalid state value rejected; mixed real+unknown
+  applies the real key and names the unknown one; three bounded source guards that the
+  route classifies against the definitions, returns `success:false`, and saves
+  `{ ...current, ...verdict.applied }` not the raw body). Targeted run: 1 file / 11
+  passed. Negative-validated: restoring the pre-fix route fails exactly the three
+  route assertions (`3 failed | 8 passed`), restored → 11/11.
+- Gates: lint (`tsc --noEmit`) exit 0; full suite 135 files / 1794 tests passed
+  (27.30 s); build exit 0 (`dist/server.cjs` 979414 bytes). E2E NOT RUN (no
+  carrier/PSTN). Deploy NOT_CONFIGURED.
+- Commit: f8d9fd5 (code+test), then docs.
+- Item 13 stays PARTIAL — sweep not exhausted; `server_tools.ts` still has ~16
+  unclassified `success: true` sites.

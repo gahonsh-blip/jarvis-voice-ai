@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 01:00 IST (2026-10-02 19:30 UTC) — window slot 8: the telephony permission route stops reporting unapplied changes as saved
+
+### Fixed
+- **`POST /api/telephony/permissions` (`server.ts`) merged any caller-supplied object over the stored matrix and answered `success: true` unconditionally.** A body naming a permission key that does not exist — a typo, or a key from a stale client — was reported as an applied change, and an empty body read as a successful save. That is a false success on the exact surface that gates outbound calling, private-data access and call recording. New `classifyPhonePermissionUpdate(body, PHONE_PERMISSION_DEFINITIONS)` (`src/utils/hardening/phonePermissionUpdateTruth.ts`) accepts only keys that exist in the real definitions and only values carrying a valid `NOT_CONFIGURED|DENIED|ASK|GRANTED` state. The route applies just `verdict.applied` and answers `success: false` with `applied: false` and a naming `reason` (`NO_KEYS` / `ALL_UNKNOWN`) when nothing real was supplied, naming any ignored keys.
+- **`src/components/TelephonyHubModal.tsx` (`handleTogglePermission`) left the toggle flipped after a rejection.** It now awaits the response, reverts the toggle when the server did not apply the change, and surfaces an honest notice instead of showing a permission as granted that was never persisted.
+
+### Tests
+- `src/tests/telephonyPermissionUpdateTruth.test.ts` — 11 cases: known key applied, all four documented states accepted, unknown key rejected, empty body rejected, non-object body rejected, invalid state value rejected, mixed real+unknown applies the real key and names the unknown one, plus three bounded source guards (classifies against the definitions, returns `success: false`, saves `{ ...current, ...verdict.applied }` not the raw body).
+- Negative-validated: restoring the pre-fix route fails exactly the three route assertions (`3 failed | 8 passed`); restored → 11/11.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 11 passed; full suite 135 files / 1794 tests passed (27.30 s); build exit 0 (`dist/server.cjs` 979414 bytes). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-03 00:14 IST (2026-10-02 18:44 UTC) — window slot 7: the social OAuth disconnect routes stop faking a credential removal
 
 ### Fixed
