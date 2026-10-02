@@ -491,6 +491,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         setOauthNotice('LinkedIn personal profile disconnected.');
         fetchPlatforms();
         onSpeak('LinkedIn personal profile disconnected, Sir.');
+      } else {
+        // Nothing was linked, so nothing was disconnected — say so instead of
+        // rendering the success notice the server used to always return.
+        setOauthNotice(data.message || 'No LinkedIn account is connected.');
+        fetchPlatforms();
       }
     } catch (err) {
       console.warn('Disconnect error:', err);
@@ -543,6 +548,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         setOauthNotice('YouTube channel disconnected.');
         fetchPlatforms();
         onSpeak('YouTube channel disconnected, Sir.');
+      } else {
+        setOauthNotice(data.message || 'No YouTube channel is connected.');
+        fetchPlatforms();
       }
     } catch (err) {
       console.warn('Disconnect error:', err);

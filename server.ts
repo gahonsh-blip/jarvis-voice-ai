@@ -5089,7 +5089,18 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
  * 4. Disconnect LinkedIn OAuth Account
  */
 app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
-  const prevMember = memoryState.linkedInConnection?.name || 'LinkedIn User';
+  // A disconnect can only succeed if something was connected. The route used to
+  // answer success:true unconditionally, so the UI announced a disconnection
+  // that removed no credential.
+  if (!memoryState.linkedInConnection) {
+    return res.json({
+      success: false,
+      outcome: 'NOT_CONNECTED',
+      message: 'No LinkedIn account is connected; nothing was disconnected.',
+    });
+  }
+
+  const prevMember = memoryState.linkedInConnection.name || 'LinkedIn User';
   memoryState.linkedInConnection = undefined;
   persistMemory();
 
@@ -5526,7 +5537,17 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
  * 4. Disconnect YouTube OAuth Account
  */
 app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
-  const prevChannel = memoryState.youTubeConnection?.channelTitle || 'YouTube Account';
+  // Same guard as LinkedIn: report a real disconnection only when a channel was
+  // actually linked and its stored credentials were removed.
+  if (!memoryState.youTubeConnection) {
+    return res.json({
+      success: false,
+      outcome: 'NOT_CONNECTED',
+      message: 'No YouTube channel is connected; nothing was disconnected.',
+    });
+  }
+
+  const prevChannel = memoryState.youTubeConnection.channelTitle || 'YouTube Account';
   memoryState.youTubeConnection = undefined;
   persistMemory();
 
