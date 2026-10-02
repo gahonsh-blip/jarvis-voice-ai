@@ -26,6 +26,7 @@ import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
+import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -112,6 +113,7 @@ import {
   evaluateClinicSafety,
   checkHumanHandoffIntent,
   DEFAULT_PHONE_PERMISSIONS,
+  PHONE_PERMISSION_DEFINITIONS,
 } from './src/utils/telephonyPermissions';
 import {
   ComputerOperatorEngine,
@@ -8569,13 +8571,31 @@ app.get('/api/telephony/permissions', (req: Request, res: Response) => {
 
 app.post('/api/telephony/permissions', (req: Request, res: Response) => {
   try {
-    const updates = req.body;
+    const verdict = classifyPhonePermissionUpdate(req.body, PHONE_PERMISSION_DEFINITIONS);
+    if (!verdict.accepted) {
+      return res.status(400).json({
+        success: false,
+        applied: false,
+        reason: verdict.reason,
+        rejected: verdict.rejected,
+        permissions: loadPhonePermissions(),
+        error: verdict.message,
+      });
+    }
+
     const current = loadPhonePermissions();
-    const updated = { ...current, ...updates };
+    const updated = { ...current, ...verdict.applied };
     savePhonePermissions(updated);
-    res.json({ success: true, permissions: updated });
+    res.json({
+      success: true,
+      applied: true,
+      appliedKeys: Object.keys(verdict.applied),
+      rejected: verdict.rejected,
+      message: verdict.message,
+      permissions: updated,
+    });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, applied: false, error: err.message });
   }
 });
 
