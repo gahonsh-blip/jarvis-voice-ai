@@ -1,23 +1,23 @@
 {
   "window_date": "2026-10-03",
   "window_started_at": "2026-10-02T15:30:00Z",
-  "last_slot_at": "2026-10-02T17:06:00Z",
-  "slots_completed": 4,
+  "last_slot_at": "2026-10-02T18:04:00Z",
+  "slots_completed": 5,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "e3414a9",
+  "last_commit": "7779a35",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    "#1 Real Android Mobile Bridge \u2014 physical Android handset",
-    "#50 Hands-free Android control \u2014 physical Android handset",
-    "#55 real-device E2E \u2014 physical Android handset",
-    "#8 real Windows screenshot capture \u2014 Windows host",
-    "real telephony carrier path \u2014 SIM/Twilio credentials and public webhook host",
-    "#51 live credential rotation \u2014 external party",
-    "#60 third-party security audit \u2014 external party"
+    "#1 Real Android Mobile Bridge — physical Android handset",
+    "#50 Hands-free Android control — physical Android handset",
+    "#55 real-device E2E — physical Android handset",
+    "#8 real Windows screenshot capture — Windows host",
+    "real telephony carrier path — SIM/Twilio credentials and public webhook host",
+    "#51 live credential rotation — external party",
+    "#60 third-party security audit — external party"
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
