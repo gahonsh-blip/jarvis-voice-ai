@@ -6035,6 +6035,11 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
 
   if (decision === 'REJECT') {
     const updated = updateActionRequestStatus(id, 'REJECTED', { resolvedBy: approver });
+    if (!updated) {
+      // No such pending action — there is nothing to reject, so do not log an
+      // audit entry or answer success for a resolution that never happened.
+      return res.status(404).json({ success: false, error: `No pending action request with id ${id}.` });
+    }
     pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
