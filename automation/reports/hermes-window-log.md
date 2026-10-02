@@ -9485,3 +9485,80 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - Item 13 के तहत चार झूठे success स्थल ठीक किए और दोनों fix को negative-validate किया।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:05
+Window date: 2026-10-03   Window slots completed so far: 4 (this is slot 5)
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL) — closed the `/api/system/resume`
+  fake-success. `server.ts` answered `success: true` and wrote a
+  `SYSTEM RESUMED ... VERIFIED` audit row unconditionally, so a resume while
+  nothing was frozen — or while a latched hard kill switch still held autonomy
+  frozen — read as released autonomy in the response and in the audit trail.
+  Now derives `emergencyResumeVerdict(getEmergencyState())` from the
+  pre-transition state; a no-op resume returns `success: false`/`released: false`
+  with an `outcome` and writes NO resumed audit row; `resumeSystemOperation` is
+  called only after the release is confirmed. `HUDHeader.tsx` adopts only an
+  observed state and shows the honest message.
+  Evidence: `src/utils/emergencyTruth.ts` (verdict), `server.ts` ~5930,
+  `src/components/HUDHeader.tsx` ~171, `src/tests/emergencyResumeTruth.test.ts`.
+
+In Progress:
+- #13 Item 13 — sweep not exhausted; ~80 `success: true` sites remain unclassified.
+
+Remaining:
+- #13 continue the zero-fake-success sweep (next: `/api/chat` emergency-stop flip
+  semantics; remaining unclassified `success: true` sites in `server.ts`).
+- #1/#50/#55 Android, #8 Windows screenshot, telephony carrier path, #51, #60 —
+  all BLOCKED (hardware/credentials/external party).
+
+Bugs Found:
+- `/api/system/resume` faked the release in both the response and the audit
+  trail (safety-direction fake success on the emergency path).
+- A pre-existing false failure on the branch: `actionExecutedRemainingSites.test.ts`
+  counted a `success: true` inside a telephony doc comment as a new flag site
+  (`3 != 2`) after the 22:35 slot added the comment; the two real sites are
+  unchanged and truthful.
+
+Bugs Fixed:
+- Resume route now gated on the pre-transition verdict; HUD reports the honest
+  outcome. Verified by the new test (7 cases) and negative-validated: weakening
+  the unobserved-state guard fails exactly the `UNKNOWN` case (1 failed | 6 passed),
+  restored -> 7/7.
+- Pin test now strips comments before counting code sites; suite green again.
+
+Tests:    131 files / 1763 tests passed (22.58 s) — full `npx vitest run`
+Lint:     pass — `npm run lint` (`tsc --noEmit`) exit 0
+Build:    pass — `npm run build` exit 0; dist/server.cjs 967919 bytes
+E2E:      NOT RUN (no Android hardware / display session / carrier)
+Security: `git check-ignore .env` -> .env ignored; no secret in diff; no
+          node_modules/dist staged. Audit: NOT RUN.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + Item 13 row)
+Branch:  feature/hermes-full-completion
+Commit:  57404e9 (fix+test), docs commit follows this report
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         existing PR from prior slots (not re-created)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this env; the verified
+            artifact `dist/server.cjs` is the deployment unit.
+
+Blocked:
+- #1/#50/#55 Android — physical Android handset
+- #8 Windows screenshot — Windows host
+- telephony carrier path — SIM/Twilio credentials + public webhook host
+- #51 live credential rotation, #60 third-party audit — external party
+
+Human Approval Required:
+- None for this slot's change (internal honesty fix, no external action).
+
+Next Slot:
+- #13 — continue the sweep: the `/api/chat` emergency-stop flip semantics and the
+  remaining unclassified `success: true` sites in `server.ts`.
+
+हिंदी सारांश (एक पंक्ति):
+- सिस्टम-रिज़्यूम रूट अब झूठी सफलता नहीं देता — असली फ़्रीज़ हटे बिना सफलता या ऑडिट रिकॉर्ड नहीं बनता; पूरी टेस्ट सूट हरी।
