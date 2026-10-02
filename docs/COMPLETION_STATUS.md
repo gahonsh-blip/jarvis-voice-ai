@@ -4,7 +4,38 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-02 18:03 UTC (23:33 IST 2026-10-02) — **WORK SLOT 5** of the
+Last cycle: 2026-10-02 18:12 UTC (23:42 IST 2026-10-02) — **WORK SLOT 6** of the
+2026-10-02 → 2026-10-03 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the emergency-toggle route.**
+
+`POST /api/emergency/toggle` drove the flag-*flipping* `toggleEmergencyStop`
+(`server_tools.ts`), which inverts `emergencyPaused` on every call, then answered
+`{ success: true, ...updated }` and wrote a `🚨 EMERGENCY STOP ACTIVATED … VERIFIED`
+(or `🟢 … RESUMED … VERIFIED`) audit row **plus** a Telegram notice unconditionally.
+Two false-success directions followed: a *repeated* stop **released** the freeze
+while the audit claimed it had just been activated, and a resume while nothing was
+paused **engaged** it — each reported as a successful transition. Fixed: the route
+derives the requested transition from the **pre-transition** state via
+`emergencyTogglePreAction(action, pre)` (`src/utils/emergencyTruth.ts`), so the
+flip only happens when the pre-state supports it. An unsupported transition is a
+reported no-op (`success: false`, `actionExecuted: false`, `title`/`message` from
+`emergencyToggleVerdict`) that writes **no** audit row, sends **no** Telegram
+notice, and does not flip. `AutonomousToolsModal.tsx` now sends an explicit
+`action` and surfaces the honest outcome (a no-op reads as a non-change, not a
+green success) while still only storing a confirmed state.
+
+Evidence: `src/tests/emergencyToggleRouteTruth.test.ts` (9 cases: the
+`emergencyTogglePreAction` truth table for stop/resume/latched/unobserved
+pre-states, plus source guards that the route derives the verdict from the
+pre-state and early-returns before the audit row, the Telegram notice and the
+flip). Targeted run: **4 files / 35 tests passed**. Negative-validated: reverting
+`server.ts` to the original route fails exactly the 3 route-source assertions
+(`3 failed | 6 passed`), restored → 9/9. Gates: lint (`tsc --noEmit`) exit 0;
+full suite **132 files / 1772 tests passed** (22.19 s); build exit 0
+(`dist/server.cjs` 946.3 kB). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays
+`PARTIAL` — the sweep is not exhausted; `grep -c "success: true"` reports 85 in
+`server.ts` and 16 in `server_tools.ts`, not yet individually classified.
+
+Previous cycle: 2026-10-02 18:03 UTC (23:33 IST 2026-10-02) — **WORK SLOT 5** of the
 2026-10-02 → 2026-10-03 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the system-resume route.**
 
 `POST /api/system/resume` answered `success: true` and wrote a

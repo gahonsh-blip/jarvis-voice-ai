@@ -44,7 +44,10 @@ describe('AutonomousToolsModal renders an unknown kill-switch state honestly', (
 
   it('does not store a status the endpoint never confirmed', () => {
     expect(MODAL_SRC).toContain('setEmergency(emergencyStatusKnown(data) ? data : null)');
-    expect(MODAL_SRC).toContain('if (!emergencyStatusKnown(data)) throw new Error');
+    // The toggle response is guarded too: only a confirmed state is stored, and
+    // an unknown success response throws rather than being rendered as healthy.
+    expect(MODAL_SRC).toContain('if (emergencyStatusKnown(state)) setEmergency(state)');
+    expect(MODAL_SRC).toContain('throw new Error(\'Emergency endpoint returned no boolean state\')');
   });
 });
 

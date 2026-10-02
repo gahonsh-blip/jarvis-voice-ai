@@ -9562,3 +9562,27 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - सिस्टम-रिज़्यूम रूट अब झूठी सफलता नहीं देता — असली फ़्रीज़ हटे बिना सफलता या ऑडिट रिकॉर्ड नहीं बनता; पूरी टेस्ट सूट हरी।
+
+## 2026-10-02 23:35 IST — WORK SLOT 6 (window 2026-10-02 → 2026-10-03)
+
+Item #13 (Zero-fake-success for all tools) — the emergency-toggle route.
+
+- Found: `POST /api/emergency/toggle` drove the flag-flipping `toggleEmergencyStop`
+  and then answered `{ success: true, ...updated }` with a VERIFIED
+  activated/deactivated audit row and Telegram notice unconditionally. A repeated
+  stop RELEASED the freeze while the audit claimed activation; a resume while
+  nothing was paused ENGAGED it — false success in both directions.
+- Fixed: derive the transition from the pre-transition state via
+  `emergencyTogglePreAction(action, pre)` (`src/utils/emergencyTruth.ts`). An
+  unsupported transition returns `success:false`, `actionExecuted:false` and
+  writes no audit row, sends no Telegram notice, and does not flip.
+  `AutonomousToolsModal.tsx` sends an explicit action and surfaces the honest
+  verdict while storing only a confirmed state.
+- Evidence: `src/tests/emergencyToggleRouteTruth.test.ts` — 9 cases. Targeted run:
+  4 files / 35 tests passed. Negative-validated: reverting `server.ts` fails
+  exactly the 3 route-source assertions (3 failed | 6 passed), restored → 9/9.
+- Gates: lint (tsc --noEmit) exit 0; full suite 132 files / 1772 tests passed;
+  build exit 0 (dist/server.cjs 946.3 kB). E2E NOT RUN. Deploy NOT_CONFIGURED.
+- Commit: 114dc6e (code+test), then docs.
+- Item 13 stays PARTIAL — `grep -c "success: true"`: 85 in server.ts, 16 in
+  server_tools.ts, not yet individually classified.
