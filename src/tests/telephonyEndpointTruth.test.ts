@@ -11,7 +11,10 @@ import {
   telephonyReadiness,
   voiceAgentLabel,
   receptionistLabel,
+  bargeInApplied,
+  silenceTimeoutApplied,
 } from '../utils/telephonyEndpointTruth';
+import { TelephonySessionManager } from '../utils/telephonySessionManager';
 import { isCarrierReachableWebhookBaseUrl } from '../utils/telephonyAdapters';
 
 // Regression guard for the Telephony Hub endpoint panel.
@@ -132,6 +135,58 @@ describe('the UI and adapters stop overstating telephony status', () => {
     expect(src).not.toContain("telephonyEndpointLabel('/api/telephony/twiml/turn', true)");
     expect(src).toContain('readiness !==');
   });
+
+  it('the interruption route gates success on a live session, not a literal true', () => {
+    // `success: true` was hardcoded, so a barge-in for an unknown call id was
+    // reported as accepted even though the handler returned state IDLE.
+    expect(serverSource).toContain('success: bargeInApplied(result)');
+    expect(serverSource).toContain('success: silenceTimeoutApplied(result)');
+  });
+
+  it('the interruption route no longer echoes success:true', () => {
+    const routeStart = serverSource.indexOf("app.post('/api/telephony/interruption'");
+    expect(routeStart).toBeGreaterThan(-1);
+    const routeBody = serverSource.slice(routeStart, routeStart + 400);
+    expect(routeBody).not.toContain('success: true');
+  });
+
+  it('the computer-operator cancel route reports the tracker outcome', () => {
+    const routeStart = serverSource.indexOf("app.post('/api/computer-operator/cancel'");
+    expect(routeStart).toBeGreaterThan(-1);
+    const routeBody = serverSource.slice(routeStart, routeStart + 400);
+    expect(routeBody).toContain('success: result.cancelled');
+    expect(routeBody).not.toContain('success: true');
+  });
+
+  it('reports a barge-in as applied only for a live session', () => {
+    expect(bargeInApplied({ state: 'LISTENING' })).toBe(true);
+    expect(bargeInApplied({ state: 'SPEAKING' })).toBe(true);
+    expect(bargeInApplied({ state: 'IDLE' })).toBe(false);
+  });
+
+  it('reports a silence timeout as applied only when a session advanced', () => {
+    expect(silenceTimeoutApplied({ applied: true })).toBe(true);
+    expect(silenceTimeoutApplied({ applied: false })).toBe(false);
+  });
+
+  it('handleSilenceTimeout marks applied=false for an unknown session id', () => {
+    const result = TelephonySessionManager.handleSilenceTimeout('no-such-session-xyz');
+    expect(result.applied).toBe(false);
+    expect(silenceTimeoutApplied(result)).toBe(false);
+  });
+
+  it('handleSilenceTimeout marks applied=true for a live session on the first timeout', () => {
+    const session = TelephonySessionManager.createInboundSession({
+      rawCallerNumber: '+919000000001',
+      providerName: 'hermes-test',
+      isSimulated: true,
+    });
+    const result = TelephonySessionManager.handleSilenceTimeout(session.callSessionId);
+    expect(result.silenceCount).toBe(1);
+    expect(result.applied).toBe(true);
+    expect(silenceTimeoutApplied(result)).toBe(true);
+  });
+
 
   it('the Twilio adapter points its callback at a registered route', () => {
     const src = readSrc('utils/telephonyAdapters.ts');

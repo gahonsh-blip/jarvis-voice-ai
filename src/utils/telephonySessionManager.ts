@@ -596,6 +596,13 @@ export class TelephonySessionManager {
     replyText: string;
     shouldEndCall: boolean;
     silenceCount: number;
+    /**
+     * Whether a live session was found. A missing id cannot be distinguished
+     * from a live first timeout by `silenceCount` alone (both read 1), so the
+     * route reported `success: true` for a stale id. This field states the
+     * fact directly.
+     */
+    applied: boolean;
   } {
     const session = this.activeSessions.get(callSessionId);
     const count = (session?.silenceCount || 0) + 1;
@@ -608,6 +615,7 @@ export class TelephonySessionManager {
         replyText: isHindi ? 'क्या आप मेरी आवाज़ सुन पा रहे हैं?' : 'Hello, are you still there? Can you hear me?',
         shouldEndCall: false,
         silenceCount: count,
+        applied: Boolean(session),
       };
     } else if (count === 2) {
       return {
@@ -616,6 +624,7 @@ export class TelephonySessionManager {
           : 'I am not receiving any audio on the line. If you are speaking, please repeat.',
         shouldEndCall: false,
         silenceCount: count,
+        applied: Boolean(session),
       };
     } else {
       if (session) session.state = 'ENDING';
@@ -625,6 +634,7 @@ export class TelephonySessionManager {
           : 'Ending call due to lack of audio on the line. Please feel free to call back. Goodbye.',
         shouldEndCall: true,
         silenceCount: count,
+        applied: Boolean(session),
       };
     }
   }

@@ -59,6 +59,7 @@ import {
 import {
   TelephonySessionManager,
 } from './src/utils/telephonySessionManager';
+import { bargeInApplied, silenceTimeoutApplied } from './src/utils/telephonyEndpointTruth';
 import {
   TelephonyProviderRegistry,
 } from './src/utils/telephonyAdapters';
@@ -6280,7 +6281,9 @@ app.post('/api/computer-operator/cancel', (req: Request, res: Response) => {
   try {
     const { reason = 'User requested stop' } = req.body;
     const result = TaskTracker.cancelActiveTask(reason);
-    res.json({ success: true, ...result });
+    // A cancel only succeeded if a task was actually running; an idle tracker
+    // returns cancelled:false and must not be reported as a successful stop.
+    res.json({ success: result.cancelled, ...result });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -8347,14 +8350,17 @@ app.post('/api/telephony/twiml/turn', async (req: Request, res: Response) => {
 app.post('/api/telephony/interruption', (req: Request, res: Response) => {
   const { callSessionId } = req.body;
   const result = TelephonySessionManager.handleBargeIn(callSessionId);
-  res.json({ success: true, ...result });
+  // A barge-in only counts when it reached a live session; an unknown id
+  // returns state IDLE, so success must follow the handler's real outcome.
+  res.json({ success: bargeInApplied(result), ...result });
 });
 
 // 6.5 Silence Timeout Endpoint (Section O)
 app.post('/api/telephony/silence-timeout', (req: Request, res: Response) => {
   const { callSessionId } = req.body;
   const result = TelephonySessionManager.handleSilenceTimeout(callSessionId);
-  res.json({ success: true, ...result });
+  // success mirrors whether a live session advanced; a stale id is not accepted.
+  res.json({ success: silenceTimeoutApplied(result), ...result });
 });
 
 // 6.6 Stage Outbound Call for Level-4 Authorization (Section H)
