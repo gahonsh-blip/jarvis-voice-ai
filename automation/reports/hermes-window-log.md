@@ -9345,3 +9345,86 @@ the only commits are the report append and the state update.
 
 हिंदी सारांश: operator chat में emergency-stop अज्ञात होने पर अब fail-closed; lint/tests/build पास; item 13 अभी PARTIAL।
 
+
+
+---
+
+## 2026-10-02 22:05 IST (WORK SLOT 3)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:05 (run clock 22:35 by report time)
+Window date: 2026-10-02   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (one slice). The offline engine
+  (src/utils/localJarvisEngine.ts) bumped stats.actionsExecuted in 15 places
+  with a bare updatedMemory.stats.actionsExecuted += 1 while the actionExecuted
+  verdict was set separately in each return literal, so the counter could disagree
+  with the verdict. All 15 sites now call the single gated countAction helper.
+  Evidence: src/tests/offlineActionCounterConsistency.test.ts — 4 cases (source
+  pin against ad-hoc increments; 48-command verdict/counter matrix over
+  true/false/no-action branches in English/Hindi/Hinglish; language_switch
+  regression pin; refusal/unrecognised-command pin). Targeted run 3 files / 55
+  passed. Observed result: green.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the server.ts actionExecuted: true
+  sites are still not individually audited; truthfulness there is UNKNOWN.
+
+Remaining:
+- #13 (server.ts sweep), then the rest of the 60-item backlog per
+  docs/COMPLETION_STATUS.md. Hardware-blocked items #1/#50/#55 stay NOT_AVAILABLE.
+
+Bugs Found:
+- The offline language_switch branch returned actionExecuted: true without
+  advancing stats.actionsExecuted, so the reply claimed the mode had changed
+  while the "actions executed" total stayed still. Found by running the real
+  engine over a 48-command matrix and comparing the counter delta to the verdict.
+- 15 offline branches decided the verdict and bumped the counter independently
+  (same drift class, latent).
+
+Bugs Fixed:
+- language_switch now counts via countAction(updatedMemory, true).
+- All 15 direct increments routed through the gated countAction helper.
+- Verification: reverting the switch branch's countAction call fails exactly
+  2 of 4 in the new test (2 failed | 2 passed); restored -> 4/4.
+
+Tests:    129 files / 1742 tests passed (22.70 s) — observed via npx vitest run.
+Lint:     exit 0 — observed via npm run lint (tsc --noEmit).
+Build:    exit 0 — observed via npm run build; dist/server.cjs 965651 bytes.
+E2E:      NOT RUN (no display session / handset in this sandbox).
+Security: NOT RUN as a separate audit — the change adds no external action, no
+          credential path, and no permission-gate change; git status --short
+          shows only the two intended files plus docs.
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 row + Last cycle + Known
+  limitations), docs/CHANGELOG.md.
+Branch:  feature/hermes-full-completion
+Commit:  880032c (code + test)
+Push:    succeeded — feature/hermes-full-completion -> origin (b9db90c..880032c)
+
+PR:         NONE opened this slot (no PR step in a work slot; the finalization
+            slot refreshes it)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified artifact is dist/server.cjs (965651 bytes).
+
+Blocked:
+- #1 Android Bridge / #50 / #55 — require real Android hardware (not present).
+- Real Android E2E, real screenshot, real telephony — require a display session,
+  handset, SIM or carrier credential (not present).
+
+Human Approval Required:
+- Merge of feature/hermes-full-completion -> main (owner reads the final report
+  first).
+
+Next Slot:
+- Continue the item-13 sweep on the unaudited actionExecuted: true sites in
+  server.ts, since that is the next unverified slice of the highest-priority
+  non-VERIFIED item and needs no hardware.
+
+हिंदी सारांश (एक पंक्ति):
+- ऑफ़लाइन इंजन में stats.actionsExecuted काउंटर को वर्डिक्ट के साथ एक ही gated
+  countAction हेल्पर से जोड़ा और language_switch की गिनती ठीक की; 129 फ़ाइल /
+  1742 टेस्ट पास, लिंट/बिल्ड हरे — आइटम 13 अभी भी PARTIAL है।
+

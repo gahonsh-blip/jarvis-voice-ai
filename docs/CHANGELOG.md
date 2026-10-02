@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 22:35 IST (2026-10-02 17:05 UTC) — window slot 3: the offline action counter follows the verdict
+
+### Fixed
+- **`src/utils/localJarvisEngine.ts` advanced `stats.actionsExecuted` in 15 places with a bare `updatedMemory.stats.actionsExecuted += 1` while the `actionExecuted` verdict was decided separately in each return literal.** The counter could therefore disagree with what the engine reported as done — a total that moves for work the engine did not perform, or stays still for work it did. All 15 sites now call the single gated `countAction(updatedMemory, true)` helper (`if (actionExecuted !== false) memory.stats.actionsExecuted += 1;`).
+- **The offline `language_switch` branch returned `actionExecuted: true` without advancing the counter.** A 48-command matrix surfaced it: the reply said the mode had changed while the "actions executed" total stayed still. It now counts like every other true verdict. (`set_name` keeps its own increment because it also rewrites `memory.name`; audited, matches the verdict.)
+
+### Tests
+- `src/tests/offlineActionCounterConsistency.test.ts` — 4 cases: a source pin that the engine holds no ad-hoc `updatedMemory.stats.actionsExecuted +=` and keeps the gated helper; a 48-command verdict/counter matrix asserting `counter delta === (actionExecuted ? 1 : 0)` over true, false and no-action branches in English, Hindi and Hinglish; a `language_switch` regression pin; and a refusal/unrecognised-command pin.
+- Negative-validated: removing the switch branch's `countAction` call fails exactly 2 of 4 (`2 failed | 2 passed`); restored → 4/4.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 3 files / 55 passed. Full suite 129 files / 1742 tests passed; build exit 0 (`dist/server.cjs` 965651 bytes). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 21:44 IST (2026-10-02 16:14 UTC) — window slot 2: the operator chat path fails closed on an unknown emergency-stop state
 
 ### Fixed
