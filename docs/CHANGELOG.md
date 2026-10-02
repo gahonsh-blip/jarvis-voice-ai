@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 03:10 IST (2026-10-02 21:40 UTC) — window slot 12: the web-fetch route stops reporting an unreadable page as a successful fetch
+
+### Fixed
+- **`realWebFetch` (`server_tools.ts`) returned `success: true` for any 2xx response and used `parsedUrl.hostname` as the title when the page had no `<title>`.** A consent/bot-check interstitial, an empty shell or a script-only page answers HTTP 200 with nothing readable, so the route reported a completed web analysis with an empty `textContent` and a bare hostname presented as the page title, which then flowed into the chat reply and the audit entry. New `classifyWebFetchContent(rawHtml)` (`src/utils/hardening/webFetchTruth.ts`) strips scripts/styles/the `<head>`, reports whether the cleaned body carries readable text (≥ `MIN_READABLE_CHARS`) and returns the page's own `og:title`/`<title>` or `null` — never the hostname. The route now refuses with `success: false` / "No readable content" when the page exposed nothing, and reports a title only when the page actually supplied one.
+
+### Tests
+- `src/tests/webFetchTruth.test.ts` — 7 cases: real title + body; `og:title` preferred; consent interstitial with a `<title>` but no body refused; script-only page refused; empty/absent body refused; unobserved title reported `null` not the hostname; plus a bounded source guard (route uses the classifier and refuses with `success: false`; the old hostname-as-title fallback is gone).
+- Negative-validated: `git stash` of the `server_tools.ts` change fails the source guard (`1 failed | 6 passed`); restored → 7/7.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 7 passed; full suite 139 files / 1832 tests passed (23.62 s); build exit 0 (`dist/server.cjs` 985386 bytes). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-03 02:41 IST (2026-10-02 21:11 UTC) — window slot 11: the YouTube transcript fetch route stops fabricating video metadata
 
 ### Fixed

@@ -4,6 +4,38 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-02 21:40 UTC (03:10 IST 2026-10-03) — **WORK SLOT 12** of the
+2026-10-02 → 2026-10-03 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the controlled web-fetch route.**
+
+`realWebFetch` (`server_tools.ts`) returned `{ success: true, title, url,
+textContent }` whenever the HTTP response was 2xx, and when the page exposed no
+`<title>` it labelled the result with `parsedUrl.hostname`. A 2xx response is
+not a retrieval: a consent / bot-check interstitial, an empty application shell
+or a JavaScript-only page all answer HTTP 200 while carrying no readable body
+text. The route therefore reported a completed "web analysis" with an empty
+`textContent`, and presented the hostname as the page title — the same
+fake-success shape item 13 exists to remove. New
+`classifyWebFetchContent(rawHtml)` (`src/utils/hardening/webFetchTruth.ts`)
+strips scripts/styles/the `<head>` and reports whether the cleaned body carries
+readable text (`>= MIN_READABLE_CHARS`), returning the page's own `og:title` /
+`<title>` or `null` — never the hostname. `realWebFetch` now refuses with
+`success: false` and a "No readable content" reason when a page exposed nothing,
+and only reports a title the page actually supplied.
+
+Evidence: new `src/tests/webFetchTruth.test.ts` (7 cases: real title + body;
+`og:title` preferred; consent interstitial with a `<title>` but no body refused;
+script-only page refused; empty/absent body refused; unobserved title reported
+`null` not the hostname; plus a bounded source guard that the route uses the
+classifier and refuses with `success: false` and that the old
+hostname-as-title fallback is gone). Negative-validated: `git stash` of the
+`server_tools.ts` change fails the source guard (`1 failed | 6 passed`);
+restored → 7/7. Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 7 passed;
+full suite **139 files / 1832 tests passed** (23.62 s); build exit 0
+(`dist/server.cjs` 985386 bytes). E2E: NOT RUN (no live target sites). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted;
+`server_tools.ts` still holds a tail of unclassified `success: true` sites.
+
+
 Last cycle: 2026-10-02 21:11 UTC (02:41 IST 2026-10-03) — **WORK SLOT 11** of the
 2026-10-02 → 2026-10-03 window, the 02:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the YouTube transcript fetch route.**
 
