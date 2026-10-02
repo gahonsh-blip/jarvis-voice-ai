@@ -29,6 +29,8 @@ import {
   planOperatorRun,
   executePlannedOperatorRun,
   fetchKillSwitchState,
+  killSwitchBlocks,
+  operatorKillSwitchRefusal,
   describeOperatorRun,
   formatOperatorTaskMessage,
   type PlannedOperatorRun,
@@ -1107,11 +1109,18 @@ export default function App() {
           pendingOperatorApprovalRef.current = null;
           operatorRunCancelledRef.current = false;
           const killSwitch = await fetchKillSwitchState();
+          // Fail closed: an UNKNOWN emergency-stop state blocks the run rather
+          // than being mistaken for a released switch.
+          if (killSwitchBlocks(killSwitch)) {
+            pushJarvisMessage(operatorKillSwitchRefusal(killSwitch), undefined, false, undefined);
+            setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+            return;
+          }
           setStatusText('COMPUTER OPERATOR • AUTHORIZED — EXECUTING');
           operatorRunActiveRef.current = true;
           const result = await executePlannedOperatorRun(pending.goal, pending.run, {
             taskId: pending.taskId,
-            killSwitchActive: killSwitch,
+            killSwitchActive: false,
             cancelCheck: () => operatorRunCancelledRef.current,
             onProgress: (t: OperatorTask) => {
               setStatusText(`COMPUTER OPERATOR • ${t.status}${t.actionIndex > 0 ? ` • step ${t.actionIndex + 1}/${t.actions.length}` : ''}`);
@@ -1157,8 +1166,10 @@ export default function App() {
         const run = await planOperatorRun(text);
         const killSwitch = await fetchKillSwitchState();
         setStatusText('COMPUTER OPERATOR • PLAN READY');
-        if (killSwitch) {
-          pushJarvisMessage('COMPUTER OPERATOR • GLOBAL KILL SWITCH ACTIVE — external actions blocked.', undefined, false, undefined);
+        // Fail closed: ENGAGED and UNKNOWN both block; only a confirmed RELEASED
+        // switch lets the run continue.
+        if (killSwitchBlocks(killSwitch)) {
+          pushJarvisMessage(operatorKillSwitchRefusal(killSwitch), undefined, false, undefined);
           setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
           return;
         }
@@ -1189,7 +1200,7 @@ export default function App() {
         operatorRunActiveRef.current = true;
         const result = await executePlannedOperatorRun(text, run, {
           taskId,
-          killSwitchActive: killSwitch,
+          killSwitchActive: false,
           cancelCheck: () => operatorRunCancelledRef.current,
           onProgress: (t: OperatorTask) => {
             setStatusText(`COMPUTER OPERATOR • ${t.status}${t.actionIndex > 0 ? ` • step ${t.actionIndex + 1}/${t.actions.length}` : ''}`);

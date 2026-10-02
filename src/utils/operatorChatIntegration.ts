@@ -61,17 +61,52 @@ export function shouldRouteToOperator(text: string): OperatorChatDecision {
   return { kind: 'NOT_OPERATOR' };
 }
 
-export async function fetchKillSwitchState(): Promise<boolean> {
+/**
+ * Tri-state kill-switch liveness for the operator chat path.
+ *
+ * The previous helper returned a bare boolean, so "the emergency stop is
+ * confirmed released" and "we could not find out" were the same `false` value.
+ * A non-OK response, a malformed body, a network error or a timeout all read as
+ * "not engaged" and the run proceeded — the owner's kill switch silently failed
+ * to block a host action when the status endpoint was unreachable. This mirrors
+ * the `emergencyLiveness` tri-state the Permission Gateway, HUD header and
+ * Autonomous Tools panel already use: an unobserved state is UNKNOWN, and
+ * UNKNOWN is never treated as released.
+ */
+export type KillSwitchLiveness = 'ENGAGED' | 'RELEASED' | 'UNKNOWN';
+
+export function killSwitchLiveness(status: unknown): KillSwitchLiveness {
+  if (status == null || typeof status !== 'object') return 'UNKNOWN';
+  const s = status as { emergencyPaused?: unknown; hardKillSwitchTriggered?: unknown; killSwitchActive?: unknown };
+  if (typeof s.emergencyPaused !== 'boolean') return 'UNKNOWN';
+  if (s.emergencyPaused || s.hardKillSwitchTriggered === true || s.killSwitchActive === true) return 'ENGAGED';
+  return 'RELEASED';
+}
+
+/** Only a confirmed `RELEASED` may let a host action proceed. UNKNOWN blocks. */
+export function killSwitchBlocks(liveness: KillSwitchLiveness): boolean {
+  return liveness !== 'RELEASED';
+}
+
+/** Honest refusal text, shared by every operator dispatch site. */
+export function operatorKillSwitchRefusal(liveness: KillSwitchLiveness): string {
+  if (liveness === 'ENGAGED') {
+    return 'COMPUTER OPERATOR • GLOBAL KILL SWITCH ACTIVE — external actions blocked.';
+  }
+  return 'COMPUTER OPERATOR • EMERGENCY STOP STATE UNKNOWN — /api/emergency/status did not answer. Refusing to run a host action, Sir.';
+}
+
+export async function fetchKillSwitchState(): Promise<KillSwitchLiveness> {
   try {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 2000);
     const res = await fetch('/api/emergency/status', { signal: controller.signal });
     clearTimeout(t);
-    if (!res.ok) return false;
+    if (!res.ok) return 'UNKNOWN';
     const data = await res.json();
-    return Boolean(data?.emergencyPaused ?? data?.killSwitchActive ?? false);
+    return killSwitchLiveness(data);
   } catch {
-    return false;
+    return 'UNKNOWN';
   }
 }
 
