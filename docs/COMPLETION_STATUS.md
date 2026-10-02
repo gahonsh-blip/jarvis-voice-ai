@@ -4,6 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-02 20:45 UTC (02:15 IST 2026-10-03) — **WORK SLOT 10** of the
+2026-10-02 → 2026-10-03 window, the 02:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the proactive-routine trigger route.**
+
+`POST /api/routines/trigger` (`server.ts`) answered `{ success: true, routine }`
+for **every** request. It matched the requested `timeSlot` against the live
+report store and fell back to `proactiveReports[0]` when nothing matched, so an
+unknown slot — or an **empty store**, where both the match and the fallback are
+`undefined` — still read as a triggered briefing with a routine attached. A
+caller could therefore ask for a routine that had not been built and receive
+`success: true` alongside an unrelated one. The four slots are fixed (they come
+from `buildProactiveReports`), so a request that names something else, or names
+nothing, never triggered anything. New `resolveRoutineTrigger(timeSlot)`
+(`src/utils/hardening/routineTriggerTruth.ts`) accepts only the four real slots
+(`morning | midday | evening | night`), refuses a missing slot
+(`success: false`, 400) and an unknown slot naming the bad value (400), and the
+route now rebuilds the store on read, finds the routine **for that slot**, and
+answers `success: false` (404) when the valid slot has no stored routine — a real
+match remains `success: true` with `triggered: true`.
+
+Evidence: new `src/tests/routineTriggerTruth.test.ts` (6 cases: every real slot
+accepted; unknown slot refused and named; missing/null/empty slot refused; a
+non-string slot refused; plus two bounded source guards that the route calls
+`resolveRoutineTrigger`, returns `success: false` / `status(400)`, and no longer
+falls back to the first report). Negative-validated: restoring the pre-fix route
+fails exactly the two route-wiring assertions (`2 failed | 4 passed`),
+restored → 6/6. Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 6 passed;
+full suite **137 files / 1818 tests passed** (23.77 s); build exit 0
+(`dist/server.cjs` 982749 bytes). E2E: NOT RUN (no carrier/PSTN). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted;
+`server_tools.ts` still holds a tail of unclassified `success: true` sites.
+
 Last cycle: 2026-10-02 19:46 UTC (01:16 IST 2026-10-03) — **WORK SLOT 9** of the
 2026-10-02 → 2026-10-03 window, the 01:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the Security Matrix update route.**
 
