@@ -9649,3 +9649,45 @@ Item #13 (Zero-fake-success for all tools) — the telephony permission-update r
 - Commit: f8d9fd5 (code+test), then docs.
 - Item 13 stays PARTIAL — sweep not exhausted; `server_tools.ts` still has ~16
   unclassified `success: true` sites.
+
+## 2026-10-03 01:16 IST — WORK SLOT 9 (window 2026-10-02 → 2026-10-03)
+
+- Item 13 (`Zero-fake-success for all tools`) — the **Security Matrix update
+  route** (`POST /api/security/update`).
+- Found: the route copied whichever fields the request body carried over the
+  running matrix and answered `{ success: true }` unconditionally. An empty body
+  read as a successful save; a `currentLevel` outside the real 1..4 range was
+  stored as-is; and an unknown field (a typo such as `humanApprovlForExternal`,
+  or a key from a stale client) was written into the matrix and reported as
+  applied. For the two boolean gates the last shape is worse than cosmetic — a
+  string such as `"false"` is truthy in every `if (humanApprovalForExternal)` /
+  `if (maskSensitiveData)` gate downstream while a tri-state renderer reads it as
+  neither true nor false. This is the surface that gates external actions and
+  credential masking.
+- Fixed: new `classifySecurityMatrixUpdate(body)`
+  (`src/utils/hardening/securityMatrixUpdateTruth.ts`) accepts only the real
+  fields with valid values (`currentLevel` in 1..4 as a number; the two gates as
+  booleans), refuses everything else, and distinguishes `NO_KEYS` from
+  `ALL_INVALID`. The route applies only `verdict.applied`, answers `success:false`
+  / `applied:false` with the reason and rejected field names when nothing valid
+  was supplied, and names any ignored keys on a partial apply.
+  `SecurityMatrixModal.tsx`'s `handleUpdateLevel` and `handleToggleHumanApproval`
+  now surface the rejection notice and resync to the server's real state.
+- Evidence: `src/tests/securityMatrixUpdateTruth.test.ts` — 18 cases (valid
+  level / approval / masking applied; empty body rejected as `NO_KEYS`;
+  non-object body rejected; out-of-range level rejected; string level rejected;
+  non-boolean approval value rejected; numeric masking value rejected; unknown
+  field rejected; mixed real+unknown applies the real field and names the
+  unknown one; invalid sibling not applied while a valid one is; four bounded
+  source guards — classifies against the real fields, returns `success: false` /
+  `applied: false`, does not spread `...req.body`, assigns only the classified
+  fields; plus two modal guards). Negative-validated: restoring the pre-fix route
+  fails exactly the three route assertions (`3 failed | 15 passed`), restored →
+  18/18.
+- Gates: lint (`tsc --noEmit`) exit 0; full suite 136 files / 1812 tests passed
+  (24.12 s); build exit 0 (`dist/server.cjs` 981690 bytes). E2E NOT RUN (no
+  carrier/PSTN, no physical device). Deploy NOT_CONFIGURED.
+- Commit: 4769804 (code+test), then docs.
+- Item 13 stays PARTIAL — sweep not exhausted; `server_tools.ts` still holds a
+  tail of unclassified `success: true` sites.
+

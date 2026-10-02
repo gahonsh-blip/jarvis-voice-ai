@@ -4,7 +4,48 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-02 19:30 UTC (01:00 IST 2026-10-03) — **WORK SLOT 8** of the
+Last cycle: 2026-10-02 19:46 UTC (01:16 IST 2026-10-03) — **WORK SLOT 9** of the
+2026-10-02 → 2026-10-03 window, the 01:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the Security Matrix update route.**
+
+`POST /api/security/update` (`server.ts`) copied whichever fields the request
+body carried over the running matrix and answered `{ success: true }`
+unconditionally. Three false-success shapes followed: an **empty body** read as
+a successful save; a `currentLevel` **outside the real 1..4 range** was stored
+as-is, so the gateway compared against a level the matrix never defines; and an
+**unknown field** (a typo such as `humanApprovlForExternal`, or a key from a
+stale client) was written into the matrix and reported as applied. For the two
+boolean gates this was worse than cosmetic — a string such as `"false"` is truthy
+in every `if (humanApprovalForExternal)` / `if (maskSensitiveData)` gate
+downstream while a tri-state renderer reads it as neither true nor false. This is
+the surface that gates external actions and credential masking, so a no-op must
+not read as a change. New `classifySecurityMatrixUpdate(body)`
+(`src/utils/hardening/securityMatrixUpdateTruth.ts`) accepts only the real
+fields with valid values (`currentLevel` in 1..4 as a number; the two gates as
+booleans), refuses everything else, and returns a distinct verdict for `NO_KEYS`
+versus `ALL_INVALID`. The route applies only `verdict.applied`, answers
+`success: false`, `applied: false` with the reason and the rejected field names
+when nothing valid was supplied, and names any ignored keys on a partial apply.
+`SecurityMatrixModal.tsx`'s `handleUpdateLevel` and `handleToggleHumanApproval`
+now surface the rejection notice and resync to the server's real state instead of
+leaving the selector showing a level or an approval gate that was never applied.
+
+Evidence: new `src/tests/securityMatrixUpdateTruth.test.ts` (18 cases: valid
+level / approval / masking applied; empty body rejected as `NO_KEYS`; non-object
+body rejected; out-of-range level rejected; string level rejected; non-boolean
+approval value rejected; numeric masking value rejected; unknown field rejected;
+mixed real+unknown applies the real field and names the unknown one; invalid
+sibling not applied while a valid one is; and four bounded source guards that the
+route classifies against the real fields, returns `success: false` / `applied:
+false`, does not spread `...req.body`, and assigns only the classified fields;
+plus two modal guards). Negative-validated: restoring the pre-fix route fails
+exactly the three route assertions (`3 failed | 15 passed`), restored → 18/18.
+Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 18 passed; full suite
+**136 files / 1812 tests passed** (24.12 s); build exit 0 (`dist/server.cjs`
+981690 bytes). E2E: NOT RUN (no carrier/PSTN). Deploy: NOT_CONFIGURED. Item 13
+stays `PARTIAL` — the sweep is not exhausted; `server_tools.ts` still holds a
+tail of unclassified `success: true` sites.
+
+Previous cycle: 2026-10-02 19:30 UTC (01:00 IST 2026-10-03) — **WORK SLOT 8** of the
 2026-10-02 → 2026-10-03 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the telephony permission-update route.**
 
 `POST /api/telephony/permissions` (`server.ts`) merged **any** caller-supplied

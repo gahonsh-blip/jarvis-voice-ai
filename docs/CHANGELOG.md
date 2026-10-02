@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 01:16 IST (2026-10-02 19:46 UTC) — window slot 9: the Security Matrix update route stops reporting unapplied changes as saved
+
+### Fixed
+- **`POST /api/security/update` (`server.ts`) copied whichever fields the body carried over the running matrix and answered `{ success: true }` unconditionally.** Three false-success shapes followed: an empty body read as a successful save; a `currentLevel` outside the real 1..4 range was stored as-is; and an unknown field (a typo such as `humanApprovlForExternal`, or a key from a stale client) was written into the matrix and reported as applied. For the two boolean gates the last shape is worse than cosmetic — a string such as `"false"` is truthy in every `if (humanApprovalForExternal)` / `if (maskSensitiveData)` gate downstream while a tri-state renderer reads it as neither true nor false. New `classifySecurityMatrixUpdate(body)` (`src/utils/hardening/securityMatrixUpdateTruth.ts`) accepts only the real fields with valid values (`currentLevel` in 1..4 as a number; the two gates as booleans), refuses everything else, and distinguishes `NO_KEYS` from `ALL_INVALID`. The route applies only `verdict.applied`, answers `success: false` / `applied: false` with the reason and rejected field names when nothing valid was supplied, and names any ignored keys on a partial apply.
+- **`src/components/SecurityMatrixModal.tsx` (`handleUpdateLevel`, `handleToggleHumanApproval`) silently ignored a rejected update.** Both now surface a notice and resync to the server's real state instead of leaving the selector showing a level or an approval gate that was never applied.
+
+### Tests
+- `src/tests/securityMatrixUpdateTruth.test.ts` — 18 cases: valid level / approval / masking applied; empty body rejected as `NO_KEYS`; non-object body rejected; out-of-range level rejected; string level rejected; non-boolean approval value rejected; numeric masking value rejected; unknown field rejected; mixed real+unknown applies the real field and names the unknown one; invalid sibling not applied while a valid one is; plus four bounded source guards (classifies against the real fields, returns `success: false` / `applied: false`, does not spread `...req.body`, assigns only the classified fields) and two modal guards.
+- Negative-validated: restoring the pre-fix route fails exactly the three route assertions (`3 failed | 15 passed`); restored → 18/18.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 18 passed; full suite 136 files / 1812 tests passed (24.12 s); build exit 0 (`dist/server.cjs` 981690 bytes). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-03 01:00 IST (2026-10-02 19:30 UTC) — window slot 8: the telephony permission route stops reporting unapplied changes as saved
 
 ### Fixed
