@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 21:44 IST (2026-10-02 16:14 UTC) — window slot 2: the operator chat path fails closed on an unknown emergency-stop state
+
+### Fixed
+- **`fetchKillSwitchState()` (`src/utils/operatorChatIntegration.ts`) collapsed "emergency stop confirmed released" and "state could not be determined" into the same `false`.** A non-OK response, a malformed body, a network error and the 2-second abort all returned `false`; both `src/App.tsx` dispatch sites passed that value as `killSwitchActive`, so an unreachable `/api/emergency/status` made the owner's emergency stop silently fail to block a host action. The helper now resolves a tri-state `KillSwitchLiveness` (`ENGAGED | RELEASED | UNKNOWN`), `killSwitchBlocks()` blocks everything except a confirmed `RELEASED`, and `operatorKillSwitchRefusal()` supplies the honest refusal text. Both dispatch sites refuse before running and pass `killSwitchActive: false` only once `RELEASED` is confirmed. This mirrors the `emergencyLiveness` tri-state (`src/utils/emergencyTruth.ts`) the Permission Gateway, HUD header and Autonomous Tools panel already use.
+
+### Tests
+- `src/tests/operatorChatIntegration.test.ts` — new `operator kill-switch tri-state liveness` block (8 cases): released/engaged flag combinations; `null`/`undefined`/`{}`/non-boolean-string/non-object → `UNKNOWN`; `killSwitchBlocks` blocking for ENGAGED and UNKNOWN while releasing only on RELEASED; the two refusal messages; and three `fetchKillSwitchState` cases (non-OK → UNKNOWN, thrown error → UNKNOWN, real released boolean → RELEASED).
+- Negative-validated: restoring `killSwitchBlocks` to `liveness === 'ENGAGED'` fails exactly the UNKNOWN-blocking assertion (`1 failed | 21 passed`); restored → 22/22.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 22 passed. Full suite/build recorded in the window report. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 21:26 IST (2026-10-02 15:56 UTC) — window slot 1: the computer-operator execute route no longer reports success for failed runs
 
 ### Fixed

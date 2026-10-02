@@ -4,7 +4,39 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-02 15:56 UTC (21:26 IST 2026-10-02) — **WORK SLOT 1** of the
+Last cycle: 2026-10-02 16:14 UTC (21:44 IST 2026-10-02) — **WORK SLOT 2** of the
+2026-10-02 → 2026-10-03 window, the 21:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the computer-operator kill-switch gate.**
+
+A real safety fake-success was found and closed on the operator chat path.
+`fetchKillSwitchState()` (`src/utils/operatorChatIntegration.ts`) returned a bare
+boolean: a non-OK response, a malformed body, a network error and the 2-second
+timeout all returned `false`, the same value as "the emergency stop is confirmed
+released". Both dispatch sites in `src/App.tsx` then passed that value as
+`killSwitchActive`, so when `/api/emergency/status` did not answer the owner's
+emergency stop silently failed to block a host action — the run proceeded as if
+the switch were off. This is the same defect class the Permission Gateway, HUD
+header and Autonomous Tools panel already fixed with the `emergencyLiveness`
+tri-state (`src/utils/emergencyTruth.ts`); the operator path had been missed.
+
+`fetchKillSwitchState()` now resolves a tri-state `KillSwitchLiveness`
+(`ENGAGED | RELEASED | UNKNOWN`), `killSwitchBlocks()` treats everything except a
+confirmed `RELEASED` as blocking, and `operatorKillSwitchRefusal()` gives the
+honest refusal text. Both `src/App.tsx` sites (`killSwitchBlocks(...)`) refuse
+before dispatching, and the now-guaranteed-`RELEASED` value is passed as
+`killSwitchActive: false`. UNKNOWN is never read as released.
+
+Evidence: `src/tests/operatorChatIntegration.test.ts` — new
+`operator kill-switch tri-state liveness` block (8 cases): released/engaged flag
+combinations, `null`/`undefined`/`{}`/non-boolean-string/non-object → `UNKNOWN`,
+`killSwitchBlocks` blocking for ENGAGED **and** UNKNOWN while releasing only on
+RELEASED, the two refusal messages, and three `fetchKillSwitchState` cases
+(non-OK response → UNKNOWN, thrown network error → UNKNOWN, real
+`{emergencyPaused:false}` → RELEASED). Targeted run: **1 file / 22 tests passed**.
+Negative-validated: forcing `killSwitchBlocks` back to `liveness === 'ENGAGED'`
+fails exactly the UNKNOWN-blocking assertion (`1 failed | 21 passed`); restored
+green. `npm run lint` (`tsc --noEmit`) exit 0. Item 13 stays `PARTIAL`.
+
+Last cycle (previous): 2026-10-02 15:56 UTC (21:26 IST 2026-10-02) — **WORK SLOT 1** of the
 2026-10-02 → 2026-10-03 window, the 21:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the computer-operator execute route.**
 
 `POST /api/computer-operator/execute` (`server.ts`, ~6246) awaited the engine and then answered

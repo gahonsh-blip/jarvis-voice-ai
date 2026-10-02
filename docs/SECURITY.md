@@ -32,6 +32,30 @@ as distinct from `APPROVE`, and must never default to consent on an unparsed rep
 
 ---
 
+## 1b. Emergency-stop liveness is tri-state, and UNKNOWN must block
+
+The owner's kill switch is only as strong as the code that reads it. Any surface
+that decides whether to allow a host action must treat "emergency stop state
+could not be determined" as blocking, never as released. A collapsed boolean
+here is a fake success: the run proceeds while the switch's state is unknown.
+
+On 2026-10-02 21:44 IST the operator chat path was found doing exactly that.
+`fetchKillSwitchState()` (`src/utils/operatorChatIntegration.ts`) returned a bare
+boolean — a non-OK response, a malformed body, a network error and the 2-second
+timeout all returned `false`, the same value as a confirmed release — and both
+`src/App.tsx` dispatch sites passed it as `killSwitchActive`. It now resolves the
+tri-state `KillSwitchLiveness` (`ENGAGED | RELEASED | UNKNOWN`) shared with
+`emergencyLiveness` (`src/utils/emergencyTruth.ts`); `killSwitchBlocks()` blocks
+every state except a confirmed `RELEASED`, and the dispatch sites refuse with
+`operatorKillSwitchRefusal()` before running. Pinned by
+`src/tests/operatorChatIntegration.test.ts`, negative-validated.
+
+The Permission Gateway, HUD header and Autonomous Tools panel already follow this
+rule. Any new surface that reads `/api/emergency/status` must do the same: default
+to blocking, and only proceed on an explicitly observed `RELEASED`.
+
+---
+
 ## 2. Strict Financial Exclusions Guard
 - All financial, banking, crypto, and payment-related commands are blocked at the semantic parsing level.
 - Any query attempting fund transfers, credit card charges, or wallet movements triggers the `FINANCE_SECURITY_GUARD` rejection response.
