@@ -24,6 +24,15 @@ import { AndroidDeviceCapabilities } from '../types/mobileBridge';
 const source = (rel: string) =>
   fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8').replace(/\s+/g, ' ');
 
+// Count only real code sites: a doc comment that merely *mentions* `success: true`
+// (e.g. one explaining an old bug) must not be mistaken for a new flag.
+const codeOnly = (rel: string) =>
+  fs
+    .readFileSync(path.resolve(process.cwd(), rel), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(/\s+/g, ' ');
+
 describe('Item 13 — remaining success:true sites are enumerated and truthful', () => {
   beforeEach(() => {
     // The bridge engine persists its permission matrix to localStorage; clear it
@@ -129,7 +138,7 @@ describe('Item 13 — remaining success:true sites are enumerated and truthful',
   it('pins the audited sites so an unaudited flag cannot be added silently', () => {
     const adapter = source('src/utils/androidBridgeAdapter.ts');
     const engine = source('src/utils/androidBridgeEngine.ts');
-    const telephony = source('src/utils/telephonySessionManager.ts');
+    const telephony = codeOnly('src/utils/telephonySessionManager.ts');
 
     // Counts match the 02:05 audit; adding a new flag here must update this test.
     expect((adapter.match(/success: true/g) || []).length).toBe(2);
