@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 00:14 IST (2026-10-02 18:44 UTC) — window slot 7: the social OAuth disconnect routes stop faking a credential removal
+
+### Fixed
+- **`POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect` (`server.ts`) answered `success: true` and wrote a `… Disconnected (…)` `VERIFIED` audit row unconditionally.** They cleared an already-absent `memoryState.linkedInConnection` / `memoryState.youTubeConnection`, so a disconnect while nothing was linked read as a real credential removal in the response *and* in the audit trail, and the Social Media Hub announced a disconnection. Both routes now guard on an existing connection first: a no-op returns `success: false` with `outcome: 'NOT_CONNECTED'` and a naming message, writes **no** audit row, and only the confirmed path clears the credential and logs the removal.
+- **`src/components/SocialMediaModal.tsx` (`handleDisconnectLinkedIn` / `handleDisconnectYouTube`) fell through to the success notice.** Each handler now surfaces the server's honest message in a not-connected `else` branch instead of claiming a disconnection.
+
+### Tests
+- `src/tests/oauthDisconnectTruth.test.ts` — 4 cases: each route's connection guard precedes its `success: true` and carries the `NOT_CONNECTED` outcome; the `Disconnected (…)` audit write follows the not-connected early return; and both modal handlers render `data.message` in an `else` branch.
+- Negative-validated: disabling both guards fails exactly the two guard assertions (`2 failed | 2 passed`); restored → 4/4.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 4 passed; full suite 134 files / 1783 tests passed (22.81 s); build exit 0 (`dist/server.cjs` 970016 bytes). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 22:35 IST (2026-10-02 17:05 UTC) — window slot 3: the offline action counter follows the verdict
 
 ### Fixed

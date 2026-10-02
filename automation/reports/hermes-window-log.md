@@ -9586,3 +9586,31 @@ Item #13 (Zero-fake-success for all tools) — the emergency-toggle route.
 - Commit: 114dc6e (code+test), then docs.
 - Item 13 stays PARTIAL — `grep -c "success: true"`: 85 in server.ts, 16 in
   server_tools.ts, not yet individually classified.
+
+## 2026-10-03 00:14 IST — WORK SLOT 7 (window 2026-10-02 → 2026-10-03)
+
+Item #13 (Zero-fake-success for all tools) — the social OAuth disconnect routes.
+
+- Found: `POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect`
+  (`server.ts`) both answered `{ success: true, message: '<provider> disconnected
+  successfully.' }` unconditionally, clearing an already-absent
+  `memoryState.linkedInConnection` / `memoryState.youTubeConnection` and writing a
+  `… Disconnected (…)` `VERIFIED` audit row regardless. A disconnect with nothing
+  linked read as a real credential removal — in the response and the audit trail —
+  and the Social Media Hub announced it.
+- Fixed: each route guards on an existing connection first. A no-op returns
+  `success:false`, `outcome:'NOT_CONNECTED'` and a naming message, writes no audit
+  row; only the confirmed path clears the credential and logs the removal.
+  `SocialMediaModal.tsx` `handleDisconnectLinkedIn`/`handleDisconnectYouTube`
+  surface the server's honest message in an `else` branch.
+- Evidence: `src/tests/oauthDisconnectTruth.test.ts` — 4 cases (guard precedes
+  `success: true` per route; `Disconnected (…)` audit write follows the
+  not-connected early return; both modal handlers render `data.message`).
+  Targeted run: 1 file / 4 passed. Negative-validated: disabling both guards fails
+  exactly the two guard assertions (`2 failed | 2 passed`), restored → 4/4.
+- Gates: lint (`tsc --noEmit`) exit 0; full suite 134 files / 1783 tests passed
+  (22.81 s); build exit 0 (`dist/server.cjs` 970016 bytes). E2E NOT RUN.
+  Deploy NOT_CONFIGURED.
+- Commit: daf243c (code+test), then docs.
+- Item 13 stays PARTIAL — sweep not exhausted; server_tools.ts still has 16
+  unclassified `success: true` sites.
