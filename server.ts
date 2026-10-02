@@ -24,6 +24,7 @@ import { emergencyResumeVerdict, emergencyTogglePreAction } from './src/utils/em
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
+import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import {
   getEmergencyState,
@@ -3601,6 +3602,22 @@ function getISTCurrentHourMinute(): { hour: number; minute: number } {
 
 let schedulerRunLog: string[] = [];
 
+/**
+ * Record one routine tick. The per-day marker is stamped by the caller, before
+ * the push is attempted, so a slow or failing push can never re-trigger the
+ * tick every 30 seconds for the rest of the window. The log line, in contrast,
+ * is only written once the push outcome is known — and it never claims a
+ * delivery that did not happen (item 13).
+ */
+async function recordSchedulerOutcome(
+  name: string,
+  push: SchedulerPushOutcome,
+): Promise<void> {
+  const logEntry = schedulerRunLogLine(name, push);
+  schedulerRunLog.unshift(logEntry);
+  console.log('[Scheduler]', logEntry);
+}
+
 async function checkAndRunSchedulerJobs() {
   const todayIST = getISTDateString();
   const { hour, minute } = getISTCurrentHourMinute();
@@ -3609,16 +3626,16 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 9 && minute >= 0 && minute <= 15) {
     if (memoryState.schedulerState.lastMorningRunDate !== todayIST) {
       memoryState.schedulerState.lastMorningRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Morning Briefing (09:00 AM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
 
+      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
       if (activeTelegramChatId && getCleanTelegramToken()) {
         const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
         const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
         const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
-        sendRealTelegramMessage(activeTelegramChatId, morningText).catch(() => {});
+        const delivery = await deliverTelegramMessage(activeTelegramChatId, morningText);
+        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
       }
+      await recordSchedulerOutcome('Morning Briefing (09:00 AM IST)', push);
       persistMemory();
     }
   }
@@ -3627,9 +3644,8 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 14 && minute >= 0 && minute <= 15) {
     if (memoryState.schedulerState.lastMiddayRunDate !== todayIST) {
       memoryState.schedulerState.lastMiddayRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Midday Health Audit (02:00 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
+      // No Telegram push and no audit work: this tick only advances the marker.
+      await recordSchedulerOutcome('Midday Health Audit (02:00 PM IST)', { attempted: false, delivered: false });
       persistMemory();
     }
   }
@@ -3638,9 +3654,7 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 18 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastEveningRunDate !== todayIST) {
       memoryState.schedulerState.lastEveningRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Evening Social Pulse (06:30 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
+      await recordSchedulerOutcome('Evening Social Pulse (06:30 PM IST)', { attempted: false, delivered: false });
       persistMemory();
     }
   }
@@ -3649,14 +3663,14 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 22 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastNightRunDate !== todayIST) {
       memoryState.schedulerState.lastNightRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Nightly Work Summary (10:30 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
 
+      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
       if (activeTelegramChatId && getCleanTelegramToken()) {
         const nightText = `🌙 *HERMES NIGHTLY WORK REPORT (10:30 PM)*\n\nSir, today's work summary has been recorded.\n• *Commands Executed*: ${memoryState.stats.totalCommands}\n• *Memory Persistence*: Synchronized\n• *Daemon Status*: Standby & Active`;
-        sendRealTelegramMessage(activeTelegramChatId, nightText).catch(() => {});
+        const delivery = await deliverTelegramMessage(activeTelegramChatId, nightText);
+        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
       }
+      await recordSchedulerOutcome('Nightly Work Summary (10:30 PM IST)', push);
       persistMemory();
     }
   }
