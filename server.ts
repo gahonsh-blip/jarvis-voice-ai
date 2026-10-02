@@ -20,6 +20,7 @@ import {
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
+import { emergencyResumeVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
@@ -5929,6 +5930,23 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
 app.post('/api/system/resume', async (req: Request, res: Response) => {
   const { requestedBy = 'HUD_OPERATOR' } = req.body;
 
+  // A resume is real only when a freeze was actually in force. The verdict is
+  // read from the pre-transition state so a resume while nothing was paused —
+  // or while a latched hard kill switch still holds autonomy frozen — cannot be
+  // reported or audited as a release.
+  const verdict = emergencyResumeVerdict(getEmergencyState());
+
+  if (!verdict.actionExecuted) {
+    persistMemory();
+    return res.json({
+      success: false,
+      released: false,
+      outcome: verdict.outcome,
+      message: verdict.message,
+      emergencyState: getEmergencyState(),
+    });
+  }
+
   const resumedState = resumeSystemOperation(requestedBy);
 
   // Re-enable telegram live polling if token is valid
@@ -5953,7 +5971,9 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    message: 'System operations resumed successfully.',
+    released: true,
+    outcome: verdict.outcome,
+    message: verdict.message,
     emergencyState: resumedState,
   });
 });

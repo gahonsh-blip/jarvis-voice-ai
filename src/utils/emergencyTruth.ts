@@ -54,3 +54,71 @@ export function emergencyLivenessLabel(liveness: EmergencyLiveness): 'EMERGENCY 
   if (liveness === 'ACTIVE') return 'ACTIVE';
   return 'STATUS UNKNOWN';
 }
+
+// ==============================================================================
+// RESUME TRANSITION — did the resume actually release anything?
+//
+// `POST /api/system/resume` used to answer `success: true` and log an
+// "EMERGENCY STOP DEACTIVATED … RESUMED" audit row unconditionally, so a resume
+// while nothing was frozen still read as released autonomy. The verdict is
+// derived from the state observed *before* the transition, so the reply and the
+// audit can only claim a release the pre-state supports.
+// ==============================================================================
+
+export type EmergencyResumeOutcome = 'RESUMED' | 'ALREADY_ACTIVE' | 'LATCHED' | 'UNKNOWN';
+
+export interface EmergencyResumeVerdict {
+  /** True only when a freeze was actually in force and is being released. */
+  actionExecuted: boolean;
+  outcome: EmergencyResumeOutcome;
+  title: string;
+  message: string;
+}
+
+/**
+ * Decide whether a resume releases anything, from the pre-transition state.
+ *
+ * An unobserved state is not a release: `actionExecuted` is false and the
+ * outcome is UNKNOWN, so the caller must not log or speak a resume it cannot
+ * substantiate. A latched hard kill switch is also not a release —
+ * `resumeSystemOperation` clears the pause flag but not the latch, so the freeze
+ * remains and claiming otherwise would be a false success in the unsafe
+ * direction.
+ */
+export function emergencyResumeVerdict(pre: EmergencyStatusShape | null | undefined): EmergencyResumeVerdict {
+  if (!emergencyStatusKnown(pre)) {
+    return {
+      actionExecuted: false,
+      outcome: 'UNKNOWN',
+      title: 'Resume state unknown',
+      message:
+        'The emergency state could not be observed, so no release was claimed. Refresh the status and retry.',
+    };
+  }
+
+  if (pre?.hardKillSwitchTriggered === true) {
+    return {
+      actionExecuted: false,
+      outcome: 'LATCHED',
+      title: 'Emergency Stop NOT Released (hard kill switch latched)',
+      message:
+        'The hard kill switch is latched, so the emergency freeze is still in force and the resume did not release it. It must be cleared by an operator.',
+    };
+  }
+
+  if (pre?.emergencyPaused === true) {
+    return {
+      actionExecuted: true,
+      outcome: 'RESUMED',
+      title: 'Emergency Stop Released',
+      message: 'System operations resumed successfully.',
+    };
+  }
+
+  return {
+    actionExecuted: false,
+    outcome: 'ALREADY_ACTIVE',
+    title: 'System Already Running (nothing to release)',
+    message: 'No emergency stop was active, so nothing was released. Subsystems were already running normally.',
+  };
+}
