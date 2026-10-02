@@ -94,6 +94,7 @@ import {
   screenInspectionReply,
   cancelComputerTaskVerdict,
 } from './src/utils/computerOperator/operatorReplyTruth';
+import { observationPerformed } from './src/utils/computerOperator/observationTruth';
 import { emergencyToggleVerdict } from './src/utils/computerOperator/offlineEmergencyTruth';
 import {
   toolActionExecuted,
@@ -6263,7 +6264,13 @@ app.post('/api/computer-operator/observe', async (req: Request, res: Response) =
     const { preferredApp, includeScreenshot = true } = req.body;
     const observation = await ScreenObserver.observeScreen({ preferredApp, includeScreenshot });
     const interpretation = ScreenInterpreter.interpret(observation, preferredApp);
-    res.json({ success: true, observation, interpretation });
+    // An illustrative view or an unreachable host still returns an observation,
+    // so a flat `success: true` claimed the screen had been inspected when
+    // nothing was read. The flag follows the same host-backed, non-ambiguous
+    // predicate the `inspect_screen` chat reply uses, and `observed` names the
+    // honest outcome.
+    const observed = observationPerformed(observation, ScreenObserver.isHostBacked());
+    res.json({ success: observed, observed, observation, interpretation });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
