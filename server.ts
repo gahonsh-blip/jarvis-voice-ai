@@ -20,7 +20,7 @@ import {
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
-import { emergencyResumeVerdict } from './src/utils/emergencyTruth';
+import { emergencyResumeVerdict, emergencyTogglePreAction } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
@@ -5856,14 +5856,41 @@ app.get('/api/emergency/status', (req: Request, res: Response) => {
 });
 
 app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
-  const { requestedBy = 'HUMAN_OPERATOR', reason } = req.body;
-  const updated = toggleEmergencyStop(requestedBy, reason);
+  const { requestedBy = 'HUMAN_OPERATOR', reason, action } = req.body;
+  const pre = getEmergencyState();
 
-  // Add audit log
+  // `toggleEmergencyStop` flips the flag, so a repeated stop would RELEASE the
+  // freeze and a resume while nothing was paused would ENGAGE it — each read as
+  // success. The action is derived from the pre-transition state; when the
+  // pre-state does not support the requested transition the request is a no-op
+  // and nothing is logged, notified, or reported as executed.
+  const resolvedAction: 'stop' | 'resume' =
+    action === 'stop' || action === 'resume' ? action : pre.emergencyPaused ? 'resume' : 'stop';
+  const gate = emergencyTogglePreAction(resolvedAction, pre);
+  const verdict = emergencyToggleVerdict(resolvedAction, { ...pre });
+
+  if (!verdict.actionExecuted) {
+    persistMemory();
+    return res.json({
+      success: false,
+      actionExecuted: false,
+      action: resolvedAction,
+      title: verdict.title,
+      message: verdict.replyEn,
+      emergencyState: getEmergencyState(),
+    });
+  }
+
+  if (gate.flip) {
+    toggleEmergencyStop(requestedBy, reason);
+  }
+  const updated = getEmergencyState();
+  const engaged = updated.emergencyPaused === true;
+
   pushAuditEntry({
     id: `log-emerg-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: updated.emergencyPaused
+    action: engaged
       ? `🚨 EMERGENCY STOP ACTIVATED by ${requestedBy}: All autonomous external actions and modifications PAUSED.`
       : `🟢 EMERGENCY STOP DEACTIVATED by ${requestedBy}: Autonomous subsystem operations RESUMED.`,
     levelRequired: 4,
@@ -5875,14 +5902,14 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
 
   // Notify Telegram Admin if connected
   if (activeTelegramChatId && getCleanTelegramToken()) {
-    const alertMsg = updated.emergencyPaused
+    const alertMsg = engaged
       ? `🚨 *HERMES JARVIS: EMERGENCY STOP ACTIVATED*\n\nAll autonomous external actions, drafts, code modifications, and background tasks are now **HARD PAUSED** by ${requestedBy}.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: SYSTEM FROZEN`
       : `🟢 *HERMES JARVIS: SYSTEM RESUMED*\n\nEmergency stop released by ${requestedBy}. Normal permission-gated operations are now active.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: STANDBY`;
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
   persistMemory();
-  res.json({ success: true, ...updated });
+  res.json({ success: true, actionExecuted: true, action: resolvedAction, title: verdict.title, ...updated });
 });
 
 // Global Kill Switch API (HUD & System Level)

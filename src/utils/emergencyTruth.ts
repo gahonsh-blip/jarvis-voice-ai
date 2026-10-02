@@ -67,6 +67,32 @@ export function emergencyLivenessLabel(liveness: EmergencyLiveness): 'EMERGENCY 
 
 export type EmergencyResumeOutcome = 'RESUMED' | 'ALREADY_ACTIVE' | 'LATCHED' | 'UNKNOWN';
 
+/**
+ * The pre-transition state a toggle request should act on. `flip` reproduces
+ * the flag-flipping `toggleEmergencyStop` only when the requested transition is
+ * one the pre-state supports; otherwise the request is a no-op and the verdict
+ * derived from `pre` will report that nothing changed.
+ *
+ * - stop: engages only when the pause is not already set and the hard kill
+ *   switch is not latched (a latched switch already holds the freeze).
+ * - resume: releases only when the pause is set and the switch is not latched.
+ */
+export function emergencyTogglePreAction(
+  action: 'stop' | 'resume',
+  pre: EmergencyStatusShape | null | undefined
+): { pre: EmergencyStatusShape | null | undefined; flip: boolean } {
+  if (pre == null || typeof pre.emergencyPaused !== 'boolean') {
+    return { pre, flip: false };
+  }
+  if (pre.hardKillSwitchTriggered === true) {
+    return { pre, flip: false };
+  }
+  if (action === 'stop') {
+    return { pre, flip: !pre.emergencyPaused };
+  }
+  return { pre, flip: pre.emergencyPaused };
+}
+
 export interface EmergencyResumeVerdict {
   /** True only when a freeze was actually in force and is being released. */
   actionExecuted: boolean;

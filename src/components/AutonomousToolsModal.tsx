@@ -150,22 +150,37 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   const handleToggleEmergency = async () => {
     setLoading(true);
     try {
+      // State is known here (the button is only actionable when it is), so the
+      // requested transition is explicit rather than left to a blind flag flip.
+      const stopRequested = !emergencyEngaged(emergency);
       const res = await fetch('/api/emergency/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestedBy: 'HUMAN_WEB_OPERATOR', reason: 'Operator manual toggle' }),
+        body: JSON.stringify({
+          requestedBy: 'HUMAN_WEB_OPERATOR',
+          reason: 'Operator manual toggle',
+          action: stopRequested ? 'stop' : 'resume',
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (!emergencyStatusKnown(data)) throw new Error('Emergency endpoint returned no boolean state');
-      const engaged = emergencyEngaged(data);
-      setEmergency(data);
-      showFeedback(
-        engaged
-          ? '🚨 EMERGENCY STOP ACTIVATED: All autonomous actions paused.'
-          : '🟢 EMERGENCY STOP DEACTIVATED: Normal operations resumed.',
-        engaged ? 'error' : 'success'
-      );
+      // A no-op toggle (e.g. stop when already frozen) is reported as a
+      // non-change, not a success. Refresh the real state that was returned.
+      const state = data.emergencyState ?? data;
+      if (emergencyStatusKnown(state)) setEmergency(state);
+      if (data.actionExecuted === false) {
+        showFeedback(data.message || 'No change: the requested transition was already in effect.', 'error');
+      } else if (emergencyStatusKnown(state)) {
+        const engaged = emergencyEngaged(state);
+        showFeedback(
+          engaged
+            ? '🚨 EMERGENCY STOP ACTIVATED: All autonomous actions paused.'
+            : '🟢 EMERGENCY STOP DEACTIVATED: Normal operations resumed.',
+          engaged ? 'error' : 'success'
+        );
+      } else {
+        throw new Error('Emergency endpoint returned no boolean state');
+      }
       fetchApprovals();
     } catch (err: any) {
       showFeedback(
