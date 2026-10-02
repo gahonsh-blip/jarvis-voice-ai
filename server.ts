@@ -6245,7 +6245,14 @@ app.post('/api/computer-operator/execute', async (req: Request, res: Response) =
     }
     const curEmergencyState = getEmergencyState();
     const task = await ComputerOperatorEngine.executeTask(objective, mode, curEmergencyState.emergencyPaused);
-    res.json({ success: true, task });
+    // The engine returns terminal states other than COMPLETED — FAILED, BLOCKED,
+    // NEEDS_APPROVAL, CANCELLED, or a run that never reached a terminal state.
+    // A flat `success: true` here read every one of them as performed host work.
+    res.json({
+      success: operatorTaskExecuted(task),
+      outcome: task.status,
+      task,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
