@@ -4,6 +4,40 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-02 21:11 UTC (02:41 IST 2026-10-03) — **WORK SLOT 11** of the
+2026-10-02 → 2026-10-03 window, the 02:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the YouTube transcript fetch route.**
+
+`fetchYouTubeTranscriptData` (`server_tools.ts`) started with `let title =
+'YouTube Video'; let channel = 'YouTube Creator';` and only overwrote them when
+`ytInitialPlayerResponse` parsed. When it did not parse, it fell back to the
+page's generic `<title>` and — crucially — still returned `{ success: true,
+videoInfo, ... }`. A YouTube **consent / bot-check interstitial** answers HTTP
+200 with a Chrome-style `<title>` ("Before you continue to YouTube") and no
+player response, so the route reported a real, successfully-fetched video whose
+title was the literal placeholder "YouTube Video", channel "YouTube Creator" and
+duration 0. That fabricated `videoInfo` then flowed into the transcript prompt
+and the audit entry — the exact fake-success shape item 13 exists to remove.
+New `resolveYouTubePageMetadata(html, playerResponse)` reports only what the
+page actually exposed: title/channel/duration are `null` when unobserved, a
+non-finite `lengthSeconds` is `null` (not 0), the generic `<title>` is never
+read as a video title, and only a real `og:title` is trusted on an unparsed
+page. The fetch route now refuses with `success: false` when no player response
+and no `og:title` are present (interstitial), and never hardcodes a placeholder.
+A genuine resolution still returns the real title/channel/duration and
+`success: true`.
+
+Evidence: new `src/tests/youtubeMetadataTruth.test.ts` (7 cases: real
+player-response resolution; every field `null` on a consent page; generic
+`<title>` not used as the video title; only the title taken from an unparsed
+page with `og:title`; non-finite duration treated as unobserved; plus two
+bounded source guards that the placeholders are gone and the route resolves via
+the helper and refuses with `success: false`). Negative-validated: stashing the
+source fix fails all 7 cases (`7 failed`), restored → 7/7. Gates: lint
+(`tsc --noEmit`) exit 0; full suite **138 files / 1825 tests passed** (25.59 s);
+build exit 0 (`dist/server.cjs` 984115 bytes). E2E: NOT RUN (no carrier/PSTN).
+Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted;
+`server_tools.ts` still holds a tail of unclassified `success: true` sites.
+
 Last cycle: 2026-10-02 20:45 UTC (02:15 IST 2026-10-03) — **WORK SLOT 10** of the
 2026-10-02 → 2026-10-03 window, the 02:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the proactive-routine trigger route.**
 

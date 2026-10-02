@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 02:41 IST (2026-10-02 21:11 UTC) — window slot 11: the YouTube transcript fetch route stops fabricating video metadata
+
+### Fixed
+- **`fetchYouTubeTranscriptData` (`server_tools.ts`) defaulted `title` to `'YouTube Video'` and `channel` to `'YouTube Creator'` and returned `success: true` when the fetched watch page carried no `ytInitialPlayerResponse`.** A consent/bot-check interstitial answers HTTP 200 with a generic Chrome `<title>` and no player response, so the route reported a genuinely-fetched video whose title was the literal placeholder, channel `'YouTube Creator'`, and duration 0 — metadata nobody observed, which then flowed into the transcript prompt and the audit entry. New `resolveYouTubePageMetadata(html, playerResponse)` reports only observed values: title/channel/duration are `null` when absent, a non-finite `lengthSeconds` is `null` rather than 0, the generic `<title>` is never read as a video title, and only a real `og:title` is trusted on an unparsed page. The route now refuses with `success: false` when there is neither a player response nor an `og:title`, and no longer hardcodes a placeholder. A real page still resolves to its true title/channel/duration with `success: true`.
+
+### Tests
+- `src/tests/youtubeMetadataTruth.test.ts` — 7 cases: real player-response resolution; every field `null` on a consent page; generic `<title>` not used as the video title; only the title taken from an unparsed page with `og:title`; non-finite duration treated as unobserved; plus two bounded source guards (no placeholder literals; the route resolves via the helper and refuses with `success: false`).
+- Negative-validated: stashing the source fix fails all 7 cases; restored → 7/7.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 7 passed; full suite 138 files / 1825 tests passed (25.59 s); build exit 0 (`dist/server.cjs` 984115 bytes). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-03 01:16 IST (2026-10-02 19:46 UTC) — window slot 9: the Security Matrix update route stops reporting unapplied changes as saved
 
 ### Fixed
