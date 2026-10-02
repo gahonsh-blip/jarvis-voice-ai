@@ -28,6 +28,7 @@ import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hard
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
+import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -5585,9 +5586,25 @@ app.get('/api/routines', (req: Request, res: Response) => {
 });
 
 app.post('/api/routines/trigger', (req: Request, res: Response) => {
-  const { timeSlot } = req.body;
-  const routine = proactiveReports.find((r) => r.timeSlot === timeSlot) || proactiveReports[0];
-  res.json({ success: true, routine });
+  const { timeSlot } = req.body || {};
+  // The store is rebuilt on read so a trigger matches the current reports. An
+  // unknown slot used to fall back to the first report in the store, and an
+  // empty store returned `undefined` — both still reported as a triggered
+  // briefing.
+  proactiveReports = buildProactiveReports();
+  const request = resolveRoutineTrigger(timeSlot);
+  if (!request.ok) {
+    return res.status(400).json({ success: false, error: request.reason, triggered: false });
+  }
+  const routine = proactiveReports.find((r) => r.timeSlot === request.slot);
+  if (!routine) {
+    return res.status(404).json({
+      success: false,
+      error: `No routine is stored for slot "${request.slot}".`,
+      triggered: false,
+    });
+  }
+  res.json({ success: true, triggered: true, routine });
 });
 
 // ==============================================================================
