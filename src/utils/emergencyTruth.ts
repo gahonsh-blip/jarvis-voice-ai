@@ -148,3 +148,78 @@ export function emergencyResumeVerdict(pre: EmergencyStatusShape | null | undefi
     message: 'No emergency stop was active, so nothing was released. Subsystems were already running normally.',
   };
 }
+
+// ==============================================================================
+// GLOBAL KILL SWITCH — did engaging it actually terminate anything?
+//
+// `POST /api/system/kill-switch` (`server.ts`) always answered `success: true`
+// with "All background processes terminated and queue cleared" and always wrote
+// a `🚨 GLOBAL KILL SWITCH TRIGGERED … cleared N pending …` audit row, whatever
+// the pre-transition state. Engaging it while the system was already frozen
+// clears nothing (there are no PENDING_APPROVAL requests left to reject) yet
+// still reported a fresh termination of the queue; and when the state could not
+// be observed at all the route still claimed it had engaged. The verdict below
+// is derived from the state observed *before* the transition and the real
+// cleared count, so a re-engagement is reported as a no-op and an unobserved
+// state is never claimed as engaged.
+// ==============================================================================
+
+export type KillSwitchOutcome = 'ENGAGED' | 'ALREADY_ENGAGED' | 'UNKNOWN';
+
+export interface KillSwitchVerdict {
+  /** True only when the freeze is known to have been engaged by this request. */
+  actionExecuted: boolean;
+  outcome: KillSwitchOutcome;
+  clearedTasksCount: number;
+  headline: string;
+  message: string;
+}
+
+/**
+ * Decide whether engaging the kill switch did anything, from the pre-transition
+ * state and the number of queued requests the activation actually cleared.
+ *
+ * The hard kill switch is idempotent: engaging it again while it is already
+ * latched clears no further queue and must not be logged or spoken as a fresh
+ * termination. An unobserved state is neither engaged nor already-engaged.
+ */
+export function killSwitchVerdict(
+  pre: EmergencyStatusShape | null | undefined,
+  clearedTasksCount: number
+): KillSwitchVerdict {
+  const cleared = Number.isFinite(clearedTasksCount) && clearedTasksCount > 0 ? clearedTasksCount : 0;
+
+  if (!emergencyStatusKnown(pre)) {
+    return {
+      actionExecuted: false,
+      outcome: 'UNKNOWN',
+      clearedTasksCount: cleared,
+      headline: 'KILL SWITCH STATE UNKNOWN',
+      message:
+        'The emergency state could not be observed, so the kill switch engagement was not confirmed. Refresh the status and retry.',
+    };
+  }
+
+  if (pre?.emergencyPaused === true || pre?.hardKillSwitchTriggered === true) {
+    return {
+      actionExecuted: false,
+      outcome: 'ALREADY_ENGAGED',
+      clearedTasksCount: cleared,
+      headline: 'KILL SWITCH ALREADY ENGAGED',
+      message:
+        'The emergency freeze was already in force, so no background processes were terminated and no queue was newly cleared. The kill switch stays engaged.',
+    };
+  }
+
+  return {
+    actionExecuted: true,
+    outcome: 'ENGAGED',
+    clearedTasksCount: cleared,
+    headline: 'KILL SWITCH ENGAGED',
+    message:
+      cleared > 0
+        ? `Global Kill Switch engaged. All background processes terminated and ${cleared} queued task(s) cleared.`
+        : 'Global Kill Switch engaged. All background processes terminated; no queued tasks were waiting to clear.',
+  };
+}
+

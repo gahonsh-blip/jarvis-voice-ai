@@ -20,7 +20,7 @@ import {
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
-import { emergencyResumeVerdict, emergencyTogglePreAction } from './src/utils/emergencyTruth';
+import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
@@ -5993,8 +5993,14 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
 app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
   const { requestedBy = 'HUD_GLOBAL_KILL_SWITCH', reason = 'Global Kill Switch Triggered by Operator' } = req.body;
 
+  // The transition verdict is derived from the state observed *before* the
+  // activation, so a kill switch that was already engaged is reported as a
+  // no-op rather than a fresh termination of the queue.
+  const preKillState = getEmergencyState();
+
   // 1. Activate hard emergency stop & clear pending queue
   const killResult = activateEmergencyKillSwitch(requestedBy, reason);
+  const killVerdict = killSwitchVerdict(preKillState, killResult.clearedTasksCount);
 
   // 2. Terminate active Telegram long-polling loop & background routines
   const wasTelegramPolling = telegramPollingActive;
@@ -6002,30 +6008,37 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
   telegramConfig.mode = 'simulator';
   telegramConfig.webhookStatus = 'waiting_token';
 
-  // 3. Log immutable Level 4 Audit Event
-  pushAuditEntry({
-    id: `log-killswitch-${Date.now()}`,
-    timestamp: new Date().toISOString(),
-    action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killResult.clearedTasksCount} pending PermissionGateway item(s).`,
-    levelRequired: 4,
-    approvedBy: requestedBy,
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  });
+  // 3. Log the Level 4 audit event only when the engagement actually did the
+  // work it claims; an already-engaged (or unobserved) kill switch must not
+  // write a "terminated all background tasks" row.
+  if (killVerdict.actionExecuted) {
+    pushAuditEntry({
+      id: `log-killswitch-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killVerdict.clearedTasksCount} pending PermissionGateway item(s).`,
+      levelRequired: 4,
+      approvedBy: requestedBy,
+      status: 'EXECUTED',
+      verificationStatus: 'VERIFIED',
+      finalTruthState: 'VERIFIED',
+    });
+  }
 
-  // 4. Send Emergency Telegram Notice
-  if (activeTelegramChatId && getCleanTelegramToken()) {
-    const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killResult.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
+  // 4. Send Emergency Telegram Notice only for a real engagement.
+  if (killVerdict.actionExecuted && activeTelegramChatId && getCleanTelegramToken()) {
+    const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killVerdict.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
   persistMemory();
 
-  res.json({
-    success: true,
-    message: 'Global Kill Switch engaged. All background processes terminated and queue cleared.',
-    clearedTasksCount: killResult.clearedTasksCount,
+  res.status(killVerdict.outcome === 'UNKNOWN' ? 503 : 200).json({
+    success: killVerdict.actionExecuted,
+    outcome: killVerdict.outcome,
+    actionExecuted: killVerdict.actionExecuted,
+    headline: killVerdict.headline,
+    message: killVerdict.message,
+    clearedTasksCount: killVerdict.clearedTasksCount,
     wasTelegramPolling,
     emergencyState: killResult.emergencyState,
   });
