@@ -195,6 +195,10 @@ export function processOfflineCommand(
   const langSwitch = detectLanguageSwitchCommand(clean);
   if (langSwitch?.requested && langSwitch.newLang) {
     const ack = langSwitch.acknowledgment || (langSwitch.newLang.startsWith('hi') ? 'हिंदी मोड सक्रिय है।' : 'Language mode updated.');
+    // The switch is a real client-side state change, so it counts as executed
+    // work like every other true verdict; without this the reported verdict
+    // and the "actions executed" counter disagreed.
+    countAction(updatedMemory, true);
     return {
       reply: ack,
       spokenText: ack,
@@ -734,7 +738,7 @@ export function processOfflineCommand(
   ) {
     const verdict = offlineOperatorVerdict('open_computer_operator');
     const reply = offlineOperatorReply('open_computer_operator', operatorLang);
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
 
     return {
       reply,
@@ -1142,7 +1146,7 @@ export function processOfflineCommand(
     lower.includes('कहाँ हूँ') ||
     lower.includes('लोकेशन बताओ')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     // Opening the map is a real in-app navigation, but this offline path reads
     // no geolocation, so it must not speak as though a GPS fix was acquired.
     // Real coordinates come from the browser Geolocation API in
@@ -1192,7 +1196,7 @@ export function processOfflineCommand(
       if (/^[0-9+\-*/().\s]+$/.test(sanitized)) {
         const val = new Function(`'use strict'; return (${sanitized})`)();
         if (typeof val === 'number' && Number.isFinite(val)) {
-          updatedMemory.stats.actionsExecuted += 1;
+          countAction(updatedMemory, true);
           const resStr = String(Math.round(val * 1000000) / 1000000);
           const reply = isHindi ? `${expr} का मान ${resStr} होता है, सर।` : isHinglish ? `Result: ${expr} = ${resStr}` : `${expr} is ${resStr}.`;
           return {
@@ -1212,7 +1216,7 @@ export function processOfflineCommand(
   }
 
   if (lower.includes('calculator') || lower.includes('कैलकुलेटर') || lower.includes('open math')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'इन-ऐप कैलकुलेटर दृश्य खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक डेस्कटॉप कैलकुलेटर ऐप नहीं खुलता।'
       : isHinglish
@@ -1231,7 +1235,7 @@ export function processOfflineCommand(
 
   // 7. Notepad & Workspace
   if (lower.includes('notepad') || lower.includes('create file') || lower.includes('नोटपैड') || lower.includes('फाइल बनाओ') || lower.includes('write note')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'इन-ऐप नोट्स वर्कस्पेस खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक नोटपैड ऐप नहीं खुलता।'
       : isHinglish
@@ -1506,7 +1510,7 @@ export function processOfflineCommand(
   }
 
   if (isTelephonyHubRequest(lower)) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi ? 'टेलीफोनी हब खोला जा रहा है।' : isHinglish ? 'Telephony Hub open ho raha hai.' : 'Opening the in-app Voice AI Telephony Hub. No external phone dialer is opened.';
     return {
       reply,
@@ -1520,7 +1524,7 @@ export function processOfflineCommand(
   }
 
   if (isCallHistoryRequest(lower)) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi ? 'इस ऐप में दर्ज कॉल हिस्ट्री दिखाई जा रही है।' : 'Showing the call logs and transcripts recorded in this app.';
     return {
       reply,
@@ -1535,7 +1539,7 @@ export function processOfflineCommand(
 
   // 8. Paint & Canvas
   if (lower.includes('paint') || lower.includes('drawing') || lower.includes('पेंट')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'इन-ऐप पेंट कैनवास खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक पेंट ऐप नहीं खुलता।'
       : isHinglish
@@ -1576,7 +1580,7 @@ export function processOfflineCommand(
 
   // 9. Master Blueprint / Project Roadmap
   if (lower.includes('project') || lower.includes('blueprint') || lower.includes('प्रोजेक्ट') || lower.includes('ब्लूप्रिंट') || lower.includes('roadmap') || lower.includes('git audit')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = blueprintRoadmapReply(isHindi ? 'hindi' : isHinglish ? 'hinglish' : 'english');
     return {
       reply,
@@ -1591,7 +1595,7 @@ export function processOfflineCommand(
 
   // 9.1 Freelance Quotation Generator
   if (lower.includes('quotation') || lower.includes('कोटेशन') || lower.includes('freelance') || lower.includes('proposal') || lower.includes('client lead')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'फ्रीलांस पाइपलाइन खोली जा रही है। ऑफ़लाइन मोड में कोई नया कोटेशन नहीं बनाया गया।'
       : isHinglish
@@ -1610,7 +1614,7 @@ export function processOfflineCommand(
 
   // 10. Social Media & Content
   if (lower.includes('social') || lower.includes('linkedin') || lower.includes('twitter') || lower.includes('पोस्ट') || lower.includes('सोशल') || lower.includes('draft post')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'सोशल मीडिया कंसोल खोला जा रहा है। ऑफ़लाइन मोड में कोई पोस्ट नहीं बनाई या प्रकाशित की गई।'
       : isHinglish
@@ -1629,7 +1633,7 @@ export function processOfflineCommand(
 
   // 11. Security Matrix & Audit Logs
   if (lower.includes('security') || lower.includes('safety') || lower.includes('सुरक्षा') || lower.includes('permission') || lower.includes('audit log')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? '4-लेवल सुरक्षा मैट्रिक्स और ऑडिट लॉग्स खोले जा रहे हैं।'
       : isHinglish
@@ -1648,7 +1652,7 @@ export function processOfflineCommand(
 
   // 11.1 Cloud Telemetry (Oracle VM)
   if (lower.includes('oracle') || lower.includes('cloud') || lower.includes('vm status') || lower.includes('telemetry') || lower.includes('server status')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     // No VM telemetry source is reachable offline, so no metrics exist. The
     // earlier "telemetry load ho rahi hai" presented a live read as in flight.
     const reply = isHindi
@@ -1669,7 +1673,7 @@ export function processOfflineCommand(
 
   // 11.2 Daily Routine & Schedule
   if (lower.includes('routine') || lower.includes('schedule') || lower.includes('रूटीन') || lower.includes('शेड्यूल')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'दैनिक शेड्यूल और ब्रीफिंग शेड्यूलर खोला जा रहा है।'
       : isHinglish
@@ -1726,7 +1730,7 @@ export function processOfflineCommand(
 
   // 11.4 Google Search Extraction
   if (lower.startsWith('search ') || lower.includes('google search') || lower.includes('सर्च करो') || lower.includes('खोजो')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const query = clean
       .replace(/^search\s+(?:for\s+)?/i, '')
       .replace(/google search\s+(?:for\s+)?/i, '')
