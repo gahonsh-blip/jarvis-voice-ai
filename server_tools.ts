@@ -15,6 +15,7 @@ import {
   type FinanceGuardReport,
 } from './src/utils/financeGuardTruth';
 import { PermissionGuard } from './src/utils/computerOperator/permissionGuard';
+import { classifyWebFetchContent } from './src/utils/hardening/webFetchTruth';
 
 // ==============================================================================
 // 1. GLOBAL EMERGENCY STOP / PAUSE ENGINE
@@ -688,32 +689,23 @@ export async function realWebFetch(targetUrl: string): Promise<{
     }
 
     const rawHtml = await res.text();
-    // Extract title
-    const titleMatch = rawHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : parsedUrl.hostname;
+    // A 2xx response is not a retrieval: a bot-check / consent interstitial, an
+    // empty shell or a script-only page answers 200 with nothing readable. The
+    // old code reported `success: true` regardless and labelled such a page with
+    // its hostname, so a page that exposed nothing still read as fetched.
+    const content = classifyWebFetchContent(rawHtml);
+    if (!content.usable) {
+      return { success: false, error: `No readable content: ${content.reason}.` };
+    }
 
-    // Clean text by stripping scripts, styles, and tags
-    let cleanText = rawHtml
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
-      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
-      .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, ' ')
-      .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/\s+/g, ' ')
-      .trim();
-
+    let cleanText = content.textContent;
     if (cleanText.length > 5000) {
       cleanText = cleanText.slice(0, 5000) + '... [Content truncated for safe analysis]';
     }
 
     return {
       success: true,
-      title,
+      title: content.title ?? undefined,
       url: parsedUrl.toString(),
       textContent: cleanText,
     };
