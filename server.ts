@@ -27,6 +27,7 @@ import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineS
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
+import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -5782,21 +5783,42 @@ app.get('/api/security', (req: Request, res: Response) => {
 });
 
 app.post('/api/security/update', (req: Request, res: Response) => {
-  const { currentLevel, humanApprovalForExternal, maskSensitiveData } = req.body;
-  if (currentLevel !== undefined) securityMatrixState.currentLevel = currentLevel;
-  if (humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = humanApprovalForExternal;
-  if (maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = maskSensitiveData;
+  // Only fields that exist in the matrix and carry a valid value are applied.
+  // An empty body, an out-of-range level, or an unknown field is answered as a
+  // no-op rather than a successful save of the matrix that gates external
+  // actions and credential masking.
+  const verdict = classifySecurityMatrixUpdate(req.body);
+
+  const securityStateSnapshot = {
+    currentLevel: securityMatrixState.currentLevel,
+    humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
+    maskSensitiveData: securityMatrixState.maskSensitiveData,
+    credentialLeakProtection: securityMatrixState.credentialLeakProtection,
+    levels: securityMatrixState.levels,
+    auditLogs: memoryState.auditLogs,
+  };
+
+  if (!verdict.accepted) {
+    return res.status(400).json({
+      success: false,
+      applied: false,
+      reason: verdict.reason,
+      rejected: verdict.rejected,
+      message: verdict.message,
+      securityState: securityStateSnapshot,
+    });
+  }
+
+  if (verdict.applied.currentLevel !== undefined) securityMatrixState.currentLevel = verdict.applied.currentLevel;
+  if (verdict.applied.humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = verdict.applied.humanApprovalForExternal;
+  if (verdict.applied.maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = verdict.applied.maskSensitiveData;
   persistMemory();
   res.json({
     success: true,
-    securityState: {
-      currentLevel: securityMatrixState.currentLevel,
-      humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
-      maskSensitiveData: securityMatrixState.maskSensitiveData,
-      credentialLeakProtection: securityMatrixState.credentialLeakProtection,
-      levels: securityMatrixState.levels,
-      auditLogs: memoryState.auditLogs,
-    },
+    applied: true,
+    rejected: verdict.rejected,
+    message: verdict.message,
+    securityState: securityStateSnapshot,
   });
 });
 

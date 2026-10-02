@@ -24,6 +24,7 @@ interface Props {
 export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [securityState, setSecurityState] = useState<SecurityMatrixState | null>(null);
   const [activeLevel, setActiveLevel] = useState<1 | 2 | 3 | 4>(2);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -44,6 +45,7 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const handleUpdateLevel = async (level: 1 | 2 | 3 | 4) => {
     try {
+      setNotice(null);
       const res = await fetch('/api/security/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,15 +55,22 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
       if (data.success) {
         setSecurityState(data.securityState);
         setActiveLevel(level);
+      } else {
+        // The update did not take effect; resync to the server's real state so
+        // the selector never displays a level that was not applied.
+        setNotice(data.message || 'Security level was not changed.');
+        await fetchSecurity();
       }
     } catch (err) {
       console.warn('Update security level failed:', err);
+      setNotice('Security level update failed; the server state is unchanged.');
     }
   };
 
   const handleToggleHumanApproval = async () => {
     if (!securityState) return;
     try {
+      setNotice(null);
       const res = await fetch('/api/security/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,9 +81,13 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
       const data = await res.json();
       if (data.success) {
         setSecurityState(data.securityState);
+      } else {
+        setNotice(data.message || 'Human approval gate was not changed.');
+        await fetchSecurity();
       }
     } catch (err) {
       console.warn('Toggle human approval failed:', err);
+      setNotice('Human approval toggle failed; the server state is unchanged.');
     }
   };
 
@@ -112,6 +125,12 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
         {/* Content */}
         <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-6 bg-slate-950/40">
+          {notice && (
+            <div className="p-3 rounded-lg bg-amber-950/60 border border-amber-800 text-amber-200 text-xs font-mono">
+              {notice}
+            </div>
+          )}
+
           {/* Security Levels Grid (1 to 4) */}
           <div>
             <span className="text-xs font-mono uppercase tracking-wider text-slate-400 block mb-3">
