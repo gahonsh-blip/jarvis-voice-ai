@@ -9320,3 +9320,28 @@ the only commits are the report append and the state update.
   Main merge: NOT MERGED — awaiting human approval.
 
 हिंदी सारांश: computer-operator execute route का fake-success बंद; lint/tests/build पास; item 13 अभी PARTIAL।
+
+---
+
+## WORK SLOT 2 — 2026-10-02 21:44 IST (2026-10-02 16:14 UTC) — item 13: operator chat kill-switch failed open on an unknown emergency-stop state
+
+- **Item #13 (Zero-fake-success for all tools) — PARTIAL, one more class closed.**
+  `fetchKillSwitchState()` (`src/utils/operatorChatIntegration.ts`) returned a bare boolean:
+  a non-OK response, a malformed body, a network error and the 2-second abort all returned `false`,
+  the same value as "emergency stop confirmed released". Both `src/App.tsx` dispatch sites passed it
+  as `killSwitchActive`, so an unreachable `/api/emergency/status` let the owner's emergency stop
+  silently fail to block a host action.
+- Fix: tri-state `KillSwitchLiveness` (`ENGAGED | RELEASED | UNKNOWN`) mirroring `emergencyLiveness`
+  (`src/utils/emergencyTruth.ts`); `killSwitchBlocks()` blocks everything except a confirmed `RELEASED`;
+  both App.tsx sites refuse via `operatorKillSwitchRefusal()` before dispatching.
+- Evidence: `src/tests/operatorChatIntegration.test.ts` — new tri-state block (8 cases) plus the existing
+  gating cases. Targeted: **1 file / 22 tests passed**.
+- Negative-validated: restoring `killSwitchBlocks` to `liveness === 'ENGAGED'` → `1 failed | 21 passed`
+  (the UNKNOWN-blocking assertion); restored → 22/22.
+- Gates: lint (`tsc --noEmit`) exit 0; full suite **128 files / 1738 tests passed** (23.21 s);
+  build exit 0 (`dist/server.cjs` 965733 bytes). E2E: NOT RUN (no handset/display). Deploy: NOT_CONFIGURED.
+- Commits: `7ddad81` (fix), `354cbf3` (docs). Branch: `feature/hermes-full-completion`.
+  Main merge: NOT MERGED — awaiting human approval.
+
+हिंदी सारांश: operator chat में emergency-stop अज्ञात होने पर अब fail-closed; lint/tests/build पास; item 13 अभी PARTIAL।
+
