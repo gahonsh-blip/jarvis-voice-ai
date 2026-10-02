@@ -9428,3 +9428,60 @@ Next Slot:
   countAction हेल्पर से जोड़ा और language_switch की गिनती ठीक की; 129 फ़ाइल /
   1742 टेस्ट पास, लिंट/बिल्ड हरे — आइटम 13 अभी भी PARTIAL है।
 
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:36
+Window date: 2026-10-02   Window slots completed so far: 4
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL. Closed 3 telephony/operator
+  routes (interruption, silence-timeout, computer-operator/cancel) that returned
+  bare success:true regardless of real effect; and the /api/approvals/resolve
+  REJECT branch that logged REJECTED + success for a nonexistent action id.
+  Evidence: src/utils/telephonyEndpointTruth.ts, server.ts:6036-6042,
+  src/tests/telephonyEndpointTruth.test.ts, src/tests/approvalResolutionTruth.test.ts.
+
+In Progress:
+- #13 — audit of remaining ~80 success:true sites in server.ts (spot-checked
+  5088/5525 disconnect routes: legitimate, they are idempotent state clears).
+
+Bugs Found:
+- /api/approvals/resolve REJECT: success + audit entry for unknown id.
+- /api/computer-operator/cancel: success even with no active task.
+
+Bugs Fixed:
+- cancel route now reports result.cancelled.
+- reject branch now 404s on unknown id and writes nothing.
+- Negative-validated both (revert -> assertion fails; restore -> green).
+
+Tests:    targeted 2 files / 43 passed (approvalResolutionTruth 16,
+          telephonyEndpointTruth 27); full suite NOT RUN (budget).
+Lint:     tsc --noEmit exit 0.
+Build:    NOT RUN.
+E2E:      NOT RUN.
+Security: no .env staged; no token in diff.
+
+Documentation: docs/COMPLETION_STATUS.md
+Branch:  feature/hermes-full-completion
+Commit:  e293193 (fix) on top of a0f8e5f (telephony fix)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this environment
+
+Blocked:
+- none new.
+
+Human Approval Required:
+- none this slot.
+
+Next Slot:
+- #13 — continue the success:true sweep in server.ts, next the highest-risk
+  social/telegram send-ack routes, because those cross the permission boundary.
+
+हिंदी सारांश (एक पंक्ति):
+- Item 13 के तहत चार झूठे success स्थल ठीक किए और दोनों fix को negative-validate किया।

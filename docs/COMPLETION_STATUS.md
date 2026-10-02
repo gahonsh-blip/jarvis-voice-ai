@@ -4,7 +4,32 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-02 17:05 UTC (22:35 IST 2026-10-02) — **WORK SLOT 3** of the
+Last cycle: 2026-10-02 17:40 UTC (22:36 IST 2026-10-02) — **WORK SLOT 4** of the
+2026-10-02 → 2026-10-03 window, the 22:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the telephony/approval truth sites.**
+
+Four more fake-success shapes were found and closed. `/api/telephony/interruption`
+and `/api/telephony/silence-timeout` returned a bare `success: true` regardless of
+whether the barge-in or silence timeout was actually applied to a live call, and
+`/api/computer-operator/cancel` answered `success: true` even when the tracker had
+no active task to cancel. Each route now reports the handler's real outcome via
+`bargeInApplied(result)` / `silenceTimeoutApplied(result)` and
+`TaskTracker.cancelActiveTask`'s `result.cancelled`.
+
+`/api/approvals/resolve`'s `REJECT` branch was a genuine audit-log fake: it called
+`updateActionRequestStatus(id, 'REJECTED')`, which returns `null` for an unknown id
+(`server_tools.ts`), yet still wrote a `REJECTED` audit entry and answered success.
+It now returns HTTP 404 and writes nothing when the action does not exist.
+
+Evidence: `src/tests/telephonyEndpointTruth.test.ts` (27+ cases) and
+`src/tests/approvalResolutionTruth.test.ts` (16 cases, incl. the new 404 guard and a
+direct null-return assertion on `updateActionRequestStatus`). Targeted run:
+**2 files / 43 tests passed**. Negative-validated: reverting the reject guard fails
+exactly the 404 assertion (`1 failed | 15 passed`), reverting the cancel fix fails
+the cancel assertion; both restored green. Gates: lint (`tsc --noEmit`) exit 0.
+Full suite/build: NOT RUN (budget). Item 13 stays `PARTIAL` — the sweep is not
+exhausted; ~80 `success: true` sites remain unclassified.
+
+Last cycle (previous): 2026-10-02 17:05 UTC (22:35 IST 2026-10-02) — **WORK SLOT 3** of the
 2026-10-02 → 2026-10-03 window, the 22:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the offline action counter.**
 
 The offline engine (`src/utils/localJarvisEngine.ts`) bumped
