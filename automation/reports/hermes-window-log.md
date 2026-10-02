@@ -9691,3 +9691,80 @@ Item #13 (Zero-fake-success for all tools) — the telephony permission-update r
 - Item 13 stays PARTIAL — sweep not exhausted; `server_tools.ts` still holds a
   tail of unclassified `success: true` sites.
 
+
+
+---
+
+## WORK SLOT 10 — 2026-10-03 02:05 IST
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:05–02:15
+Window date: 2026-10-03   Window slots completed so far: 10
+
+Completed:
+- #13 Zero-fake-success for all tools — closed another real fake-success site.
+  `POST /api/routines/trigger` (`server.ts`) answered `{ success: true, routine }`
+  for every request, falling back to the first stored report when the requested
+  `timeSlot` did not match. An unknown slot, or an empty store (match and
+  fallback both `undefined`), still read as a triggered briefing with an
+  unrelated routine attached. New `resolveRoutineTrigger()`
+  (`src/utils/hardening/routineTriggerTruth.ts`) accepts only the four real slots,
+  and the route now answers `success: false` (400) for a missing/unknown slot and
+  `success: false` (404) when the valid slot has no stored routine; a real match
+  is `success: true` with `triggered: true`.
+  Evidence: `src/tests/routineTriggerTruth.test.ts` — 6 cases, 6 passed.
+  Negative-validated: pre-fix route → `2 failed | 4 passed`; restored → 6/6.
+
+In Progress:
+- #13 Zero-fake-success for all tools — `server_tools.ts` still holds a tail of
+  unclassified `success: true` sites (incl. commit/diff tools).
+
+Remaining:
+- #13 sweep not exhausted (server_tools.ts tail).
+- Item 13 is the only non-`VERIFIED` item that can be advanced here; the
+  hardware/credential-gated items (#1, #8, #50, #55, telephony carrier, #51,
+  #60) remain blocked.
+
+Bugs Found:
+- `server.ts` `/api/routines/trigger` reported a triggered routine for a slot it
+  never triggered, and could attach an arbitrary routine from the store.
+
+Bugs Fixed:
+- `POST /api/routines/trigger` now validates the slot and reports
+  `success: false` on a miss. Verified by the new test file and the
+  negative-validation described above.
+
+Tests:    137 files / 1818 tests passed (23.77 s)
+Lint:     exit 0 (`tsc --noEmit`)
+Build:    exit 0 — `dist/server.cjs` 982749 bytes
+E2E:      NOT RUN (no carrier/PSTN)
+Security: `git check-ignore -v .env` → `.env` ignored; no secret in tracked diff;
+          no `node_modules`/`dist` staged. Full audit NOT RUN this slot.
+
+Documentation: `docs/COMPLETION_STATUS.md` (slot 10 entry)
+Branch:  feature/hermes-full-completion
+Commit:  feab541 (docs) / 1a0bc93 (fix)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         existing PR to main on this branch (not refreshed this slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            verified artifact `dist/server.cjs` (982749 bytes) is the deployment unit.
+
+Blocked:
+- #1 / #50 / #55 — physical Android handset
+- #8 — Windows host (real screenshot capture)
+- real telephony carrier path — SIM/Twilio credentials + public webhook host
+- #51 — external party (live credential rotation)
+- #60 — external party (third-party security audit)
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- Continue the Item 13 sweep in `server_tools.ts` — classify the remaining
+  unconditional `success: true` returns (commit/diff tools included) so a
+  tool that changed nothing cannot report success.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में `/api/routines/trigger` का झूठा `success: true` हटाकर असली स्लॉट-वैलिडेशन जोड़ी गई, 6 टेस्ट पास और पूरा सूट 1818 टेस्ट ग्रीन रहा।
