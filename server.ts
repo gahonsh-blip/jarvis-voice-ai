@@ -29,6 +29,7 @@ import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatu
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
+import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -8125,14 +8126,22 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
 
 // 3. Delete / Clear Telephony Calls
 app.delete('/api/telephony/calls', (req: Request, res: Response) => {
+  const before = telephonyCalls.length;
   telephonyCalls = [];
-  res.json({ success: true, message: 'Telephony call history cleared' });
+  // Clearing an already-empty history removes nothing; report the real count
+  // rather than asserting a deletion that never happened.
+  const verdict = classifyTelephonyCallDeletion(before);
+  res.json({ ...verdict });
 });
 
 app.delete('/api/telephony/calls/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  const before = telephonyCalls.length;
   telephonyCalls = telephonyCalls.filter((c) => c.id !== id);
-  res.json({ success: true, message: `Call ${id} deleted` });
+  // Deleting an id that was never recorded removes nothing; the old route
+  // still answered success: true and named the call as deleted.
+  const verdict = classifyTelephonyCallDeletion(before - telephonyCalls.length, id);
+  res.json({ ...verdict });
 });
 
 // 4. Telephony Settings
