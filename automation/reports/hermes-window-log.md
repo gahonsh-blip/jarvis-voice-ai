@@ -9300,3 +9300,23 @@ PR #5 (`feature/hermes-full-completion` → `main`) is open, non-draft, `mergeab
 the only commits are the report append and the state update.
 
 हिंदी सारांश: फ़ाइनलाइज़ेशन स्लॉट — नया डेवलपमेंट नहीं; f4ecfad पर lint पास, 127 फ़ाइलें / 1725 टेस्ट पास, build पास; सुरक्षा साफ़; PR #5 मर्ज के लिए मानव अनुमोदन की प्रतीक्षा में।
+
+---
+
+## WORK SLOT 1 — 2026-10-02 21:26 IST (2026-10-02 15:56 UTC) — item 13: computer-operator execute route fake success
+
+- **Item #13 (Zero-fake-success for all tools) — PARTIAL, one more class closed.**
+  `POST /api/computer-operator/execute` (`server.ts`, ~6246) awaited `ComputerOperatorEngine.executeTask(...)`
+  and answered `res.json({ success: true, task })` unconditionally. A FAILED, BLOCKED, NEEDS_APPROVAL or
+  CANCELLED run — and a run that never reached a terminal state — all read as performed host work.
+  Fixed: `success: operatorTaskExecuted(task)` plus a new `outcome: task.status` field.
+- Evidence: `src/tests/computerOperatorExecuteRouteTruth.test.ts` (5 cases) — bounded source guard
+  (execute-route body no longer contains the flat literal, does contain the verdict call) plus real
+  engine runs for COMPLETED / FAILED / BLOCKED / NEEDS_APPROVAL.
+- Negative-validated: restoring `success: true` → `1 failed | 4 passed`; restored → 5/5.
+- Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 5 passed; full suite **128 files / 1730 tests passed**
+  (22.69 s); build exit 0 (`dist/server.cjs` 965733 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+- Commit: `b2e4399`. Branch: `feature/hermes-full-completion`. PR #5 refreshed.
+  Main merge: NOT MERGED — awaiting human approval.
+
+हिंदी सारांश: computer-operator execute route का fake-success बंद; lint/tests/build पास; item 13 अभी PARTIAL।

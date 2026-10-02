@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-02 21:26 IST (2026-10-02 15:56 UTC) — window slot 1: the computer-operator execute route no longer reports success for failed runs
+
+### Fixed
+- **`POST /api/computer-operator/execute` (`server.ts`) answered `{ success: true, task }` for every engine result.** The route awaited `ComputerOperatorEngine.executeTask(...)` and then returned a flat success, so a `FAILED`, `BLOCKED`, `NEEDS_APPROVAL` or `CANCELLED` run — and a run that never reached a terminal state — all read as performed host work to any caller reading `success`. The flag now follows `operatorTaskExecuted(task)` (the helper the `/api/chat` `fix_project_error` branch already uses) and the route names the engine verdict in a new `outcome` field.
+
+### Tests
+- `src/tests/computerOperatorExecuteRouteTruth.test.ts` (5 cases) — a bounded source guard proves the execute-route body no longer contains `res.json({ success: true, task })` and does contain `success: operatorTaskExecuted(task)`; behavioural runs of the real engine cover COMPLETED, FAILED, BLOCKED (ambiguous screen) and NEEDS_APPROVAL, asserting the verdict each time.
+- Negative-validated: restoring `success: true` fails exactly the source guard (`1 failed | 4 passed`); restored → 5/5.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 5 passed; full suite **128 files / 1730 tests passed** (22.69 s); build exit 0 (`dist/server.cjs` 965733 bytes). E2E: NOT RUN (no display session / handset). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-02 04:27 IST (2026-10-01 22:57 UTC) — window slot 15: outbound dial no longer hands the carrier a callback URL nobody can reach
 
 ### Fixed
