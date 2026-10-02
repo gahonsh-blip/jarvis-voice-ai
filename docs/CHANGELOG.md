@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 04:36 IST (2026-10-02 23:06 UTC) — window finalization: tip re-verified, no new development
+
+### Verified
+- Window 2026-10-02 → 2026-10-03 frozen and re-verified at tip `e99aaaf` on `feature/hermes-full-completion`. No new backlog item was advanced.
+- Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 141 files / 1849 tests passed (24.00 s, 0 failed); build exit 0 with artifact `dist/server.cjs` 964.8 kb.
+- Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short` empty; no `.env`, token, key, `node_modules/` or `dist/` tracked or staged. The diff-vs-main secret scan returned exactly one hit — a synthetic LinkedIn-token fixture at `src/tests/credentialRedactor.test.ts:273`, not a real credential. `npm audit`: NOT RUN.
+
+### Known limitations
+- E2E: NOT RUN — no handset, emulator, or display session in the sandbox. Deploy: `NOT_CONFIGURED`. Item 13 (`Zero-fake-success for all tools`) remains `PARTIAL`; the `server.ts` / `server_tools.ts` tail of unclassified `success: true` sites is still `UNKNOWN`. Hardware-blocked items #1/#50/#55 remain `NOT_AVAILABLE`.
+
+### PR
+- PR #5 remains open, non-draft, `mergeable_state: clean`. **Not merged — awaiting human approval.**
+
+---
+
 ## [Unreleased] - 2026-10-03 04:08 IST (2026-10-02 22:38 UTC) — window slot 14: the global kill switch stops reporting a re-engagement as a fresh termination
 
 ### Fixed
