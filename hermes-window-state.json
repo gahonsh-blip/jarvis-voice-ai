@@ -1,0 +1,15 @@
+{
+  "window_date": "2026-10-03",
+  "window_started_at": "2026-10-02T15:35:00Z",
+  "last_slot_at": "2026-10-02T21:41:00Z",
+  "slots_completed": 12,
+  "current_item": 13,
+  "current_item_title": "Zero-fake-success for all tools",
+  "current_item_status": "PARTIAL",
+  "last_commit": "4c4738f",
+  "last_branch": "feature/hermes-full-completion",
+  "finalized": false,
+  "finalization_result": null,
+  "blocked_items": [],
+  "last_report_path": "/tmp/hermes-window-report.md"
+}
