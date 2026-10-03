@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 22:47 IST (2026-10-03 17:17 UTC) — window slot 3: the LinkedIn status route stops presenting an unprobed env token as a live account
+
+### Fixed
+- **`GET /api/auth/linkedin/status` (`server.ts`) answered `connected: true` for a static `LINKEDIN_ACCESS_TOKEN` read straight from the environment.** Nothing had probed that token against LinkedIn, so an unmeasured credential was presented as a live account — the fabricated success this project forbids. It was internally inconsistent as well: the canonical `/api/social/platforms` card already labels the same token `CONFIGURED` ("Credentials present but not verified"), and the YouTube status route already keeps its static-token branch honest (`connected: false`, `status: 'CONFIGURED'`).
+- The static-token branch now answers `connected: false`, `status: 'CONFIGURED'`, `configured: true`, `authType: 'STATIC_ENV_TOKEN'`, with a message directing the user to "Test connection". Only `/api/social/platforms/test` can confirm the account. The OAuth-connected branch (a real authenticated userinfo probe) is unchanged and still reports `connected: true`. The response exposes only the token's presence, never the token itself.
+
+### Tests
+- `src/tests/linkedinStatusTruth.test.ts` — new file, 3 cases: the static branch never contains `connected: true` and does contain `connected: false` + `status: 'CONFIGURED'` + "has not been verified against LinkedIn"; the OAuth branch still contains `connected: true`; the branch does not echo the token.
+- Negative-validated: reverting the branch to `connected: true` fails exactly 1 of the 3 (`1 failed | 2 passed`); restored → 3/3.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; full suite 142 files / 1856 tests passed (24.28 s, 0 failed); build exit 0 (`dist/server.cjs` 968.6 kb / 991806 bytes). E2E: NOT RUN (no LinkedIn credential / no device). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-03 21:22 IST (2026-10-03 15:52 UTC) — window slot 1: the offline engine stops staging a call to a fabricated placeholder number
 
 ### Fixed

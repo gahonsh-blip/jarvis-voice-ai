@@ -329,6 +329,24 @@ values carrying a valid state; the route applies just the classified keys and an
 was never persisted. Guarded by `src/tests/telephonyPermissionUpdateTruth.test.ts`
 (11 tests); negative-validated (`3 failed | 8 passed` with the pre-fix route restored).
 
+**Update 2026-10-03 22:47 IST — an unprobed LinkedIn token was reported as a live connection.**
+`GET /api/auth/linkedin/status` (`server.ts`) answered `connected: true` whenever a static
+`LINKEDIN_ACCESS_TOKEN` was present in the environment, without ever probing that token
+against LinkedIn. The route is not decorative: it is one of the integration status
+endpoints the UI and the offline/online e2e contract treat as the authority on whether an
+integration is connected. Reporting an unmeasured credential as a live account is the
+fabricated success this project forbids, and it invites a Level-4 publish decision on the
+belief that the account is proven. The canonical `/api/social/platforms` card already
+labelled the same token `CONFIGURED` ("Credentials present but not verified"), and the
+YouTube status route already kept its static-token branch honest — LinkedIn contradicted
+both. The static-token branch now answers `connected: false`, `status: 'CONFIGURED'`,
+`configured: true`, `authType: 'STATIC_ENV_TOKEN'` with a "Test connection" message; only
+`/api/social/platforms/test` can confirm the account, and the response exposes only the
+token's presence, never the token. The OAuth-connected branch (a real authenticated
+userinfo probe) still reports `connected: true`. Guarded by
+`src/tests/linkedinStatusTruth.test.ts` (3 tests); negative-validated (`1 failed | 2
+passed` with the `connected: true` branch restored).
+
 **Update 2026-10-03 21:22 IST — the offline engine staged a call to a fabricated number.**
 The offline outbound-call and schedule branches (`src/utils/localJarvisEngine.ts`) fell
 back to a hardcoded placeholder number whenever the command captured no dial target, so
