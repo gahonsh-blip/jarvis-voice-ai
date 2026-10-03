@@ -31,6 +31,7 @@ import {
   fetchKillSwitchState,
   killSwitchBlocks,
   operatorKillSwitchRefusal,
+  type KillSwitchLiveness,
   describeOperatorRun,
   formatOperatorTaskMessage,
   type PlannedOperatorRun,
@@ -146,6 +147,12 @@ export default function App() {
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
 
+  // Kill-switch liveness mirrored from the server, so the Computer Operator HUD
+  // shows the real switch position instead of the modal's default. Starts UNKNOWN
+  // and is only ever set to a confirmed ENGAGED/RELEASED by a server answer; an
+  // unanswered probe stays UNKNOWN and the operator view refuses to run.
+  const [killSwitchLiveness, setKillSwitchLiveness] = useState<KillSwitchLiveness>('UNKNOWN');
+
   // Autonomous Voice AI Telephony State
   const [activeCall, setActiveCall] = useState<CallRecord | null>(null);
   const [callHistory, setCallHistory] = useState<CallRecord[]>(() => {
@@ -247,6 +254,22 @@ export default function App() {
   useEffect(() => {
     saveLocalVoiceSettings(voiceSettings);
   }, [voiceSettings]);
+
+  // Mirror the server kill-switch position so the Computer Operator HUD can show
+  // the real switch state and refuse to run while it is ENGAGED or UNKNOWN.
+  // Re-probed whenever the operator view is opened; a failed probe stays UNKNOWN.
+  useEffect(() => {
+    let cancelled = false;
+    const refreshKillSwitch = async () => {
+      const liveness = await fetchKillSwitchState();
+      if (!cancelled) setKillSwitchLiveness(liveness);
+    };
+    refreshKillSwitch();
+    if (activeApp === 'computer_operator') refreshKillSwitch();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeApp]);
 
   // Online / Offline Detection & Sync Queue Processor
   const flushPendingSyncQueue = useCallback(async () => {
@@ -1851,6 +1874,7 @@ export default function App() {
         onClose={() => setActiveApp(null)}
         onSendToChat={handleSendCommand}
         activeLanguage={voiceSettings.language || 'en-US'}
+        isEmergencyStopped={killSwitchBlocks(killSwitchLiveness)}
       />
 
       <PermissionGateway
