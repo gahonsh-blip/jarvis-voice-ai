@@ -7635,10 +7635,29 @@ app.post('/api/mobile/bridge/connect', (req: Request, res: Response) => {
       permissions,
     });
 
+    // The handshake only *negotiated* capabilities; it did not prove the device
+    // can do the work. A device that landed in PERMISSION_REQUIRED or
+    // LIMITED_CAPABILITY, or one that is still SIMULATION_ONLY, must not be
+    // reported as a verified connection — only a live, fully-permitted CONNECTED
+    // handshake is VERIFIED. This matches the engine and the client adapter,
+    // which already derive success from the same status.
+    const bridgeStatus = bridgeGateway.getStatus();
+    const outcome: ExecutionOutcome =
+      bridgeStatus === 'CONNECTED'
+        ? 'VERIFIED'
+        : bridgeStatus === 'PERMISSION_REQUIRED'
+        ? 'PERMISSION_REQUIRED'
+        : bridgeStatus === 'LIMITED_CAPABILITY' || bridgeStatus === 'PARTIALLY_CONNECTED'
+        ? 'NOT_AVAILABLE'
+        : bridgeStatus === 'MOBILE_NOT_CONNECTED'
+        ? 'NOT_CONFIGURED'
+        : 'UNVERIFIED';
+
     return res.json({
-      success: true,
-      outcome: 'VERIFIED',
-      status: bridgeGateway.getStatus(),
+      success: bridgeStatus === 'CONNECTED',
+      outcome,
+      verified: outcome === 'VERIFIED',
+      status: bridgeStatus,
       device: {
         deviceId: registered.deviceId,
         deviceName: registered.deviceName,

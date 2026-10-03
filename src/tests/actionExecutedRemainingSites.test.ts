@@ -150,4 +150,21 @@ describe('Item 13 — remaining success:true sites are enumerated and truthful',
     // The simulation flag is always accompanied by the SIMULATION_ONLY label.
     expect(adapter).toContain('[SIMULATION_ONLY] Android Virtual Testbed Connected');
   });
+
+  it('bridge connect route derives its outcome from the negotiated status, not a bare 200', () => {
+    // Audited 2026-10-03 00:05 IST: the route answered `outcome: 'VERIFIED'`
+    // unconditionally, so a device refused with PERMISSION_REQUIRED or downgraded
+    // to LIMITED_CAPABILITY read as a verified connection. The outcome and
+    // success flag now follow `bridgeGateway.getStatus()`.
+    const server = source('server.ts');
+    expect(server).toContain('const bridgeStatus = bridgeGateway.getStatus();');
+    expect(server).toContain('success: bridgeStatus === \'CONNECTED\'');
+    expect(server).toContain("bridgeStatus === 'CONNECTED' ? 'VERIFIED'");
+    // The old unconditional claim must be gone from the connect handler.
+    const connectHandler = server.slice(
+      server.indexOf("app.post('/api/mobile/bridge/connect'"),
+      server.indexOf("app.post('/api/mobile/bridge/heartbeat'")
+    );
+    expect(connectHandler).not.toContain("outcome: 'VERIFIED', status:");
+  });
 });

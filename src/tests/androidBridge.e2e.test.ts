@@ -178,6 +178,11 @@ describe('Android Bridge E2E (real server process)', () => {
     expect(connectRes.status).toBe(200);
     expect(connectBody.status).toBe('CONNECTED');
     expect(connectBody.capabilities.unavailable).toEqual([]);
+    // A handshake that negotiated every capability is the only one that may
+    // report success; the flag and outcome track the observed status, not a 200.
+    expect(connectBody.success).toBe(true);
+    expect(connectBody.outcome).toBe('VERIFIED');
+    expect(connectBody.verified).toBe(true);
 
     // 2. Heartbeat carrying real telemetry
     const hbRes = await fetch(`${BASE}/api/mobile/bridge/heartbeat`, {
