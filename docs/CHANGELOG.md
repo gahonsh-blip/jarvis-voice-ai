@@ -4,6 +4,26 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 23:23 IST (2026-10-03 17:53 UTC) — window slot 4: the bundled telephony suite stops asserting fabricated call success
+
+### Fixed
+- **Four of the 20 mandatory cases in `src/utils/telephonyTestRunner.ts` pinned the pre-hardening, fake behaviour the engine has since been fixed to refuse.** They asserted the fabricated success the whole zero-fake-success sweep exists to eliminate, so the suite failed its own honest invariants (observed `total 20 / passed 16 / failed 4` before the change):
+  - #3 (English inbound) recited unverified clinic hours as fact.
+  - #5 (Hindi clinic-hours QA) recited the sample clinic's `9:00` opening as fact.
+  - #11 (human handoff) credited a simulation-only transfer as `CONFIRMED`.
+  - #17 (outbound confirm) reported a call as "placed" with only a simulation adapter active.
+- The assertions now pin the honest behaviour: #3/#5 report unverified hours as unverified and never recite a time; #11 requires `handoffStatus !== 'CONFIRMED'` + `handoff_unavailable_message_taking` + `simProvider.callTransferred === false`; #17 requires `actionExecuted === false` + `TELEPHONY_NOT_CONFIGURED` and the absence of the old "अधिकृत" placed-call phrase. Both #11 and #17 restore the registry to the default carrier afterwards so later cases are unaffected.
+- No engine behaviour was changed — the engine already refused all four. Only the suite's stale expectations were corrected, so the bundled self-test now reports the truth it was written to prove.
+
+### Tests
+- `src/tests/telephonyTestRunnerHonesty.test.ts` — new file, 1 case: runs the whole suite and asserts `failed === 0`, `passed === total`, and that the outbound case's evidence string contains `actionExecuted: false` and `TELEPHONY_NOT_CONFIGURED` — so the suite cannot pass by narrating work no carrier performed.
+- Negative-validated: restoring the old `9:00` assertion for #5 fails exactly the wrapper test (`1 failed | 0 passed`); restored → suite 20/20 and wrapper 1/1.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **143 files / 1857 tests passed** (23.64 s, 0 failed); build exit 0 (`dist/server.cjs` 992442 bytes). E2E: NOT RUN (no carrier / no handset). Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-03 22:47 IST (2026-10-03 17:17 UTC) — window slot 3: the LinkedIn status route stops presenting an unprobed env token as a live account
 
 ### Fixed

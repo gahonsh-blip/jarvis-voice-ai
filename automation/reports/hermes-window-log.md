@@ -10182,3 +10182,52 @@ NOT_CONFIGURED.
 **Commits.** `21df127` (fix + test), `0853325` (docs).
 
 Item #13 remains `PARTIAL` — the sweep is not exhausted.
+
+---
+
+## Slot 2026-10-03 23:05 IST — WORK SLOT 4 (item 13: bundled telephony suite stops asserting fabricated success)
+
+**Window:** 2026-10-03 → 2026-10-04, the 23:05 IST fire. Slots completed so far: 4.
+
+**Item:** #13 `Zero-fake-success for all tools` — the project's own self-test surface.
+
+**Bug found and fixed.** The 20 mandatory cases in `src/utils/telephonyTestRunner.ts`
+are the self-test the product exposes at `/api/telephony/test-suite`. Four of them
+still pinned the pre-hardening, fabricated behaviour the engine has since been
+fixed to refuse — the exact class the zero-fake-success sweep exists to remove. So
+the suite failed its own honest invariants (observed `total 20 / passed 16 / failed 4`):
+
+- #3 (English inbound) recited unverified clinic hours as fact.
+- #5 (Hindi clinic-hours QA) recited the sample clinic's 9:00 opening as fact.
+- #11 (human handoff) credited a simulation-only transfer as CONFIRMED.
+- #17 (outbound confirm) reported a call as "placed" with only a simulation adapter.
+
+**No engine defect.** Probing processOfflineCommand for the outbound-confirm
+intent confirmed the branch already returns actionExecuted=false with
+TELEPHONY_NOT_CONFIGURED when only the simulation provider is registered (and
+false when no number is given); the handoff path already refuses CONFIRMED
+without a real carrier; the clinic-facts path already withholds unverified hours.
+Only the suite's expectations were stale.
+
+**Fix.** The four assertions now pin the honest behaviour: #3/#5 report unverified
+hours as unverified and never recite a time; #11 requires handoffStatus !== CONFIRMED
++ handoff_unavailable_message_taking + simProvider.callTransferred === false;
+#17 requires actionExecuted === false + TELEPHONY_NOT_CONFIGURED and the absence
+of the old placed-call phrase. Both #11 and #17 restore the registry to the
+default carrier afterwards so later cases are unaffected. New
+src/tests/telephonyTestRunnerHonesty.test.ts (1 case) runs the whole suite in CI and
+pins the outbound case's evidence string (actionExecuted: false,
+TELEPHONY_NOT_CONFIGURED) — so the suite cannot pass by narrating work no carrier
+performed.
+
+**Evidence.** Negative-validated: restoring the old 9:00 assertion for #5 fails
+exactly the new wrapper test (1 failed | 0 passed); restored → suite 20/20 and
+wrapper 1/1.
+
+**Gates (observed).** lint (tsc --noEmit) exit 0; full suite 143 files / 1857
+tests passed (23.64 s, 0 failed); build exit 0 (dist/server.cjs 992442 bytes).
+E2E: NOT RUN (no carrier / no handset). Deploy: NOT_CONFIGURED.
+
+**Commits.** 597b0ce (fix + test), docs commit this slot.
+
+Item #13 remains PARTIAL — the sweep is not exhausted.
