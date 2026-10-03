@@ -10231,3 +10231,38 @@ E2E: NOT RUN (no carrier / no handset). Deploy: NOT_CONFIGURED.
 **Commits.** 597b0ce (fix + test), docs commit this slot.
 
 Item #13 remains PARTIAL — the sweep is not exhausted.
+
+---
+
+## Slot 5 — WORK — 2026-10-03 23:35 IST (2026-10-03 → 2026-10-04 window)
+
+**Item #13 Zero-fake-success for all tools — Telegram broadcast `executed` flag.**
+
+**Finding.** `/api/telegram/broadcast` had already been hardened so `success`,
+`verified` and `liveSent` derive from the message id Telegram returns, but the
+route still hard-coded `executed: true` on every 200 response. A broadcast that
+Telegram did not confirm (no message id, blocked bot, not configured) therefore
+reported the action as executed — the same fake-success shape item 13 removes.
+The client notice helper (`telegramBroadcastNotice`) was already honest; the raw
+`executed` field was the remaining contradiction.
+
+**Fix.** `executed` now tracks the same proof as `success`
+(`interpretation.delivered`), so an unconfirmed send reads as not executed.
+`server.ts` lines 4229-4232.
+
+**Evidence.** `src/tests/telegramDelivery.e2e.test.ts` now asserts
+`executed === true` on a verified send (message id 777) and `executed === false`
+on a send Telegram accepts without a message id. Negative-validated: restoring
+`executed: true` fails exactly that assertion (observed `1 failed | 2 passed`);
+restored → `3 passed`.
+
+**Gates (observed).** lint (`tsc --noEmit`) exit 0; targeted test 3/3; full suite
+143 files / 1857 tests passed (27.03 s, 0 failed); build exit 0
+(dist/server.cjs 992611 bytes). E2E: NOT RUN (no live Telegram bot token in this
+sandbox; the route's e2e test uses a local stub server). Deploy: NOT_CONFIGURED.
+
+**Commit.** 870cf99 (fix + test), docs commit this slot.
+
+Item #13 remains PARTIAL — the sweep of remaining `success`/`executed` sites in
+server.ts and server_tools.ts is not exhausted.
+

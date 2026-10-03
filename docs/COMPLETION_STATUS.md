@@ -4,7 +4,22 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-03 17:53 UTC (23:23 IST 2026-10-03) — **WORK SLOT 4** of the
+Last cycle: 2026-10-03 18:20 UTC (23:50 IST 2026-10-03) — **WORK SLOT 5** of the
+2026-10-03 → 2026-10-04 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the Telegram broadcast route's `executed` flag.**
+
+`/api/telegram/broadcast` correctly derived `success` and `verified` from the
+message id Telegram returns, but still hard-coded `executed: true` on every
+200 response. A broadcast that never reached the target chat therefore reported
+the action as executed, the exact fake-success shape item 13 removes. `executed`
+now tracks the same proof as `success` (`interpretation.delivered`), so a send
+that Telegram did not confirm reads as not executed. Evidence:
+`server.ts` (4229-4232); `src/tests/telegramDelivery.e2e.test.ts` asserts
+`executed === true` on a verified send and `executed === false` on a send
+Telegram accepts without a message id. Negative-validated: restoring
+`executed: true` fails exactly that assertion (`1 failed | 2 passed`), restored
+→ `3 passed`. Item 13 remains `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-03 17:53 UTC (23:23 IST 2026-10-03) — **WORK SLOT 4** of the
 2026-10-03 → 2026-10-04 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the bundled telephony test suite's own assertions.**
 
 Four of the 20 mandatory cases in `src/utils/telephonyTestRunner.ts` still
