@@ -4,7 +4,28 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-03 18:56 UTC (00:26 IST 2026-10-04) — **WORK SLOT 6** of the
+Last cycle: 2026-10-03 19:15 UTC (00:45 IST 2026-10-04) — **WORK SLOT 7** of the
+2026-10-03 → 2026-10-04 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the Computer Operator HUD's kill-switch gate.**
+
+`App.tsx` mounted `<ComputerOperatorModal>` without the `isEmergencyStopped`
+prop, so the modal fell back to its `false` default: the HUD's own Run button
+always called `ComputerOperatorEngine.executeTask(..., false)` and the
+`EMERGENCY PAUSED` banner could never render, whatever the real switch position.
+The operator chat paths already refused on `ENGAGED`/`UNKNOWN`; the HUD path did
+not. `App.tsx` now mirrors the tri-state `KillSwitchLiveness` from
+`/api/emergency/status` (seeded `UNKNOWN`, re-probed when the operator view
+opens) and passes `killSwitchBlocks(killSwitchLiveness)` to the modal, so an
+ENGAGED or UNKNOWN switch blocks the HUD run. Evidence: `src/App.tsx`
+(kill-switch state + effect + `isEmergencyStopped={killSwitchBlocks(...)}`);
+`src/tests/computerOperatorHudEmergencyTruth.test.ts` (4 cases) pins the
+UNKNOWN seed, the shared-helper derivation, the re-probe on open, and the
+fail-closed update. Negative-validated: deleting the `isEmergencyStopped` line
+fails exactly that guard (`1 failed | 3 passed`), restored → 4/4. Gates on
+`40e8eb7`: lint (`tsc --noEmit`) exit 0; full suite **144 files / 1862 tests
+passed** (24.68 s, 0 failed); build exit 0 (`dist/server.cjs` 993006 bytes).
+Item 13 remains `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-03 18:56 UTC (00:26 IST 2026-10-04) — **WORK SLOT 6** of the
 2026-10-03 → 2026-10-04 window, the 00:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the Android bridge connect route's outcome.**
 
 `POST /api/mobile/bridge/connect` answered `outcome: 'VERIFIED'` on every

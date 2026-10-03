@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 00:45 IST (2026-10-03 19:15 UTC) — window slot 7: the Computer Operator HUD reflects the live kill-switch state
+
+### Fixed
+- **`App.tsx` mounted `<ComputerOperatorModal>` without the `isEmergencyStopped` prop**, so the modal fell back to its `false` default. The HUD's own Run button therefore always called `ComputerOperatorEngine.executeTask(..., false)` and the `EMERGENCY PAUSED` banner could never render, regardless of the real switch position. The operator chat paths already refused on `ENGAGED`/`UNKNOWN`; the HUD path did not.
+- `App.tsx` now mirrors the tri-state `KillSwitchLiveness` from `/api/emergency/status` — seeded `UNKNOWN` and only ever replaced by an awaited server answer, re-probed whenever the operator view opens — and passes `killSwitchBlocks(killSwitchLiveness)` to the modal. An ENGAGED or UNKNOWN switch now blocks the HUD run, matching the chat paths.
+
+### Tests
+- `src/tests/computerOperatorHudEmergencyTruth.test.ts` — 4 source-guard cases pin the UNKNOWN seed, the `killSwitchBlocks(killSwitchLiveness)` derivation, the re-probe on open, and the fail-closed update path.
+- Negative-validated: deleting the `isEmergencyStopped` line fails exactly that guard (`1 failed | 3 passed`); restored → 4/4.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **144 files / 1862 tests passed** (24.68 s, 0 failed); build exit 0 (`dist/server.cjs` 993006 bytes). Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 00:26 IST (2026-10-03 18:56 UTC) — window slot 6: the Android bridge connect route stops reporting a degraded handshake as VERIFIED
 
 ### Fixed

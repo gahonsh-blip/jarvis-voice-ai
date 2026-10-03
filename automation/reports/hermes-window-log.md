@@ -10282,3 +10282,44 @@ server.ts and server_tools.ts is not exhausted.
 **Gates (observed).** lint (`tsc --noEmit`) exit 0; full suite **143 files / 1858 tests passed** (24.43 s, 0 failed); build exit 0 (`dist/server.cjs` 993006 bytes). E2E: bridge E2E ran against the real server process (1 file / 11 passed) — server-side leg only, no physical handset. Deploy: NOT_CONFIGURED.
 
 **Commits.** ed3b4fa (fix + test), ba1dc4c (docs). Item #13 remains PARTIAL — the sweep is not exhausted.
+
+
+---
+
+## Slot 7 — WORK — 2026-10-04 00:35 IST (2026-10-03 → 2026-10-04 window)
+
+**Item #13 Zero-fake-success for all tools — Computer Operator HUD kill-switch gate.**
+
+**Finding.** `App.tsx` mounted `<ComputerOperatorModal>` without the
+`isEmergencyStopped` prop, so the modal fell back to its `false` default. The
+HUD's own Run button calls `ComputerOperatorEngine.executeTask(directive, mode,
+isEmergencyStopped)` — always with `false` — and the `EMERGENCY PAUSED` banner
+(`isEmergencyStopped && ...`) could never render, whatever the real switch
+position. The operator chat paths already fetched and enforced the tri-state
+`KillSwitchLiveness`; the HUD path silently bypassed it, so the operator view
+could run host actions under an emergency stop.
+
+**Fix.** `App.tsx` now mirrors the tri-state `KillSwitchLiveness` from
+`/api/emergency/status` — seeded `UNKNOWN` and only ever replaced by an awaited
+server answer, re-probed whenever the operator view opens — and passes
+`killSwitchBlocks(killSwitchLiveness)` to the modal. An ENGAGED or UNKNOWN switch
+now blocks the HUD run, matching the chat paths and the repo's own fail-closed
+rule (`killSwitchBlocks`: only a confirmed `RELEASED` may proceed).
+
+**Evidence.** `src/tests/computerOperatorHudEmergencyTruth.test.ts` (new, 4
+cases) pins the UNKNOWN seed, the `killSwitchBlocks(killSwitchLiveness)`
+derivation, the re-probe on open, and the fail-closed update. Negative-validated:
+deleting the `isEmergencyStopped` line fails exactly that guard (observed
+`1 failed | 3 passed`); restored → 4/4.
+
+**Gates (observed).** lint (`tsc --noEmit`) exit 0; targeted test 4/4; full suite
+**144 files / 1862 tests passed** (24.68 s, 0 failed); build exit 0
+(`dist/server.cjs` 993006 bytes). E2E: NOT RUN (HUD source guard only; no browser
+harness). Deploy: NOT_CONFIGURED.
+
+**Commits.** 40e8eb7 (fix + test), docs commit this slot.
+
+Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
+exhausted. Note: this slot's first commit was based on a stale shallow clone;
+the branch was reset onto the real remote tip (`9c92586`) before the fix, so no
+prior slot's work was lost.
