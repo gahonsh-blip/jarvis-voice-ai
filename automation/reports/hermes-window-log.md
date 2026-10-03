@@ -10266,3 +10266,19 @@ sandbox; the route's e2e test uses a local stub server). Deploy: NOT_CONFIGURED.
 Item #13 remains PARTIAL — the sweep of remaining `success`/`executed` sites in
 server.ts and server_tools.ts is not exhausted.
 
+
+---
+
+## Slot 6 — WORK — 2026-10-04 00:05 IST (2026-10-03 → 2026-10-04 window)
+
+**Item #13 Zero-fake-success for all tools — Android bridge connect route outcome.**
+
+**Finding.** `POST /api/mobile/bridge/connect` (`server.ts` 7638-7660) answered `outcome: 'VERIFIED'` on every successful handshake while `status` correctly reported `PERMISSION_REQUIRED`, `LIMITED_CAPABILITY` or `SIMULATION_ONLY`. A caller reading `outcome` — the field the honesty vocabulary reserves for confirmed work — was told a refused or simulation-only device had connected. The engine already told the truth (`androidBridgeEngine.ts`: `success: this.status === 'CONNECTED'`); the server route contradicted it.
+
+**Fix.** The route now derives `outcome` and `success` from `bridgeGateway.getStatus()`: only a live, fully-permitted `CONNECTED` handshake is `VERIFIED`; `PERMISSION_REQUIRED` maps to `PERMISSION_REQUIRED`, a limited/partial handshake to `NOT_AVAILABLE`, no live device to `NOT_CONFIGURED`.
+
+**Evidence.** `src/tests/androidBridge.e2e.test.ts` asserts `success === true`, `outcome === 'VERIFIED'`, `verified === true` on a fully granted handshake against the real server process (1 file / 11 passed). `src/tests/actionExecutedRemainingSites.test.ts` (now 6 cases) pins `const bridgeStatus = bridgeGateway.getStatus()`, `success: bridgeStatus === 'CONNECTED'` and the `CONNECTED ? 'VERIFIED'` mapping, and forbids the old unconditional `outcome: 'VERIFIED', status:` literal. Negative-validated: restoring the unconditional claim fails exactly that guard (`1 failed | 5 passed`); restored → 6/6.
+
+**Gates (observed).** lint (`tsc --noEmit`) exit 0; full suite **143 files / 1858 tests passed** (24.43 s, 0 failed); build exit 0 (`dist/server.cjs` 993006 bytes). E2E: bridge E2E ran against the real server process (1 file / 11 passed) — server-side leg only, no physical handset. Deploy: NOT_CONFIGURED.
+
+**Commits.** ed3b4fa (fix + test), ba1dc4c (docs). Item #13 remains PARTIAL — the sweep is not exhausted.
