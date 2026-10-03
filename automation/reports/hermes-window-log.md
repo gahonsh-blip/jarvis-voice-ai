@@ -10402,3 +10402,43 @@ E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Security: `.env` ignored
 
 Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
 exhausted.
+
+---
+
+## 2026-10-04 02:05 IST (2026-10-03 21:05 UTC) — WORK SLOT 10 — Item #13: the staged YouTube target channel is never invented
+
+**Item.** #13 Zero-fake-success for all tools (`PARTIAL`).
+
+**Bug found.** Both YouTube draft routes in `server.ts` — `POST
+/api/social/youtube/upload-draft` and `POST /api/social/youtube/draft-test` —
+staged `targetChannel: memoryState.youTubeConnection?.channelTitle || 'YouTube
+Channel'` and named `|| 'Connected Channel'` in their Level-4 permission-gateway
+rows. `src/components/SocialMediaModal.tsx` rendered `|| 'Connected YouTube
+Channel'` in the upload tab. Neither route reads a channel, so a draft staged
+before any channel had been read presented an invented channel name to the
+operator and to the approval surface.
+
+**Fix.** New `src/utils/hardening/youtubeChannelTruth.ts` (`recordedChannelTitle`,
+`describeStagedChannel`, `CHANNEL_NOT_RECORDED_LABEL`) returns the recorded title
+or `null`. Every draft `targetChannel`, the permission `target`, the
+`verifyAndPublishToYouTube` result message, and both Social Hub renders route
+through it; an unrecorded channel is left unset so the UI says `channel not
+recorded — no channel was read`.
+
+**Evidence.** `src/tests/youtubeChannelTruth.test.ts` (new, 6 cases):
+placeholder / blank / non-string inputs, the display label, and source guards
+that `server.ts` and `SocialMediaModal.tsx` no longer emit the three invented
+literals. Negative-validated: removing `'Connected YouTube Channel'` from the
+placeholder set fails exactly 2 of 6; restored → 6/6.
+
+**Gates (observed).** lint (`tsc --noEmit`) exit 0; targeted 1 file / 6 passed;
+related truth tests 3 files / 46 passed; full suite **147 files / 1886 tests
+passed** (24.33 s, 0 failed); build exit 0 (`dist/server.cjs` 996462 bytes).
+E2E: NOT RUN (no handset, no Google OAuth grant). Deploy: NOT_CONFIGURED.
+Security: `.env` ignored (`.gitignore:4:.env`), no `.env` / `node_modules` /
+`dist` tracked, no key material in the diff.
+
+**Commits.** 9388a90 (fix + test), 30d5d0e (docs).
+
+Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
+exhausted.
