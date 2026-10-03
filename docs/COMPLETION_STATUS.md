@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-03 21:45 UTC (03:16 IST 2026-10-04) — **WORK SLOT 12** of the
+Last cycle: 2026-10-03 22:14 UTC (03:44 IST 2026-10-04) — **WORK SLOT 13** of the
+2026-10-03 → 2026-10-04 window, the 03:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the live social account identity.**
+
+`testPlatformConnection()` makes a real, token-authenticated call to each platform
+and answers `success: true, status: 'VERIFIED'` when it authenticates — but the
+account NAME it returned was invented whenever the provider response omitted one:
+LinkedIn fell back to `'LinkedIn Member'`, Facebook to `'Facebook Page'`,
+Instagram to `'Instagram Account'`, YouTube to `'YouTube Channel'`. The same
+invented default lived in the YouTube connect callback (`channelTitle = ... ||
+'YouTube Channel'`), the YouTube `/status` probe, the YouTube pre-upload
+requisite check, and the LinkedIn OAuth callback (`memberName ... || 'LinkedIn
+Member'`). The account is genuinely verified; the name is not measured. New
+`socialAccountIdTruth.ts` (`observedAccountName`, `describeVerifiedAccount`,
+`ACCOUNT_NAME_NOT_RETURNED_LABEL`) returns the observed name or `null` (also
+rejecting the historical placeholder strings) and names the real identifier (page
+id / URN) when no name was returned. All four probes and both OAuth callbacks now
+route through it; nothing displays or persists an unobserved name. Evidence:
+`server.ts` (LinkedIn/Facebook/Instagram/YouTube probes ~2511/2563/2599/2643;
+LinkedIn callback ~4973; YouTube callback ~5308/5457);
+`src/utils/hardening/socialAccountIdTruth.ts`;
+`src/tests/socialAccountIdTruth.test.ts` (8 cases). Negative-validated —
+reverting `observedAccountName(item.snippet?.title)` to `item.snippet?.title ||
+'YouTube Channel'` fails exactly 1 of 8 (observed `1 failed | 7 passed`);
+restored → 8/8. Gates on `8dec240`: lint (`tsc --noEmit`) exit 0; targeted 1 file /
+8 passed. E2E: NOT RUN (no platform credentials / no handset). Deploy:
+NOT_CONFIGURED. Item 13 remains `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-03 21:45 UTC (03:16 IST 2026-10-04) — **WORK SLOT 12** of the
 2026-10-03 → 2026-10-04 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the OAuth popup account notice.**
 
 `SocialMediaModal.tsx`'s OAuth popup listener announced a named account that was
