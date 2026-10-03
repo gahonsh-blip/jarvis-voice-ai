@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-03 21:22 IST (2026-10-03 15:52 UTC) — window slot 1: the offline engine stops staging a call to a fabricated placeholder number
+
+### Fixed
+- **The offline outbound-call and schedule branches (`src/utils/localJarvisEngine.ts`) fell back to a hardcoded placeholder number whenever the command captured no number**, so "make a call" or "schedule call tomorrow" staged a pending outbound request — behind the same Level-4 authorization prompt used for a real target — to a number the user never named. `server.ts` did the same with a fabricated `'Contact'` default in `classifyIntentLocally` and the `make_call` handler. A fabricated target is not performed work, and it is worse than a missing feature because it is presented as a staged call.
+- New `extractDialTarget(raw)` and `offlineCallMissingNumberVerdict(phase)` (`src/utils/computerOperator/offlineCallTruth.ts`) make a target a number only when it carries at least three digits, and give the honest refusal for a command with no number. Both offline branches (`localJarvisEngine.ts` schedule ~1262, outbound ~1388), the local intent classifier (`server.ts` ~885) and the `make_call` handler (`server.ts` ~9149) now route through them: a request with no number returns `outbound_call_authorization` with `actionExecuted: false`, a title of `No Number to Call (nothing staged)` / `No Number to Schedule (nothing recorded)`, and a reply that asks which number — never a staged placeholder. A real number the user names still stages exactly as before.
+
+### Tests
+- `src/tests/offlineCallTruth.test.ts` — 4 new cases (file total 27): "make a call" refused with `actionExecuted: false`, `memory.stats.actionsExecuted` still 0 and no placeholder in the spoken text; "schedule call tomorrow" refused; a real named number (`call +91 98765 43210`) still staged; plus a source guard that the branches call `offlineCallMissingNumberVerdict(` and the placeholder literal is gone.
+- Negative-validated: reintroducing the placeholder fallback in the outbound branch fails exactly 2 of the 27 (`2 failed | 25 passed`); restored → 27/27.
+
+### Verified
+- Lint (`tsc --noEmit`) exit 0; targeted 3 files / 52 passed; full suite 141 files / 1853 tests passed (23.70 s, 0 failed); build exit 0 (`dist/server.cjs` 968.3 kb). E2E: NOT RUN (no carrier/PSTN). Item 13 remains `PARTIAL`.
+
+---
+
 ## [Unreleased] - 2026-10-03 04:36 IST (2026-10-02 23:06 UTC) — window finalization: tip re-verified, no new development
 
 ### Verified

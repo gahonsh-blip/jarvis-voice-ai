@@ -329,6 +329,23 @@ values carrying a valid state; the route applies just the classified keys and an
 was never persisted. Guarded by `src/tests/telephonyPermissionUpdateTruth.test.ts`
 (11 tests); negative-validated (`3 failed | 8 passed` with the pre-fix route restored).
 
+**Update 2026-10-03 21:22 IST — the offline engine staged a call to a fabricated number.**
+The offline outbound-call and schedule branches (`src/utils/localJarvisEngine.ts`) fell
+back to a hardcoded placeholder number whenever the command captured no dial target, so
+"make a call" or "schedule call tomorrow" staged a pending outbound request — behind the
+same Level-4 authorization prompt used for a real number — to a number the user never
+named. `server.ts` did the same with a fabricated `'Contact'` default in
+`classifyIntentLocally` and the `make_call` handler. The Level-4 gate is only meaningful
+if the thing being approved is real: a fabricated destination turns an authorization
+prompt into theatre and can send the approval flow toward a target the operator never
+chose. `extractDialTarget(raw)` and `offlineCallMissingNumberVerdict(phase)`
+(`src/utils/computerOperator/offlineCallTruth.ts`) now make a target a number only when
+it carries at least three digits and give an honest refusal for a command with no number:
+`actionExecuted: false`, no staged call, and a reply asking which number. A real number
+the user names still stages as before. Guarded by `src/tests/offlineCallTruth.test.ts`
+(4 new cases, file total 27); negative-validated (`2 failed | 25 passed` with the
+placeholder fallback restored).
+
 **Update 2026-09-23 03:13 IST — a correct mask that the UI did not use.** The
 helper was sound by this point, but a component could still render the raw field
 next to a badge asserting the opposite. `ActiveCallHUD.tsx` drew a `MASKED` badge

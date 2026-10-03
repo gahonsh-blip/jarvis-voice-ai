@@ -4,11 +4,45 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-02 23:06 UTC (04:36 IST 2026-10-03) — **FINALIZATION SLOT** of the
+Last cycle: 2026-10-03 15:52 UTC (21:22 IST 2026-10-03) — **WORK SLOT 1** of the
+2026-10-03 → 2026-10-04 window, the 21:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the offline telephony missing-number branches.**
+
+The offline outbound-call and schedule branches in `src/utils/localJarvisEngine.ts`
+fell back to a hardcoded placeholder number whenever the command captured no
+number, so "make a call" or "schedule call tomorrow" staged a pending outbound
+request — behind the same Level-4 authorization prompt used for a real target —
+to a number the user never named. `server.ts` did the same with a fabricated
+`'Contact'` default in `classifyIntentLocally` and the `make_call` handler. A
+fabricated target is not performed work, and it is worse than a missing feature
+because it is presented as a staged call.
+
+New `extractDialTarget(raw)` and `offlineCallMissingNumberVerdict(phase)`
+(`src/utils/computerOperator/offlineCallTruth.ts`) make a target a number only
+when it carries at least three digits, and give the honest refusal for a command
+with no number. Both offline branches (`localJarvisEngine.ts` schedule ~1262,
+outbound ~1388), the local intent classifier (`server.ts` ~885) and the
+`make_call` handler (`server.ts` ~9149) now route through them: a request with no
+number returns `outbound_call_authorization` with `actionExecuted: false`, a
+title of `No Number to Call (nothing staged)` / `No Number to Schedule (nothing
+recorded)`, and a reply that asks which number — never a staged placeholder.
+
+Evidence: 4 new cases in `src/tests/offlineCallTruth.test.ts` (file total 27):
+"make a call" refused with `actionExecuted: false`, `memory.stats.actionsExecuted`
+still 0 and no `9876543210` in the spoken text; "schedule call tomorrow" refused;
+a real named number (`call +91 98765 43210`) still staged; and a source guard that
+the branches call `offlineCallMissingNumberVerdict(` and the placeholder literal
+is gone. Negative-validated: reintroducing the placeholder fallback in the
+outbound branch fails exactly 2 of the 27 (`2 failed | 25 passed`); restored →
+27/27. Gates: lint (`tsc --noEmit`) exit 0; targeted 3 files / 52 passed; full
+suite **141 files / 1853 tests passed** (23.70 s, 0 failed); build exit 0
+(`dist/server.cjs` 968.3 kb). E2E: NOT RUN (no carrier/PSTN). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-02 23:06 UTC (04:36 IST 2026-10-03) — **FINALIZATION SLOT** of the
 2026-10-02 → 2026-10-03 window, the 04:35 IST fire. No new backlog item was advanced:
 the window was frozen and the tip `e99aaaf` re-verified end to end.
 
-Observed this run on `feature/hermes-full-completion` @ `e99aaaf`: `npm run lint`
+Observed that run on `feature/hermes-full-completion` @ `e99aaaf`: `npm run lint`
 (`tsc --noEmit`) exit 0; full `npx vitest run` **141 files / 1849 tests passed**
 (24.00 s, 0 failed); `npm run build` exit 0 with artifact `dist/server.cjs`
 **964.8 kb**. Security checks clean: `git check-ignore -v .env` → `.gitignore:4:.env`;
