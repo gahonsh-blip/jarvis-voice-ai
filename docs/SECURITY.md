@@ -314,6 +314,21 @@ spacing normalised (`'+91-9876543210'` → `'+91 ******3210'`). Guarded by
 (`2 failed | 37 passed` with the pre-fix body restored). `telephonyPermissions.ts`
 never shared the digit-free defect — it already returns `'Unknown / Private'`.
 
+**Update 2026-10-04 01:28 IST — the outbound-call authorization route confirmed calls it never held.**
+`POST /api/telephony/outbound/authorize` answered
+`success: true, authorized: false, message: 'Outbound call cancelled.'` for any
+decision other than `APPROVE`, even when `requestId` had never been staged, and
+the `APPROVE` branch marked an unknown id `authorized: true`. The route is the
+Level-4 gate on placing a call, so a fabricated "cancelled" or "authorized"
+answer tells the operator that an outbound action was withdrawn or cleared when
+the session manager held no such request — a false record on the very surface
+that is supposed to record human consent. `classifyOutboundAuthorization()`
+(`src/utils/hardening/outboundAuthorizationTruth.ts`) now reports `NOT_FOUND`
+(HTTP 404, no success flag) unless a real request record was found and its
+decision recorded; `APPROVED`/`REJECTED` are reported only for real records.
+Guarded by `src/tests/outboundAuthorizationTruth.test.ts` (9 tests);
+negative-validated (`2 failed | 7 passed` with the pre-fix route restored).
+
 **Update 2026-10-03 01:00 IST — the permission route accepted changes it never applied.**
 `POST /api/telephony/permissions` merged any caller-supplied object over the stored
 matrix (`{ ...current, ...req.body }`) and answered `success: true` unconditionally.

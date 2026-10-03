@@ -4,7 +4,31 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-03 19:15 UTC (00:45 IST 2026-10-04) — **WORK SLOT 7** of the
+Last cycle: 2026-10-03 19:58 UTC (01:28 IST 2026-10-04) — **WORK SLOT 8** of the
+2026-10-03 → 2026-10-04 window, the 01:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the outbound-call authorization route.**
+
+`POST /api/telephony/outbound/authorize` answered
+`success: true, authorized: false, message: 'Outbound call cancelled.'` for any
+decision that was not `APPROVE`, even when `requestId` had never been staged —
+reporting an outbound call as withdrawn when no request existed. The `APPROVE`
+branch marked an unknown id `authorized: true` for the same reason, so an
+operator could be told a call was cleared that the session manager never held.
+The route now passes the manager result through `classifyOutboundAuthorization`
+(a new pure helper in `src/utils/hardening/outboundAuthorizationTruth.ts`):
+unless a real request record was found and its decision recorded, it answers
+`NOT_FOUND` with HTTP 404 and no success flag. Evidence: `server.ts`
+(`/api/telephony/outbound/authorize`, `recorded` + `verdict` + `if (!verdict.success)`
+404 branch); `src/utils/hardening/outboundAuthorizationTruth.ts`;
+`src/tests/outboundAuthorizationTruth.test.ts` (9 cases) pins NOT_FOUND for both
+decisions on a missing/refused/request-less record, APPROVED/REJECTED on real
+records, the live `TelephonySessionManager` agreement, and the route wiring.
+Negative-validated: reverting `server.ts` fails exactly the 2 route assertions
+(`2 failed | 7 passed`), restored → 9/9. Gates on `4072027`: lint (`tsc --noEmit`)
+exit 0; full suite **145 files / 1871 tests passed** (24.02 s, 0 failed); build
+exit 0 (`dist/server.cjs` 994056 bytes). Item 13 remains `PARTIAL` — the sweep is
+not exhausted.
+
+Previous cycle: 2026-10-03 19:15 UTC (00:45 IST 2026-10-04) — **WORK SLOT 7** of the
 2026-10-03 → 2026-10-04 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the Computer Operator HUD's kill-switch gate.**
 
 `App.tsx` mounted `<ComputerOperatorModal>` without the `isEmergencyStopped`

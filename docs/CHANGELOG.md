@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 01:28 IST (2026-10-03 19:58 UTC) — window slot 8: outbound-call authorization refuses an unrecorded request
+
+### Fixed
+- **`POST /api/telephony/outbound/authorize` (`server.ts`) answered `success: true, authorized: false, message: 'Outbound call cancelled.'` for any decision that was not `APPROVE`, even when `requestId` had never been staged.** The operator was told an outbound call had been withdrawn when no request existed; the `APPROVE` branch marked an unknown id `authorized: true` for the same reason. The route now passes the manager result through `classifyOutboundAuthorization` (`src/utils/hardening/outboundAuthorizationTruth.ts`), which reports `NOT_FOUND` with HTTP 404 — and no success flag — unless a real request record was found and its decision recorded.
+
+### Tests
+- `src/tests/outboundAuthorizationTruth.test.ts` — 9 cases: NOT_FOUND for a missing/refused/request-less record under both decisions, APPROVED/REJECTED on real records, agreement with the live `TelephonySessionManager`, and a source guard that the route routes through the helper and no longer emits the fake cancellation literal.
+- Negative-validated: reverting `server.ts` fails exactly the 2 route assertions (`2 failed | 7 passed`); restored → 9/9.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **145 files / 1871 tests passed** (24.02 s, 0 failed); build exit 0 (`dist/server.cjs` 994056 bytes). Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 00:45 IST (2026-10-03 19:15 UTC) — window slot 7: the Computer Operator HUD reflects the live kill-switch state
 
 ### Fixed
