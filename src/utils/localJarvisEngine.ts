@@ -26,6 +26,8 @@ import {
   offlineAndroidRejectVerdict,
   offlineAndroidMessageRejectVerdict,
   offlineOutboundCancelVerdict,
+  offlineCallMissingNumberVerdict,
+  extractDialTarget,
 } from './computerOperator/offlineCallTruth';
 import { offlineEmergencyVerdict, offlineEmergencyReply } from './computerOperator/offlineEmergencyTruth';
 import { telephonyEngineMode, type TelephonyEngineMode } from './telephonyGatewayTruth';
@@ -1260,7 +1262,23 @@ export function processOfflineCommand(
     lower.includes('schedule call tomorrow')
   ) {
     const targetMatch = clean.match(/(?:नंबर पर फोन|कल फोन करना|schedule call tomorrow)\s*(.*)/i);
-    const target = targetMatch && targetMatch[1].trim() ? targetMatch[1].trim() : '+91 9876543210';
+    const target = extractDialTarget(targetMatch ? targetMatch[1] : '');
+    // No number was given: never stage a call to a fabricated placeholder. The
+    // literal placeholder fallback that used to live here is not a
+    // number the user named, so it is refused rather than recorded.
+    if (!target) {
+      const verdict = offlineCallMissingNumberVerdict('schedule');
+      const reply = isHindi ? verdict.replyHi : isHinglish ? verdict.replyHinglish : verdict.replyEn;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'outbound_call_authorization',
+        actionExecuted: verdict.actionExecuted,
+        actionDetail: { type: 'outbound_call_authorization', title: verdict.title, payload: { target: null, scheduled: true } },
+        updatedMemory,
+        offline: true,
+      };
+    }
     const masked = maskPhoneNumber(target);
     stagedOutboundCall = { destination: target, masked, isScheduled: true };
     const verdict = offlineCallVerdict('schedule', activeTelephonyEngineMode());
@@ -1370,7 +1388,27 @@ export function processOfflineCommand(
       !isTelephonyControlRequest(lower))
   ) {
     const targetMatch = clean.match(/(?:call|dial|फोन करो|कॉल करो|call lagao|इस नंबर पर फोन करो)\s+(.+)/i);
-    const target = targetMatch ? targetMatch[1].trim() : '+91 9876543210';
+    const target = extractDialTarget(targetMatch ? targetMatch[1] : '');
+    // No number was given ("make a call", "call now"): never stage a call to a
+    // fabricated placeholder. The literal fallback that used to live here
+    // (a hardcoded placeholder) is not a number the user named.
+    if (!target) {
+      const verdict = offlineCallMissingNumberVerdict('dial');
+      const reply = isHindi ? verdict.replyHi : isHinglish ? verdict.replyHinglish : verdict.replyEn;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'outbound_call_authorization',
+        actionExecuted: verdict.actionExecuted,
+        actionDetail: {
+          type: 'outbound_call_authorization',
+          title: verdict.title,
+          payload: { target: null, requiresApproval: false },
+        },
+        updatedMemory,
+        offline: true,
+      };
+    }
     const masked = maskPhoneNumber(target);
 
     // Stage for Level-4 Authorization

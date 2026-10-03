@@ -87,6 +87,10 @@ import {
   TelephonyDispatchPhase,
 } from './src/utils/telephonyDispatchTruth';
 import {
+  extractDialTarget,
+  offlineCallMissingNumberVerdict,
+} from './src/utils/computerOperator/offlineCallTruth';
+import {
   launchVerdict,
   launchReply,
 } from './src/utils/computerOperator/launchDispatchTruth';
@@ -881,7 +885,10 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
       !isTelephonyControlRequest(lower))
   ) {
     const targetMatch = text.match(/(?:call|dial|फोन करो|कॉल करो|call lagao)\s+(.+)/i);
-    const target = targetMatch ? targetMatch[1].trim() : 'Contact';
+    // Only a target that carries real digits is a number. "make a call" /
+    // "place a call" capture nothing, and a name is not dialable — neither may
+    // become a fabricated "Contact" that the handler then reports as called.
+    const target = extractDialTarget(targetMatch ? targetMatch[1] : '');
     return {
       intent: 'make_call',
       confidence: 0.96,
@@ -9142,7 +9149,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'make_call': {
-        const target = intentData.actionPayload?.target || 'Contact';
+        const target = extractDialTarget(intentData.actionPayload?.target);
+        if (!target) {
+          const verdict = offlineCallMissingNumberVerdict('dial');
+          spokenResponse = language.startsWith('hi') ? verdict.replyHi : verdict.replyEn;
+          actionExecuted = verdict.actionExecuted;
+          actionDetail = {
+            type: 'make_call',
+            title: verdict.title,
+            payload: { target: null, outcome: 'NO_NUMBER' },
+          };
+          break;
+        }
         const verdict = evaluateTelephonyDispatch('dial');
         const base = telephonyDispatchReply(verdict.outcome, language);
         spokenResponse = language.startsWith('hi') ? `${target}: ${base}` : `Call to ${target}: ${base}`;
