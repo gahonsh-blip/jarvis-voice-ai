@@ -449,7 +449,7 @@ export interface FreelanceLead {
   source: 'Website Form' | 'WhatsApp Inquiry' | 'Telegram AI Bot' | 'Direct Email' | string;
   projectType: 'Full-Stack Web App' | 'AI Integration' | 'Mobile App' | 'Automation Bot' | 'E-commerce' | string;
   rawRequirement: string;
-  budgetEstimate: { currency: 'INR' | 'USD'; amount: number };
+  budgetEstimate: { currency: 'INR' | 'USD'; amount: number | null };
   status: 'New Inquiry' | 'AI Requirements Extracted' | 'Quotation Sent' | 'In Progress' | 'Delivered' | 'Delivered & Closed' | 'Followed Up' | string;
   createdAt: string;
   quotation?: {

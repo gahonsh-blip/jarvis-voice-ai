@@ -14,6 +14,7 @@ import {
   Check,
 } from 'lucide-react';
 import { FreelanceLead } from '../types';
+import { formatLeadBudget } from '../utils/freelanceLeadTruth';
 
 interface Props {
   isOpen: boolean;
@@ -178,7 +179,7 @@ ${selectedLead.quotation.milestones.map((m, i) => `${i + 1}. ${m.title} - ₹${m
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-100 truncate">{lead.clientName}</span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300">
-                      ₹{lead.budgetEstimate.amount.toLocaleString()}
+                      {formatLeadBudget(lead.budgetEstimate.amount)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-slate-400">

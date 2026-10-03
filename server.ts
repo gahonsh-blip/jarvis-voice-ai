@@ -9,7 +9,7 @@ import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
 import { isTelephonyHubRequest, isCallHistoryRequest, isAnswerCallRequest, isHangupCallRequest, isRejectCallRequest, isTelephonyControlRequest } from './src/utils/telephonyIntentRouting';
 import { judgeSetNameIntent } from './src/utils/identityTruth';
-import { freelanceLeadsReply } from './src/utils/freelanceLeadTruth';
+import { freelanceLeadsReply, buildNewLeadRecord } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
 import {
   AUDIT_LOG_SOURCE_RECORDED,
@@ -398,7 +398,7 @@ export interface ServerFreelanceLead {
   source: string;
   projectType: string;
   rawRequirement: string;
-  budgetEstimate: { currency: string; amount: number };
+  budgetEstimate: { currency: string; amount: number | null };
   status: string;
   createdAt: string;
   quotation?: {
@@ -4267,26 +4267,17 @@ app.get('/api/freelance/leads', (req: Request, res: Response) => {
 
 app.post('/api/freelance/create-lead', (req: Request, res: Response) => {
   const { clientName, source, projectType, rawRequirement, budgetAmount } = req.body;
-  const newLead: ServerFreelanceLead = {
+  // Store only what the operator actually supplied. A missing budget stays
+  // unrecorded (no ₹50,000 default) and no quotation is fabricated from it.
+  const newLead = buildNewLeadRecord({
     id: `lead-${Date.now()}`,
-    clientName: clientName || 'New Client Inquiry',
-    source: source || 'Telegram AI Bot',
-    projectType: projectType || 'Full-Stack Web App',
-    rawRequirement: rawRequirement || 'Custom web application requirement.',
-    budgetEstimate: { currency: 'INR', amount: Number(budgetAmount) || 50000 },
-    status: 'AI Requirements Extracted',
+    clientName,
+    source,
+    projectType,
+    rawRequirement,
+    budget: budgetAmount,
     createdAt: new Date().toISOString(),
-    quotation: {
-      scopeSummary: `Complete turnkey implementation for ${projectType || 'Web App'}`,
-      timelineDays: 12,
-      totalPrice: Number(budgetAmount) || 50000,
-      milestones: [
-        { title: 'Phase 1: Architecture & UI Prototype', price: Math.round((Number(budgetAmount) || 50000) * 0.35), days: 4 },
-        { title: 'Phase 2: Core Engineering & Backend APIs', price: Math.round((Number(budgetAmount) || 50000) * 0.45), days: 5 },
-        { title: 'Phase 3: QA Testing, Deployment & Handover', price: Math.round((Number(budgetAmount) || 50000) * 0.20), days: 3 },
-      ],
-    },
-  };
+  }) as ServerFreelanceLead;
   memoryState.freelanceLeads.unshift(newLead);
   persistMemory();
   res.json({ success: true, lead: newLead });
