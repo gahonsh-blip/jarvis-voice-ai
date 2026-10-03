@@ -41,6 +41,7 @@ import {
   FileVideo,
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
+import { describeStagedChannel } from '../utils/hardening/youtubeChannelTruth';
 import {
   classifyProviderTestResponse,
   verifiedAccountName,
@@ -991,7 +992,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                         </div>
                         <p className="text-[11px] text-slate-400 font-mono">
                           {isYouTubeConnected
-                            ? (ytOauth?.channelTitle || 'Connected YouTube Channel')
+                            ? describeStagedChannel(ytOauth?.channelTitle)
                             : 'OAuth Disconnected — Connect via Platform Hub'}
                         </p>
                       </div>
@@ -1638,7 +1639,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col gap-2 font-mono text-xs">
                       <div className="flex justify-between">
                         <span className="text-slate-400">Target Channel:</span>
-                        <span className="text-slate-200 font-bold">{ytStagedPost.targetChannel || 'Connected YouTube Channel'}</span>
+                        <span className="text-slate-200 font-bold">{describeStagedChannel(ytStagedPost.targetChannel)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Video Title:</span>
@@ -1957,7 +1958,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           )}
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-100 text-xs">{ytOauth.channelTitle || 'YouTube Channel'}</span>
+                              <span className="font-bold text-slate-100 text-xs">{describeStagedChannel(ytOauth.channelTitle)}</span>
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
                                 {ytOauth.authType || 'OAuth 2.0'} Active
                               </span>

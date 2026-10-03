@@ -22,6 +22,7 @@ import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTru
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
+import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
@@ -2353,12 +2354,19 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
       const videoId = uploadData.id;
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       const finalPrivacy = uploadData.status?.privacyStatus || privacyStatus;
-      const uploadedChannel = uploadData.snippet?.channelTitle || channelTitle;
+      // Prefer the channel the provider echoed; otherwise the one read earlier in
+      // this route. If neither is a real title, the upload still succeeded — do
+      // not invent a channel name for it.
+      const uploadedChannel =
+        recordedChannelTitle(uploadData.snippet?.channelTitle) ?? recordedChannelTitle(channelTitle);
+      const channelLabel = uploadedChannel
+        ? `"${uploadedChannel}"`
+        : 'the connected channel (channel title not read)';
 
       post.providerUrn = videoId;
       post.videoUrl = videoUrl;
       post.privacyStatus = finalPrivacy;
-      post.targetChannel = uploadedChannel;
+      post.targetChannel = uploadedChannel ?? undefined;
 
       // A 2xx with an id proves the upload was accepted, but not that the video
       // is publicly watchable: a PRIVATE or UNLISTED upload is not visible to
@@ -2372,8 +2380,8 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
         finalTruthState: 'VERIFIED',
         providerUrn: videoId,
         userMessage: isPubliclyVisible
-          ? `✅ VERIFIED & PUBLIC: Live on YouTube Channel "${uploadedChannel}"!\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}\n• Privacy Mode: ${finalPrivacy.toUpperCase()} — publicly watchable`
-          : `✅ VERIFIED UPLOAD: Accepted by YouTube Data API on channel "${uploadedChannel}" as ${finalPrivacy.toUpperCase()} — ${finalPrivacy === 'private' ? 'visible only to the channel owner' : 'visible only with the direct link, not publicly listed'}.\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}`,
+          ? `✅ VERIFIED & PUBLIC: Live on YouTube Channel ${channelLabel}!\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}\n• Privacy Mode: ${finalPrivacy.toUpperCase()} — publicly watchable`
+          : `✅ VERIFIED UPLOAD: Accepted by YouTube Data API on channel ${channelLabel} as ${finalPrivacy.toUpperCase()} — ${finalPrivacy === 'private' ? 'visible only to the channel owner' : 'visible only with the direct link, not publicly listed'}.\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}`,
       };
     } else {
       const errDetail = uploadData?.error?.message || `HTTP ${uploadRes.status}: ${uploadRes.statusText}`;
@@ -4422,7 +4430,9 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     creativePrompt: 'High-tech JARVIS HUD telemetry showing secure cloud authorization and automated upload.',
     status: 'pending_approval',
     privacyStatus: validPrivacy,
-    targetChannel: memoryState.youTubeConnection?.channelTitle || 'YouTube Channel',
+    // Stage the channel actually recorded in memory; if none was read, leave it
+    // unset so the UI says so instead of displaying an invented channel name.
+    targetChannel: recordedChannelTitle(memoryState.youTubeConnection?.channelTitle) ?? undefined,
     isTestUpload: !videoPayloadBase64 || Boolean(isTestUpload),
     videoFileName: videoFileName || (videoPayloadBase64 ? 'uploaded_video.mp4' : 'synthetic_test.mp4'),
     videoPayloadBase64: videoPayloadBase64 || undefined,
@@ -4438,7 +4448,7 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
   // Register Level 4 Action in Permission Gateway
   createPendingActionRequest({
     exactAction: `YouTube Video Upload (${validPrivacy.toUpperCase()}) - "${validTitle}"`,
-    target: `YouTube Channel: ${memoryState.youTubeConnection?.channelTitle || 'Connected Channel'}`,
+    target: `YouTube Channel: ${describeStagedChannel(memoryState.youTubeConnection?.channelTitle)}`,
     contentChanges: `Title: "${validTitle}" | Privacy: ${validPrivacy.toUpperCase()} | Tags: ${tagList.join(', ')} | File: ${newPost.videoFileName}`,
     level: 4,
     source: 'social_hub_youtube_upload',
@@ -4496,7 +4506,9 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     creativePrompt: 'High-tech JARVIS HUD telemetry showing secure cloud authorization and automated upload.',
     status: 'pending_approval',
     privacyStatus: validPrivacy,
-    targetChannel: memoryState.youTubeConnection?.channelTitle || 'YouTube Channel',
+    // Stage the channel actually recorded in memory; if none was read, leave it
+    // unset so the UI says so instead of displaying an invented channel name.
+    targetChannel: recordedChannelTitle(memoryState.youTubeConnection?.channelTitle) ?? undefined,
     isTestUpload: true,
     scheduledTime: 'Instant upon Level 4 Authorization',
     likesSimulated: 0,
@@ -4510,7 +4522,7 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
   // Register Level 4 Action in Permission Gateway
   createPendingActionRequest({
     exactAction: `YouTube Video Upload (Test Mode: ${validPrivacy.toUpperCase()})`,
-    target: `YouTube Channel: ${memoryState.youTubeConnection?.channelTitle || 'Connected Channel'}`,
+    target: `YouTube Channel: ${describeStagedChannel(memoryState.youTubeConnection?.channelTitle)}`,
     contentChanges: `Title: "${title}" | Privacy: ${validPrivacy.toUpperCase()} | Tags: ${tags.join(', ')}`,
     level: 4,
     source: 'social_hub_youtube_test',
