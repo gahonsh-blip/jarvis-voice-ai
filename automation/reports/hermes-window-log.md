@@ -10482,3 +10482,71 @@ full suite 147 files / 1895 tests passed (23.95 s, 0 failed); build exit 0
 (`dist/server.cjs` 997687 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
 
 Commits: fa3684c (fix + test), 85e322c (docs). Item #13 remains PARTIAL.
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:35
+Window date: 2026-10-03 (IST 2026-10-04)   Window slots completed so far: 13
+
+Completed:
+- #13 Zero-fake-success for all tools — live social account identity. The four
+  live probes (LinkedIn/Facebook/Instagram/YouTube) in testPlatformConnection and
+  both OAuth callbacks (LinkedIn, YouTube) invented account names when the
+  provider response omitted one ('LinkedIn Member', 'Facebook Page',
+  'Instagram Account', 'YouTube Channel', 'YouTube User'). Routed every
+  displayed/persisted name through observedAccountName()/describeVerifiedAccount()
+  (null when unobserved; real identifier fallback). Evidence:
+  src/utils/hardening/socialAccountIdTruth.ts;
+  src/tests/socialAccountIdTruth.test.ts (8 cases, 8/8 pass);
+  server.ts probes ~2511/2563/2599/2643, callbacks ~4973/5308/5457.
+
+In Progress:
+- #13 Zero-fake-success for all tools — sweep not exhausted; next un-audited
+  zero-fake-success surface to be picked next slot.
+
+Remaining:
+- #13 sweep continues; items 14+ of the 60-item backlog remain, many blocked on
+  hardware/credentials (see Blocked).
+
+Bugs Found:
+- Live social connection probes reported success:true/status:VERIFIED (real
+  authenticated call) but labelled the account with an invented name when the
+  provider returned none — an unobserved name presented as verified.
+
+Bugs Fixed:
+- server.ts: all four probes + both OAuth callbacks now return/persist null (or
+  the real identifier) instead of invented literals. Verified by source-guard
+  test: reverting observedAccountName(item.snippet?.title) to `|| 'YouTube
+  Channel'` fails exactly 1 of 8 (observed 1 failed | 7 passed); restored -> 8/8.
+
+Tests:    149 files / 1911 tests passed, 0 failed (full `npx vitest run`, 24.52s)
+Lint:     tsc --noEmit exit 0
+Build:    exit 0 (dist/server.cjs 999631 bytes / 976.2 kb)
+E2E:      NOT RUN (no platform credentials, no handset)
+Security: git status shows only the 3 intended files + docs; no .env/node_modules/dist staged; no token in diff
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle updated)
+Branch:  feature/hermes-full-completion
+Commit:  8dec240 (code) / 3274b29 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         not opened this slot (work slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- Real Android E2E — requires a physical handset
+- Real Screenshot — requires a display session
+- Live platform probes against real providers — require real LinkedIn/Facebook/
+  Instagram/Google credentials
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- Continue the Item 13 zero-fake-success sweep on the next un-audited surface.
+  Finalization slot (04:35 IST) must not start new development.
+
+हिंदी सारांश (एक पंक्ति):
+- सोशल कनेक्शन जाँचों में जब प्रोवाइडर नाम नहीं लौटाता तो नकली नाम ("LinkedIn
+  Member" आदि) दिखाना बंद किया; अब वास्तविक नाम या स्पष्ट "नाम नहीं मिला" दिखता है।
+
+---
