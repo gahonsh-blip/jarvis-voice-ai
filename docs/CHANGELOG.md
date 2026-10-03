@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 01:50 IST (2026-10-03 20:20 UTC) — window slot 9: the mobile bridge heartbeat route reports live device truth
+
+### Fixed
+- **`POST /api/mobile/bridge/heartbeat` (`server.ts`) answered `success: true, outcome: 'VERIFIED'` for every heartbeat the gateway accepted.** A simulated device, and a heartbeat whose session had already lapsed so the bridge status read `MOBILE_NOT_CONNECTED`, were both reported as a verified live bridge. The route now passes the observed heartbeat through `classifyBridgeHeartbeat` (`src/utils/hardening/bridgeHeartbeatTruth.ts`): a real, live, non-simulated device is `VERIFIED`; a simulated device is `SIMULATION_ONLY`; a heartbeat that did not leave the bridge live is `PARTIAL`. `success` equals `VERIFIED`, and a new `verified` field carries the same proof.
+
+### Tests
+- `src/tests/bridgeHeartbeatTruth.test.ts` — 9 cases: the four helper outcomes, agreement with the real `AndroidBridgeGateway` (paired live → VERIFIED, simulated → SIMULATION_ONLY, lapsed → PARTIAL), and a source guard that the route routes through the helper and no longer emits the unconditional `VERIFIED` literal.
+- Negative-validated: the pre-fix `server.ts` contains the removed literal `success: true, outcome: 'VERIFIED', status: bridgeGateway.getStatus()` (confirmed via `git show HEAD:server.ts`); with the fix all 9 pass.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **146 files / 1880 tests passed** (23.86 s, 0 failed); build exit 0 (`dist/server.cjs` 995370 bytes). Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 01:28 IST (2026-10-03 19:58 UTC) — window slot 8: outbound-call authorization refuses an unrecorded request
 
 ### Fixed
