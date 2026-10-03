@@ -10444,6 +10444,26 @@ Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
 exhausted.
 
 
+## Slot 2026-10-04 03:05 IST (WORK SLOT 12) — item 13: OAuth popup account notice
+
+Advance: `SocialMediaModal.tsx`'s OAuth popup listener fell back to the literals
+`event.data.member?.name || 'LinkedIn Member'` and
+`event.data.channel?.channelTitle || 'Channel'`, so a popup that returned no
+name still announced a named account. New
+`src/utils/hardening/oauthAccountNoticeTruth.ts` (`recordedAccountName`,
+`oauthConnectionNotice`) returns the recorded name or `null` and states plainly
+that the account name was not returned. Both success branches and their spoken
+lines route through it. Evidence: `src/tests/oauthAccountNoticeTruth.test.ts`
+(8 cases); negative-validated (inject a `'LinkedIn Member'` fallback -> 3 of 8
+fail; restored -> 8/8).
+
+Gates (observed): lint (`tsc --noEmit`) exit 0; targeted 1 file / 8 passed;
+full suite 148 files / 1903 tests passed (24.39 s, 0 failed); build exit 0
+(`dist/server.cjs` 974.3 kb). E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+
+Commits: 36eb90a (fix + test), cb6085e (docs). State branch: 6fbab92. Item #13
+remains PARTIAL — the sweep is not exhausted.
+
 ## Slot 2026-10-04 02:35 IST (WORK SLOT 11) — item 13: freelance lead intake
 
 Advance: `POST /api/freelance/create-lead` in `server.ts` invented a ₹50,000
