@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 02:35 IST (2026-10-03 21:05 UTC) — window slot 10: the staged YouTube target channel is never invented
+
+### Fixed
+- **The YouTube draft routes (`POST /api/social/youtube/upload-draft`, `POST /api/social/youtube/draft-test` in `server.ts`) staged `targetChannel: memoryState.youTubeConnection?.channelTitle || 'YouTube Channel'` and named `|| 'Connected Channel'` in their Level-4 permission-gateway rows; `SocialMediaModal.tsx` rendered `|| 'Connected YouTube Channel'`.** Neither route reads a channel, so a draft staged before any channel had been read presented an invented channel name to the operator and the approval surface. A new `src/utils/hardening/youtubeChannelTruth.ts` (`recordedChannelTitle`, `describeStagedChannel`, `CHANNEL_NOT_RECORDED_LABEL`) returns the recorded title or `null`; every draft `targetChannel`, the permission `target`, the `verifyAndPublishToYouTube` result message, and both Social Hub renders route through it, and an unrecorded channel is left unset so the UI says `channel not recorded — no channel was read`.
+
+### Tests
+- `src/tests/youtubeChannelTruth.test.ts` — 6 cases: placeholder / blank / non-string inputs, the display label, and source guards that `server.ts` and `SocialMediaModal.tsx` no longer emit the three invented literals.
+- Negative-validated: removing `'Connected YouTube Channel'` from the placeholder set fails exactly 2 of 6; restored → 6/6.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; targeted 1 file / 6 passed; related truth tests 3 files / 46 passed; full suite **147 files / 1886 tests passed** (24.33 s, 0 failed); build exit 0 (`dist/server.cjs` 996462 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 01:50 IST (2026-10-03 20:20 UTC) — window slot 9: the mobile bridge heartbeat route reports live device truth
 
 ### Fixed
