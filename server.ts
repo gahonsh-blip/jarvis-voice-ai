@@ -30,6 +30,7 @@ import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermis
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
+import { classifyOutboundAuthorization } from './src/utils/hardening/outboundAuthorizationTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -8594,13 +8595,36 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
   try {
     const { requestId, actionId, decision, approverName = 'HUMAN_OPERATOR' } = req.body;
 
-    if (decision !== 'APPROVE') {
-      TelephonySessionManager.authorizeOutboundRequest(requestId, 'REJECT', approverName);
-      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', approverName);
-      return res.json({ success: true, authorized: false, message: 'Outbound call cancelled.' });
+    const requestedDecision: 'APPROVE' | 'REJECT' = decision === 'APPROVE' ? 'APPROVE' : 'REJECT';
+    const recorded = TelephonySessionManager.authorizeOutboundRequest(
+      requestId,
+      requestedDecision,
+      approverName
+    );
+    const verdict = classifyOutboundAuthorization(requestedDecision, recorded);
+
+    // A requestId that was never staged cannot be cancelled or authorized.
+    // Reporting success here told the operator an outbound call had been
+    // withdrawn (or approved) when no request existed.
+    if (!verdict.success) {
+      return res.status(404).json({
+        success: false,
+        authorized: false,
+        outcome: verdict.outcome,
+        message: verdict.message,
+      });
     }
 
-    const authRes = TelephonySessionManager.authorizeOutboundRequest(requestId, 'APPROVE', approverName);
+    if (requestedDecision === 'REJECT') {
+      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', approverName);
+      return res.json({
+        success: true,
+        authorized: false,
+        outcome: verdict.outcome,
+        message: verdict.message,
+      });
+    }
+
     if (actionId) updateActionRequestStatus(actionId, 'APPROVED', approverName);
 
     // Verify the active engine can actually place a PSTN call before
@@ -8620,11 +8644,11 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
       });
     }
 
-    const dest = authRes.request?.destinationNumber || req.body.destinationNumber;
+    const dest = recorded.request?.destinationNumber || req.body.destinationNumber;
     const sessionRes = TelephonySessionManager.createOutboundSession({
       destinationNumber: dest,
-      purpose: authRes.request?.purpose || 'Outbound consultation',
-      language: authRes.request?.language || 'hi-IN',
+      purpose: recorded.request?.purpose || 'Outbound consultation',
+      language: recorded.request?.language || 'hi-IN',
       isSimulated: Boolean(req.body.isSimulated),
     });
 
