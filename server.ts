@@ -23,6 +23,7 @@ import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
+import { observedAccountName, describeVerifiedAccount } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
@@ -2225,7 +2226,9 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
   }
 
   // 3. Verify Channel Status
-  let channelTitle = memoryState.youTubeConnection?.channelTitle || 'YouTube Channel';
+  // Honest empty default: use the recorded title if any, else no name (never the
+  // invented 'YouTube Channel'). Downstream passes it through recordedChannelTitle.
+  let channelTitle = memoryState.youTubeConnection?.channelTitle || '';
   let channelId = memoryState.youTubeConnection?.channelId || '';
 
   try {
@@ -2506,10 +2509,13 @@ async function testPlatformConnection(platformKey: string): Promise<{
       });
       if (res.ok) {
         const data: any = await res.json().catch(() => null);
-        const memberName = data?.name || `${data?.given_name || ''} ${data?.family_name || ''}`.trim() || 'LinkedIn Member';
+        // The token authenticated, but LinkedIn may not return a name. Never
+        // fall back to the invented 'LinkedIn Member' — name the identity from
+        // the real URN when the provider omitted the name.
+        const memberName = observedAccountName(data?.name) ?? observedAccountName(`${data?.given_name || ''} ${data?.family_name || ''}`.trim());
         const memberUrn = data?.sub ? `urn:li:person:${data.sub}` : conn?.authorUrn;
         if (conn && conn.connected) {
-          conn.name = memberName;
+          if (memberName) conn.name = memberName;
           if (data?.picture) conn.picture = data.picture;
           if (data?.email) conn.email = data.email;
           if (memberUrn) conn.authorUrn = memberUrn;
@@ -2518,9 +2524,11 @@ async function testPlatformConnection(platformKey: string): Promise<{
         return {
           success: true,
           status: 'VERIFIED',
-          accountName: memberName,
+          accountName: memberName ?? undefined,
           accountIdentifier: memberUrn,
-          message: `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`,
+          message: memberName
+            ? `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`
+            : `Live Verified: Connected to Personal Member Profile (${memberUrn}). The provider did not return an account name.`,
         };
       } else {
         if (conn) {
@@ -2553,12 +2561,15 @@ async function testPlatformConnection(platformKey: string): Promise<{
       const res = await fetch(`https://graph.facebook.com/v20.0/${pageId}?fields=id,name,category,link&access_token=${token}`);
       const data: any = await res.json();
       if (res.ok && data?.id) {
+        const pageName = observedAccountName(data.name);
         return {
           success: true,
           status: 'VERIFIED',
-          accountName: data.name || 'Facebook Page',
+          accountName: pageName ?? undefined,
           accountIdentifier: data.id,
-          message: `Connected & Verified to Page "${data.name}" (${data.category || 'Business'}).`,
+          message: pageName
+            ? `Connected & Verified to Page "${pageName}" (${data.category || 'Business'}).`
+            : `Connected & Verified to Page ID ${data.id}. The provider did not return a page name.`,
         };
       } else {
         return {
@@ -2586,12 +2597,16 @@ async function testPlatformConnection(platformKey: string): Promise<{
       const res = await fetch(`https://graph.facebook.com/v20.0/${igUserId}?fields=id,username,name&access_token=${token}`);
       const data: any = await res.json();
       if (res.ok && data?.id) {
+        // Prefer the real @handle, then the returned name, then the id. Never
+        // invent an 'Instagram Account' name when the provider returned none.
+        const igUsername = observedAccountName(data.username);
+        const igIdentity = igUsername ? `@${igUsername}` : (observedAccountName(data.name) ?? data.id);
         return {
           success: true,
           status: 'VERIFIED',
-          accountName: data.username ? `@${data.username}` : (data.name || 'Instagram Account'),
+          accountName: igIdentity,
           accountIdentifier: data.id,
-          message: `Connected & Verified to Instagram account ${data.username ? `@${data.username}` : data.id}.`,
+          message: `Connected & Verified to Instagram account ${igIdentity}.`,
         };
       } else {
         return {
@@ -2627,13 +2642,15 @@ async function testPlatformConnection(platformKey: string): Promise<{
         const data: any = await res.json().catch(() => null);
         if (res.ok && data?.items?.length > 0) {
           const item = data.items[0];
-          const title = item.snippet?.title || 'YouTube Channel';
+          // Never fall back to the invented 'YouTube Channel' name. When the
+          // provider returned no title, name the channel from its real id.
+          const title = observedAccountName(item.snippet?.title);
           const chId = item.id || '';
           const avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url;
 
           // Update memoryState with verified channel data
           if (memoryState.youTubeConnection) {
-            memoryState.youTubeConnection.channelTitle = title;
+            if (title) memoryState.youTubeConnection.channelTitle = title;
             memoryState.youTubeConnection.channelId = chId;
             if (avatarUrl) memoryState.youTubeConnection.avatarUrl = avatarUrl;
             persistMemory();
@@ -2642,9 +2659,11 @@ async function testPlatformConnection(platformKey: string): Promise<{
           return {
             success: true,
             status: 'VERIFIED',
-            accountName: title,
+            accountName: title ?? chId ?? undefined,
             accountIdentifier: chId,
-            message: `Connected & Verified to YouTube Channel "${title}" (${chId}) via OAuth 2.0.`,
+            message: title
+              ? `Connected & Verified to YouTube Channel "${title}" (${chId}) via OAuth 2.0.`
+              : `Connected & Verified to YouTube Channel ${chId} via OAuth 2.0. The provider did not return a channel name.`,
           };
         } else {
           const errMsg = data?.error?.message || `HTTP ${res.status}`;
@@ -4952,7 +4971,9 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       },
     });
 
-    let memberName = 'LinkedIn Member';
+    // The authenticated name, or null when LinkedIn did not return one. Never
+    // fall back to the invented 'LinkedIn Member'.
+    let memberName: string | null = null;
     let memberSub = '';
     let authorUrn = 'urn:li:person:self';
     let memberEmail = '';
@@ -4962,12 +4983,14 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       const uData: any = await userinfoRes.json().catch(() => null);
       if (uData) {
         memberSub = uData.sub || '';
-        memberName = uData.name || `${uData.given_name || ''} ${uData.family_name || ''}`.trim() || 'LinkedIn Member';
+        memberName = observedAccountName(uData.name) ?? observedAccountName(`${uData.given_name || ''} ${uData.family_name || ''}`.trim());
         authorUrn = memberSub ? `urn:li:person:${memberSub}` : 'urn:li:person:self';
         memberEmail = uData.email || '';
         memberPicture = uData.picture || '';
       }
     }
+
+    const memberDisplay = describeVerifiedAccount('linkedin', memberName, authorUrn);
 
     // Persist securely in server state
     memoryState.linkedInConnection = {
@@ -4975,7 +4998,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       authType: 'OAUTH_2_0',
       memberSub,
       authorUrn,
-      name: memberName,
+      name: memberName ?? undefined,
       email: memberEmail,
       picture: memberPicture,
       connectedAt: new Date().toISOString(),
@@ -4987,7 +5010,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
 
     // Log security audit entry
     addAuditLog(
-      `LinkedIn Personal Profile Connected via OAuth 2.0 (${memberName} - ${authorUrn})`,
+      `LinkedIn Personal Profile Connected via OAuth 2.0 (${memberDisplay} - ${authorUrn})`,
       1,
       'HUMAN_CONFIRMATION',
       'VERIFIED'
@@ -5005,7 +5028,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       ✓
     </div>
     <h2 style="color: #4ade80; margin: 0 0 8px 0; font-size: 20px; font-weight: 700;">LinkedIn Connected!</h2>
-    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Authenticated as <strong>${memberName}</strong></p>
+    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Authenticated as <strong>${memberDisplay}</strong></p>
     <p style="color: #86efac; font-size: 12px; font-family: monospace; margin: 0 0 20px 0;">${authorUrn}</p>
     <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
       Target: Personal Member Profile (Real UGC Posts API Ready)
@@ -5283,9 +5306,10 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     const expiresIn = tokenData.expires_in || 3600;
     const grantedScopes = grantedScopesFromTokenResponse(tokenData) ?? [];
 
-    // Query Channel Info from YouTube Data API v3
+    // The authenticated channel title, or null when the API did not return one.
+    // Never fall back to the invented 'YouTube Channel'.
     let channelId = '';
-    let channelTitle = 'YouTube Channel';
+    let channelTitle: string | null = null;
     let customUrl = '';
     let avatarUrl = '';
 
@@ -5297,7 +5321,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       if (ytResp.ok && ytData?.items?.length > 0) {
         const item = ytData.items[0];
         channelId = item.id || '';
-        channelTitle = item.snippet?.title || 'YouTube Channel';
+        channelTitle = observedAccountName(item.snippet?.title);
         customUrl = item.snippet?.customUrl || '';
         avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '';
       }
@@ -5306,14 +5330,14 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     }
 
     // Fallback if channel snippet not returned
-    if (!channelId || channelTitle === 'YouTube Channel') {
+    if (!channelId || !channelTitle) {
       try {
         const userResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         const userData: any = await userResp.json().catch(() => null);
         if (userResp.ok && userData) {
-          if (!channelTitle || channelTitle === 'YouTube Channel') channelTitle = userData.name || userData.email || 'YouTube User';
+          if (!channelTitle) channelTitle = observedAccountName(userData.name) ?? observedAccountName(userData.email);
           if (!avatarUrl) avatarUrl = userData.picture || '';
         }
       } catch (uErr) {
@@ -5321,12 +5345,14 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       }
     }
 
+    const channelDisplay = describeVerifiedAccount('youtube', channelTitle, channelId);
+
     // Persist securely in memory and encrypted disk
     memoryState.youTubeConnection = {
       connected: true,
       authType: 'OAUTH_2_0',
       channelId,
-      channelTitle,
+      channelTitle: channelTitle ?? undefined,
       customUrl,
       avatarUrl,
       connectedAt: new Date().toISOString(),
@@ -5338,7 +5364,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     persistMemory();
 
     addAuditLog(
-      `YouTube Channel Connected via OAuth 2.0 (${channelTitle} - ${channelId || 'Authenticated'})`,
+      `YouTube Channel Connected via OAuth 2.0 (${channelDisplay} - ${channelId || 'Authenticated'})`,
       1,
       'HUMAN_CONFIRMATION',
       'VERIFIED'
@@ -5356,7 +5382,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       ▶
     </div>
     <h2 style="color: #4ade80; margin: 0 0 8px 0; font-size: 20px; font-weight: 700;">YouTube Connected!</h2>
-    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Channel: <strong>${channelTitle}</strong></p>
+    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Channel: <strong>${channelDisplay}</strong></p>
     <p style="color: #86efac; font-size: 12px; font-family: monospace; margin: 0 0 20px 0;">${channelId ? 'ID: ' + channelId : 'OAuth 2.0 Token Active'}</p>
     <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
       Google Cloud & YouTube Data API v3 Ready
@@ -5368,7 +5394,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       window.opener.postMessage({
         type: 'YOUTUBE_OAUTH_SUCCESS',
         channel: {
-          channelTitle: ${JSON.stringify(channelTitle)},
+          channelTitle: ${JSON.stringify(channelTitle ?? channelDisplay)},
           channelId: ${JSON.stringify(channelId)},
           avatarUrl: ${JSON.stringify(avatarUrl)}
         }
@@ -5426,13 +5452,15 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
 
       if (probeRes.ok && probeData?.items?.length > 0) {
         const item = probeData.items[0];
-        const title = item.snippet?.title || 'YouTube Channel';
+        // Never invent 'YouTube Channel' when the API omitted the title; fall
+        // back to the real channel id, mirroring the connect callback.
+        const title = observedAccountName(item.snippet?.title);
         const chId = item.id || '';
         const customUrl = item.snippet?.customUrl || '';
         const avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '';
 
         if (memoryState.youTubeConnection) {
-          memoryState.youTubeConnection.channelTitle = title;
+          if (title) memoryState.youTubeConnection.channelTitle = title;
           memoryState.youTubeConnection.channelId = chId;
           memoryState.youTubeConnection.customUrl = customUrl;
           if (avatarUrl) memoryState.youTubeConnection.avatarUrl = avatarUrl;
@@ -5449,7 +5477,7 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
           status: 'API_VERIFIED',
           canPublish: uploadScopeGranted,
           authType: 'OAUTH_2_0',
-          channelTitle: title,
+          channelTitle: title ?? chId ?? undefined,
           channelId: chId,
           customUrl,
           avatarUrl,
