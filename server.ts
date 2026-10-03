@@ -5076,15 +5076,24 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
     });
   }
 
+  // A static env token has not been probed against LinkedIn, so it is
+  // configured — never a live connection. The canonical `/api/social/platforms`
+  // card already labels it CONFIGURED; this endpoint answering connected: true
+  // was the fabricated success this project forbids, and it contradicted the one
+  // endpoint the UI trusts. Only `/api/social/platforms/test` can confirm it.
   if (staticToken) {
     return res.json({
-      connected: true,
+      connected: false,
+      status: 'CONFIGURED',
+      configured: true,
       authType: 'STATIC_ENV_TOKEN',
       name: 'Configured Personal Member (Env Token)',
       authorUrn: staticUrn || 'urn:li:person:self',
       hasClientId: Boolean(clientId),
       hasClientSecret: Boolean(clientSecret),
       redirectUri,
+      message:
+        'A static LINKEDIN_ACCESS_TOKEN is present but has not been verified against LinkedIn. Run "Test connection" to confirm the account before publishing.',
     });
   }
 
