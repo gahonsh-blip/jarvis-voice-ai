@@ -1,19 +1,19 @@
 {
   "window_date": "2026-10-03",
   "window_started_at": "2026-10-03T15:35:00Z",
-  "last_slot_at": "2026-10-03T21:45:00Z",
-  "slots_completed": 12,
+  "last_slot_at": "2026-10-03T22:14:00Z",
+  "slots_completed": 13,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "cb6085e",
+  "last_commit": "cd5d308",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
     "Real Android E2E requires a physical handset",
     "Real Screenshot requires a display session",
-    "LinkedIn live status probe requires a real LinkedIn credential"
+    "Live social account probes require real platform credentials"
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
