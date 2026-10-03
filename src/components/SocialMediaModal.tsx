@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
 import { describeStagedChannel } from '../utils/hardening/youtubeChannelTruth';
+import { oauthConnectionNotice } from '../utils/hardening/oauthAccountNoticeTruth';
 import {
   classifyProviderTestResponse,
   verifiedAccountName,
@@ -152,10 +153,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       if (event.data?.type === 'LINKEDIN_OAUTH_SUCCESS') {
         setIsConnectingOAuth(false);
         setOauthError(null);
-        setOauthNotice(`✅ Successfully authorized Personal Profile for ${event.data.member?.name || 'LinkedIn Member'}!`);
+        const linkedinNotice = oauthConnectionNotice('linkedin', event.data.member?.name);
+        setOauthNotice(linkedinNotice.notice);
         fetchPlatforms();
         fetchPosts();
-        onSpeak(`LinkedIn personal profile connected successfully for ${event.data.member?.name || 'Member'}, Sir.`);
+        onSpeak(linkedinNotice.spoken);
       } else if (event.data?.type === 'LINKEDIN_OAUTH_ERROR') {
         setIsConnectingOAuth(false);
         setOauthError(`LinkedIn OAuth error: ${event.data.error || 'Authorization cancelled'}`);
@@ -165,10 +167,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         setIsConnectingOAuth(false);
         setOauthError(null);
         setIsGoogleTestingModeBlocked(false);
-        setOauthNotice(`✅ Successfully connected YouTube Channel "${event.data.channel?.channelTitle || 'Channel'}"!`);
+        const youtubeNotice = oauthConnectionNotice('youtube', event.data.channel?.channelTitle);
+        setOauthNotice(youtubeNotice.notice);
         fetchPlatforms();
         fetchPosts();
-        onSpeak(`YouTube channel connected successfully for ${event.data.channel?.channelTitle || 'Channel'}, Sir.`);
+        onSpeak(youtubeNotice.spoken);
       } else if (event.data?.type === 'YOUTUBE_OAUTH_ERROR') {
         setIsConnectingOAuth(false);
         const errMsg = event.data.error || 'Authorization cancelled';
