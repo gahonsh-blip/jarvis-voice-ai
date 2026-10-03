@@ -10442,3 +10442,23 @@ Security: `.env` ignored (`.gitignore:4:.env`), no `.env` / `node_modules` /
 
 Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
 exhausted.
+
+
+## Slot 2026-10-04 02:35 IST (WORK SLOT 11) — item 13: freelance lead intake
+
+Advance: `POST /api/freelance/create-lead` in `server.ts` invented a ₹50,000
+budget (`Number(budgetAmount) || 50000`), a client, a project type, a source and
+an 'AI Requirements Extracted' status, then priced a three-milestone quotation
+against the invented ₹50,000. New `buildNewLeadRecord` / `recordedBudgetAmount`
+in `src/utils/freelanceLeadTruth.ts` store only supplied values (unrecorded
+budget -> null; quotation attached only when a budget exists; status ->
+'Lead Entered'). `FreelancePipelineModal.tsx` and the Telegram listing render
+'Budget not recorded'; `FreelanceLead.budgetEstimate.amount` is now
+`number | null`. Evidence: `src/tests/freelanceLeadTruth.test.ts` (14 cases);
+negative-validated (restore `: 50000` -> 3 of 14 fail; restored -> 14/14).
+
+Gates (observed): lint (`tsc --noEmit`) exit 0; targeted 1 file / 14 passed;
+full suite 147 files / 1895 tests passed (23.95 s, 0 failed); build exit 0
+(`dist/server.cjs` 997687 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+Commits: fa3684c (fix + test), 85e322c (docs). Item #13 remains PARTIAL.
