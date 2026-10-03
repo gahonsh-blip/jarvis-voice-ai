@@ -77,3 +77,21 @@ export function blueprintPhaseCountLabel(statusKnown: boolean, total: unknown): 
   }
   return `TOTAL PHASES: ${total}`;
 }
+
+/**
+ * Spoken reply for the offline `check_project` branch. The branch opens the
+ * Master Blueprint view but never reads `/api/blueprint`, so it cannot know how
+ * many phases exist or whether they are active. The old reply asserted
+ * "Phase 0 to 9" / "all phases active" / "फेज 0 से 9 सक्रिय हैं" — a readiness
+ * claim nobody measured. This says the view is opening and that the phase list
+ * is unread.
+ */
+export function blueprintRoadmapReply(lang: 'hindi' | 'hinglish' | 'english'): string {
+  if (lang === 'hindi') {
+    return 'मास्टर ब्लूप्रिंट दृश्य खोला जा रहा है। इस ऑफ़लाइन पथ पर /api/blueprint नहीं पढ़ा गया, इसलिए फेज सूची या सक्रियता की पुष्टि नहीं हुई।';
+  }
+  if (lang === 'hinglish') {
+    return 'Master Blueprint view khol raha hoon, Sir. Is offline path par /api/blueprint nahi padha gaya, isliye phase list ya active status confirm nahi hua.';
+  }
+  return 'Opening the Master Blueprint view. This offline path did not read /api/blueprint, so the phase list and its active status are unconfirmed.';
+}

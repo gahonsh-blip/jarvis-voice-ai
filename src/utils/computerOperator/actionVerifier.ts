@@ -33,6 +33,16 @@ export class ActionVerifier {
   }
 
   /**
+   * Clears every retry counter. Call this when a new task starts: the counters
+   * are keyed by action id/type, which repeats across tasks, so a spent budget
+   * from a previous task would otherwise make a fresh task skip its own safe
+   * retry and report a verification failure it never actually attempted.
+   */
+  public static resetAllRetries() {
+    this.retryCounters.clear();
+  }
+
+  /**
    * Verifies the outcome of an action by comparing pre-action and post-action observations
    */
   public static verifyAction(

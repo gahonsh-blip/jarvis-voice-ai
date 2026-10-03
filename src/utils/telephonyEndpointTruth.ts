@@ -95,3 +95,24 @@ export function receptionistLabel(status: TelephonyStatusSnapshot | null | undef
   if (readiness === 'UNKNOWN') return 'RECEPTIONIST UNKNOWN';
   return readiness === 'CONFIGURED' ? 'RECEPTIONIST GATEWAY CONFIGURED' : 'RECEPTIONIST UNAVAILABLE';
 }
+
+/**
+ * Whether a barge-in signal was applied to a live call session.
+ *
+ * `POST /api/telephony/interruption` answered `{ success: true }` for every
+ * request, including one whose `callSessionId` matched no active session — the
+ * handler returns `state: 'IDLE'` in that case, so the flag disagreed with the
+ * state it returned. An idle result means no live call was interrupted.
+ */
+export function bargeInApplied(result: { state: string }): boolean {
+  return result.state !== 'IDLE';
+}
+
+/**
+ * Whether a silence-timeout signal was applied to a live call session. The
+ * route reported `{ success: true }` unconditionally, so a stale id looked
+ * accepted; the handler now states whether a session was actually found.
+ */
+export function silenceTimeoutApplied(result: { applied: boolean }): boolean {
+  return result.applied;
+}

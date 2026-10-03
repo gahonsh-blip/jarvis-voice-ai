@@ -328,3 +328,47 @@ describe('the offline cancel branch never claims a cancellation that did not hap
   });
 });
 
+// The outbound-call and schedule branches fell back to the literal
+// '+91 9876543210' whenever the command captured no number, so "make a call" or
+// "schedule call tomorrow" staged a pending outbound request — behind a Level-4
+// authorization prompt — to a number the user never named. A fabricated target
+// is not performed work; the honest result is a refusal that asks which number.
+describe('the offline engine never stages a call to a fabricated placeholder number', () => {
+  beforeEach(() => {
+    TelephonyProviderRegistry.setActiveProvider(SIMULATION_PROVIDER_ID);
+  });
+
+  it('refuses to dial when the command names no number', () => {
+    const memory = freshMemory();
+    const res = processOfflineCommand('make a call', memory, 'en-US');
+    expect(res.intent).toBe('outbound_call_authorization');
+    expect(res.actionExecuted).toBe(false);
+    expect(res.spokenText).not.toContain('9876543210');
+    expect(res.reply).toMatch(/which number/i);
+    expect((res.actionDetail as any)?.title).toBe('No Number to Call (nothing staged)');
+    expect(memory.stats.actionsExecuted).toBe(0);
+  });
+
+  it('refuses to schedule when the command names no number', () => {
+    const memory = freshMemory();
+    const res = processOfflineCommand('schedule call tomorrow', memory, 'en-US');
+    expect(res.intent).toBe('outbound_call_authorization');
+    expect(res.actionExecuted).toBe(false);
+    expect(res.spokenText).not.toContain('9876543210');
+    expect((res.actionDetail as any)?.title).toBe('No Number to Schedule (nothing recorded)');
+  });
+
+  it('still stages a real number the user named', () => {
+    const memory = freshMemory();
+    const res = processOfflineCommand('call +91 98765 43210', memory, 'en-US');
+    expect(res.intent).toBe('outbound_call_authorization');
+    expect(res.actionExecuted).toBe(false);
+    expect((res.actionDetail as any)?.payload?.target).toBe('+91 98765 43210');
+  });
+
+  it('pins the branches to the honest verdict and removes the literal fallback', () => {
+    expect(engineSource).toContain('offlineCallMissingNumberVerdict(');
+    expect(engineSource).not.toContain("'+91 9876543210'");
+  });
+});
+

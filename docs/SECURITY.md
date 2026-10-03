@@ -32,6 +32,30 @@ as distinct from `APPROVE`, and must never default to consent on an unparsed rep
 
 ---
 
+## 1b. Emergency-stop liveness is tri-state, and UNKNOWN must block
+
+The owner's kill switch is only as strong as the code that reads it. Any surface
+that decides whether to allow a host action must treat "emergency stop state
+could not be determined" as blocking, never as released. A collapsed boolean
+here is a fake success: the run proceeds while the switch's state is unknown.
+
+On 2026-10-02 21:44 IST the operator chat path was found doing exactly that.
+`fetchKillSwitchState()` (`src/utils/operatorChatIntegration.ts`) returned a bare
+boolean — a non-OK response, a malformed body, a network error and the 2-second
+timeout all returned `false`, the same value as a confirmed release — and both
+`src/App.tsx` dispatch sites passed it as `killSwitchActive`. It now resolves the
+tri-state `KillSwitchLiveness` (`ENGAGED | RELEASED | UNKNOWN`) shared with
+`emergencyLiveness` (`src/utils/emergencyTruth.ts`); `killSwitchBlocks()` blocks
+every state except a confirmed `RELEASED`, and the dispatch sites refuse with
+`operatorKillSwitchRefusal()` before running. Pinned by
+`src/tests/operatorChatIntegration.test.ts`, negative-validated.
+
+The Permission Gateway, HUD header and Autonomous Tools panel already follow this
+rule. Any new surface that reads `/api/emergency/status` must do the same: default
+to blocking, and only proceed on an explicitly observed `RELEASED`.
+
+---
+
 ## 2. Strict Financial Exclusions Guard
 - All financial, banking, crypto, and payment-related commands are blocked at the semantic parsing level.
 - Any query attempting fund transfers, credit card charges, or wallet movements triggers the `FINANCE_SECURITY_GUARD` rejection response.
@@ -203,6 +227,54 @@ probe. Six of those seven fail against the previous pattern set, and the seventh
 is a guard against over-redaction. Negative-validated: reverting only the source
 fix fails exactly those 6.
 
+A third probe (work slot 10, 2026-10-01 00:35 IST) found eight further families
+`redactSecrets` left untouched — and these are the providers the project actually
+integrates with, so the gap was live rather than theoretical:
+
+- Groq (`gsk_` + long body), Perplexity (`pplx-`), Linear (`lin_api_`),
+  Resend (`re_` + long body) API keys.
+- Notion integration tokens, both current (`ntn_`) and legacy (`secret_`).
+- Shopify access / shared-secret / private-app tokens (`shpat_`, `shpss_`,
+  `shpca_`, `shppa_`).
+- Slack incoming-webhook URLs (`https://hooks.slack.com/services/…`) — the whole
+  URL is the secret, so the `T`/`B` ids are redacted with it.
+- Azure Storage `AccountKey=` values and Firebase browser API keys. Firebase keys
+  carry the same `AIza` marker as Google server keys but not the `Sy` infix, so
+  the existing Google pattern did not match them; a separate branch covers the
+  family.
+
+All are covered by 11 new regression tests, each using the token bare (the form a
+key takes in a screenshot or terminal stream). Negative-validated: the 11 tests
+fail against the previous pattern set (`11 failed | 24 passed`) and pass after the
+fix (`35 passed`). Two over-redaction guards accompany them: an ordinary Slack
+URL (`app.slack.com/client/…`, no embedded secret) and the English `re_` prefix
+are left intact.
+
+A fourth probe (work slot 13, 2026-10-01 02:05 IST) found three more families the
+project itself carries: Telnyx API keys (`KEY` + 32 hex, read by the Telnyx
+telephony adapter), LinkedIn OAuth access tokens (`AQV` + body) and Gmail app
+passwords (`abcd efgh ijkl mnop`, which the generic keyword rule truncated at the
+first space). A fifth probe (work slot 14, 2026-10-01 02:35 IST) of ten provider
+formats found three more passing through byte-for-byte:
+
+- Slack app-level tokens (`xapp-…`) — the existing pattern's character class is
+  only `xox[baprs]-`, and an `xapp-` token can mint `xoxp` user tokens.
+- Stripe webhook signing secrets (`whsec_…`) — the existing Stripe pattern covers
+  only `sk_`/`rk_` API keys; this is the secret that signs webhook payloads.
+- Mailgun API keys (`key-` + 32 hex) — no pattern existed.
+
+All are covered by new regression tests using the bare token form. The fifth
+probe deliberately leaves two observed values unredacted: the Twilio
+Account/API-Key SIDs (`AC…`/`SK…`) are public account identifiers (an existing
+test asserts the SID must survive), and an X/Twitter OAuth2 bearer key is covered
+by the generic keyword rule when it is labelled, which is how it appears in a
+config or log. Each addition is negative-validated (the new tests fail against
+the prior pattern set).
+
+The provider list is not provably exhaustive — a future probe may find more — so
+this class of gap is closed one verified family at a time rather than declared
+complete.
+
 `.gitignore` must contain a `.env` line and must be UTF-8. The committed file was
 UTF-16, so git honoured none of it; `git check-ignore .env` confirms the current
 file works.
@@ -241,6 +313,56 @@ spacing normalised (`'+91-9876543210'` → `'+91 ******3210'`). Guarded by
 `src/tests/androidMobileBridge.test.ts` Scenarios 19–20; negative-validated
 (`2 failed | 37 passed` with the pre-fix body restored). `telephonyPermissions.ts`
 never shared the digit-free defect — it already returns `'Unknown / Private'`.
+
+**Update 2026-10-03 01:00 IST — the permission route accepted changes it never applied.**
+`POST /api/telephony/permissions` merged any caller-supplied object over the stored
+matrix (`{ ...current, ...req.body }`) and answered `success: true` unconditionally.
+A body naming a key that does not exist — a typo, or a key from a stale client — was
+reported as an applied change, and an empty body read as a successful save. These
+permissions gate outbound calling, private-data access and call recording, so the
+operator could believe a grant or revocation had taken effect when nothing changed.
+`classifyPhonePermissionUpdate()` (`src/utils/hardening/phonePermissionUpdateTruth.ts`)
+now accepts only keys present in the real `PHONE_PERMISSION_DEFINITIONS` and only
+values carrying a valid state; the route applies just the classified keys and answers
+`success: false`, `applied: false` with a naming reason when nothing real was supplied.
+`TelephonyHubModal.tsx` reverts a rejected toggle rather than showing a permission that
+was never persisted. Guarded by `src/tests/telephonyPermissionUpdateTruth.test.ts`
+(11 tests); negative-validated (`3 failed | 8 passed` with the pre-fix route restored).
+
+**Update 2026-10-03 22:47 IST — an unprobed LinkedIn token was reported as a live connection.**
+`GET /api/auth/linkedin/status` (`server.ts`) answered `connected: true` whenever a static
+`LINKEDIN_ACCESS_TOKEN` was present in the environment, without ever probing that token
+against LinkedIn. The route is not decorative: it is one of the integration status
+endpoints the UI and the offline/online e2e contract treat as the authority on whether an
+integration is connected. Reporting an unmeasured credential as a live account is the
+fabricated success this project forbids, and it invites a Level-4 publish decision on the
+belief that the account is proven. The canonical `/api/social/platforms` card already
+labelled the same token `CONFIGURED` ("Credentials present but not verified"), and the
+YouTube status route already kept its static-token branch honest — LinkedIn contradicted
+both. The static-token branch now answers `connected: false`, `status: 'CONFIGURED'`,
+`configured: true`, `authType: 'STATIC_ENV_TOKEN'` with a "Test connection" message; only
+`/api/social/platforms/test` can confirm the account, and the response exposes only the
+token's presence, never the token. The OAuth-connected branch (a real authenticated
+userinfo probe) still reports `connected: true`. Guarded by
+`src/tests/linkedinStatusTruth.test.ts` (3 tests); negative-validated (`1 failed | 2
+passed` with the `connected: true` branch restored).
+
+**Update 2026-10-03 21:22 IST — the offline engine staged a call to a fabricated number.**
+The offline outbound-call and schedule branches (`src/utils/localJarvisEngine.ts`) fell
+back to a hardcoded placeholder number whenever the command captured no dial target, so
+"make a call" or "schedule call tomorrow" staged a pending outbound request — behind the
+same Level-4 authorization prompt used for a real number — to a number the user never
+named. `server.ts` did the same with a fabricated `'Contact'` default in
+`classifyIntentLocally` and the `make_call` handler. The Level-4 gate is only meaningful
+if the thing being approved is real: a fabricated destination turns an authorization
+prompt into theatre and can send the approval flow toward a target the operator never
+chose. `extractDialTarget(raw)` and `offlineCallMissingNumberVerdict(phase)`
+(`src/utils/computerOperator/offlineCallTruth.ts`) now make a target a number only when
+it carries at least three digits and give an honest refusal for a command with no number:
+`actionExecuted: false`, no staged call, and a reply asking which number. A real number
+the user names still stages as before. Guarded by `src/tests/offlineCallTruth.test.ts`
+(4 new cases, file total 27); negative-validated (`2 failed | 25 passed` with the
+placeholder fallback restored).
 
 **Update 2026-09-23 03:13 IST — a correct mask that the UI did not use.** The
 helper was sound by this point, but a component could still render the raw field

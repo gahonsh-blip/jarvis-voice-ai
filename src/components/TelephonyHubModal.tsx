@@ -121,6 +121,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     provider?: { id: string; name: string; isSimulationOnly?: boolean };
   } | null>(null);
   const [settingsSaveResult, setSettingsSaveResult] = useState<string | null>(null);
+  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
   const [geminiConfigured, setGeminiConfigured] = useState<boolean | undefined>(undefined);
 
   const loadProviderStatus = React.useCallback(() => {
@@ -174,23 +175,38 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     }
   };
 
-  const handleTogglePermission = (key: string) => {
-    const updated = {
-      ...phonePermissions,
-      [key]: !phonePermissions[key],
-    };
-    setPhonePermissions(updated);
-    fetch('/api/telephony/permissions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        [key]: {
-          key,
-          state: updated[key] ? 'GRANTED' : 'DENIED',
-          lastUpdated: new Date().toISOString(),
-        },
-      }),
-    }).catch(() => {});
+  const handleTogglePermission = async (key: string) => {
+    const nextGranted = !phonePermissions[key];
+    setPhonePermissions((prev) => ({ ...prev, [key]: nextGranted }));
+    try {
+      const res = await fetch('/api/telephony/permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [key]: {
+            key,
+            state: nextGranted ? 'GRANTED' : 'DENIED',
+            lastUpdated: new Date().toISOString(),
+          },
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.success !== true) {
+        // The server refused the change — do not leave the toggle showing a
+        // permission that was never persisted.
+        setPhonePermissions((prev) => ({ ...prev, [key]: !nextGranted }));
+        setPermissionNotice(data?.error || 'PERMISSION CHANGE REJECTED — the server did not apply it');
+        return;
+      }
+      setPermissionNotice(
+        data.rejected && data.rejected.length > 0
+          ? `PARTIAL — applied ${(data.appliedKeys || []).length} key(s); server ignored: ${data.rejected.join(', ')}`
+          : null,
+      );
+    } catch {
+      setPhonePermissions((prev) => ({ ...prev, [key]: !nextGranted }));
+      setPermissionNotice('PERMISSION CHANGE FAILED — could not reach the server');
+    }
   };
 
   // Dialer state
@@ -1454,6 +1470,12 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     </p>
                   </div>
                 </div>
+
+                {permissionNotice && (
+                  <div className="mt-3 rounded-xl bg-amber-950/40 border border-amber-500/40 p-3 text-xs font-mono text-amber-200">
+                    {permissionNotice}
+                  </div>
+                )}
 
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {PHONE_PERMISSION_DEFINITIONS.map((def) => {

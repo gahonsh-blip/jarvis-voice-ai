@@ -169,10 +169,17 @@ export const HUDHeader: React.FC<HUDHeaderProps> = ({
         body: JSON.stringify({ requestedBy: 'HUD_RESUME_BUTTON' }),
       });
       const data = await res.json();
+      // Adopt only an observed state, and only claim a resume when the server
+      // confirmed it released a real freeze. A no-op resume (nothing paused, or
+      // a latched kill switch) reports the honest message instead of a green
+      // "resumed" notice.
+      setEmergency(emergencyStatusKnown(data.emergencyState) ? data.emergencyState : null);
       if (data.success) {
-        setEmergency(emergencyStatusKnown(data.emergencyState) ? data.emergencyState : null);
         setKillNotice('🟢 System resumed safely. Normal level 1-4 permission gating active.');
         setShowKillModal(false);
+      } else {
+        setKillNotice(`⚪ ${data.message || 'Nothing to resume — no emergency stop was active.'}`);
+        if (data.outcome !== 'LATCHED') setShowKillModal(false);
       }
     } catch (err: any) {
       setKillNotice(`Error resuming system: ${err.message}`);

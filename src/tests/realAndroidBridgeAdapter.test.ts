@@ -126,6 +126,59 @@ describe('RealAndroidBridgeAdapter — server contract', () => {
     }
   });
 
+  it('does not report success when the server accepts but the device is a simulation', async () => {
+    // A 200 response carrying a simulated/testbed device makes the engine land
+    // in LIMITED_CAPABILITY. The adapter must propagate that honest verdict, not
+    // overwrite it with `success: true` (which would reintroduce the exact
+    // fake-success the engine's connectDevice fix removed).
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          status: 'LIMITED_CAPABILITY',
+          device: { ...CAPS, isSimulation: true },
+        }),
+      }) as any) as typeof fetch;
+
+    try {
+      const adapter = new RealAndroidBridgeAdapter();
+      adapter.setReportedCapabilities(CAPS);
+      const result = await adapter.connect();
+      expect(result.status).toBe('LIMITED_CAPABILITY');
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/not a live fully-permitted connection/i);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('does not report success when the server accepts a device that cannot answer calls', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          status: 'CONNECTED',
+          device: { ...CAPS, canAnswerCalls: false, telecomRoleDialer: false },
+        }),
+      }) as any) as typeof fetch;
+
+    try {
+      const adapter = new RealAndroidBridgeAdapter();
+      adapter.setReportedCapabilities(CAPS);
+      const result = await adapter.connect();
+      expect(result.status).toBe('LIMITED_CAPABILITY');
+      expect(result.success).toBe(false);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it('simulated adapter refuses an unapproved reply', async () => {
     const result = await simulatedAndroidAdapter.sendReply('notif_1', 'ok', false);
     expect(result.success).toBe(false);

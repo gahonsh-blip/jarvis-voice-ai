@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { screenshotVerdict, screenshotReply } from '../utils/computerOperator/screenshotDispatchTruth';
+import { screenshotVerdict, screenshotReply, browserCaptureVerdict } from '../utils/computerOperator/screenshotDispatchTruth';
+import { ActionExecutor } from '../utils/computerOperator/actionExecutor';
+import { ScreenObserver } from '../utils/computerOperator/screenObserver';
 import { volumeVerdict, volumeReply } from '../utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from '../utils/computerOperator/powerDispatchTruth';
 import { processOfflineCommand } from '../utils/localJarvisEngine';
@@ -19,6 +21,12 @@ const engineFlat = fs
 
 const appFlat = fs
   .readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8')
+  .replace(/\s+/g, ' ');
+
+// The in-app Browser disclosures live in the browser truth helper rather than in
+// server.ts, so the routing guard reads that layer too.
+const browserTruthFlat = fs
+  .readFileSync(path.resolve(process.cwd(), 'src/utils/browserDispatchTruth.ts'), 'utf8')
   .replace(/\s+/g, ' ');
 
 /**
@@ -167,6 +175,38 @@ describe('power verdict is never executed and always requests approval', () => {
   });
 });
 
+describe('a browser display capture without a decoded frame is not a capture', () => {
+  it('refuses to credit a frame when the video reports no dimensions', () => {
+    const verdict = browserCaptureVerdict(0, 0, 'Screen 1');
+    expect(verdict.captured).toBe(false);
+    expect(verdict.width).toBeNull();
+    expect(verdict.height).toBeNull();
+    expect(verdict.detailEn).toMatch(/no decoded frame/i);
+  });
+
+  it('still credits a real decoded frame at its true dimensions', () => {
+    const verdict = browserCaptureVerdict(1920, 1080, 'Screen 1');
+    expect(verdict.captured).toBe(true);
+    expect(verdict.width).toBe(1920);
+    expect(verdict.height).toBe(1080);
+    expect(verdict.detailEn).toContain('1920x1080');
+  });
+
+  it('does not substitute a placeholder size when only one dimension is missing', () => {
+    expect(browserCaptureVerdict(1920, 0).captured).toBe(false);
+    expect(browserCaptureVerdict(0, 1080).captured).toBe(false);
+  });
+
+  it('the ScreenshotModal routes its live capture through the verdict, not a 1280x720 fallback', () => {
+    const modalFlat = fs
+      .readFileSync(path.resolve(process.cwd(), 'src/components/ScreenshotModal.tsx'), 'utf8')
+      .replace(/\s+/g, ' ');
+    expect(modalFlat).toContain('browserCaptureVerdict(');
+    expect(modalFlat).not.toContain('video.videoWidth || 1280');
+    expect(modalFlat).not.toContain('video.videoHeight || 720');
+  });
+});
+
 describe('the /api/chat dispatch cases use the truth helpers', () => {
   it('take_screenshot captures for real and reports the verdict', () => {
     const body = caseBody('take_screenshot');
@@ -202,6 +242,9 @@ describe('the /api/chat dispatch cases use the truth helpers', () => {
   });
 
   it('the in-app routing cases disclose that no external app was opened', () => {
+    // The in-app Browser disclosures are emitted by the browser truth helper
+    // (`server.ts` delegates the reply to it), so the guard reads both layers.
+    const dispatchLayer = serverFlat + ' ' + browserTruthFlat;
     for (const marker of [
       'No external phone dialer was opened.',
       'No external calculator application was opened.',
@@ -209,7 +252,7 @@ describe('the /api/chat dispatch cases use the truth helpers', () => {
       'No external Chrome process was started.',
       'No external browser was launched.',
     ]) {
-      expect(serverFlat, marker).toContain(marker);
+      expect(dispatchLayer, marker).toContain(marker);
     }
   });
 });
@@ -447,3 +490,153 @@ describe('a fetch-only YouTube summarization is not credited as executed work', 
   });
 });
 
+
+describe('a briefing that read no telemetry is not credited as executed work', () => {
+  // With no device attached, every section of the offline briefing is a "no
+  // source connected" refusal and the handler reads nothing, yet it advanced
+  // the user-visible "Autonomous Actions Executed" counter unconditionally.
+  const memory = {
+    userName: 'Sir',
+    name: 'Sir',
+    customKeyValues: {},
+    notes: [],
+    conversationHistory: [],
+    stats: { actionsExecuted: 0, tasksCompleted: 0, voiceCommands: 0 },
+  } as any;
+
+  it('does not advance the counter when no device telemetry is available', () => {
+    const result = processOfflineCommand('Good morning JARVIS', memory, 'en-US');
+    expect(result.intent).toBe('mobile_personal_status');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.updatedMemory?.stats.actionsExecuted).toBe(0);
+  });
+
+  it('advances the counter only when a real telemetry section was read', () => {
+    const status = {
+      lastUpdated: new Date().toISOString(),
+      permissions: { BATTERY_STATUS: true },
+      battery: { level: 64, charging: false, temperatureC: 31, powerMode: 'Normal', statusText: 'OK', available: true, isSample: false },
+    } as any;
+    const result = processOfflineCommand('Good morning JARVIS', memory, 'en-US', status);
+    expect(result.intent).toBe('mobile_personal_status');
+    expect(result.actionExecuted).toBe(true);
+    expect(result.updatedMemory?.stats.actionsExecuted).toBe(1);
+  });
+});
+
+describe('a successful weather read is a status answer, not executed work', () => {
+  const memory = {
+    userName: 'Sir',
+    name: 'Sir',
+    customKeyValues: {},
+    notes: [],
+    conversationHistory: [],
+    stats: { actionsExecuted: 0, tasksCompleted: 0, voiceCommands: 0 },
+  } as any;
+
+  it('reports the reading without advancing the counter', () => {
+    const status = {
+      lastUpdated: new Date().toISOString(),
+      permissions: { WEATHER_LOCATION: true },
+      weather: { location: 'New Delhi', temperatureC: 31, condition: 'Clear Sky', conditionHi: 'साफ', humidity: 40, windKmh: 8, feelsLikeC: 32, available: true, isSample: false },
+    } as any;
+    const result = processOfflineCommand('what is the weather', memory, 'en-US', status);
+    expect(result.intent).toBe('weather_inquiry');
+    expect(result.actionExecuted).toBe(false);
+    expect(result.updatedMemory?.stats.actionsExecuted).toBe(0);
+    expect(result.reply).toContain('New Delhi');
+  });
+});
+
+
+function makeObservation(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'obs-test',
+    timestamp: new Date().toISOString(),
+    activeWindow: 'Visual Studio Code',
+    activeApplication: 'VS Code',
+    windowTitle: 'server.ts',
+    visibleElements: [],
+    detectedErrors: [],
+    screenResolution: { width: 1920, height: 1080 },
+    isAmbiguous: false,
+    platform: 'browser' as const,
+    ...overrides,
+  };
+}
+
+function inspectAction(type: 'INSPECT_SCREEN' | 'TAKE_SCREENSHOT') {
+  return {
+    id: 'act-1',
+    type,
+    description: 'inspect the screen',
+    securityLevel: 1 as const,
+    requiresHumanApproval: false,
+  } as any;
+}
+
+describe('computer-operator screen capture is credited only from a host-backed observer', () => {
+  it('refuses an illustrative observation even when it returns a synthetic image', async () => {
+    ScreenObserver.setSource(null);
+    // Reproduce the browser path: the illustrative observer draws a synthetic
+    // canvas image of a screen it never saw. Without the gate this action
+    // reports VERIFIED for that fabricated image.
+    const originalWindow = (globalThis as any).window;
+    const originalCreate = (globalThis as any).document;
+    const stubCanvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({ fillRect: () => {}, fillText: () => {}, fillStyle: '', font: '' }),
+      toDataURL: () => 'data:image/png;base64,ILLUSTRATIVE',
+    };
+    (globalThis as any).document = { createElement: () => stubCanvas };
+    (globalThis as any).window = { fetch: () => {} };
+    try {
+      const observation = await ScreenObserver.observeScreen({ mockWindow: 'vscode', includeScreenshot: true });
+      expect(observation.screenshotBase64).toBe('data:image/png;base64,ILLUSTRATIVE');
+
+      const result = await ActionExecutor.executeAction(inspectAction('INSPECT_SCREEN'));
+      expect(result.outcome).toBe('NOT_AVAILABLE');
+      expect(result.success).toBe(false);
+      expect(result.receipt.verified).toBe(false);
+      expect(result.receipt.failureReason).toBe('ILLUSTRATIVE_OBSERVATION_SOURCE');
+      expect(result.message).toContain('Nothing was captured');
+    } finally {
+      (globalThis as any).window = originalWindow;
+      (globalThis as any).document = originalCreate;
+    }
+  });
+
+  it('refuses a TAKE_SCREENSHOT request against the illustrative observer too', async () => {
+    ScreenObserver.setSource(null);
+    const result = await ActionExecutor.executeAction(inspectAction('TAKE_SCREENSHOT'));
+    expect(result.outcome).toBe('NOT_AVAILABLE');
+    expect(result.success).toBe(false);
+  });
+
+  it('credits a host-backed observation that carries image data', async () => {
+    ScreenObserver.setSource(async () =>
+      makeObservation({ screenshotBase64: 'data:image/png;base64,AAAA' }) as any
+    );
+    try {
+      const result = await ActionExecutor.executeAction(inspectAction('INSPECT_SCREEN'));
+      expect(result.outcome).toBe('VERIFIED');
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Captured the current view');
+    } finally {
+      ScreenObserver.setSource(null);
+    }
+  });
+
+  it('does not credit a host-backed observation that produced no image', async () => {
+    ScreenObserver.setSource(async () => makeObservation() as any);
+    try {
+      const result = await ActionExecutor.executeAction(inspectAction('INSPECT_SCREEN'));
+      expect(result.outcome).toBe('NOT_AVAILABLE');
+      expect(result.success).toBe(false);
+      expect(result.receipt.failureReason).toBe('NO_CAPTURE_PRODUCED');
+    } finally {
+      ScreenObserver.setSource(null);
+    }
+  });
+});

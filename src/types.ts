@@ -50,6 +50,7 @@ export type IntentCategory =
   | 'answer_call'
   | 'hangup_call'
   | 'reject_call'
+  | 'reject_message'
   | 'telephony_hub'
   | 'call_history'
   | 'caller_inquiry'
@@ -621,7 +622,7 @@ export interface IntegrationAuditItem {
   id: string;
   name: string;
   service: string;
-  status: 'REAL_WORKING' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
+  status: 'CREDENTIALS_PRESENT' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
   reason?: string;
   requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean; placeholder: string }[];
   scopesOrPermissions: string[];

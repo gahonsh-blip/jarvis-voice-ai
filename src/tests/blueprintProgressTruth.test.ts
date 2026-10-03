@@ -8,6 +8,7 @@ import {
   blueprintProgressLabel,
   blueprintFooterLabel,
   blueprintPhaseCountLabel,
+  blueprintRoadmapReply,
 } from '../utils/blueprintTruth';
 
 // Regression guard: the Master Blueprint modal rendered an unmeasured progress
@@ -73,6 +74,43 @@ describe('blueprint labels say UNKNOWN instead of a fabricated zero', () => {
     expect(blueprintPhaseCountLabel(true, 10)).toBe('TOTAL PHASES: 10');
     expect(blueprintPhaseCountLabel(true, 0)).toBe('TOTAL PHASES: UNKNOWN');
     expect(blueprintPhaseCountLabel(true, undefined)).toBe('TOTAL PHASES: UNKNOWN');
+  });
+});
+
+describe('the offline blueprint reply states the phase list is unread', () => {
+  it('never asserts a phase range or an active-phase count', () => {
+    for (const lang of ['english', 'hindi', 'hinglish'] as const) {
+      const reply = blueprintRoadmapReply(lang);
+      expect(reply).not.toMatch(/phase 0 to 9/i);
+      expect(reply).not.toMatch(/all phases active/i);
+      expect(reply).not.toMatch(/फेज 0 से 9/);
+      expect(reply).not.toMatch(/0 to 9/);
+    }
+  });
+
+  it('says the phase list and its active status were not read', () => {
+    expect(blueprintRoadmapReply('english')).toMatch(/unconfirmed/i);
+    expect(blueprintRoadmapReply('english')).toContain('/api/blueprint');
+    expect(blueprintRoadmapReply('hinglish')).toContain('/api/blueprint');
+    expect(blueprintRoadmapReply('hindi')).toContain('/api/blueprint');
+  });
+
+  it('still tells the user the view is opening', () => {
+    expect(blueprintRoadmapReply('english')).toMatch(/Opening the Master Blueprint view/);
+  });
+});
+
+describe('the offline engine blueprint branch uses the truth reply', () => {
+  const engine = fs.readFileSync(
+    path.resolve(__dirname, '../utils/localJarvisEngine.ts'),
+    'utf8',
+  );
+
+  it('calls blueprintRoadmapReply instead of hardcoding active phases', () => {
+    expect(engine).toContain('blueprintRoadmapReply(');
+    expect(engine).not.toMatch(/All phases active/);
+    expect(engine).not.toMatch(/Phase 0 to 9/);
+    expect(engine).not.toMatch(/फेज 0 से 9 सक्रिय/);
   });
 });
 

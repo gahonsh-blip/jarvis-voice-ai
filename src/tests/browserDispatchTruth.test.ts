@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { browserOpenVerdict, browserDestinationUrl } from '../utils/browserDispatchTruth';
+import { browserOpenVerdict, browserDestinationUrl, browserOpenActionDetail, searchDispatch } from '../utils/browserDispatchTruth';
 
 // server.ts binds a port on import, so the route assertions read the source
 // text, matching the convention in launchDispatchTruth.test.ts.
@@ -12,6 +12,18 @@ const serverFlat = fs
 const appFlat = fs
   .readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8')
   .replace(/\s+/g, ' ');
+
+/** The `open_*` case body, bounded at the next block-opening case. */
+function caseBody(intent: string): string {
+  const label = serverFlat.indexOf(`case '${intent}':`);
+  expect(label, `${intent} case missing`).toBeGreaterThan(-1);
+  const blockOpen = serverFlat.indexOf('{', label);
+  expect(blockOpen, `${intent} case has no block`).toBeGreaterThan(-1);
+  const rest = serverFlat.slice(blockOpen + 1);
+  const nextMatch = /case '[a-z_]+': \{/.exec(rest);
+  const end = nextMatch ? blockOpen + 1 + nextMatch.index : serverFlat.length;
+  return serverFlat.slice(label, end);
+}
 
 describe('browser-open verdict names a site only when the view loads it', () => {
   it('points YouTube at youtube.com, not the Google home', () => {
@@ -58,16 +70,94 @@ describe('browser-open verdict names a site only when the view loads it', () => 
   });
 });
 
-describe('server + app wiring carry the destination through', () => {
-  it('server derives the browser-open reply and target from browserOpenVerdict', () => {
-    expect(serverFlat).toContain('import { browserOpenVerdict } from');
-    expect(serverFlat).toContain("case 'open_google': case 'open_youtube': case 'open_gmail': case 'open_chatgpt': {");
-    expect(serverFlat).toContain('const verdict = browserOpenVerdict(intentData.intent);');
-    expect(serverFlat).toContain('target: verdict.url,');
+describe('the action detail carries the destination where the app reads it', () => {
+  it('puts the resolved URL inside payload.target, not at the top level', () => {
+    const detail = browserOpenActionDetail(browserOpenVerdict('open_youtube'));
+    expect(detail.type).toBe('open_youtube');
+    expect(detail.payload.target).toBe('https://www.youtube.com');
+    expect((detail as unknown as Record<string, unknown>).target).toBeUndefined();
   });
 
-  it('the app hands the destination URL to the browser view', () => {
+  it.each([
+    ['open_google', 'https://www.google.com'],
+    ['open_youtube', 'https://www.youtube.com'],
+    ['open_gmail', 'https://mail.google.com'],
+    ['open_chatgpt', 'https://chatgpt.com'],
+  ])('%s carries %s in payload.target', (intent, url) => {
+    const detail = browserOpenActionDetail(browserOpenVerdict(intent));
+    expect(detail.payload.target).toBe(url);
+  });
+
+  it('falls back to the default home when a named site could not be pointed', () => {
+    const detail = browserOpenActionDetail(browserOpenVerdict('open_chatgpt', 'https://www.google.com'));
+    expect(detail.payload.target).toBe('https://www.google.com');
+    expect(detail.title).toContain('not loaded');
+  });
+});
+
+describe('a search request carries the URL the Browser must load', () => {
+  it('derives the Google search URL from the query', () => {
+    const dispatch = searchDispatch('latest TypeScript releases');
+    expect(dispatch.url).toBe('https://www.google.com/search?q=latest%20TypeScript%20releases');
+    expect(dispatch.query).toBe('latest TypeScript releases');
+    expect(dispatch.replyEn).toContain('latest TypeScript releases');
+    expect(dispatch.replyEn).toContain('No external browser was launched');
+  });
+
+  it('trims the query before deriving the URL', () => {
+    expect(searchDispatch('  spaced  ').query).toBe('spaced');
+    expect(searchDispatch('  spaced  ').url).toContain('spaced');
+  });
+
+  it('falls back to the default home for an empty query instead of a bare /search?q=', () => {
+    const dispatch = searchDispatch('   ');
+    expect(dispatch.query).toBe('');
+    expect(dispatch.url).toBe('https://www.google.com');
+    expect(dispatch.url).not.toContain('search?q=');
+  });
+
+  it('offers a Hindi reply that also names the query', () => {
+    const dispatch = searchDispatch('रिएक्ट हुक्स');
+    expect(dispatch.replyHi).toContain('रिएक्ट हुक्स');
+    expect(dispatch.replyHi).toContain('इन-ऐप ब्राउज़र');
+  });
+});
+
+describe('server + app wiring carry the destination through', () => {
+  it('server derives the search reply and target from searchDispatch', () => {
+    expect(serverFlat).toContain('import { browserOpenVerdict, browserOpenActionDetail, searchDispatch } from');
+    expect(serverFlat).toContain('const dispatch = searchDispatch(query);');
+    // The target rode at the top level before, where the app dispatcher never reads it.
+    expect(serverFlat).toContain('payload: { query: dispatch.query, target: dispatch.url }');
+    expect(serverFlat).not.toContain('target: `https://www.google.com/search?q=${encodeURIComponent(query)}`');
+  });
+
+  it('the app hands the search URL to the view from payload.target', () => {
+    expect(appFlat).toContain("case 'google_search': setBrowserSearchQuery(payload?.query || ''); setBrowserInitialUrl(payload?.target || ''); setActiveApp('browser');");
+    expect(appFlat).not.toContain("case 'google_search': setBrowserSearchQuery(payload?.query || ''); setBrowserInitialUrl('');");
+  });
+
+  it('server derives the browser-open reply and target from browserOpenVerdict', () => {
+    expect(serverFlat).toContain('import { browserOpenVerdict, browserOpenActionDetail, searchDispatch } from');
+    expect(serverFlat).toContain("case 'open_google': case 'open_youtube': case 'open_gmail': case 'open_chatgpt': {");
+    expect(serverFlat).toContain('const verdict = browserOpenVerdict(intentData.intent);');
+    expect(serverFlat).toContain('actionDetail = browserOpenActionDetail(verdict);');
+    // A top-level `target` on the action detail never reaches the app dispatcher.
+    expect(serverFlat).not.toContain('target: verdict.url,');
+  });
+
+  it('the app reads the destination from actionDetail.payload and hands it to the view', () => {
     expect(appFlat).toContain('setBrowserInitialUrl(payload?.target || \'\');');
+    expect(appFlat).toContain('handleExecuteAction(data.intent, data.actionDetail?.payload);');
     expect(appFlat).toContain('initialUrl={browserInitialUrl}');
+  });
+
+  it('selects the Hindi reply from the locale the client actually sends', () => {
+    // The client posts `voiceSettings.language`, a locale such as `hi-IN` or
+    // `hinglish`, never a bare `hi`. A `language === 'hi'` test is therefore
+    // dead code and answers Hindi users in English.
+    const body = caseBody('open_google');
+    expect(body).toContain("language.startsWith('hi')");
+    expect(body).not.toContain("language === 'hi'");
   });
 });

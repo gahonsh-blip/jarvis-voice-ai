@@ -98,3 +98,48 @@ export function screenshotReply(verdict: ScreenshotVerdict, language: string): s
   }
   return hi ? verdict.detailHi : verdict.detailEn;
 }
+
+export interface BrowserCaptureVerdict {
+  /** True only when a decoded frame of known dimensions was drawn to the canvas. */
+  captured: boolean;
+  width: number | null;
+  height: number | null;
+  detailEn: string;
+  detailHi: string;
+}
+
+/**
+ * Builds the honest verdict for a browser `getDisplayMedia` capture.
+ *
+ * The display stream can resolve without ever decoding a frame — the source is
+ * muted, protected, or not yet rendered — in which case `videoWidth`/
+ * `videoHeight` stay `0`. The previous code fell back to `1280`/`720`, drew the
+ * frameless video onto a black canvas and reported a verified live capture. A
+ * capture is credited only when the video reports non-zero dimensions.
+ */
+export function browserCaptureVerdict(
+  videoWidth: number,
+  videoHeight: number,
+  trackLabel?: string | null
+): BrowserCaptureVerdict {
+  const valid = Number.isFinite(videoWidth) && Number.isFinite(videoHeight) && videoWidth > 0 && videoHeight > 0;
+  if (!valid) {
+    return {
+      captured: false,
+      width: null,
+      height: null,
+      detailEn:
+        'The display stream provided no decoded frame (the source reported no dimensions). Nothing was captured.',
+      detailHi:
+        'डिस्प्ले स्ट्रीम से कोई डिकोडेड फ्रेम नहीं मिला, इसलिए कुछ भी कैप्चर नहीं हुआ।',
+    };
+  }
+  const label = trackLabel ? ` (${trackLabel})` : '';
+  return {
+    captured: true,
+    width: videoWidth,
+    height: videoHeight,
+    detailEn: `Live display captured at ${videoWidth}x${videoHeight}${label}.`,
+    detailHi: `लाइव डिस्प्ले ${videoWidth}x${videoHeight} पर कैप्चर किया गया${label}।`,
+  };
+}

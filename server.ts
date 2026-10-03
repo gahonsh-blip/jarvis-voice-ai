@@ -7,6 +7,7 @@ import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
+import { isTelephonyHubRequest, isCallHistoryRequest, isAnswerCallRequest, isHangupCallRequest, isRejectCallRequest, isTelephonyControlRequest } from './src/utils/telephonyIntentRouting';
 import { judgeSetNameIntent } from './src/utils/identityTruth';
 import { freelanceLeadsReply } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
@@ -19,10 +20,16 @@ import {
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
+import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
+import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
+import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
+import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
+import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
+import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -58,6 +65,7 @@ import {
 import {
   TelephonySessionManager,
 } from './src/utils/telephonySessionManager';
+import { bargeInApplied, silenceTimeoutApplied } from './src/utils/telephonyEndpointTruth';
 import {
   TelephonyProviderRegistry,
 } from './src/utils/telephonyAdapters';
@@ -66,6 +74,8 @@ import {
   telephonyEngineMode,
   telephonyEngineLabel,
   telephonySelectionApplied,
+  telephonyEngineCanDial,
+  telephonyDialRefusal,
   SIMULATION_PROVIDER_ID,
 } from './src/utils/telephonyGatewayTruth';
 import {
@@ -77,13 +87,17 @@ import {
   TelephonyDispatchPhase,
 } from './src/utils/telephonyDispatchTruth';
 import {
+  extractDialTarget,
+  offlineCallMissingNumberVerdict,
+} from './src/utils/computerOperator/offlineCallTruth';
+import {
   launchVerdict,
   launchReply,
 } from './src/utils/computerOperator/launchDispatchTruth';
 import { screenshotVerdict, screenshotReply } from './src/utils/computerOperator/screenshotDispatchTruth';
 import { volumeVerdict, volumeReply } from './src/utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from './src/utils/computerOperator/powerDispatchTruth';
-import { browserOpenVerdict } from './src/utils/browserDispatchTruth';
+import { browserOpenVerdict, browserOpenActionDetail, searchDispatch } from './src/utils/browserDispatchTruth';
 import {
   fixProjectErrorReply,
   operatorTaskExecuted,
@@ -91,6 +105,7 @@ import {
   screenInspectionReply,
   cancelComputerTaskVerdict,
 } from './src/utils/computerOperator/operatorReplyTruth';
+import { observationPerformed } from './src/utils/computerOperator/observationTruth';
 import { emergencyToggleVerdict } from './src/utils/computerOperator/offlineEmergencyTruth';
 import {
   toolActionExecuted,
@@ -105,6 +120,7 @@ import {
   evaluateClinicSafety,
   checkHumanHandoffIntent,
   DEFAULT_PHONE_PERMISSIONS,
+  PHONE_PERMISSION_DEFINITIONS,
 } from './src/utils/telephonyPermissions';
 import {
   ComputerOperatorEngine,
@@ -854,18 +870,25 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
   }
 
   // Telephony & Voice Calling Commands ("call Dr. Wayne", "answer call", "hang up", "open dialer", etc.)
+  // Console/history phrases also begin with "call " and must not be read as an
+  // outbound dial to a literal target ("call hub" -> call "hub"). They are
+  // classified below.
   if (
-    lower.startsWith('call ') ||
-    lower.startsWith('dial ') ||
-    lower.includes('make a call') ||
-    lower.includes('phone call') ||
-    lower.includes('place a call') ||
-    lower.includes('कॉल करो') ||
-    lower.includes('फोन करो') ||
-    lower.includes('call lagao')
+    ((lower.startsWith('call ') || lower.startsWith('dial ')) &&
+      !isTelephonyControlRequest(lower)) ||
+    ((lower.includes('phone call') ||
+      lower.includes('make a call') ||
+      lower.includes('place a call') ||
+      lower.includes('कॉल करो') ||
+      lower.includes('फोन करो') ||
+      lower.includes('call lagao')) &&
+      !isTelephonyControlRequest(lower))
   ) {
     const targetMatch = text.match(/(?:call|dial|फोन करो|कॉल करो|call lagao)\s+(.+)/i);
-    const target = targetMatch ? targetMatch[1].trim() : 'Contact';
+    // Only a target that carries real digits is a number. "make a call" /
+    // "place a call" capture nothing, and a name is not dialable — neither may
+    // become a fabricated "Contact" that the handler then reports as called.
+    const target = extractDialTarget(targetMatch ? targetMatch[1] : '');
     return {
       intent: 'make_call',
       confidence: 0.96,
@@ -873,59 +896,23 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
     };
   }
 
-  if (
-    lower.includes('answer call') ||
-    lower.includes('pick up the phone') ||
-    lower.includes('pick up the call') ||
-    lower.includes('answer the phone') ||
-    lower.includes('कॉल उठाओ') ||
-    lower.includes('फोन उठाओ') ||
-    lower.includes('phone uthao')
-  ) {
+  if (isAnswerCallRequest(lower)) {
     return { intent: 'answer_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('hang up') ||
-    lower.includes('end call') ||
-    lower.includes('cut the call') ||
-    lower.includes('disconnect call') ||
-    lower.includes('कॉल काटो') ||
-    lower.includes('फोन काटो') ||
-    lower.includes('call kato')
-  ) {
+  if (isHangupCallRequest(lower)) {
     return { intent: 'hangup_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('reject call') ||
-    lower.includes('decline call') ||
-    lower.includes('कॉल रिजेक्ट करो')
-  ) {
+  if (isRejectCallRequest(lower)) {
     return { intent: 'reject_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('call hub') ||
-    lower.includes('open dialer') ||
-    lower.includes('open phone') ||
-    lower.includes('phone dialer') ||
-    lower.includes('telephony hub') ||
-    lower.includes('telephony system') ||
-    lower.includes('कॉल हब') ||
-    lower.includes('फोन डायलर')
-  ) {
+  if (isTelephonyHubRequest(lower)) {
     return { intent: 'telephony_hub', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('call history') ||
-    lower.includes('call logs') ||
-    lower.includes('recent calls') ||
-    lower.includes('who called') ||
-    lower.includes('कॉल हिस्ट्री') ||
-    lower.includes('किसका कॉल आया')
-  ) {
+  if (isCallHistoryRequest(lower)) {
     return { intent: 'call_history', confidence: 0.95 };
   }
 
@@ -3627,6 +3614,22 @@ function getISTCurrentHourMinute(): { hour: number; minute: number } {
 
 let schedulerRunLog: string[] = [];
 
+/**
+ * Record one routine tick. The per-day marker is stamped by the caller, before
+ * the push is attempted, so a slow or failing push can never re-trigger the
+ * tick every 30 seconds for the rest of the window. The log line, in contrast,
+ * is only written once the push outcome is known — and it never claims a
+ * delivery that did not happen (item 13).
+ */
+async function recordSchedulerOutcome(
+  name: string,
+  push: SchedulerPushOutcome,
+): Promise<void> {
+  const logEntry = schedulerRunLogLine(name, push);
+  schedulerRunLog.unshift(logEntry);
+  console.log('[Scheduler]', logEntry);
+}
+
 async function checkAndRunSchedulerJobs() {
   const todayIST = getISTDateString();
   const { hour, minute } = getISTCurrentHourMinute();
@@ -3635,16 +3638,16 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 9 && minute >= 0 && minute <= 15) {
     if (memoryState.schedulerState.lastMorningRunDate !== todayIST) {
       memoryState.schedulerState.lastMorningRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Morning Briefing (09:00 AM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
 
+      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
       if (activeTelegramChatId && getCleanTelegramToken()) {
         const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
         const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
         const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
-        sendRealTelegramMessage(activeTelegramChatId, morningText).catch(() => {});
+        const delivery = await deliverTelegramMessage(activeTelegramChatId, morningText);
+        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
       }
+      await recordSchedulerOutcome('Morning Briefing (09:00 AM IST)', push);
       persistMemory();
     }
   }
@@ -3653,9 +3656,8 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 14 && minute >= 0 && minute <= 15) {
     if (memoryState.schedulerState.lastMiddayRunDate !== todayIST) {
       memoryState.schedulerState.lastMiddayRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Midday Health Audit (02:00 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
+      // No Telegram push and no audit work: this tick only advances the marker.
+      await recordSchedulerOutcome('Midday Health Audit (02:00 PM IST)', { attempted: false, delivered: false });
       persistMemory();
     }
   }
@@ -3664,9 +3666,7 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 18 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastEveningRunDate !== todayIST) {
       memoryState.schedulerState.lastEveningRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Evening Social Pulse (06:30 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
+      await recordSchedulerOutcome('Evening Social Pulse (06:30 PM IST)', { attempted: false, delivered: false });
       persistMemory();
     }
   }
@@ -3675,14 +3675,14 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 22 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastNightRunDate !== todayIST) {
       memoryState.schedulerState.lastNightRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Nightly Work Summary (10:30 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
 
+      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
       if (activeTelegramChatId && getCleanTelegramToken()) {
         const nightText = `🌙 *HERMES NIGHTLY WORK REPORT (10:30 PM)*\n\nSir, today's work summary has been recorded.\n• *Commands Executed*: ${memoryState.stats.totalCommands}\n• *Memory Persistence*: Synchronized\n• *Daemon Status*: Standby & Active`;
-        sendRealTelegramMessage(activeTelegramChatId, nightText).catch(() => {});
+        const delivery = await deliverTelegramMessage(activeTelegramChatId, nightText);
+        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
       }
+      await recordSchedulerOutcome('Nightly Work Summary (10:30 PM IST)', push);
       persistMemory();
     }
   }
@@ -4224,9 +4224,11 @@ app.post('/api/telegram/broadcast', async (req: Request, res: Response) => {
     return res.json({
       // Only a verified delivery is a success. Anything else is reported with
       // its true outcome so the UI cannot claim the briefing went out.
+      // `executed` tracks the same proof: the send was attempted but the
+      // message did not reach the target, so executing is not delivering.
       success: interpretation.delivered,
       outcome: interpretation.outcome,
-      executed: true,
+      executed: interpretation.delivered,
       verified: receipt.verified,
       liveSent: interpretation.delivered,
       messageId: interpretation.messageId,
@@ -5076,15 +5078,24 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
     });
   }
 
+  // A static env token has not been probed against LinkedIn, so it is
+  // configured — never a live connection. The canonical `/api/social/platforms`
+  // card already labels it CONFIGURED; this endpoint answering connected: true
+  // was the fabricated success this project forbids, and it contradicted the one
+  // endpoint the UI trusts. Only `/api/social/platforms/test` can confirm it.
   if (staticToken) {
     return res.json({
-      connected: true,
+      connected: false,
+      status: 'CONFIGURED',
+      configured: true,
       authType: 'STATIC_ENV_TOKEN',
       name: 'Configured Personal Member (Env Token)',
       authorUrn: staticUrn || 'urn:li:person:self',
       hasClientId: Boolean(clientId),
       hasClientSecret: Boolean(clientSecret),
       redirectUri,
+      message:
+        'A static LINKEDIN_ACCESS_TOKEN is present but has not been verified against LinkedIn. Run "Test connection" to confirm the account before publishing.',
     });
   }
 
@@ -5101,7 +5112,18 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
  * 4. Disconnect LinkedIn OAuth Account
  */
 app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
-  const prevMember = memoryState.linkedInConnection?.name || 'LinkedIn User';
+  // A disconnect can only succeed if something was connected. The route used to
+  // answer success:true unconditionally, so the UI announced a disconnection
+  // that removed no credential.
+  if (!memoryState.linkedInConnection) {
+    return res.json({
+      success: false,
+      outcome: 'NOT_CONNECTED',
+      message: 'No LinkedIn account is connected; nothing was disconnected.',
+    });
+  }
+
+  const prevMember = memoryState.linkedInConnection.name || 'LinkedIn User';
   memoryState.linkedInConnection = undefined;
   persistMemory();
 
@@ -5538,7 +5560,17 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
  * 4. Disconnect YouTube OAuth Account
  */
 app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
-  const prevChannel = memoryState.youTubeConnection?.channelTitle || 'YouTube Account';
+  // Same guard as LinkedIn: report a real disconnection only when a channel was
+  // actually linked and its stored credentials were removed.
+  if (!memoryState.youTubeConnection) {
+    return res.json({
+      success: false,
+      outcome: 'NOT_CONNECTED',
+      message: 'No YouTube channel is connected; nothing was disconnected.',
+    });
+  }
+
+  const prevChannel = memoryState.youTubeConnection.channelTitle || 'YouTube Account';
   memoryState.youTubeConnection = undefined;
   persistMemory();
 
@@ -5573,9 +5605,25 @@ app.get('/api/routines', (req: Request, res: Response) => {
 });
 
 app.post('/api/routines/trigger', (req: Request, res: Response) => {
-  const { timeSlot } = req.body;
-  const routine = proactiveReports.find((r) => r.timeSlot === timeSlot) || proactiveReports[0];
-  res.json({ success: true, routine });
+  const { timeSlot } = req.body || {};
+  // The store is rebuilt on read so a trigger matches the current reports. An
+  // unknown slot used to fall back to the first report in the store, and an
+  // empty store returned `undefined` — both still reported as a triggered
+  // briefing.
+  proactiveReports = buildProactiveReports();
+  const request = resolveRoutineTrigger(timeSlot);
+  if (!request.ok) {
+    return res.status(400).json({ success: false, error: request.reason, triggered: false });
+  }
+  const routine = proactiveReports.find((r) => r.timeSlot === request.slot);
+  if (!routine) {
+    return res.status(404).json({
+      success: false,
+      error: `No routine is stored for slot "${request.slot}".`,
+      triggered: false,
+    });
+  }
+  res.json({ success: true, triggered: true, routine });
 });
 
 // ==============================================================================
@@ -5771,21 +5819,42 @@ app.get('/api/security', (req: Request, res: Response) => {
 });
 
 app.post('/api/security/update', (req: Request, res: Response) => {
-  const { currentLevel, humanApprovalForExternal, maskSensitiveData } = req.body;
-  if (currentLevel !== undefined) securityMatrixState.currentLevel = currentLevel;
-  if (humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = humanApprovalForExternal;
-  if (maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = maskSensitiveData;
+  // Only fields that exist in the matrix and carry a valid value are applied.
+  // An empty body, an out-of-range level, or an unknown field is answered as a
+  // no-op rather than a successful save of the matrix that gates external
+  // actions and credential masking.
+  const verdict = classifySecurityMatrixUpdate(req.body);
+
+  const securityStateSnapshot = {
+    currentLevel: securityMatrixState.currentLevel,
+    humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
+    maskSensitiveData: securityMatrixState.maskSensitiveData,
+    credentialLeakProtection: securityMatrixState.credentialLeakProtection,
+    levels: securityMatrixState.levels,
+    auditLogs: memoryState.auditLogs,
+  };
+
+  if (!verdict.accepted) {
+    return res.status(400).json({
+      success: false,
+      applied: false,
+      reason: verdict.reason,
+      rejected: verdict.rejected,
+      message: verdict.message,
+      securityState: securityStateSnapshot,
+    });
+  }
+
+  if (verdict.applied.currentLevel !== undefined) securityMatrixState.currentLevel = verdict.applied.currentLevel;
+  if (verdict.applied.humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = verdict.applied.humanApprovalForExternal;
+  if (verdict.applied.maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = verdict.applied.maskSensitiveData;
   persistMemory();
   res.json({
     success: true,
-    securityState: {
-      currentLevel: securityMatrixState.currentLevel,
-      humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
-      maskSensitiveData: securityMatrixState.maskSensitiveData,
-      credentialLeakProtection: securityMatrixState.credentialLeakProtection,
-      levels: securityMatrixState.levels,
-      auditLogs: memoryState.auditLogs,
-    },
+    applied: true,
+    rejected: verdict.rejected,
+    message: verdict.message,
+    securityState: securityStateSnapshot,
   });
 });
 
@@ -5882,14 +5951,41 @@ app.get('/api/emergency/status', (req: Request, res: Response) => {
 });
 
 app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
-  const { requestedBy = 'HUMAN_OPERATOR', reason } = req.body;
-  const updated = toggleEmergencyStop(requestedBy, reason);
+  const { requestedBy = 'HUMAN_OPERATOR', reason, action } = req.body;
+  const pre = getEmergencyState();
 
-  // Add audit log
+  // `toggleEmergencyStop` flips the flag, so a repeated stop would RELEASE the
+  // freeze and a resume while nothing was paused would ENGAGE it — each read as
+  // success. The action is derived from the pre-transition state; when the
+  // pre-state does not support the requested transition the request is a no-op
+  // and nothing is logged, notified, or reported as executed.
+  const resolvedAction: 'stop' | 'resume' =
+    action === 'stop' || action === 'resume' ? action : pre.emergencyPaused ? 'resume' : 'stop';
+  const gate = emergencyTogglePreAction(resolvedAction, pre);
+  const verdict = emergencyToggleVerdict(resolvedAction, { ...pre });
+
+  if (!verdict.actionExecuted) {
+    persistMemory();
+    return res.json({
+      success: false,
+      actionExecuted: false,
+      action: resolvedAction,
+      title: verdict.title,
+      message: verdict.replyEn,
+      emergencyState: getEmergencyState(),
+    });
+  }
+
+  if (gate.flip) {
+    toggleEmergencyStop(requestedBy, reason);
+  }
+  const updated = getEmergencyState();
+  const engaged = updated.emergencyPaused === true;
+
   pushAuditEntry({
     id: `log-emerg-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: updated.emergencyPaused
+    action: engaged
       ? `🚨 EMERGENCY STOP ACTIVATED by ${requestedBy}: All autonomous external actions and modifications PAUSED.`
       : `🟢 EMERGENCY STOP DEACTIVATED by ${requestedBy}: Autonomous subsystem operations RESUMED.`,
     levelRequired: 4,
@@ -5901,22 +5997,28 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
 
   // Notify Telegram Admin if connected
   if (activeTelegramChatId && getCleanTelegramToken()) {
-    const alertMsg = updated.emergencyPaused
+    const alertMsg = engaged
       ? `🚨 *HERMES JARVIS: EMERGENCY STOP ACTIVATED*\n\nAll autonomous external actions, drafts, code modifications, and background tasks are now **HARD PAUSED** by ${requestedBy}.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: SYSTEM FROZEN`
       : `🟢 *HERMES JARVIS: SYSTEM RESUMED*\n\nEmergency stop released by ${requestedBy}. Normal permission-gated operations are now active.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: STANDBY`;
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
   persistMemory();
-  res.json({ success: true, ...updated });
+  res.json({ success: true, actionExecuted: true, action: resolvedAction, title: verdict.title, ...updated });
 });
 
 // Global Kill Switch API (HUD & System Level)
 app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
   const { requestedBy = 'HUD_GLOBAL_KILL_SWITCH', reason = 'Global Kill Switch Triggered by Operator' } = req.body;
 
+  // The transition verdict is derived from the state observed *before* the
+  // activation, so a kill switch that was already engaged is reported as a
+  // no-op rather than a fresh termination of the queue.
+  const preKillState = getEmergencyState();
+
   // 1. Activate hard emergency stop & clear pending queue
   const killResult = activateEmergencyKillSwitch(requestedBy, reason);
+  const killVerdict = killSwitchVerdict(preKillState, killResult.clearedTasksCount);
 
   // 2. Terminate active Telegram long-polling loop & background routines
   const wasTelegramPolling = telegramPollingActive;
@@ -5924,30 +6026,37 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
   telegramConfig.mode = 'simulator';
   telegramConfig.webhookStatus = 'waiting_token';
 
-  // 3. Log immutable Level 4 Audit Event
-  pushAuditEntry({
-    id: `log-killswitch-${Date.now()}`,
-    timestamp: new Date().toISOString(),
-    action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killResult.clearedTasksCount} pending PermissionGateway item(s).`,
-    levelRequired: 4,
-    approvedBy: requestedBy,
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  });
+  // 3. Log the Level 4 audit event only when the engagement actually did the
+  // work it claims; an already-engaged (or unobserved) kill switch must not
+  // write a "terminated all background tasks" row.
+  if (killVerdict.actionExecuted) {
+    pushAuditEntry({
+      id: `log-killswitch-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killVerdict.clearedTasksCount} pending PermissionGateway item(s).`,
+      levelRequired: 4,
+      approvedBy: requestedBy,
+      status: 'EXECUTED',
+      verificationStatus: 'VERIFIED',
+      finalTruthState: 'VERIFIED',
+    });
+  }
 
-  // 4. Send Emergency Telegram Notice
-  if (activeTelegramChatId && getCleanTelegramToken()) {
-    const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killResult.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
+  // 4. Send Emergency Telegram Notice only for a real engagement.
+  if (killVerdict.actionExecuted && activeTelegramChatId && getCleanTelegramToken()) {
+    const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killVerdict.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
   persistMemory();
 
-  res.json({
-    success: true,
-    message: 'Global Kill Switch engaged. All background processes terminated and queue cleared.',
-    clearedTasksCount: killResult.clearedTasksCount,
+  res.status(killVerdict.outcome === 'UNKNOWN' ? 503 : 200).json({
+    success: killVerdict.actionExecuted,
+    outcome: killVerdict.outcome,
+    actionExecuted: killVerdict.actionExecuted,
+    headline: killVerdict.headline,
+    message: killVerdict.message,
+    clearedTasksCount: killVerdict.clearedTasksCount,
     wasTelegramPolling,
     emergencyState: killResult.emergencyState,
   });
@@ -5955,6 +6064,23 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
 
 app.post('/api/system/resume', async (req: Request, res: Response) => {
   const { requestedBy = 'HUD_OPERATOR' } = req.body;
+
+  // A resume is real only when a freeze was actually in force. The verdict is
+  // read from the pre-transition state so a resume while nothing was paused —
+  // or while a latched hard kill switch still holds autonomy frozen — cannot be
+  // reported or audited as a release.
+  const verdict = emergencyResumeVerdict(getEmergencyState());
+
+  if (!verdict.actionExecuted) {
+    persistMemory();
+    return res.json({
+      success: false,
+      released: false,
+      outcome: verdict.outcome,
+      message: verdict.message,
+      emergencyState: getEmergencyState(),
+    });
+  }
 
   const resumedState = resumeSystemOperation(requestedBy);
 
@@ -5980,7 +6106,9 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    message: 'System operations resumed successfully.',
+    released: true,
+    outcome: verdict.outcome,
+    message: verdict.message,
     emergencyState: resumedState,
   });
 });
@@ -6062,6 +6190,11 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
 
   if (decision === 'REJECT') {
     const updated = updateActionRequestStatus(id, 'REJECTED', { resolvedBy: approver });
+    if (!updated) {
+      // No such pending action — there is nothing to reject, so do not log an
+      // audit entry or answer success for a resolution that never happened.
+      return res.status(404).json({ success: false, error: `No pending action request with id ${id}.` });
+    }
     pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
@@ -6274,7 +6407,14 @@ app.post('/api/computer-operator/execute', async (req: Request, res: Response) =
     }
     const curEmergencyState = getEmergencyState();
     const task = await ComputerOperatorEngine.executeTask(objective, mode, curEmergencyState.emergencyPaused);
-    res.json({ success: true, task });
+    // The engine returns terminal states other than COMPLETED — FAILED, BLOCKED,
+    // NEEDS_APPROVAL, CANCELLED, or a run that never reached a terminal state.
+    // A flat `success: true` here read every one of them as performed host work.
+    res.json({
+      success: operatorTaskExecuted(task),
+      outcome: task.status,
+      task,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -6285,7 +6425,13 @@ app.post('/api/computer-operator/observe', async (req: Request, res: Response) =
     const { preferredApp, includeScreenshot = true } = req.body;
     const observation = await ScreenObserver.observeScreen({ preferredApp, includeScreenshot });
     const interpretation = ScreenInterpreter.interpret(observation, preferredApp);
-    res.json({ success: true, observation, interpretation });
+    // An illustrative view or an unreachable host still returns an observation,
+    // so a flat `success: true` claimed the screen had been inspected when
+    // nothing was read. The flag follows the same host-backed, non-ambiguous
+    // predicate the `inspect_screen` chat reply uses, and `observed` names the
+    // honest outcome.
+    const observed = observationPerformed(observation, ScreenObserver.isHostBacked());
+    res.json({ success: observed, observed, observation, interpretation });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -6295,7 +6441,9 @@ app.post('/api/computer-operator/cancel', (req: Request, res: Response) => {
   try {
     const { reason = 'User requested stop' } = req.body;
     const result = TaskTracker.cancelActiveTask(reason);
-    res.json({ success: true, ...result });
+    // A cancel only succeeded if a task was actually running; an idle tracker
+    // returns cancelled:false and must not be reported as a successful stop.
+    res.json({ success: result.cancelled, ...result });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -7914,9 +8062,25 @@ app.post('/api/memory', (req: Request, res: Response) => {
     if (customKeyValues !== undefined) {
       memoryState.customKeyValues = { ...memoryState.customKeyValues, ...customKeyValues };
     }
-    if (statUpdate) {
-      if (statUpdate.incrementCommand) memoryState.stats.totalCommands += 1;
-      if (statUpdate.incrementAction) memoryState.stats.actionsExecuted += 1;
+    // The "Autonomous Actions Executed" figure is user-visible (MemoryModal) and
+    // must only advance when the server itself observed work. A caller-supplied
+    // counter request used to bump it, so a POST with no command or action could
+    // raise the number. Record such requests as inert instead of crediting them.
+    const requestedStats = [];
+    if (statUpdate?.incrementCommand) requestedStats.push('incrementCommand');
+    if (statUpdate?.incrementAction) requestedStats.push('incrementAction');
+    if (requestedStats.length > 0) {
+      memoryState.notes = [
+        ...memoryState.notes,
+        {
+          id: `stat-assert-${Date.now()}`,
+          title: 'Counter request not applied',
+          content: `A caller asked to increment ${requestedStats.join(', ')} via POST /api/memory. The server did not observe that work, so no counter was advanced.`,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
+    if (name !== undefined || notes !== undefined || customKeyValues !== undefined || statUpdate) {
       memoryState.stats.lastActive = new Date().toISOString();
     }
 
@@ -7993,14 +8157,22 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
 
 // 3. Delete / Clear Telephony Calls
 app.delete('/api/telephony/calls', (req: Request, res: Response) => {
+  const before = telephonyCalls.length;
   telephonyCalls = [];
-  res.json({ success: true, message: 'Telephony call history cleared' });
+  // Clearing an already-empty history removes nothing; report the real count
+  // rather than asserting a deletion that never happened.
+  const verdict = classifyTelephonyCallDeletion(before);
+  res.json({ ...verdict });
 });
 
 app.delete('/api/telephony/calls/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  const before = telephonyCalls.length;
   telephonyCalls = telephonyCalls.filter((c) => c.id !== id);
-  res.json({ success: true, message: `Call ${id} deleted` });
+  // Deleting an id that was never recorded removes nothing; the old route
+  // still answered success: true and named the call as deleted.
+  const verdict = classifyTelephonyCallDeletion(before - telephonyCalls.length, id);
+  res.json({ ...verdict });
 });
 
 // 4. Telephony Settings
@@ -8346,14 +8518,17 @@ app.post('/api/telephony/twiml/turn', async (req: Request, res: Response) => {
 app.post('/api/telephony/interruption', (req: Request, res: Response) => {
   const { callSessionId } = req.body;
   const result = TelephonySessionManager.handleBargeIn(callSessionId);
-  res.json({ success: true, ...result });
+  // A barge-in only counts when it reached a live session; an unknown id
+  // returns state IDLE, so success must follow the handler's real outcome.
+  res.json({ success: bargeInApplied(result), ...result });
 });
 
 // 6.5 Silence Timeout Endpoint (Section O)
 app.post('/api/telephony/silence-timeout', (req: Request, res: Response) => {
   const { callSessionId } = req.body;
   const result = TelephonySessionManager.handleSilenceTimeout(callSessionId);
-  res.json({ success: true, ...result });
+  // success mirrors whether a live session advanced; a stale id is not accepted.
+  res.json({ success: silenceTimeoutApplied(result), ...result });
 });
 
 // 6.6 Stage Outbound Call for Level-4 Authorization (Section H)
@@ -8409,13 +8584,20 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
     const authRes = TelephonySessionManager.authorizeOutboundRequest(requestId, 'APPROVE', approverName);
     if (actionId) updateActionRequestStatus(actionId, 'APPROVED', approverName);
 
-    // Verify provider configuration before connecting (Section V)
+    // Verify the active engine can actually place a PSTN call before
+    // connecting (Section V). The raw `isConfigured()` boolean is not enough:
+    // the simulator's is unconditionally true and its startOutboundCall()
+    // returns a fabricated providerCallId, so gating on the boolean alone let
+    // a simulated engine through and the route reported a "placed" call that
+    // no carrier saw. Derive the honest mode from the active provider id.
     const provider = TelephonyProviderRegistry.getProvider();
-    if (!provider.isConfigured() && req.body.isSimulated !== true) {
+    const dialEngineMode = telephonyEngineMode(provider.id, provider.isConfigured());
+    if (!telephonyEngineCanDial(dialEngineMode)) {
       return res.status(400).json({
         success: false,
-        status: 'TELEPHONY_NOT_CONFIGURED',
-        error: 'Cannot place outbound telephone call because carrier provider credentials are missing (TELEPHONY_NOT_CONFIGURED).',
+        authorized: true,
+        status: dialEngineMode,
+        error: telephonyDialRefusal(dialEngineMode),
       });
     }
 
@@ -8468,13 +8650,31 @@ app.get('/api/telephony/permissions', (req: Request, res: Response) => {
 
 app.post('/api/telephony/permissions', (req: Request, res: Response) => {
   try {
-    const updates = req.body;
+    const verdict = classifyPhonePermissionUpdate(req.body, PHONE_PERMISSION_DEFINITIONS);
+    if (!verdict.accepted) {
+      return res.status(400).json({
+        success: false,
+        applied: false,
+        reason: verdict.reason,
+        rejected: verdict.rejected,
+        permissions: loadPhonePermissions(),
+        error: verdict.message,
+      });
+    }
+
     const current = loadPhonePermissions();
-    const updated = { ...current, ...updates };
+    const updated = { ...current, ...verdict.applied };
     savePhonePermissions(updated);
-    res.json({ success: true, permissions: updated });
+    res.json({
+      success: true,
+      applied: true,
+      appliedKeys: Object.keys(verdict.applied),
+      rejected: verdict.rejected,
+      message: verdict.message,
+      permissions: updated,
+    });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, applied: false, error: err.message });
   }
 });
 
@@ -8622,21 +8822,21 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const verdict = await evaluateLaunchDispatch('Visual Studio Code', 'code');
         spokenResponse = launchReply('Visual Studio Code', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_vscode', title: verdict.title, target: 'VS Code', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_vscode', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_browser': {
         const verdict = await evaluateLaunchDispatch('Chrome browser', 'google-chrome');
         spokenResponse = launchReply('Chrome browser', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_browser', title: verdict.title, target: 'Chrome', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_browser', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_terminal': {
         const verdict = await evaluateLaunchDispatch('Terminal', 'x-terminal-emulator');
         spokenResponse = launchReply('Terminal', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_terminal', title: verdict.title, target: 'Terminal', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_terminal', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'open_computer_operator': {
@@ -8773,7 +8973,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'tools_audit': {
         const audit = getIntegrationsAuditReport();
-        spokenResponse = `Integrations audit: ${audit.summary.connected} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
+        spokenResponse = `Integrations audit: ${audit.summary.credentialsPresent} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
         actionExecuted = true;
         actionDetail = { type: 'tools_audit', title: 'Integrations Matrix', payload: audit };
         break;
@@ -8960,7 +9160,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'make_call': {
-        const target = intentData.actionPayload?.target || 'Contact';
+        const target = extractDialTarget(intentData.actionPayload?.target);
+        if (!target) {
+          const verdict = offlineCallMissingNumberVerdict('dial');
+          spokenResponse = language.startsWith('hi') ? verdict.replyHi : verdict.replyEn;
+          actionExecuted = verdict.actionExecuted;
+          actionDetail = {
+            type: 'make_call',
+            title: verdict.title,
+            payload: { target: null, outcome: 'NO_NUMBER' },
+          };
+          break;
+        }
         const verdict = evaluateTelephonyDispatch('dial');
         const base = telephonyDispatchReply(verdict.outcome, language);
         spokenResponse = language.startsWith('hi') ? `${target}: ${base}` : `Call to ${target}: ${base}`;
@@ -9080,24 +9291,30 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         // the destination URL; the reply, the card and that URL all come from
         // one verdict so a named site is never claimed without being loaded.
         const verdict = browserOpenVerdict(intentData.intent);
-        spokenResponse = language === 'hi' ? verdict.replyHi : verdict.replyEn;
+        // The client sends a locale (`hi-IN`, `hinglish`), never a bare `hi`, so
+        // this must use the same `startsWith('hi')` test as every other case or
+        // the Hindi reply is unreachable and Hindi users are answered in English.
+        spokenResponse = language.startsWith('hi') ? verdict.replyHi : verdict.replyEn;
         actionExecuted = true;
-        actionDetail = {
-          type: intentData.intent,
-          title: verdict.title,
-          target: verdict.url,
-        };
+        // The URL must ride inside `payload.target`: the app dispatcher reads the
+        // destination only from `actionDetail.payload`, so a top-level `target`
+        // would never reach the view.
+        actionDetail = browserOpenActionDetail(verdict);
         break;
       }
       case 'google_search': {
         const query = intentData.actionPayload?.query || message.replace(/^search\s+/i, '').trim();
-        spokenResponse = `Searching Google for "${query}" in the in-app Browser. No external browser was launched.`;
+        // "Searching Google for X" asserts a lookup is under way. The in-app Browser
+        // only runs it when the view is handed the search URL in `payload.target`,
+        // so the reply and the target come from one verdict and defer to Hindi when
+        // the request was Hindi.
+        const dispatch = searchDispatch(query);
+        spokenResponse = language.startsWith('hi') ? dispatch.replyHi : dispatch.replyEn;
         actionExecuted = true;
         actionDetail = {
           type: 'google_search',
-          title: `In-App Browser Search: ${query} (external browser not launched)`,
-          target: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-          payload: { query },
+          title: dispatch.title,
+          payload: { query: dispatch.query, target: dispatch.url },
         };
         break;
       }

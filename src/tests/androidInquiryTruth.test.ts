@@ -131,3 +131,46 @@ describe('offline inquiry section source guard', () => {
     expect(section).not.toContain('actionExecuted: true');
   });
 });
+
+// The owner declining a pending notification reply. The MESSAGE-reject branch
+// cleared the mirrored pending event and returned `actionExecuted: true` with the
+// detail `{ type: 'open_notepad', title: 'Message Dismissed' }` — a green action
+// banner and a bump to the user-visible "Autonomous Actions Executed" counter
+// for a refusal that was never handed to the device. Its CALL-reject sibling
+// (`offlineAndroidRejectVerdict`) had already been corrected to `false`; this
+// pins the message twin to the same honesty.
+describe('Android message reply decline never claims executed work', () => {
+  beforeEach(() => {
+    notificationDeduplicator.clear();
+    androidBridgeEngine.disconnectDevice('test reset');
+    androidBridgeEngine.connectDevice(CAPS);
+  });
+
+  it('declining a pending reply reports nothing sent and does not bump the counter', () => {
+    const notificationResult = androidBridgeEngine.handleIncomingNotification(NOTIFICATION);
+    expect(notificationResult.announced).toBe(true);
+    expect(androidBridgeEngine.getPendingEvent()?.type).toBe('MESSAGE');
+
+    const memory = freshMemory();
+    const res = processOfflineCommand('नहीं रहने दो', memory);
+
+    expect(res.intent).toBe('reject_message');
+    expect(res.actionExecuted).toBe(false);
+    expect(memory.stats.actionsExecuted).toBe(0);
+    expect((res.actionDetail as any)?.type).not.toBe('open_notepad');
+    expect(res.actionDetail?.title).toBe('Message Reply Declined Locally (nothing was sent)');
+    // The reply must not claim the message was sent, only that it was declined
+    // in the app and the device was never told to send anything.
+    expect(res.reply).not.toMatch(/sent to the device|भेज दिया/i);
+    expect(res.reply).toMatch(/केवल ऐप में/);
+    expect(res.reply).toMatch(/भेजने के लिए कहा ही नहीं गया/);
+    // The local approval prompt is genuinely dropped.
+    expect(androidBridgeEngine.getPendingEvent()).toBeNull();
+  });
+
+  it('pins the message-reject branch to the honest verdict, not a literal', () => {
+    expect(engineSource).toContain('offlineAndroidMessageRejectVerdict(');
+    expect(engineSource).not.toContain("title: 'Message Dismissed'");
+    expect(engineSource).not.toContain('सर, संदेश का उत्तर रद्द कर दिया गया है।');
+  });
+});

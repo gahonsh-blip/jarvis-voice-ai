@@ -4,7 +4,1569 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-09-27 23:05 UTC (04:35 IST 2026-09-28) — **FINALIZATION SLOT** of the
+Last cycle: 2026-10-03 18:20 UTC (23:50 IST 2026-10-03) — **WORK SLOT 5** of the
+2026-10-03 → 2026-10-04 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the Telegram broadcast route's `executed` flag.**
+
+`/api/telegram/broadcast` correctly derived `success` and `verified` from the
+message id Telegram returns, but still hard-coded `executed: true` on every
+200 response. A broadcast that never reached the target chat therefore reported
+the action as executed, the exact fake-success shape item 13 removes. `executed`
+now tracks the same proof as `success` (`interpretation.delivered`), so a send
+that Telegram did not confirm reads as not executed. Evidence:
+`server.ts` (4229-4232); `src/tests/telegramDelivery.e2e.test.ts` asserts
+`executed === true` on a verified send and `executed === false` on a send
+Telegram accepts without a message id. Negative-validated: restoring
+`executed: true` fails exactly that assertion (`1 failed | 2 passed`), restored
+→ `3 passed`. Item 13 remains `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-03 17:53 UTC (23:23 IST 2026-10-03) — **WORK SLOT 4** of the
+2026-10-03 → 2026-10-04 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the bundled telephony test suite's own assertions.**
+
+Four of the 20 mandatory cases in `src/utils/telephonyTestRunner.ts` still
+pinned the pre-hardening, fabricated behaviour that the engine has since been
+fixed to refuse: #3 recited unverified clinic hours as fact, #5 recited the
+sample clinic's `9:00` opening as fact, #11 credited a simulation-only transfer
+as `CONFIRMED`, and #17 reported a call as "placed" with only a simulation
+adapter active. The suite was therefore failing its own honest invariants
+(observed `total 20 / passed 16 / failed 4`). The four assertions now pin the
+honest behaviour: #3/#5 report unverified hours as unverified and never recite
+a time; #11 requires `handoffStatus !== 'CONFIRMED'` +
+`handoff_unavailable_message_taking` + `simProvider.callTransferred === false`;
+#17 requires `actionExecuted === false` + `TELEPHONY_NOT_CONFIGURED` and the
+absence of the old "अधिकृत" placed-call phrase. New
+`src/tests/telephonyTestRunnerHonesty.test.ts` runs the whole suite in CI and
+pins the outbound case's evidence string (`actionExecuted: false`,
+`TELEPHONY_NOT_CONFIGURED`). Negative-validated: restoring the old `9:00`
+assertion for #5 fails exactly that wrapper test (`1 failed | 0 passed`);
+restored → suite 20/20 and wrapper 1/1. No engine behaviour was changed — the
+engine already refused all four; only its stale test expectations were corrected.
+Gates on `597b0ce`: lint (`tsc --noEmit`) exit 0; full suite **143 files / 1857
+tests passed** (23.64 s, 0 failed); build exit 0 (`dist/server.cjs` 992442
+bytes). E2E: NOT RUN (no carrier / no handset). Deploy: NOT_CONFIGURED. Item 13
+stays `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-03 17:17 UTC (22:47 IST 2026-10-03) — **WORK SLOT 3** of the
+2026-10-03 → 2026-10-04 window, the 22:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the LinkedIn status route.**
+
+`GET /api/auth/linkedin/status` answered `connected: true` for a static
+`LINKEDIN_ACCESS_TOKEN` read straight from the environment. Nothing had probed
+that token against LinkedIn, so an unmeasured credential was presented as a live
+account — the exact fabricated success this project forbids. The defect was
+internally inconsistent too: the canonical `/api/social/platforms` card already
+labels the same token `CONFIGURED` ("Credentials present but not verified"), and
+this endpoint contradicted the one surface the UI trusts. The YouTube status
+route already keeps its static-token branch honest (`connected: false`,
+`status: 'CONFIGURED'`, `canPublish: false`); LinkedIn did not.
+
+The static-token branch now answers `connected: false`, `status: 'CONFIGURED'`,
+`configured: true`, `authType: 'STATIC_ENV_TOKEN'`, with a message directing the
+user to "Test connection". Only `/api/social/platforms/test` can confirm the
+account. The OAuth-connected branch (which runs a real authenticated userinfo
+probe) is unchanged and still reports `connected: true`. The response exposes
+only the token's presence, never the token itself.
+
+Evidence: new `src/tests/linkedinStatusTruth.test.ts` (1 file / 3 tests):
+the static branch never contains `connected: true` and does contain
+`connected: false` + `status: 'CONFIGURED'` + "has not been verified against
+LinkedIn"; the OAuth branch still contains `connected: true`; and the branch
+does not echo the token. Negative-validated: reverting the branch to
+`connected: true` fails exactly 1 of the 3 (`1 failed | 2 passed`); restored →
+3/3. Gates: lint (`tsc --noEmit`) exit 0; full suite **142 files / 1856 tests
+passed** (24.28 s, 0 failed); build exit 0 (`dist/server.cjs` 968.6 kb / 991806
+bytes). E2E: NOT RUN (no LinkedIn credential / no device). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-03 15:52 UTC (21:22 IST 2026-10-03) — **WORK SLOT 1** of the
+2026-10-03 → 2026-10-04 window, the 21:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the offline telephony missing-number branches.**
+
+The offline outbound-call and schedule branches in `src/utils/localJarvisEngine.ts`
+fell back to a hardcoded placeholder number whenever the command captured no
+number, so "make a call" or "schedule call tomorrow" staged a pending outbound
+request — behind the same Level-4 authorization prompt used for a real target —
+to a number the user never named. `server.ts` did the same with a fabricated
+`'Contact'` default in `classifyIntentLocally` and the `make_call` handler. A
+fabricated target is not performed work, and it is worse than a missing feature
+because it is presented as a staged call.
+
+New `extractDialTarget(raw)` and `offlineCallMissingNumberVerdict(phase)`
+(`src/utils/computerOperator/offlineCallTruth.ts`) make a target a number only
+when it carries at least three digits, and give the honest refusal for a command
+with no number. Both offline branches (`localJarvisEngine.ts` schedule ~1262,
+outbound ~1388), the local intent classifier (`server.ts` ~885) and the
+`make_call` handler (`server.ts` ~9149) now route through them: a request with no
+number returns `outbound_call_authorization` with `actionExecuted: false`, a
+title of `No Number to Call (nothing staged)` / `No Number to Schedule (nothing
+recorded)`, and a reply that asks which number — never a staged placeholder.
+
+Evidence: 4 new cases in `src/tests/offlineCallTruth.test.ts` (file total 27):
+"make a call" refused with `actionExecuted: false`, `memory.stats.actionsExecuted`
+still 0 and no `9876543210` in the spoken text; "schedule call tomorrow" refused;
+a real named number (`call +91 98765 43210`) still staged; and a source guard that
+the branches call `offlineCallMissingNumberVerdict(` and the placeholder literal
+is gone. Negative-validated: reintroducing the placeholder fallback in the
+outbound branch fails exactly 2 of the 27 (`2 failed | 25 passed`); restored →
+27/27. Gates: lint (`tsc --noEmit`) exit 0; targeted 3 files / 52 passed; full
+suite **141 files / 1853 tests passed** (23.70 s, 0 failed); build exit 0
+(`dist/server.cjs` 968.3 kb). E2E: NOT RUN (no carrier/PSTN). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-02 23:06 UTC (04:36 IST 2026-10-03) — **FINALIZATION SLOT** of the
+2026-10-02 → 2026-10-03 window, the 04:35 IST fire. No new backlog item was advanced:
+the window was frozen and the tip `e99aaaf` re-verified end to end.
+
+Observed that run on `feature/hermes-full-completion` @ `e99aaaf`: `npm run lint`
+(`tsc --noEmit`) exit 0; full `npx vitest run` **141 files / 1849 tests passed**
+(24.00 s, 0 failed); `npm run build` exit 0 with artifact `dist/server.cjs`
+**964.8 kb**. Security checks clean: `git check-ignore -v .env` → `.gitignore:4:.env`;
+`git status --short` empty; no `node_modules/` or `dist/` tracked (both git-ignored);
+only `.env.example` tracked; the diff-vs-main secret scan returned exactly one hit —
+`AQVt3n0k9Jm2XyZabcDEF1234567890abcdefg` in `src/tests/credentialRedactor.test.ts:273`,
+a synthetic LinkedIn-token fixture for the redactor, not a real credential. `npm audit`:
+NOT RUN. PR **#5** is open, non-draft, `mergeable_state: clean`. **Not merged — awaiting
+human approval.** Item 13 (`Zero-fake-success for all tools`) remains `PARTIAL` — the
+`server.ts` / `server_tools.ts` tail of unclassified `success: true` sites is still not
+individually audited (`UNKNOWN`). E2E: NOT RUN — no handset and no display session in
+this sandbox. Deploy: `NOT_CONFIGURED`. Hardware-blocked items #1/#50/#55 remain
+`NOT_AVAILABLE`.
+
+Previous cycle: 2026-10-02 22:38 UTC (04:08 IST 2026-10-03) — **WORK SLOT 14** of the
+2026-10-02 → 2026-10-03 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the global kill-switch route.**
+
+`POST /api/system/kill-switch` (`server.ts`) always answered `{ success: true,
+message: 'Global Kill Switch engaged. All background processes terminated and
+queue cleared.' }` and always wrote a `🚨 GLOBAL KILL SWITCH TRIGGERED … cleared
+N pending …` Level 4 audit row, whatever the pre-transition state. Engaging the
+switch while the system was already frozen cleared no queue (there are no
+`PENDING_APPROVAL` requests left to reject) yet still read as a fresh
+termination of it. New `killSwitchVerdict(pre, clearedTasksCount)`
+(`src/utils/emergencyTruth.ts`) derives the verdict from the state observed
+*before* the activation and the real cleared count: a genuine engagement reports
+`actionExecuted: true`, `outcome: 'ENGAGED'`; a re-engagement of a paused or
+latched system reports `outcome: 'ALREADY_ENGAGED'`, `actionExecuted: false`; an
+unobserved state reports `outcome: 'UNKNOWN'` and never claims an engagement.
+The route now returns that verdict, gates both the audit row and the Telegram
+notice on `actionExecuted`, and answers `503` for the unknown case.
+
+Evidence: new `src/tests/killSwitchTruth.test.ts` (9 cases: fresh engagement with
+count; engagement clearing no queue does not invent a count; re-engagement of a
+paused system refused; re-engagement of a latched switch refused; unobserved
+state never engaged; non-finite cleared count treated as nothing; plus source
+guards that the route calls the classifier with the pre-transition state, that
+the old success literal is gone, and that the audit and Telegram branches are
+gated on `actionExecuted`). Negative-validated: restoring the original route
+fails exactly the three source guards (`3 failed | 6 passed`); restored → 9/9.
+Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 9 passed; full suite
+**141 files / 1849 tests passed** (23.62 s); build exit 0 (`dist/server.cjs`
+964.8 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the
+sweep is not exhausted; `server.ts` still holds a tail of unclassified
+`success: true` sites.
+
+Previous cycle: 2026-10-02 22:12 UTC (03:42 IST 2026-10-03) — **WORK SLOT 13** of the
+2026-10-02 → 2026-10-03 window, the 03:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the telephony call-history delete routes.**
+
+`DELETE /api/telephony/calls` and `DELETE /api/telephony/calls/:id` (`server.ts`)
+both answered `{ success: true, message: … }` unconditionally. Clearing an
+already-empty history, or deleting an id that was never recorded, still read as a
+completed deletion — the response asserted that call records were removed while
+the in-memory store was unchanged. A caller could not distinguish a real deletion
+from a no-op. New `classifyTelephonyCallDeletion(removed, targetId?)`
+(`src/utils/hardening/telephonyCallDeleteTruth.ts`) derives the verdict from the
+actual removed count: a real removal reports `success: true` with the count and
+`outcome: 'DELETED'`; clearing an empty store reports `success: false`,
+`outcome: 'NOTHING_TO_CLEAR'`; deleting an unrecorded id reports
+`success: false`, `outcome: 'NOT_FOUND'` and names the id. Both routes now return
+that verdict.
+
+Evidence: new `src/tests/telephonyCallDeleteTruth.test.ts` (8 cases: real clear
+with count; empty clear refused; real id deleted; unknown id refused and named;
+non-finite/negative removed treated as nothing; plus source guards that both
+routes call the classifier, that neither the old success literal nor
+`res.json({ success: true` survives on either delete route, and that the
+delete-by-id route reaches the classifier with the id). Negative-validated:
+restoring the two unconditional `success: true` literals fails exactly the three
+route guards (`3 failed | 5 passed`); restored → 8/8. Gates: lint (`tsc --noEmit`)
+exit 0; targeted 1 file / 8 passed; full suite **140 files / 1840 tests passed**
+(23.95 s); build exit 0 (`dist/server.cjs` 963.2 kb). E2E: NOT RUN (no carrier/PSTN).
+Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted;
+`server.ts` still holds a tail of unclassified `success: true` sites. The other
+two delete sites named by the prior slot were audited this run and are already
+truthful: `/api/tools/fs/delete` returns `realFsDelete()`'s real result, and
+`DELETE /api/autonomous/schedule/:id` 404s an unknown id.
+
+Last cycle: 2026-10-02 21:40 UTC (03:10 IST 2026-10-03) — **WORK SLOT 12** of the
+2026-10-02 → 2026-10-03 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the controlled web-fetch route.**
+
+`realWebFetch` (`server_tools.ts`) returned `{ success: true, title, url,
+textContent }` whenever the HTTP response was 2xx, and when the page exposed no
+`<title>` it labelled the result with `parsedUrl.hostname`. A 2xx response is
+not a retrieval: a consent / bot-check interstitial, an empty application shell
+or a JavaScript-only page all answer HTTP 200 while carrying no readable body
+text. The route therefore reported a completed "web analysis" with an empty
+`textContent`, and presented the hostname as the page title — the same
+fake-success shape item 13 exists to remove. New
+`classifyWebFetchContent(rawHtml)` (`src/utils/hardening/webFetchTruth.ts`)
+strips scripts/styles/the `<head>` and reports whether the cleaned body carries
+readable text (`>= MIN_READABLE_CHARS`), returning the page's own `og:title` /
+`<title>` or `null` — never the hostname. `realWebFetch` now refuses with
+`success: false` and a "No readable content" reason when a page exposed nothing,
+and only reports a title the page actually supplied.
+
+Evidence: new `src/tests/webFetchTruth.test.ts` (7 cases: real title + body;
+`og:title` preferred; consent interstitial with a `<title>` but no body refused;
+script-only page refused; empty/absent body refused; unobserved title reported
+`null` not the hostname; plus a bounded source guard that the route uses the
+classifier and refuses with `success: false` and that the old
+hostname-as-title fallback is gone). Negative-validated: `git stash` of the
+`server_tools.ts` change fails the source guard (`1 failed | 6 passed`);
+restored → 7/7. Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 7 passed;
+full suite **139 files / 1832 tests passed** (23.62 s); build exit 0
+(`dist/server.cjs` 985386 bytes). E2E: NOT RUN (no live target sites). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted;
+`server_tools.ts` still holds a tail of unclassified `success: true` sites.
+
+
+Last cycle: 2026-10-02 21:11 UTC (02:41 IST 2026-10-03) — **WORK SLOT 11** of the
+2026-10-02 → 2026-10-03 window, the 02:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the YouTube transcript fetch route.**
+
+`fetchYouTubeTranscriptData` (`server_tools.ts`) started with `let title =
+'YouTube Video'; let channel = 'YouTube Creator';` and only overwrote them when
+`ytInitialPlayerResponse` parsed. When it did not parse, it fell back to the
+page's generic `<title>` and — crucially — still returned `{ success: true,
+videoInfo, ... }`. A YouTube **consent / bot-check interstitial** answers HTTP
+200 with a Chrome-style `<title>` ("Before you continue to YouTube") and no
+player response, so the route reported a real, successfully-fetched video whose
+title was the literal placeholder "YouTube Video", channel "YouTube Creator" and
+duration 0. That fabricated `videoInfo` then flowed into the transcript prompt
+and the audit entry — the exact fake-success shape item 13 exists to remove.
+New `resolveYouTubePageMetadata(html, playerResponse)` reports only what the
+page actually exposed: title/channel/duration are `null` when unobserved, a
+non-finite `lengthSeconds` is `null` (not 0), the generic `<title>` is never
+read as a video title, and only a real `og:title` is trusted on an unparsed
+page. The fetch route now refuses with `success: false` when no player response
+and no `og:title` are present (interstitial), and never hardcodes a placeholder.
+A genuine resolution still returns the real title/channel/duration and
+`success: true`.
+
+Evidence: new `src/tests/youtubeMetadataTruth.test.ts` (7 cases: real
+player-response resolution; every field `null` on a consent page; generic
+`<title>` not used as the video title; only the title taken from an unparsed
+page with `og:title`; non-finite duration treated as unobserved; plus two
+bounded source guards that the placeholders are gone and the route resolves via
+the helper and refuses with `success: false`). Negative-validated: stashing the
+source fix fails all 7 cases (`7 failed`), restored → 7/7. Gates: lint
+(`tsc --noEmit`) exit 0; full suite **138 files / 1825 tests passed** (25.59 s);
+build exit 0 (`dist/server.cjs` 984115 bytes). E2E: NOT RUN (no carrier/PSTN).
+Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted;
+`server_tools.ts` still holds a tail of unclassified `success: true` sites.
+
+Last cycle: 2026-10-02 20:45 UTC (02:15 IST 2026-10-03) — **WORK SLOT 10** of the
+2026-10-02 → 2026-10-03 window, the 02:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the proactive-routine trigger route.**
+
+`POST /api/routines/trigger` (`server.ts`) answered `{ success: true, routine }`
+for **every** request. It matched the requested `timeSlot` against the live
+report store and fell back to `proactiveReports[0]` when nothing matched, so an
+unknown slot — or an **empty store**, where both the match and the fallback are
+`undefined` — still read as a triggered briefing with a routine attached. A
+caller could therefore ask for a routine that had not been built and receive
+`success: true` alongside an unrelated one. The four slots are fixed (they come
+from `buildProactiveReports`), so a request that names something else, or names
+nothing, never triggered anything. New `resolveRoutineTrigger(timeSlot)`
+(`src/utils/hardening/routineTriggerTruth.ts`) accepts only the four real slots
+(`morning | midday | evening | night`), refuses a missing slot
+(`success: false`, 400) and an unknown slot naming the bad value (400), and the
+route now rebuilds the store on read, finds the routine **for that slot**, and
+answers `success: false` (404) when the valid slot has no stored routine — a real
+match remains `success: true` with `triggered: true`.
+
+Evidence: new `src/tests/routineTriggerTruth.test.ts` (6 cases: every real slot
+accepted; unknown slot refused and named; missing/null/empty slot refused; a
+non-string slot refused; plus two bounded source guards that the route calls
+`resolveRoutineTrigger`, returns `success: false` / `status(400)`, and no longer
+falls back to the first report). Negative-validated: restoring the pre-fix route
+fails exactly the two route-wiring assertions (`2 failed | 4 passed`),
+restored → 6/6. Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 6 passed;
+full suite **137 files / 1818 tests passed** (23.77 s); build exit 0
+(`dist/server.cjs` 982749 bytes). E2E: NOT RUN (no carrier/PSTN). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted;
+`server_tools.ts` still holds a tail of unclassified `success: true` sites.
+
+Last cycle: 2026-10-02 19:46 UTC (01:16 IST 2026-10-03) — **WORK SLOT 9** of the
+2026-10-02 → 2026-10-03 window, the 01:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the Security Matrix update route.**
+
+`POST /api/security/update` (`server.ts`) copied whichever fields the request
+body carried over the running matrix and answered `{ success: true }`
+unconditionally. Three false-success shapes followed: an **empty body** read as
+a successful save; a `currentLevel` **outside the real 1..4 range** was stored
+as-is, so the gateway compared against a level the matrix never defines; and an
+**unknown field** (a typo such as `humanApprovlForExternal`, or a key from a
+stale client) was written into the matrix and reported as applied. For the two
+boolean gates this was worse than cosmetic — a string such as `"false"` is truthy
+in every `if (humanApprovalForExternal)` / `if (maskSensitiveData)` gate
+downstream while a tri-state renderer reads it as neither true nor false. This is
+the surface that gates external actions and credential masking, so a no-op must
+not read as a change. New `classifySecurityMatrixUpdate(body)`
+(`src/utils/hardening/securityMatrixUpdateTruth.ts`) accepts only the real
+fields with valid values (`currentLevel` in 1..4 as a number; the two gates as
+booleans), refuses everything else, and returns a distinct verdict for `NO_KEYS`
+versus `ALL_INVALID`. The route applies only `verdict.applied`, answers
+`success: false`, `applied: false` with the reason and the rejected field names
+when nothing valid was supplied, and names any ignored keys on a partial apply.
+`SecurityMatrixModal.tsx`'s `handleUpdateLevel` and `handleToggleHumanApproval`
+now surface the rejection notice and resync to the server's real state instead of
+leaving the selector showing a level or an approval gate that was never applied.
+
+Evidence: new `src/tests/securityMatrixUpdateTruth.test.ts` (18 cases: valid
+level / approval / masking applied; empty body rejected as `NO_KEYS`; non-object
+body rejected; out-of-range level rejected; string level rejected; non-boolean
+approval value rejected; numeric masking value rejected; unknown field rejected;
+mixed real+unknown applies the real field and names the unknown one; invalid
+sibling not applied while a valid one is; and four bounded source guards that the
+route classifies against the real fields, returns `success: false` / `applied:
+false`, does not spread `...req.body`, and assigns only the classified fields;
+plus two modal guards). Negative-validated: restoring the pre-fix route fails
+exactly the three route assertions (`3 failed | 15 passed`), restored → 18/18.
+Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 18 passed; full suite
+**136 files / 1812 tests passed** (24.12 s); build exit 0 (`dist/server.cjs`
+981690 bytes). E2E: NOT RUN (no carrier/PSTN). Deploy: NOT_CONFIGURED. Item 13
+stays `PARTIAL` — the sweep is not exhausted; `server_tools.ts` still holds a
+tail of unclassified `success: true` sites.
+
+Previous cycle: 2026-10-02 19:30 UTC (01:00 IST 2026-10-03) — **WORK SLOT 8** of the
+2026-10-02 → 2026-10-03 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the telephony permission-update route.**
+
+`POST /api/telephony/permissions` (`server.ts`) merged **any** caller-supplied
+object over the stored matrix (`{ ...current, ...req.body }`) and answered
+`success: true` unconditionally, so a body naming a permission key that does not
+exist — a typo, or a key from a stale client — was reported as an applied change,
+and an empty body read as a successful save. That is a false success on the exact
+surface that gates outbound calling, private-data access and call recording: the
+operator believes a permission changed when nothing did. New
+`classifyPhonePermissionUpdate(body, PHONE_PERMISSION_DEFINITIONS)`
+(`src/utils/hardening/phonePermissionUpdateTruth.ts`) accepts only keys that exist
+in the real definitions and only values carrying a valid
+`NOT_CONFIGURED|DENIED|ASK|GRANTED` state; the route now applies just
+`verdict.applied`, answers `success: false` with `applied: false` and a naming
+`reason` (`NO_KEYS` / `ALL_UNKNOWN`) when nothing real was supplied, and names any
+ignored keys. `TelephonyHubModal.tsx`'s `handleTogglePermission` awaits the
+response, reverts the toggle on a rejection, and surfaces a notice instead of
+leaving a permission shown as granted that was never persisted.
+
+Evidence: new `src/tests/telephonyPermissionUpdateTruth.test.ts` (11 cases: known
+key applied, all four documented states accepted, unknown key rejected, empty body
+rejected, non-object body rejected, invalid state value rejected, mixed real+unknown
+applies the real key and names the unknown one, and three bounded source guards that
+the route classifies against the definitions, returns `success: false`, and saves
+`{ ...current, ...verdict.applied }` rather than the raw body). Negative-validated:
+restoring the pre-fix route fails exactly the three route assertions
+(`3 failed | 8 passed`), restored → 11/11. Gates: lint (`tsc --noEmit`) exit 0;
+targeted 1 file / 11 passed; full suite **135 files / 1794 tests passed**
+(27.30 s); build exit 0 (`dist/server.cjs` 979414 bytes). E2E: NOT RUN (no
+carrier/PSTN). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not
+exhausted.
+
+Previous cycle: 2026-10-02 18:44 UTC (00:14 IST 2026-10-03) — **WORK SLOT 7** of the
+2026-10-02 → 2026-10-03 window, the 00:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the social OAuth disconnect routes.**
+
+`POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect`
+(`server.ts`) both answered `{ success: true, message: '<provider> disconnected
+successfully.' }` **unconditionally** — they cleared an already-absent
+`memoryState.linkedInConnection` / `memoryState.youTubeConnection` and wrote a
+`… Disconnected (…)` `VERIFIED` audit row no matter what. A disconnect while
+nothing was linked therefore read as a real credential removal, in the response
+*and* in the immutable audit trail. Both routes now guard on an existing
+connection first: a no-op disconnect returns `success: false` with
+`outcome: 'NOT_CONNECTED'` and a naming message, writes **no** audit row, and
+only the confirmed path clears the credential and logs the removal.
+`src/components/SocialMediaModal.tsx` (`handleDisconnectLinkedIn` /
+`handleDisconnectYouTube`) now surfaces the server's honest message in the
+not-connected branch instead of falling through to the success notice.
+
+Evidence: new `src/tests/oauthDisconnectTruth.test.ts` (4 cases: each route's
+guard precedes its `success: true` and carries the `NOT_CONNECTED` outcome, the
+`Disconnected (…)` audit write follows the not-connected early return, and the
+modal handlers render `data.message` in an `else` branch). Negative-validated:
+disabling both guards (`if (false)`) fails exactly the two guard assertions
+(`2 failed | 2 passed`), restored → 4/4. Gates: lint (`tsc --noEmit`) exit 0;
+targeted 1 file / 4 passed; full suite **134 files / 1783 tests passed**
+(22.81 s); build exit 0 (`dist/server.cjs` 970016 bytes). E2E: NOT RUN (no
+LinkedIn/YouTube OAuth credentials). Deploy: NOT_CONFIGURED. Item 13 stays
+`PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-02 18:20 UTC (23:50 IST 2026-10-02) — **WORK SLOT 7** of the
+2026-10-02 → 2026-10-03 window, the 23:45 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the scheduler routines.**
+
+`checkAndRunSchedulerJobs()` in `server.ts` logged `Executed <routine>` for a job
+the instant its time window opened, *before* anything was attempted, and for the
+two push routines it did so while the outbound Telegram call was fire-and-forget:
+`sendRealTelegramMessage(...).catch(...)` swallows every failure, so the log
+claimed the Morning Briefing or Nightly Work Summary had gone out even when the
+push had failed (or, with no `activeTelegramChatId`, was never sent at all). The
+Morning and Night routines now `await deliverTelegramMessage(...)`, take its
+strict `DeliveryInterpretation` verdict (`VERIFIED` / `UNVERIFIED` /
+`NOT_CONFIGURED` / `FAILED` / `PERMISSION_REQUIRED`), and record the outcome
+through a new `recordSchedulerOutcome(name, push)` helper that appends
+`✅ <routine>: message delivered to Telegram` only on a confirmed delivery and
+`⚠️ <routine>: executed, but message NOT delivered to Telegram — <verdict>`
+otherwise. The two no-push routines (Midday Health Audit, Evening Social Pulse)
+record `schedule advanced (no Telegram push in this environment)` rather than an
+execution claim. The per-day run-date marker is still stamped *first*, so an
+awaited push cannot re-fire the window; the `detail` field also corrects the
+previous slot's `detail: delivery.status` (a field `DeliveryInterpretation` does
+not carry) to the real fields (`delivery.errorReason || delivery.outcome`).
+
+Evidence: new `src/utils/hardening/schedulerRunTruth.ts` (`schedulerRunLogLine`)
+and `src/tests/schedulerRunTruth.test.ts` (7 cases: confirmed / failed /
+not-attempted log lines, plus source guards that the four unconditional
+`Executed …` strings are gone, every routine routes through
+`recordSchedulerOutcome`, the two pushes are awaited through
+`deliverTelegramMessage`, and the marker precedes the awaited push). Targeted
+run: **1 file / 7 tests passed**; related truth tests **4 files / 80 tests
+passed**. Gates: lint (`tsc --noEmit`) exit 0; full suite **133 files / 1779
+tests passed** (22.48 s); build exit 0 (`dist/server.cjs` 969608 bytes). E2E:
+NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not
+exhausted.
+
+
+Previous cycle: 2026-10-02 18:12 UTC (23:42 IST 2026-10-02) — **WORK SLOT 6** of the
+2026-10-02 → 2026-10-03 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the emergency-toggle route.**
+
+`POST /api/emergency/toggle` drove the flag-*flipping* `toggleEmergencyStop`
+(`server_tools.ts`), which inverts `emergencyPaused` on every call, then answered
+`{ success: true, ...updated }` and wrote a `🚨 EMERGENCY STOP ACTIVATED … VERIFIED`
+(or `🟢 … RESUMED … VERIFIED`) audit row **plus** a Telegram notice unconditionally.
+Two false-success directions followed: a *repeated* stop **released** the freeze
+while the audit claimed it had just been activated, and a resume while nothing was
+paused **engaged** it — each reported as a successful transition. Fixed: the route
+derives the requested transition from the **pre-transition** state via
+`emergencyTogglePreAction(action, pre)` (`src/utils/emergencyTruth.ts`), so the
+flip only happens when the pre-state supports it. An unsupported transition is a
+reported no-op (`success: false`, `actionExecuted: false`, `title`/`message` from
+`emergencyToggleVerdict`) that writes **no** audit row, sends **no** Telegram
+notice, and does not flip. `AutonomousToolsModal.tsx` now sends an explicit
+`action` and surfaces the honest outcome (a no-op reads as a non-change, not a
+green success) while still only storing a confirmed state.
+
+Evidence: `src/tests/emergencyToggleRouteTruth.test.ts` (9 cases: the
+`emergencyTogglePreAction` truth table for stop/resume/latched/unobserved
+pre-states, plus source guards that the route derives the verdict from the
+pre-state and early-returns before the audit row, the Telegram notice and the
+flip). Targeted run: **4 files / 35 tests passed**. Negative-validated: reverting
+`server.ts` to the original route fails exactly the 3 route-source assertions
+(`3 failed | 6 passed`), restored → 9/9. Gates: lint (`tsc --noEmit`) exit 0;
+full suite **132 files / 1772 tests passed** (22.19 s); build exit 0
+(`dist/server.cjs` 946.3 kB). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays
+`PARTIAL` — the sweep is not exhausted; `grep -c "success: true"` reports 85 in
+`server.ts` and 16 in `server_tools.ts`, not yet individually classified.
+
+
+Previous cycle: 2026-10-02 18:03 UTC (23:33 IST 2026-10-02) — **WORK SLOT 5** of the
+2026-10-02 → 2026-10-03 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the system-resume route.**
+
+`POST /api/system/resume` answered `success: true` and wrote a
+`🟢 SYSTEM RESUMED … VERIFIED` audit row unconditionally, whatever the actual
+state. A resume while nothing was frozen — or while a latched hard kill switch
+still held autonomy frozen — therefore read as released autonomy, in the server
+response *and* in the immutable audit trail. This is the fake-success shape that
+matters most on the emergency path: the operator believes autonomy resumed when
+it did not. Fixed: the route derives `emergencyResumeVerdict(getEmergencyState())`
+(`src/utils/emergencyTruth.ts`) from the **pre-transition** state; a no-op resume
+returns `success: false`, `released: false`, an `outcome` and writes **no**
+resumed audit row, and `resumeSystemOperation` is only called once a release is
+confirmed. `HUDHeader.tsx` adopts only an observed state and shows the honest
+message instead of a green "resumed" notice.
+
+Also fixed: a **pre-existing false failure** on the branch. The 02:05 slot's
+`src/tests/actionExecutedRemainingSites.test.ts` pin counted the literal
+`success: true` inside a *doc comment* on `telephonySessionManager.ts` as a new
+flag site after the 22:35 slot added that comment, so the pin failed `3 != 2`
+when the two real sites are unchanged and truthful. The pin now strips comments
+before counting; the suite is green again.
+
+Evidence: `src/tests/emergencyResumeTruth.test.ts` (7 cases: the verdict for
+engaged / already-active / latched / unobserved pre-states, plus source guards
+that the route derives the verdict before mutating and early-returns before the
+resumed audit row). Targeted run: **2 files / 16 tests passed**. Negative-validated:
+weakening the unobserved-state guard in `emergencyResumeVerdict` fails exactly the
+`UNKNOWN` case (`1 failed | 6 passed`), restored → 7/7. Gates: lint
+(`tsc --noEmit`) exit 0; full suite **131 files / 1763 tests passed** (22.58 s);
+build exit 0 (`dist/server.cjs` 967919 bytes). E2E: NOT RUN. Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-02 17:40 UTC (22:36 IST 2026-10-02) — **WORK SLOT 4** of the
+2026-10-02 → 2026-10-03 window, the 22:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the telephony/approval truth sites.**
+
+Four more fake-success shapes were found and closed. `/api/telephony/interruption`
+and `/api/telephony/silence-timeout` returned a bare `success: true` regardless of
+whether the barge-in or silence timeout was actually applied to a live call, and
+`/api/computer-operator/cancel` answered `success: true` even when the tracker had
+no active task to cancel. Each route now reports the handler's real outcome via
+`bargeInApplied(result)` / `silenceTimeoutApplied(result)` and
+`TaskTracker.cancelActiveTask`'s `result.cancelled`.
+
+`/api/approvals/resolve`'s `REJECT` branch was a genuine audit-log fake: it called
+`updateActionRequestStatus(id, 'REJECTED')`, which returns `null` for an unknown id
+(`server_tools.ts`), yet still wrote a `REJECTED` audit entry and answered success.
+It now returns HTTP 404 and writes nothing when the action does not exist.
+
+Evidence: `src/tests/telephonyEndpointTruth.test.ts` (27+ cases) and
+`src/tests/approvalResolutionTruth.test.ts` (16 cases, incl. the new 404 guard and a
+direct null-return assertion on `updateActionRequestStatus`). Targeted run:
+**2 files / 43 tests passed**. Negative-validated: reverting the reject guard fails
+exactly the 404 assertion (`1 failed | 15 passed`), reverting the cancel fix fails
+the cancel assertion; both restored green. Gates: lint (`tsc --noEmit`) exit 0.
+Full suite/build: NOT RUN (budget). Item 13 stays `PARTIAL` — the sweep is not
+exhausted; ~80 `success: true` sites remain unclassified.
+
+Last cycle (previous): 2026-10-02 17:05 UTC (22:35 IST 2026-10-02) — **WORK SLOT 3** of the
+2026-10-02 → 2026-10-03 window, the 22:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the offline action counter.**
+
+The offline engine (`src/utils/localJarvisEngine.ts`) bumped
+`stats.actionsExecuted` in 15 places with a bare
+`updatedMemory.stats.actionsExecuted += 1`, decided the `actionExecuted` verdict
+separately in the return literal, and let the two drift. A counter that advances
+for work the engine did not do — or stays still for work it reports as done — is
+the exact fake-success shape item 13 exists to prevent. Every increment now goes
+through the single `countAction` helper, which already gates on the verdict
+(`if (actionExecuted !== false) memory.stats.actionsExecuted += 1;`).
+
+The `language_switch` branch was the one live drift the matrix surfaced: it
+returned `actionExecuted: true` without ever advancing the counter, so the reply
+told the user the mode had changed while the "actions executed" total stayed
+still. It now counts like every other true verdict. (The `set_name` branch keeps
+its own increment because it also replaces the memory's `name`; it was audited
+and matches the verdict.)
+
+Evidence: `src/tests/offlineActionCounterConsistency.test.ts` (4 cases) — a
+source pin that the engine holds no ad-hoc `updatedMemory.stats.actionsExecuted +=`
+and keeps the gated helper, a 48-command verdict/counter matrix asserting
+`counter delta === (actionExecuted ? 1 : 0)` over true, false and no-action
+branches in English, Hindi and Hinglish, a `language_switch` regression pin, and
+a refusal/unrecognised-command pin. Targeted run: **3 files / 55 tests passed**.
+Negative-validated: reverting the `countAction` call in the switch branch fails
+exactly 2 of 4 (`2 failed | 2 passed`); restored green. Gates: lint
+(`tsc --noEmit`) exit 0; full suite **129 files / 1742 tests passed** (22.70 s);
+build exit 0 (`dist/server.cjs` 965651 bytes). E2E: NOT RUN. Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted.
+
+Last cycle (previous): 2026-10-02 16:14 UTC (21:44 IST 2026-10-02) — **WORK SLOT 2** of the
+2026-10-02 → 2026-10-03 window, the 21:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the computer-operator kill-switch gate.**
+
+A real safety fake-success was found and closed on the operator chat path.
+`fetchKillSwitchState()` (`src/utils/operatorChatIntegration.ts`) returned a bare
+boolean: a non-OK response, a malformed body, a network error and the 2-second
+timeout all returned `false`, the same value as "the emergency stop is confirmed
+released". Both dispatch sites in `src/App.tsx` then passed that value as
+`killSwitchActive`, so when `/api/emergency/status` did not answer the owner's
+emergency stop silently failed to block a host action — the run proceeded as if
+the switch were off. This is the same defect class the Permission Gateway, HUD
+header and Autonomous Tools panel already fixed with the `emergencyLiveness`
+tri-state (`src/utils/emergencyTruth.ts`); the operator path had been missed.
+
+`fetchKillSwitchState()` now resolves a tri-state `KillSwitchLiveness`
+(`ENGAGED | RELEASED | UNKNOWN`), `killSwitchBlocks()` treats everything except a
+confirmed `RELEASED` as blocking, and `operatorKillSwitchRefusal()` gives the
+honest refusal text. Both `src/App.tsx` sites (`killSwitchBlocks(...)`) refuse
+before dispatching, and the now-guaranteed-`RELEASED` value is passed as
+`killSwitchActive: false`. UNKNOWN is never read as released.
+
+Evidence: `src/tests/operatorChatIntegration.test.ts` — new
+`operator kill-switch tri-state liveness` block (8 cases): released/engaged flag
+combinations, `null`/`undefined`/`{}`/non-boolean-string/non-object → `UNKNOWN`,
+`killSwitchBlocks` blocking for ENGAGED **and** UNKNOWN while releasing only on
+RELEASED, the two refusal messages, and three `fetchKillSwitchState` cases
+(non-OK response → UNKNOWN, thrown network error → UNKNOWN, real
+`{emergencyPaused:false}` → RELEASED). Targeted run: **1 file / 22 tests passed**.
+Negative-validated: forcing `killSwitchBlocks` back to `liveness === 'ENGAGED'`
+fails exactly the UNKNOWN-blocking assertion (`1 failed | 21 passed`); restored
+green. `npm run lint` (`tsc --noEmit`) exit 0. Item 13 stays `PARTIAL`.
+
+Last cycle (previous): 2026-10-02 15:56 UTC (21:26 IST 2026-10-02) — **WORK SLOT 1** of the
+2026-10-02 → 2026-10-03 window, the 21:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the computer-operator execute route.**
+
+`POST /api/computer-operator/execute` (`server.ts`, ~6246) awaited the engine and then answered
+`res.json({ success: true, task })` for every result. A `FAILED`, `BLOCKED`, `NEEDS_APPROVAL` or
+`CANCELLED` run — and a run that never reached a terminal state — therefore all read as performed
+host work to any caller reading `success`. The flag now follows `operatorTaskExecuted(task)`, the
+helper the `/api/chat` `fix_project_error` branch already uses, and the route names the engine
+verdict in a new `outcome` field. Guarded by `src/tests/computerOperatorExecuteRouteTruth.test.ts`
+(5 cases), negative-validated, and the full suite/build are green. Item 13 stays `PARTIAL`.
+
+=== OLDER ===
+
+Last cycle: 2026-10-01 22:57 UTC (04:27 IST 2026-10-02) — **WORK SLOT 15** of the
+2026-10-02 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the Twilio outbound-dial callback URL.**
+
+A genuine fake-success shape was found and closed on the outbound PSTN path.
+`TwilioTelephonyProvider.startOutboundCall()` (`src/utils/telephonyAdapters.ts`)
+built the call-answer callback URL as
+`${this.webhookBaseUrl || 'https://hermes-jarvis.local'}${TELEPHONY_TWIML_TURN_PATH}`.
+The carrier is handed that URL and calls back on it for *every* call turn, so when
+`TELEPHONY_WEBHOOK_BASE_URL` was unset the adapter silently substituted the fabricated
+host `https://hermes-jarvis.local`, which resolves nowhere. Twilio would accept the
+call and the call could never connect — a placed call reported as success that cannot
+work. A private/loopback base URL (e.g. `https://192.168.x.x`) had the same effect.
+
+The dial now refuses unless the base URL is one a carrier could actually reach:
+`isCarrierReachableWebhookBaseUrl()` requires an absolute `https` URL whose host is not
+loopback (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`), a `.local` name, or an RFC 1918
+private address (`10/8`, `192.168/16`, `172.16/12`). On failure it returns
+`TELEPHONY_WEBHOOK_BASE_URL_MISSING` and never falls back to a fabricated host. The
+`callbackUrl` now uses `this.webhookBaseUrl` directly, which the guard has already
+proven non-empty.
+
+Tests: four helper cases in `src/tests/telephonyEndpointTruth.test.ts` (blank/absent →
+false; fabricated host + every loopback/private host → false; non-https or relative →
+false; public https → true; source no longer contains `hermes-jarvis.local`) and two
+behavioral cases in `src/tests/telephonyProviderHonesty.test.ts` (no callback URL set →
+`success: false` with no `providerCallId`; a private `TELEPHONY_WEBHOOK_BASE_URL` →
+`success: false`).
+
+Negative-validated: forcing the new guard to `false` fails exactly the 2 new behavioral
+cases (`2 failed | 8 passed`), and the captured failure shows the adapter reached the
+real Twilio API and was rejected with a 401 — proof the dial genuinely left the adapter
+before the guard was added; restored green.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted `telephonyEndpointTruth` +
+`telephonyProviderHonesty` **2 files / 30 tests passed**; full suite **127 files / 1725
+tests passed** (23.84 s); build exit 0 (`dist/server.cjs` 965667 bytes / 943.0 kb).
+E2E: NOT RUN (no carrier credentials, no public webhook host). Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — another real defect closed, but the sweep is not exhausted.
+
+Last cycle (previous): 2026-10-01 22:17 UTC (03:47 IST 2026-10-02) — **WORK SLOT 14** of the
+2026-10-02 window, the 03:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the real bridge adapter, and the telephony simulator status.**
+
+Two more fake-success sites were found and closed. (1) `RealAndroidBridgeAdapter.connect()`
+(`src/utils/androidBridgeAdapter.ts`) returned `success: true` on any HTTP 200,
+*after* calling `androidBridgeEngine.connectDevice(...)` whose own return value it
+discarded. The engine's `connectDevice` derives an honest status from the reported
+capabilities (a simulated/testbed device, or one missing call-answer capability, is
+`LIMITED_CAPABILITY`; one with no notification/call-detection grant is
+`PERMISSION_REQUIRED`), so the adapter's flat `success: true` overwrote exactly the
+verdict the 02:35 IST slot had just made truthful. The flag now follows the status the
+engine observed: `success: status === 'CONNECTED'`, with a message that names the
+degraded status otherwise. (2) `TelephonyProviderRegistry.getActiveStatus()`
+(`src/utils/telephonyAdapters.ts`) returned `READY` whenever the active provider's
+`isConfigured()` was true — and `SimulatedTestTelephonyProvider.isConfigured()` is
+unconditionally `true`. A simulator has no PSTN carrier, so it is now reported
+`NOT_CONFIGURED`, consistent with the `SIMULATION_ONLY` mode/label the gateway-truth
+module already uses.
+
+Added two cases to `src/tests/realAndroidBridgeAdapter.test.ts` (a 200 with a simulated
+device, and a 200 with a device that cannot answer calls → `success: false`, status
+`LIMITED_CAPABILITY`) and two to `src/tests/telephonyGatewayTruth.test.ts` (active
+simulator → `NOT_CONFIGURED`; a real configured carrier still → `READY`).
+
+Negative-validated: restoring the adapter's `success: true` fails exactly the 2 new
+adapter cases (`2 failed | 7 passed`); removing the simulator guard fails exactly the 1
+new `getActiveStatus` case (`1 failed | 11 passed`); both restored green.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted `realAndroidBridgeAdapter` +
+`telephonyGatewayTruth` **2 files / 21 tests passed**; full suite **127 files / 1718
+tests passed** (23.23 s); build exit 0 (`dist/server.cjs` 964691 bytes / 942.1 kb).
+E2E: NOT RUN (no Android hardware, no carrier credentials). Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — two more real defects closed, but the sweep is not exhausted.
+
+Last cycle (previous): 2026-10-01 21:52 UTC (03:22 IST 2026-10-02) — **WORK SLOT 13** of the
+2026-10-02 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — a false-green bridge status badge.**
+
+`MobileBridgeModal` (`src/components/MobileBridgeModal.tsx`) computed
+`bridgeConnected = status === 'CONNECTED' || status === 'PERMISSION_REQUIRED' ||
+status === 'LIMITED_CAPABILITY'` and rendered its header badge in the live
+(green) style for any of those three. A device that had been downgraded to
+`LIMITED_CAPABILITY`, or that had refused with `PERMISSION_REQUIRED`, therefore
+still showed a green "connected" badge — the UI claiming a live connection the
+status did not support. This is the visual form of the fake-success shape item 13
+exists to prevent.
+
+Fixed: added `bridgeStatusTone()` to `src/utils/mobileBridgeEngine.ts`, which
+classifies every `AndroidBridgeStatus`. Only `CONNECTED` is `live` (green);
+`PARTIALLY_CONNECTED`, `LIMITED_CAPABILITY` and `PERMISSION_REQUIRED` are
+`degraded` (amber); `MOBILE_NOT_CONNECTED`, `ERROR` and anything unrecognised are
+`inactive` (grey). The badge now keys off that tone instead of the old
+`bridgeConnected` expression. No status can be promoted to green by default.
+
+Added `src/tests/bridgeStatusTone.test.ts` (11 tests): it pins the tone of every
+status, asserts `CONNECTED` is the *only* live status across the whole union,
+treats an unknown status as inactive, and guards the component wiring (the old
+`bridgeConnected` expression and the per-status equality checks are gone; the
+green class is gated on the live tone).
+
+Negative-validated: mapping `LIMITED_CAPABILITY`/`PERMISSION_REQUIRED` back to
+`live` fails 4 of the 11 tests (`4 failed | 7 passed`); restored → 11/11 green.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted suite `bridgeStatusTone` **1 file /
+11 tests passed**; full suite **127 files / 1714 tests passed**; build exit 0
+(`dist/server.cjs` 942.0 kb). E2E: NOT RUN (no Android hardware). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — another real defect closed, but the
+item spans tool-level success flags beyond the bridge family.
+
+Last cycle (previous): 2026-10-01 21:05 UTC (02:35 IST 2026-10-02) — **WORK SLOT 12** of the
+2026-10-02 window, the 02:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — a real fake-success defect on the Android bridge connect path.**
+
+`AndroidBridgeManager.connectDevice` (`src/utils/androidBridgeEngine.ts`) returned
+`{ success: true }` unconditionally, alongside an honest `status`. When a device
+was downgraded to `LIMITED_CAPABILITY` (a simulated/testbed device, or one
+missing call-answer/telecom-dialer capability) or refused with
+`PERMISSION_REQUIRED` (no notification-access and no call-detection grant), the
+boolean still read `true` — so any caller checking `.success` would believe a
+live, fully-permitted device had connected when the status said the opposite.
+This is exactly the fake-success shape item 13 exists to prevent.
+
+Fixed: the return is now `{ success: this.status === 'CONNECTED', status: this.status }`,
+so the flag can only be `true` for a genuinely live, fully-permitted device. No
+in-repo consumer read `connectDevice(...).success` (verified by grep), so no
+runtime behaviour changed.
+
+Also closed the coverage gap the 02:05 slot named: `androidBridgeAdapter.ts`,
+`androidBridgeEngine.ts` and `telephonySessionManager.ts` held the last three
+unaudited `success: true` sites. Added
+`src/tests/actionExecutedRemainingSites.test.ts` (5 tests): it pins the
+telephony authorization flag as truthful (success follows a recorded
+`AUTHORIZED`/`REJECTED` decision; an unknown request id returns `false`), the
+simulated adapter as `SIMULATION_ONLY` (never `CONNECTED`), the real adapter as
+propagating a server rejection, and the fixed engine behaviour for all three
+connect outcomes. A source guard pins the `success: true` counts
+(adapter 2, engine 0, telephony 2) so a new unaudited flag fails the test.
+
+Negative-validated: restoring `{ success: true }` fails 2 of the 5 tests
+(`2 failed | 3 passed`); restored → 5/5 green.
+
+Gates: lint (`tsc --noEmit`) exit 0; targeted bridge suite
+(`androidMobileBridge` + `realAndroidBridgeAdapter` + `androidBridgePrivacySettings`
++ `androidInquiryTruth` + `offlineActionExecutedSweep` + `actionExecutedRemainingSites`)
+**6 files / 71 tests passed**; full suite **126 files / 1703 tests passed**;
+build exit 0 (`dist/server.cjs` 942.0 kb). E2E: NOT RUN (no Android hardware).
+Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — another real defect closed,
+but the item spans tool-level success flags beyond the bridge family.
+
+Last cycle (previous): 2026-10-01 20:52 UTC (02:22 IST 2026-10-02) — **WORK SLOT 11** of the
+2026-10-02 window, the 02:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the offline engine's `actionExecuted: true` sites were enumerated but
+not pinned by any test.**
+
+Item 13 has swept `server.ts` (`src/tests/actionExecutedSweepAudit.test.ts`) but
+the offline fallback in `src/utils/localJarvisEngine.ts` also returns
+`actionExecuted: true` from 16 return literals across 14 unique intents
+(`language_switch`, `set_name`, `location_services`, `open_calculator`,
+`open_notepad`, `telephony_hub`, `call_history`, `open_paint`, `check_project`,
+`generate_quotation`, `create_social_post`, `security_audit`, `cloud_telemetry`,
+`schedule_morning_report`, `google_search`). No test asserted that the set stays
+audited, so a future edit could add an unaudited `true` (the exact fake-success
+shape item 13 exists to prevent) without any failure.
+
+Audited each of the 14 intents: 13 are credited because `handleExecuteAction` in
+`src/App.tsx` routes them to a real in-app view via `setActiveApp(...)`; the
+14th, `set_name`, opens no view but writes a validated name into the returned
+memory (`judgeSetNameIntent` guard → `name: extractedName`) which App.tsx
+persists. Both are real, user-observable work, so the flags are truthful — no
+source change was needed.
+
+Added `src/tests/offlineActionExecutedSweep.test.ts`: it enumerates every
+same-return literal `actionExecuted: true`, asserts the set equals the audited
+allow-list, asserts each view-backed intent is actually routed by App.tsx, and
+asserts `set_name`'s validated persisted write. Negative-validated: flipping
+`time_inquiry` to `true` fails the sweep (`1 failed | 3 passed`); restored →
+green. Full suite **125 files / 1698 tests passed** (22.57 s); lint
+(`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 942.0kb). Item 13 stays
+`PARTIAL` — this closes a coverage gap, not a code defect.
+
+Last cycle (previous): 2026-10-01 20:13 UTC (01:43 IST 2026-10-02) — **WORK SLOT 10** of the
+2026-10-02 window, the 01:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the offline search branch named a lookup the in-app Browser never
+loaded.**
+
+`src/utils/localJarvisEngine.ts`'s offline `google_search` branch prepared the
+query for the in-app Browser but emitted only `payload.query`. The client
+(`src/App.tsx` `handleExecuteAction`) reads the destination from
+`payload.target` and hands it to `BrowserModal` as `initialUrl`; `BrowserModal`
+ignores `initialQuery` whenever `initialUrl` is already set, so with the target
+missing the view stayed on its Google home while the action card and reply named
+the query — the exact "named a search that never loaded" class the `/api/chat`
+path had already fixed via `searchDispatch()` in `src/utils/browserDispatchTruth.ts`.
+This offline sibling surface was missed.
+
+Fixed: the offline branch now routes through the same `searchDispatch()` helper
+and emits `payload: { query, target: dispatch.url }`, so the Browser loads
+`https://www.google.com/search?q=<query>`. Guarded by a new case in
+`src/tests/localJarvisEngine.test.ts` (`carries the search URL in
+payload.target so the in-app Browser loads it`). Negative-validated: reverting
+the payload to `{ query }` fails exactly that case (`1 failed | 46 skipped`);
+restored → green. Full suite **124 files / 1694 tests passed** (24.26 s);
+lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964583 bytes).
+Item 13 stays `PARTIAL`.
+
+Last cycle (previous): 2026-10-01 19:46 UTC (01:16 IST 2026-10-02) — **WORK SLOT 9** of the
+2026-10-01 window, the 01:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the browser-open dispatch case answered Hindi users in English.**
+
+During the item-13 sweep of `actionExecuted: true` sites in `server.ts`, the
+`open_google` / `open_youtube` / `open_gmail` / `open_chatgpt` case gated its
+Hindi reply on `language === 'hi'`. The client (`src/App.tsx`) posts
+`voiceSettings.language` to `/api/chat` — a locale such as `hi-IN` or
+`hinglish`, never a bare `hi` — so the comparison was dead code and every Hindi
+user got `verdict.replyEn`. It is the only bare-`hi` comparison in `server.ts`;
+the other 20-odd language gates all use `language.startsWith('hi')`.
+
+Fixed: `server.ts` now uses `language.startsWith('hi')`, matching the rest of
+the file. Guarded by a new case in `src/tests/browserDispatchTruth.test.ts`
+(bounds the `open_google` case body and asserts the `startsWith('hi')` form is
+present and the `language === 'hi'` form is absent). Negative-validated:
+restoring the bare `hi` comparison fails exactly that case (`1 failed | 10
+passed`); restored → 11/11. Full suite **124 files / 1693 tests passed** (22.24 s);
+lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964517 bytes).
+Item 13 stays `PARTIAL`.
+
+Last cycle (previous): 2026-10-01 19:32 UTC (01:02 IST 2026-10-02) — **WORK SLOT 8** of the
+2026-10-01 window, the 01:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the telephony adapter family reported `success: true` for provider
+documents it never delivered to a carrier.**
+
+`src/utils/telephonyAdapters.ts` (Twilio / Telnyx / Plivo adapters) returned
+`{ success: true }` from `answerIncomingCall`, `rejectIncomingCall`, `endCall`,
+`playAudio`, `streamAudio` and `collectSpeech` while only *building* a provider
+document (TwiML / a provider command / Plivo XML) and never handing it to the
+carrier or an HTTP client. A caller reading `success` would believe an audio
+prompt had played, speech collection had started, or a call had ended, when
+nothing left the machine — the exact fake-success shape item 13 exists to
+eliminate. The methods are exported but have no in-repo consumers, so no runtime
+behaviour changed; the fix is confined to the returned verdict.
+
+Fixed: a shared `TELEPHONY_DOCUMENT_NOT_DELIVERED` reason constant is now
+returned by all six methods (`success: false`), naming that the provider document
+was produced but not delivered. The document fields are still returned so callers
+can transmit them explicitly.
+
+Evidence: `src/tests/telephonyProviderHonesty.test.ts` — **8 tests** (source
+guards on the shared constant and per-provider honest verdicts). Negative-
+validated: reverting the adapter verdicts to `success: true` fails `1 failed | 7
+passed`; restored → 8/8. Full suite **124 files / 1692 tests passed** (21.66 s);
+lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 964509 bytes).
+Item 13 stays `PARTIAL` — another real fake-success class closed; `SocialMediaModal`
+remains the one named candidate (its YouTube upload-draft flow is already guarded
+by a real `providerUrn` check) plus any tool-level success flags not yet swept.
+
+Last cycle (previous): 2026-10-01 19:26 UTC (00:56 IST 2026-10-02) — **WORK SLOT 7** of the
+2026-10-01 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the outbound-dial authorize route dialled through the simulator.**
+
+`POST /api/telephony/outbound/authorize` (`server.ts`) gated its dial on the raw
+`provider.isConfigured()` boolean and then called `startOutboundCall()`. The
+`simulation_test_provider`'s `isConfigured()` is unconditionally `true` and its
+`startOutboundCall()` returns a fabricated `providerCallId`, so once the
+simulator was the selected engine the route answered `success: true` with a
+`providerCallId` although no carrier ever saw a call — the same fake-success
+class as the earlier handoff fix, on the adjacent route.
+
+Fixed: `telephonyEngineCanObserveCall(mode)` added to
+`src/utils/telephonyGatewayTruth.ts`; the route now derives the active engine
+mode from the registry via the existing `telephonyEngineMode()` and refuses any
+dial the engine cannot actually place, naming the mode
+(`SIMULATION_ONLY` / `TELEPHONY_NOT_CONFIGURED` / `TELEPHONY_ENGINE_UNSUPPORTED`)
+with the matching refusal text. The simulator response no longer carries
+`success: true` or a `providerCallId`.
+
+Evidence: `src/tests/telephonyOutboundDialTruth.test.ts` — **9 tests** (source
+guards + behavioural checks of the shared verdict functions). Targeted
+`telephonyOutboundDialTruth` + `telephonyGatewayTruth` — **2 files / 19 passed**.
+Negative-validated — reverting the route gate to
+`!provider.isConfigured() && req.body.isSimulated !== true` fails `2 failed | 7
+passed`; restored → 9/9. Live E2E on `node dist/server.cjs` (PORT 4013):
+`POST /api/telephony/settings {provider: browser_webrtc_simulator}` →
+`engineApplied: true`, then `outbound/stage` + `outbound/authorize` →
+HTTP 400 `{"success":false,"authorized":true,"status":"SIMULATION_ONLY",...}`;
+with the default twilio engine → HTTP 400 `{"status":"NOT_CONFIGURED",...}`.
+Full suite **124 files / 1690 tests passed** (22.42 s); lint (`tsc --noEmit`)
+exit 0; build exit 0 (`dist/server.cjs` 963512 bytes). Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — another real fake-success class closed; the item still
+spans tool-level success flags not yet swept (`SocialMediaModal` and the
+telephony adapter `success: true` returns remain candidates).
+
+Last cycle (previous): 2026-10-01 18:20 UTC (23:50 IST 2026-10-01) — **WORK SLOT 6** of the
+2026-10-01 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the offline blueprint branch claimed phases 0 to 9 were active.**
+
+The offline `check_project` branch of `src/utils/localJarvisEngine.ts` (the
+fallback engine used when the server is unreachable) spoke
+`Displaying Master Blueprint Phase 0 to 9.` / `All phases active hain.` /
+`मास्टर ब्लूप्रिंट खोला जा रहा है। फेज 0 से 9 सक्रिय हैं।` while opening the
+Master Blueprint view. That path never reads `/api/blueprint`, so it cannot
+know how many phases exist or whether any is active — the identical
+readiness claim the blueprint-truth work (previous cycle) removed from
+`BlueprintRoadmapModal.tsx`, still alive one layer down in the spoken reply.
+
+Fixed: added `blueprintRoadmapReply(lang)` to `src/utils/blueprintTruth.ts`.
+It states the view is opening and that `/api/blueprint` was not read on this
+offline path, so the phase list and its active status are unconfirmed — in
+English, Hindi and Hinglish. The engine branch now calls it instead of
+hardcoding the range.
+
+Evidence: `src/tests/blueprintProgressTruth.test.ts` — **3 new cases + 1 engine
+source guard**; targeted `blueprintProgressTruth` + `localJarvisEngine` —
+**2 files / 59 passed**; full suite **123 files / 1681 tests passed** (22.55 s);
+lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 962913 bytes).
+Negative-validated — restoring the hardcoded phase claim fails the engine source
+guard (`1 failed | 12 passed`); restored → 13/13. E2E: NOT RUN. Deploy:
+NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — another real fake-success class closed; the item still
+spans tool-level success flags not yet swept (`SocialMediaModal` and the
+telephony adapter `success: true` returns remain candidates).
+
+Last cycle (previous): 2026-10-01 17:49 UTC (23:19 IST 2026-10-01) — **WORK SLOT 5** of the
+2026-10-01 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the telephony agent recited unverified clinic facts on live calls.**
+
+`TelephonySessionManager.processTurn` (`src/utils/telephonySessionManager.ts`)
+answered "clinic hours", "is the doctor available" and "how do I get an
+appointment" by reading `DEFAULT_CLINIC_CONFIG` and speaking the values as fact.
+That config (`src/utils/telephonyPermissions.ts`) is a hardcoded sample dataset —
+"Apollo Health & Wellness Clinic", "Dr. Julian Wayne, MD (Physician)", "Monday to
+Friday 9:00 AM to 6:00 PM" — that no human verified for any deployment, yet the
+`/api/telephony/twiml/turn` route passes it to `processTurn` on every real
+inbound call. A caller to a real clinic heard another business's hours, doctor
+name and booking process presented as this clinic's own, and the `doctor_
+availability` branch asserted a named doctor was present in clinic. This is the
+same fake-success class as the previous telephony slots (handoff, weather),
+one level up.
+
+Fixed: added `ClinicConfig.configured` (the shipped `DEFAULT_CLINIC_CONFIG` sets
+it `false`). The three clinic-fact intents now check `clinic.configured === true`;
+an unconfigured clinic reports the fact as *not verified* and offers to take a
+message, while a deployment that supplies verified data (its own `ClinicConfig`
+with `configured: true`) still answers normally.
+
+Evidence: `src/tests/telephonyClinicFactsHonesty.test.ts` — **6 passed**;
+`telephonyClinicFactsHonesty` + `telephonyHandoffTruth` + `telephonyWeather
+Honesty` — **3 files / 14 passed**; full suite **123 files / 1677 tests passed**
+(23.02 s); lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 962168
+bytes). Negative-validated — flipping `configured` to `true` restores the recital
+and the new suite goes `5 failed | 1 passed`; restored → 6/6. E2E: NOT RUN.
+Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — another real fake-success class closed; the item still
+spans tool-level success flags not yet swept (`SocialMediaModal` and the
+telephony adapter `success: true` returns remain candidates).
+
+Last cycle (previous): 2026-10-01 17:21 UTC (22:51 IST 2026-10-01) — **WORK SLOT 4** of the
+2026-10-01 window, the 22:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the Computer Operator credited a screen capture of a screen it never
+saw.**
+
+`ActionExecutor.inspectScreen` (`src/utils/computerOperator/actionExecutor.ts`)
+returned `outcome: 'VERIFIED'`, `success: true`, message *"Captured the current
+view"* whenever the observation carried `screenshotBase64`. The non-host-backed
+`ScreenObserver` (`src/utils/computerOperator/screenObserver.ts`) draws a
+synthetic canvas image of an imagined VS Code / Chrome / Terminal desktop and
+returns it as `screenshotBase64`. So in a browser context — the exact place the
+screen-inspection action is meant to be useful — a picture of a screen this
+process never observed was reported as a verified capture. This is the precise
+fake-success shape item 13 exists to eliminate, one level up from the telephony
+work of the previous three slots.
+
+Fixed: `inspectScreen` now refuses locally with `outcome: 'NOT_AVAILABLE'`,
+`success: false`, `receipt.verified: false`, `failureReason:
+'ILLUSTRATIVE_OBSERVATION_SOURCE'` unless `ScreenObserver.isHostBacked()`. A
+host-backed observation that carries image data still verifies; a host-backed
+observation that produced no image is `NO_CAPTURE_PRODUCED`.
+
+Evidence: `src/tests/remainingFakeSuccess.test.ts` — **52 passed** (targeted);
+`screenObserver` + `computerOperatorTaskStatus` + `remainingFakeSuccess` —
+**3 files / 68 passed**; full suite **122 files / 1671 tests passed** (22.97 s);
+lint (`tsc --noEmit`) exit 0; build exit 0 (`dist/server.cjs` 959709 bytes).
+Negative-validated — disabling the `isHostBacked()` gate makes the illustrative
+observation report `VERIFIED` (`1 failed | 51 passed`), restored → 52/52.
+E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — another real fake-success class closed; the item still
+spans tool-level success flags not yet swept (telephony adapters and
+`SocialMediaModal` remain candidates).
+
+Last cycle (previous): 2026-10-01 16:57 UTC (22:27 IST 2026-10-01) — **WORK SLOT 3** of the
+2026-10-01 window, the 22:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the telephony human-handoff confirmed a staff transfer that no carrier
+ever observed.**
+
+**`transfer me to a doctor` reported "Transferring your call to our clinic staff
+now, please hold the line" and advanced the session to `CONFIRMED` even with no
+carrier.** `TelephonySessionManager.processTurn`'s handoff branch gated the
+transfer on `provider.isConfigured() || session.isSimulated` and trusted the
+adapter's `providerConfirmed: true`. The simulator's `transferCall()` is
+hardcoded `providerConfirmed: true`, and an unconfigured real carrier cannot be
+observed at all, so a call nothing handled read as a confirmed handoff. The
+fallback also asserted "all staff members are currently occupied on another
+line" — a busy state that was never observed.
+
+Previous cycle: 2026-10-01 16:23 UTC (21:53 IST 2026-10-01) — **WORK SLOT 2** of
+the 2026-10-01 window, the 21:35 IST fire. **Item 13 — call-control phrases
+containing "phone call" were dialled as outbound calls in both intent
+classifiers.**
+
+**`end phone call` staged an outbound request to the default number behind a
+Level-4 prompt instead of hanging up.** Slot 1 closed the `call `-prefix
+misrouting; this slot closes the sibling class. The outbound branch also keys on
+the substring `phone call`, which appears inside call-control phrases: `end
+phone call`, `disconnect phone call`, `reject phone call`, `hang up the phone
+call`, `phone call history`. All of them were classified
+`outbound_call_authorization` and dialled the default contact instead of
+answering, hanging up, rejecting, or opening the call log.
+
+Fixed: `src/utils/telephonyIntentRouting.ts` now exports `isAnswerCallRequest()`,
+`isHangupCallRequest()`, `isRejectCallRequest()` and the umbrella
+`isTelephonyControlRequest()`. The outbound branch in `server.ts` (~line 861)
+and `src/utils/localJarvisEngine.ts` (~line 1355) excludes the whole control
+family (`!isTelephonyControlRequest(lower)`), and the answer/hangup/reject
+branches route through the shared predicates so both surfaces cannot drift.
+
+Evidence: `src/tests/telephonyIntentRouting.test.ts` — **20 passed** (targeted);
+full suite **121 files / 1663 tests passed** (22.56 s); lint (`tsc --noEmit`)
+exit 0; build exit 0 (`dist/server.cjs` 958252 bytes). Live `/api/chat` E2E
+against the built server (PORT 4012): `end phone call` → `hangup_call`
+(target null), `disconnect phone call` → `hangup_call`, `reject phone call` →
+`reject_call`, `phone call history` → `call_history` (actionExecuted true),
+`call hub` → `telephony_hub`, and `call Dr Wayne` → `make_call` target
+`Dr Wayne` (genuine dial preserved). Negative-validated — removing the guard
+from `src/utils/localJarvisEngine.ts` fails 14 of 20 routing tests
+(`14 failed | 6 passed`), restored → 20/20. Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — two real misrouting classes closed, not proof the
+sweep across every tool is complete.
+
+Last cycle (previous): 2026-10-01 16:02 UTC (21:32 IST 2026-10-01) — **WORK SLOT 1** of the
+2026-10-01 window, the 21:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the telephony console/history phrases were swallowed by the outbound-call
+branch in both intent classifiers.**
+
+**`call hub` was staged as an outbound call to the literal target "hub".** The
+outbound-call branch in `server.ts`'s `classifyIntentLocally()` (~line 833) and in
+`src/utils/localJarvisEngine.ts` (~line 1329) keyed on the bare prefix `call `,
+which also matches the console/history phrases. So "call hub" (the in-app
+Telephony Hub) and "call history" (the call log) were classified
+`outbound_call_authorization`, staged an outbound request to the literal strings
+`hub` / `history` behind a Level-4 approval prompt, and never opened the console
+or history view the user asked for. `open dialer` was already excluded, which is
+why the gap was missed.
+
+Fixed: new `src/utils/telephonyIntentRouting.ts` holds `isTelephonyHubRequest()`
+and `isCallHistoryRequest()`, shared by both surfaces so the classifiers cannot
+drift apart again; the outbound branch in both now excludes those phrases and
+lets their own branches below handle them.
+
+Evidence: `src/tests/telephonyIntentRouting.test.ts` — 6 passed (targeted).
+A live `/api/chat` probe was NOT RUN in this slot. Full suite
+**121 files / 1649 tests passed** (22.04 s); lint exit 0; build exit 0
+(`dist/server.cjs` 959143 bytes). Negative-validated — removing the guard from
+`src/utils/localJarvisEngine.ts` fails exactly the two routing tests
+(`2 failed | 4 passed`), restored → 6/6. E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — one more real misrouting class closed, not proof the
+sweep is complete.
+
+Last cycle (previous): 2026-09-30 23:00 UTC (04:30 IST 2026-10-01) — **WORK SLOT 17** of the
+2026-09-30 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the offline briefing credited itself for work it did not do.**
+
+**A briefing with no device attached still advanced "Autonomous Actions
+Executed".** `processOfflineCommand` (`src/utils/localJarvisEngine.ts`) incremented
+`updatedMemory.stats.actionsExecuted` at the top of the morning-briefing branch
+before it knew whether any telemetry had been read. With no phone connected every
+telemetry section speaks a "no source connected" refusal, yet the user-visible
+counter still ticked up. A fixture `MobileStatusData` flagged `isSample` had the
+same effect: sample data is not a measurement, so it must not count as a read.
+The successful weather answer had the same defect: like the already-fixed
+`time_inquiry`, `weather_inquiry` only switches the app to the status view
+(`src/App.tsx` case `weather_inquiry`) and speaks a reading — it is an
+informational answer, not executed work.
+
+Fixed: the briefing now credits the counter only when `readAnyTelemetry`
+(battery/weather/notifications/calendar/mail availability, all false with no
+device) is true; the weather branch no longer increments and reports
+`actionExecuted: false`. Guarded by `src/tests/localJarvisEngine.test.ts`
+("should not speak sample fixture telemetry as measured readings" now pins
+`actionExecuted === false`) and `src/tests/remainingFakeSuccess.test.ts` (briefing
+counter block: no-telemetry → 0, one real telemetry section read → 1).
+
+**Negative-validated:** reverting only the source change (unconditional
+increment, `readAnyTelemetry = true`, weather credit restored) makes the guard
+fail (`2 files failed / 5 tests failed | 89 passed`); restored → `3 files / 109
+tests passed`. Gates observed on this commit: lint (`tsc --noEmit`) exit 0;
+targeted `remainingFakeSuccess` + `localJarvisEngine` + `conversationalPipelineRegression`
+**3 files / 109 tests passed**. Item 13 remains `PARTIAL` — another real
+fake-success class closed; the item still covers tool-level success flags not yet
+swept.
+
+Previous cycle: 2026-09-30 22:20 UTC (03:50 IST 2026-10-01) — **WORK SLOT 16** of the
+2026-09-30 window, the 03:35 IST fire. **Item 32 (`Call detection E2E`) — the
+live-call weather answer was fabricated.**
+
+**A live call answered a weather question with an invented temperature band.**
+`TelephonySessionManager.processTurn` (`src/utils/telephonySessionManager.ts`) is
+the turn handler wired to the real TwiML endpoint `/api/telephony/twiml/turn` in
+`server.ts`, so its `replyText` is spoken to a caller. Its weather branch, when
+no `weatherData` was supplied, answered "temperatures around 25 to 28 degrees
+Celsius" as if that were a current reading — a fabricated telemetry claim on a
+live call. A supplied `weatherData` object with no `temp` also fell through to
+invented per-field defaults (`26°C`, `Clear`, `Gurugram / SFO`).
+
+Fixed: the no-reading branch now states that no weather source is connected to
+the call and that no current temperature or conditions are available; a partial
+telemetry object is treated as no reading rather than filled with invented
+defaults; the connected-source branch still speaks the real reading and names an
+unknown location as unknown instead of inventing `Gurugram / SFO`. Guarded by
+`src/tests/telephonyWeatherHonesty.test.ts` (4 tests): no-source Hindi and
+English, an empty telemetry object, and the connected-source case.
+
+**Negative-validated:** with only the reply branch reverted to the fabricated
+band the guard fails (`3 failed | 1 passed`); restored → `4 passed`. Gates
+observed on this commit: lint (`tsc --noEmit`) exit 0; targeted
+`telephonyWeatherHonesty` + `telephonyProviderHonesty` **2 files / 10 tests
+passed**. Item 32 remains `PARTIAL` — the telemetry chain is now honest on the
+live call path; no physical call has reached this host.
+
+Previous cycle: 2026-09-30 21:45 UTC (03:15 IST 2026-10-01) — **WORK SLOT 15** of the
+2026-09-30 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the Computer Operator view the dispatcher opens was never mounted.**
+
+**`open_computer_operator` claimed a view it never opened.** The offline verdict
+`offlineOperatorCountsAsHostWork('open_computer_operator')` returns `true` (it is
+the one offline operator intent credited as real page-local work) and its reply
+says the HUD was activated, and `handleExecuteAction` in `src/App.tsx` does run
+`setActiveApp('computer_operator')`. But `App.tsx` had **no render site** for
+`activeApp === 'computer_operator'`: the `ComputerOperatorModal` import at the top
+of the file was unused. Assigning `activeApp` to a value nothing consumes meant
+the HUD never opened while the spoken reply and the user-visible "Autonomous
+Actions Executed" counter both reported it had — the exact fake-success shape
+item 13 exists to eliminate.
+
+Fixed: mount `ComputerOperatorModal` on `activeApp === 'computer_operator'`
+(`onClose` resets `activeApp`; `onSendToChat={handleSendCommand}`;
+`activeLanguage` from `voiceSettings`), matching the sibling modal wiring.
+Guarded by `src/tests/computerOperatorDispatchTruth.test.ts` (3 tests): it derives
+the set of views `setActiveApp('...')` assigns and the set the JSX actually
+renders (`activeApp === '...'`) and asserts the assigned set is a subset of the
+rendered set — a general invariant, so any future dangling view fails the guard.
+
+**Negative-validated:** with only `src/App.tsx` reverted the guard fails
+(`3 failed`); restored → `3 passed`. Gates observed on this commit: lint
+(`tsc --noEmit`) exit 0; targeted `computerOperatorDispatchTruth` +
+`actionExecutedSweepAudit` + `launchDispatchTruth` **3 files / 25 tests passed**;
+full suite **119 files / 1636 tests passed** (22.03 s); build exit 0
+(`dist/server.cjs` 935.5 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13
+remains `PARTIAL` — another real fake-success class closed; the item still spans
+tool-level success flags beyond the audited branches.
+
+Previous cycle: 2026-09-30 21:06 UTC (02:36 IST 2026-10-01) — **WORK SLOT 14** of the
+2026-09-30 window, the 02:35 IST fire. Continued **Item 54 (Production Hardening)
+— credential redaction** with a fifth live probe of `redactSecrets()`.
+
+**A probe of ten provider credential formats found three real secrets passing
+through `redactSecrets()` byte-for-byte.** (1) Slack app-level tokens
+(`xapp-...`) — not covered by the existing `xox[baprs]-` pattern and capable of
+minting `xoxp` user tokens. (2) Stripe webhook signing secrets (`whsec_...`) —
+not covered by the existing `sk_`/`rk_` key pattern; this is the secret that
+signs and validates Stripe webhook payloads. (3) Mailgun API keys (`key-` + 32
+hex) — no pattern existed. Added pattern branches 38–40 and 3 regression tests
+in `src/tests/credentialRedactor.test.ts`. Each test uses the **bare** token form
+(the path this function exists to protect) and asserts a non-token prose case is
+preserved (`the key-value store`). The probe also found Twilio Account/API-Key
+SIDs (`AC…`/`SK…`) and an X/Twitter OAuth2 bearer passing through unchanged —
+those are deliberately **not** redacted here: the SID is a public account
+identifier (an existing test asserts it must survive) and the bearer is a
+distinctive-char-prefixed key the generic keyword rule already covers when
+labelled.
+
+**Negative-validated:** stashing only the engine change fails exactly the three
+new cases (`3 failed | 42 passed`); restored → `45 passed`. Gates observed: lint
+(`tsc --noEmit`) exit 0; targeted `credentialRedactor` **1 file / 45 tests
+passed**; push accepted after `abbe956` was amended to `b24b96a` (GitHub push
+protection flagged a synthetic Mailgun test literal; the fixture was rebuilt by
+concatenation rather than allow-listed). Item 54 remains `PARTIAL` — another
+real leak class closed; the provider list is still not provably exhaustive.
+
+Previous cycle: 2026-10-01 20:42 UTC (02:12 IST 2026-10-01) — **WORK SLOT 13** of the
+2026-10-01 window, the 02:05 IST fire. Continued **Item 54 (Production Hardening)
+— credential redaction** with a third live probe of `redactSecrets()`.
+
+**A probe of three more credential families this app itself carries found all
+three leaking through the redactor byte-for-byte.** (1) Telnyx API keys
+(`KEY` + 32 hex) — `TELNYX_API_KEY` is read by the Telnyx telephony adapter
+(`src/utils/telephonyAdapters.ts`); the labelled form was caught by the generic
+keyword rule but the **bare** key (the form in a screenshot or terminal stream)
+passed through unchanged. (2) LinkedIn OAuth access tokens (`AQV` + body) —
+`LINKEDIN_ACCESS_TOKEN` is a first-class integration credential. (3) Gmail app
+passwords — the generic `Password Assignment` rule stops at the first space, so
+`GMAIL_APP_PASSWORD=abcd efgh ijkl mnop` redacted only the first group and left
+12 of the 16 characters in the clear. Added pattern branches 36–37 (Telnyx,
+LinkedIn) plus a dedicated Gmail-app-password rule (6b) ordered **before** the
+generic rule so the whole value is consumed, and 3 regression tests in
+`src/tests/credentialRedactor.test.ts`. Each test uses the **bare** token form —
+the path this function exists to protect — and asserts a non-token prose case is
+preserved (e.g. `press the KEY button`, an `AQV` mnemonic).
+
+**Negative-validated:** stashing only the engine change fails exactly the three
+new cases (`3 failed | 39 passed`); restored → `42 passed`. Gates observed: lint
+(`tsc --noEmit`) exit 0; targeted `credentialRedactor` **1 file / 42 tests
+passed**; full suite **118 files / 1630 tests passed** (22.05 s); build exit 0
+(`dist/server.cjs` 956883 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 54
+remains `PARTIAL` — another real leak class closed; the provider list is still
+not provably exhaustive.
+
+Previous cycle: 2026-10-01 20:11 UTC (01:41 IST 2026-10-01) — **SLOT** of the
+2026-10-01 window. **Item 13 (`Zero-fake-success for all tools`) — the offline
+Android message-reply decline branch.**
+
+**The MESSAGE reject branch in `src/utils/localJarvisEngine.ts` credited a
+decline as executed work.** When the owner declines a pending notification reply
+(`androidBridgeEngine.clearPendingEvent()`), the branch returned
+`actionExecuted: true` with the detail `{ type: 'open_notepad', title: 'Message
+Dismissed' }` and incremented the user-visible "Autonomous Actions Executed"
+counter (`countAction(updatedMemory, true)`). Refusing to send a reply performs
+no work: it only drops a locally mirrored approval prompt, so nothing was ever
+handed to the Android device, and no notepad view is opened for a decline. The
+call-reject twin (`offlineAndroidRejectVerdict`) already reports `false`; this
+branch was the outlier.
+
+Fixed: a new `offlineAndroidMessageRejectVerdict(connected)` in
+`src/utils/computerOperator/offlineCallTruth.ts` returns `actionExecuted: false`,
+title `Message Reply Declined Locally (nothing was sent)`, and an honest EN/HI/
+Hinglish reply that names the device state. The branch routes the counter
+through `countAction(updatedMemory, rejectVerdict.actionExecuted)`, and the honest
+intent `reject_message` was added to `IntentCategory` in `src/types.ts`.
+
+Guarded by `src/tests/androidInquiryTruth.test.ts` — asserts the branch emits no
+`answer_call`/`open_notepad` intent and never `actionExecuted: true`, and pins the
+title/reply. Negative-validated: flipping the verdict to credit the decline fails
+the guard, restored → green.
+
+Gates observed on this commit: lint (`tsc --noEmit`) exit 0; targeted
+`androidInquiryTruth` + `offlineCallTruth` **2 files / 30 tests passed**; full
+suite **118 files / 1627 tests passed** (22.35 s); build exit 0
+(`dist/server.cjs` 955360 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13
+remains `PARTIAL` — another real fake-success class closed; the item still spans
+tool-level success flags beyond the audited branches.
+
+Previous cycle: 2026-09-30 19:35 UTC (01:05 IST 2026-10-01) — **WORK SLOT 11** of the
+2026-09-30 window, the 01:05 IST fire. Continued **Item 54 (Production Hardening)
+— credential redaction** with a second live probe of `redactSecrets()`.
+
+**A probe of four more provider-token families that this app itself carries found
+all four passing through the redactor byte-for-byte.** `credentialRedactor.ts`
+covered the providers added in slot 10 (Groq, Perplexity, Notion, Shopify, Linear,
+Slack webhooks, Azure, Firebase, Resend), but not Meta/Facebook Graph access
+tokens (`FACEBOOK_PAGE_ACCESS_TOKEN` / `INSTAGRAM_ACCESS_TOKEN`, `EAA` + body),
+Google OAuth refresh tokens (`YOUTUBE_REFRESH_TOKEN` / Gmail / Calendar, `1//` +
+body), Google OAuth authorization codes (`4/0A` + body) and Google OAuth access
+tokens (`ya29.` + body). A screen capture, task summary or audit log exposing any
+of these would have surfaced it unredacted. Added pattern branches 32–35 and 4
+regression tests (plus a non-token preservation assertion) in
+`src/tests/credentialRedactor.test.ts`. **Negative-validated:** stashing only the
+engine change fails exactly the four new cases (`4 failed | 35 passed`); restored
+→ `39 passed`. Gates observed: lint (`tsc --noEmit`) exit 0; targeted file 39/39;
+full suite and build results recorded in the report. E2E: NOT RUN. Deploy:
+NOT_CONFIGURED. Item 54 remains `PARTIAL` — another real leak class closed, the
+provider list is still not provably exhaustive.
+
+Last cycle (previous): 2026-09-30 19:05 UTC (00:35 IST 2026-10-01) — **WORK SLOT 10** of the
+2026-09-30 window, the 00:35 IST fire. Item 13 (`Zero-fake-success for all tools`)
+was re-checked and found already complete on the paths reachable without a host
+session (the server tool path routes every result through `toolActionExecuted`,
+and every remaining offline-engine `actionExecuted: true` site maps to a real
+view handler in `src/App.tsx`). No unproven success claim was found to fix, so
+the slot advanced **Item 54 (Production Hardening) — credential redaction** with
+a genuine, verified bug hunt.
+
+**A live probe found eight provider token families that passed through
+`redactSecrets()` byte-for-byte.** `src/utils/computerOperator/credentialRedactor.ts`
+covered OpenAI/Anthropic/Google/GitHub/Telegram/AWS/Discord/GitLab/DigitalOcean/
+GOCSPX keys but not the providers this project actually integrates with: Groq
+(`gsk_`), Perplexity (`pplx-`), Notion (`ntn_` and legacy `secret_`), Shopify
+(`shpat_`/`shpss_`), Linear (`lin_api_`), Slack incoming-webhook URLs, Azure
+Storage `AccountKey=`, Firebase browser keys (`AIza…` without the `Sy` infix,
+which the existing Google pattern did not match) and Resend (`re_`). The redactor
+is wired into the computer-operator planner, action verifier, engine and screen
+interpreter, so a key visible on screen or in a task summary would have been
+surfaced unredacted. Added pattern branches 23–31 and 11 regression tests in
+`src/tests/credentialRedactor.test.ts`. **Negative-validated:** the 11 new tests
+fail against the previous code (`11 failed | 24 passed`) and pass after the fix
+(`35 passed`). Gates observed: lint (`tsc --noEmit`) exit 0; targeted file 35/35;
+full suite **118 files / 1621 tests passed**; build exit 0 (`dist/server.cjs`
+952094 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 remains `PARTIAL` — no advanceable slice was found this slot; Item 54
+remains `PARTIAL` — one more real leak class closed, the provider list is not
+provably exhaustive.
+
+Last cycle (previous): 2026-09-30 18:35 UTC (00:05 IST 2026-10-01) — **WORK SLOT 9** of the
+2026-09-30 window, the 00:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
+the **search-dispatch URL** and the **per-task safe-retry budget**.
+
+**A search request could be narrated as running while loading nothing.** The
+`google_search` `/api/chat` case put the Google search URL at the top-level
+`target` of the action detail and cleared the in-app Browser's `initialUrl`, so
+the dispatcher (`payload.target || ''`) opened an empty address; and because
+`BrowserModal` ignores `initialQuery` whenever `initialUrl` is set, a search
+after any earlier page load ran nothing at all. Fixed by deriving URL, title and
+reply from one `searchDispatch()` verdict in `src/utils/browserDispatchTruth.ts`,
+carrying the URL in `payload.target`, and handing it to the view in `src/App.tsx`.
+Guarded in `src/tests/browserDispatchTruth.test.ts`; negative-validated (reverting
+the `App.tsx` wiring fails the guard).
+
+**A task could report a verification failure it never attempted.** In
+`src/utils/computerOperator/actionVerifier.ts`, `retryCounters` is static and
+keyed on action id/type, which repeat across tasks (the planner names steps
+`act-1-*`, `act-2-*`). A task that exhausted `MAX_RETRIES` left the counter set,
+so the next task with the same action shape saw `shouldRetry = false` and failed
+without a retry. This was the source of a real flake: the "safe retry is
+re-verified" suite in `src/tests/computerOperatorTaskStatus.test.ts` failed ~4
+runs in 5, and a full-suite run failed once. Fixed with `ActionVerifier.
+resetAllRetries()` called at the start of `executeTask`; new regression case runs
+a budget-exhausting task then a same-shaped task whose retry must still verify.
+Negative-validated (removing the reset → `2 failed | 8 passed`); file now 10/10
+across six consecutive runs. Gates observed: lint (`tsc --noEmit`) exit 0; full
+suite **118 files / 1610 tests passed**; build exit 0 (`dist/server.cjs`
+949796 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 remains `PARTIAL` — two more real fake-success/honesty classes closed;
+the item still spans tool-level success flags beyond these surfaces.
+
+Last cycle (previous): 2026-09-30 18:16 UTC (23:46 IST 2026-09-30) — **WORK SLOT 8** of the
+2026-09-30 window, the 23:35 IST fire. Item 13 (`Zero-fake-success for all tools`),
+the **Computer Operator engine's single safe retry**.
+
+**A computer-operator retry could be credited as verified when it changed
+nothing.** In `src/utils/computerOperator/computerOperatorEngine.ts` the
+`verification.shouldRetry` branch re-executed the action with
+`await this.executor.executeAction(action);` — discarding the result and never
+re-observing the screen — then fell through to the loop tail and the `COMPLETED`
+summary that claims *"All N step(s) executed and verified against the host
+desktop"*. A retry whose execution failed, or that produced no observable screen
+change, was therefore reported as a verified step. Fixed: the retry is now
+re-executed **and re-verified**; a failed re-execution ends the task `FAILED` with
+the executor error, an unverified retry ends it `FAILED` with the verification
+message, and only a confirmed change adopts the retry as the step result (feeding
+the RESULT event and the completion summary). Guarded by three new cases in
+`src/tests/computerOperatorTaskStatus.test.ts` (file now 9 tests).
+Negative-validated — reverting only the engine fix fails `2 failed | 7 passed`
+(`expected 'COMPLETED' to be 'FAILED'`), restored → 9/9. A pre-existing case
+("allows a verification claim once a host-backed observer is installed") used a
+stub observer whose screen never changed and had only passed because of this bug;
+its stub was corrected to genuinely transition. Gates observed: lint
+(`tsc --noEmit`) exit 0; targeted `computerOperatorTaskStatus.test.ts` **9 passed**;
+full suite **118 files / 1603 tests passed** (22.10 s); build exit 0
+(`dist/server.cjs` 948625 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 remains `PARTIAL` — another real fake-success class closed; the item still
+spans tool-level success flags beyond the computer-operator verdicts.
+
+Last cycle (previous): 2026-09-30 18:07 UTC — **WORK SLOT 7** of the 2026-09-30 window. Item 13
+(`Zero-fake-success for all tools`), the **browser `getDisplayMedia` blank-frame
+capture claim**.
+
+**A browser display capture could report a live screen capture it never took.**
+`src/components/ScreenshotModal.tsx` sized its output canvas with
+`video.videoWidth || 1280` / `video.videoHeight || 720`. When `getDisplayMedia`
+resolves but no frame is ever decoded — a muted/protected source, or a track not
+yet rendered — `videoWidth`/`videoHeight` stay `0`, so the code drew the frameless
+video (a black fill) onto a fixed 1280×720 canvas, saved it as the "capture", and
+told the operator `Live display captured at 1280x720`. The magic numbers were a
+fabricated resolution standing in for a frame that did not exist. Fixed: new
+`browserCaptureVerdict(videoWidth, videoHeight, trackLabel)` in
+`src/utils/computerOperator/screenshotDispatchTruth.ts` credits a capture only on
+non-zero, finite dimensions; otherwise it returns `captured: false` and the modal
+reports `failed` ("no decoded frame … nothing was captured") and clears any stale
+image instead of drawing a blank canvas. Guarded by four new cases in
+`src/tests/remainingFakeSuccess.test.ts` (file now 45 tests), including a
+`ScreenshotModal.tsx` source-pin asserting the `|| 1280` / `|| 720` placeholders
+are gone. Negative-validated — reintroducing the fallback fails exactly the
+source-pin (`1 failed | 44 passed`); restored → 45/45. Gates observed: lint
+(`tsc --noEmit`) exit 0; targeted `remainingFakeSuccess.test.ts` **45 passed**;
+targeted `remainingFakeSuccess + screenshotStore` **58 passed**; full suite
+**118 files / 1600 tests passed** (22.51 s); build exit 0 (`dist/server.cjs`
+946569 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+Item 13 remains `PARTIAL` — another real fake-success class closed; the live
+`getDisplayMedia` path cannot be exercised here (no display session), so it is
+covered by unit verdict + source-pin only.
+
+Last cycle (previous): 2026-09-30 17:40 UTC (23:10 IST 2026-09-30) — **WORK SLOT 7** of the
+2026-09-30 window, the 23:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **`POST /api/memory` client-asserted
+counter** — a real fake-success surface, fixed and pinned.
+
+**A client can no longer credit work it did not perform.** The `POST /api/memory`
+handler in `server.ts` honored a caller-supplied
+`statUpdate.incrementAction` / `statUpdate.incrementCommand`, unconditionally doing
+`memoryState.stats.actionsExecuted += 1` / `totalCommands += 1`. Those counters are
+the user-visible **"Autonomous Actions Executed"** and **"Total Voice / Text
+Commands"** figures rendered by `src/components/MemoryModal.tsx` (lines 190/202), so
+any POST carrying the field raised them without the server observing a command or an
+action. No in-repo caller (App.tsx, MemoryModal) ever sends `statUpdate`, so the
+field was a pure fabricated-success surface. The server now ignores those requests
+and appends an inert note (`Counter request not applied`) stating that no counter was
+advanced. Guard:
+`src/tests/memoryPersistence.e2e.test.ts` gains a `client-asserted counters` suite
+(2 tests) driving the **real HTTP route** against a spawned server — asserting both
+counters stay flat before/after (fresh GET) and that the request is recorded rather
+than credited. Negative-validated: restoring the old `statUpdate` branch fails
+`2 failed | 5 passed`; with the fix the file passes `7/7` and `npm run lint`
+(`tsc --noEmit`) exits `0`. Item 13 stays `PARTIAL` — this closes another named
+surface, but the item also covers computer-operator `actionExecuted` verdicts and
+other tool-level success flags, which remain open.
+
+Last cycle (previous): 2026-09-30 17:05 UTC (22:35 IST 2026-09-30) — **WORK SLOT 6** of the
+2026-09-30 window, the 22:35 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **dashboard radar pin's `CURRENT FIX`
+fallback** — a real fake-success surface, fixed and pinned.
+
+**The dashboard radar pin no longer claims a live fix for a simulated point.**
+`DashboardMapSnippet.tsx` rendered its pin label as
+`isResolvedAddress(address) ? address?.city : 'CURRENT FIX'`. The fallback ignored
+the coordinate provenance entirely, so a `preset`, `manual` or `cache` position that
+had no resolved address was labelled `CURRENT FIX` — a live-fix claim — in the very
+same card whose PRECISION field (via `accuracyDisplay`) and provenance badge (via
+`locationSourceLabel`) correctly read `N/A — no GPS fix` / `PRESET ONLY`. The label
+is now gated on the source: only `source === 'live'` (a real device GPS reading) may
+print `CURRENT FIX`; every other provenance prints `NO FIX`. Guard:
+`src/tests/locationServicesTruth.test.ts` gains a test asserting the `CURRENT FIX`
+literal is preceded by a `source === 'live'` guard. Negative-validated: reverting the
+component to the old fallback fails `1 failed | 16 passed`; with the fix it passes
+`17/17`. Item 13 stays `PARTIAL` — the sweep of remaining tool-level success flags
+(the `actionsExecuted` counter and computer-operator `actionExecuted` verdicts in
+`server.ts`) remains open.
+
+Last cycle (previous): 2026-09-30 16:43 UTC (22:13 IST 2026-09-30) — **WORK SLOT 5** of the
+2026-09-30 window, the 22:05 IST fire. Item 13
+(`Zero-fake-success for all tools`), the **Truth-in-Execution Integrations Matrix
+credential-presence claim** — a real fake-success surface, fixed and pinned.
+
+**The Integrations Matrix no longer turns env-var presence into a working
+integration.** `getIntegrationsAuditReport()` in `server_tools.ts` reported
+`status: 'REAL_WORKING'` for LinkedIn, Telegram, GitHub, Facebook, Instagram and
+YouTube purely because their credential env vars were visible, and dressed that up
+in reasons asserting state the matrix never observes — "OAuth 2.0 engine
+authenticated", "24/7 Long-Polling Daemon active", "GitHub REST API authenticated",
+"YouTube Data API v3 active". The function makes **no provider call**, so it cannot
+observe any of that. The status vocabulary is now `CREDENTIALS_PRESENT` (summary
+`connected` → `credentialsPresent`), and every credential-visible reason states only
+what is known: a credential string is present, no call was made, so authentication /
+liveness is not confirmed. Updated in lockstep: the API return type
+(`server_tools.ts`), the shared `IntegrationAuditItem` type (`src/types.ts`), the
+Autonomous Tools Modal rendering (`src/components/AutonomousToolsModal.tsx`), and the
+spoken `tools_audit` line (`server.ts`). The pre-existing `email` and `oracle_cloud`
+rows stay `NOT_AVAILABLE`. Guard: `src/tests/integrationsAuditTruthfulness.test.ts`
+now forces every credential-visible branch and asserts no reason matches
+`authenticated|verified|active|online|working`, while requiring an explicit
+non-confirmation phrase. Negative-validated: restoring the old GitHub reason makes it
+fail (`1 failed | 4 passed`); restoring the fix passes `5/5`. Item 13 stays `PARTIAL`
+— this closes one more named surface, but the item also covers tool-level success
+flags beyond this matrix (e.g. the hardcoded `LIVE GPS` label in
+`LocationServicesModal.tsx` and the `verificationStatus`/`finalTruthState` literals in
+`server.ts`), which remain open.
+
+Last cycle (previous): 2026-09-30 16:25 UTC (21:55 IST 2026-09-30) — **WORK SLOT 3** of the
+2026-09-30 window, the 21:35 IST fire (second run). Item 13
+(`Zero-fake-success for all tools`), the **`actionExecuted: true` sweep itself** —
+enumerated and pinned so the flag can no longer be `UNKNOWN`.
+
+**The item-13 sweep is now complete and durable, not "still not audited".** Every
+literal `actionExecuted = true;` in `server.ts` was paired with its enclosing intent
+case and audited by reading the body: 21 sites covering 21 distinct intents. Nineteen
+are routed by `App.tsx` to a real in-app view; the two that open no view justify the
+flag with real work — `find_document` only counts when `realFsSearch()` returned
+matches, and `set_name` only after `memoryState.name = verdict.name` +
+`persistMemory()`. No site is a bare unconditional assignment. New guard
+`src/tests/actionExecutedSweepAudit.test.ts` (4 tests) asserts the full set matches the
+audited map, that every view-backed intent is actually routed by the dispatcher, that
+the two non-view intents contain their real-work calls, and that no case credits
+execution without a routed view or observable work. Negative-validated: injecting an
+un-audited `actionExecuted = true;` case fails `2 failed | 2 passed`; removing it
+passes 4/4. Item 13 stays `PARTIAL` — the live sweep is proven complete *for the
+literal `actionExecuted = true` assignments*, but `actionExecuted = verdict...` /
+`toolActionExecuted(...)` assignments were already guarded in prior cycles and the
+item also covers tool-level success flags beyond this counter, so it is not promoted
+to `VERIFIED`.
+
+Last cycle (previous): 2026-09-30 16:10 UTC (21:35 IST 2026-09-30) — **WORK SLOT 2** of the
+2026-09-30 window, the 21:35 IST fire. Item 13 (`Zero-fake-success for all tools`),
+completing the browser/editor/terminal **launch-case field** fix that slot 1 started.
+
+**The offline engine was fixed but the live `/api/chat` path still emitted the dead
+field.** Slot 1 fixed `localJarvisEngine.ts` so the destination rides inside
+`actionDetail.payload` — the only place the app dispatcher reads it
+(`handleExecuteAction(intent, actionDetail?.payload)` → launch cases read
+`payload?.target`). The live server `operate_vscode`, `operate_browser` and
+`operate_terminal` cases still wrote a **top-level** `actionDetail.target` that the
+dispatcher drops. Confirmed live against the built server before the fix: each of
+`open browser`, `open vscode`, `open terminal` returned
+`actionDetail.keys = ['payload','title','type']` after the fix, and the pre-fix shape
+carried the dropped `target`.
+
+Fixed: removed the dead top-level `target` from all three server launch cases
+(`server.ts` ~8625/8632/8639). The destination name already travels in
+`actionDetail.title`, and the app's `operate_vscode/operate_terminal` case only needs
+the intent to route to `computer_operator`. Added three source-text guards to
+`launchDispatchTruth.test.ts` asserting each server launch case carries no top-level
+`target` the dispatcher would drop. Item 13 stays `PARTIAL` — this closes one more
+real violation; the `actionExecuted: true` sweep is not proven complete.
+
+**Window-state record was stale.** The automation branch `automation/hermes-state`
+still described PR #4 as "open, awaiting human merge approval". PR #4 was in fact
+**merged by a human on 2026-09-28T05:13:29Z** (GitHub API reads `merged: true`) — the
+outcome the owner's rule requires. This automation did not merge it and never touches
+`main`. The state file is corrected this slot; no branch was rewritten.
+
+**Untracked `.vite/` cache.** Vite's dependency cache directory appeared untracked and
+was not covered by `.gitignore`. Added `.vite/` and pinned it in the existing
+`gitignoreHygiene.test.ts` required-line list. Negative-validated: deleting the
+`.gitignore` line fails the guard (`1 failed | 1 passed`), restoring it passes
+(`2 passed`).
+
+Evidence: `src/tests/launchDispatchTruth.test.ts` — 18 passed (targeted; was 15).
+Full suite `117 files / 1588 tests passed` (21.36s); lint (`tsc --noEmit`) exit 0;
+build exit 0 (`dist/server.cjs` 945471 bytes, source map 1.7mb, only the chunk-size
+warning). Live E2E against the fresh production build (`node dist/server.cjs`,
+PORT 4189): `open browser` → intent `operate_browser`, `actionExecuted false`,
+`actionDetail.keys=['payload','title','type']`, `title="Launch Not Executed (no
+display session)"`; `open vscode` → same shape, intent `operate_vscode`; `open
+terminal` → same shape, intent `operate_terminal`. No `target` key in any case — the
+dropped field is gone. Negative-validated: restoring the top-level `target` to the
+`operate_browser` case fails the new guard (`1 failed | 17 passed`), then restored →
+18/18.
+Security: `.env` ignored (`.gitignore:4`), `git status --short` clean, no token/key in
+the diff-vs-`main` scan, no `node_modules`/`dist` staged. Item 13 remains `PARTIAL` —
+the `actionExecuted: true` sweep is still not proven complete.
+
+Window hygiene: the `jarvis_memory.json` runtime state touched by the live probe was
+reverted, so the diff carries only intended source/tests/docs.
+
+Last cycle (previous): 2026-09-30 15:51 UTC (21:05 IST 2026-09-30) — **WORK SLOT 1** of the
+2026-09-30 window, the 21:05 IST fire. Item 13 (`Zero-fake-success for all tools`),
+the browser-open destination that was emitted in the wrong field (commit `b473722`).
+
+**The previous slot's browser-open fix never reached the view.** Slot 15 of the
+2026-09-28 window made `server.ts` emit the destination as a **top-level**
+`actionDetail.target`. But the app dispatcher `handleExecuteAction(intent,
+payload)` is called as `handleExecuteAction(data.intent, data.actionDetail?.payload)`,
+and its `open_google/open_youtube/open_gmail/open_chatgpt` case reads
+`payload?.target`. A top-level `target` is therefore dropped, `setBrowserInitialUrl('')`
+runs, and `BrowserModal` stays on its Google home — so "open YouTube", "open Gmail"
+and "open ChatGPT" still loaded the Google home page while the reply and card named
+another site. The prior slot's source-text test asserted the wrong shape
+(`target: verdict.url,`) so it passed over the bug. Confirmed live against the
+running server: `actionDetail` was `{type, title, target}` with no `payload`.
+
+Fixed: `browserDispatchTruth.ts` gains `browserOpenActionDetail(verdict)`, which
+returns the action detail with the URL inside `payload.target` (the only place the
+dispatcher reads it); `server.ts` uses it. `browserDispatchTruth.test.ts` now pins
+the corrected contract with unit tests (URL in `payload.target`, no top-level
+`target`, default-home fallback when a site could not be pointed) and a wiring
+guard that reads the real dispatcher call. Item 13 stays `PARTIAL` — this closes
+one more real violation; the `actionExecuted: true` sweep is not proven complete.
+
+Evidence: `src/tests/browserDispatchTruth.test.ts` — 16 passed (targeted). Live E2E
+against the production build (`node dist/server.cjs`, PORT 4011): `open youtube` →
+`payload.target=https://www.youtube.com`; `open gmail` → `https://mail.google.com`;
+`open chatgpt` → `https://chatgpt.com`; `open google` → `https://www.google.com`.
+Full suite `117 files / 1583 tests passed`; lint clean; build green
+(`dist/server.cjs` 923.1kb). Negative-validated: reverting `server.ts` to the
+top-level `target` shape fails the new wiring guard (`1 failed | 15 passed`), then
+restored → 16/16.
+
+Last cycle (previous): 2026-09-27 23:05 UTC (04:35 IST 2026-09-28) — **FINALIZATION SLOT** of the
 2026-09-28 window, the 04:35 IST fire. No new backlog item was advanced: the window
 was frozen and re-verified, and one repository-hygiene regression guard was added
 (`test(repo): guard .gitignore against non-UTF-8 encoding`, commit `c334491`).
@@ -3575,7 +5137,7 @@ files / 675 tests, clean lint, clean build.
 | 10 | Real Computer Operator actions | `VERIFIED` (subset) | `HostActionExecutor` runs real commands, file reads/writes, test runs and captures. Synthetic mouse/keyboard input reports `NOT_AVAILABLE` with a reason rather than faking success. Covered by `hostActionExecutor.test.ts`. The file routes' workspace boundary was not actually sound until 2026-09-20 22:05 IST: `safeResolvePath` used a bare string-prefix test, so a sibling directory sharing the root's name prefix escaped the workspace. Now segment-checked (see Last cycle), guarded by `src/tests/workspacePathContainment.test.ts`. The computer-operator permission gate itself also has direct coverage now: `src/tests/permissionGuard.test.ts` (9 tests, 2026-09-20 23:05 IST) asserts the emergency-stop block, the finance exclusion, the destructive-command and security-bypass guards, the Level 4 human gate, and that a blocked action must never be read as "no approval needed". |
 | 11 | Action result verification | `VERIFIED` | `ActionVerifier` no longer returns unconditional success (`|| true` removed). Clicks require an observed screen change; edits require a disk re-read; tests require parsed runner output; screenshots require a captured file. |
 | 12 | Browser real-action + permission flow | `VERIFIED` | `ScreenshotModal.tsx` uses `getDisplayMedia` when permitted, otherwise asks the host to capture via `/api/computer-operator/screenshot`. A denied permission reports `permission_denied`, not a simulated image. |
-| 13 | Zero-fake-success for all tools | `PARTIAL` | **2026-09-27 21:05 UTC (02:35 IST 2026-09-28) — the live `/api/chat` `time_inquiry` case and its offline engine twin.** Both the `/api/chat` case (`server.ts` ~line 9157) and the engine's time branch (`src/utils/localJarvisEngine.ts`) set `actionExecuted = true` and advanced the user-visible "Autonomous Actions Executed" counter for a question. `handleExecuteAction` in `src/App.tsx` routes `time_inquiry` only to `setActiveApp('mobile_personal_status')` — a view switch that cannot read the clock (the read already happened inside the handler) — so the intent performed no work and opened no view. Same inflation class as the earlier `get_name`/`capabilities_inquiry`/`system_diagnostic` fix. Both surfaces now report `actionExecuted = false` with the inert `Clock Query (informational, no action taken)` detail; the clock answers are unchanged. Guarded by two new cases in `src/tests/remainingFakeSuccess.test.ts` (a `server.ts` source-pin and an offline-engine branch guard; file now 41 tests) and the aligned `conversationalPipelineRegression.test.ts` case B (which previously encoded the fake contract, matching cases C/D in the same file). Negative-validated — reverting only `src/utils/localJarvisEngine.ts` fails exactly the new engine guard (`1 failed | 40 passed`); restored → 41/41. Gates: lint exit 0; targeted `remainingFakeSuccess` **41 passed**; full suite **115 files / 1546 tests passed** (23.11 s); build exit 0 (`dist/server.cjs` 943006 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed; the earlier-named unrouted `time_inquiry` case is now handled, while the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited (`UNKNOWN`). **2026-09-27 20:42 UTC (02:12 IST 2026-09-28) — the live `/api/chat` `set_name` case and its offline engine twin.** Both the `set_name` case in `server.ts` (~line 8913) and the identity branch in `src/utils/localJarvisEngine.ts` (~line 833) stored whatever text followed the name phrase verbatim as `memoryState.name`, spoke a "recorded" success and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter. The name group is greedy over a whitespace class and accepts digits, so a live probe confirmed `"my name is hello how are you"` stored the sentence as the name, `"my name is 123"` stored `123`, and each bumped the counter. Fixed: a new `src/utils/identityTruth.ts` `judgeSetNameIntent()`/`canonicalizeNameCandidate()` accepts only a plausible name (letter-bearing, no digits, ≤3 words after trimming punctuation and the trailing Hindi copula/honorific) and both call sites route through it; an unusable payload leaves the stored name untouched, does not count, and answers honestly with the inert `set_name_rejected` detail. Guarded by `src/tests/identityTruth.test.ts` (9 tests); negative-validated (disabling only the `MAX_NAME_WORDS` guard → `2 failed | 5 passed`, restored → 7/7). Live probe before/after: `"my name is hello how are you"` `actionExecuted` `true`→`false`, name unchanged; `"my name is Ravi Kumar"` still `true` (name `ravi kumar`). Gates: lint exit 0; targeted 4 files / 81 passed; full suite **115 files / 1544 tests passed** (21.08 s); build exit 0 (`dist/server.cjs` 942642 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed; remaining `actionExecuted: true` sites still not individually audited (`UNKNOWN`), and the unrouted `time_inquiry` case remains. **2026-09-27 20:15 UTC (01:45 IST 2026-09-28) — the live `/api/chat` `summarize_youtube_video` case.** The case (~line 8709) gated `actionExecuted` on `summaryRes.success` alone. `summarizeYouTubeVideoCore` returns `success: true` as soon as the video *metadata* is fetched, and a video exposing no transcript and no description comes back `success: true` with an empty summary (`source: 'none'`), so the case spoke the title as if a summarization had happened and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter for work that produced nothing. Fixed: the success branch derives `const hasSummary = Boolean(summaryRes.summary && summaryRes.summary.trim())` and sets `actionExecuted = hasSummary`; a summary-less result gets the honest "nothing to summarize" line and the inert `youtube_summary_empty` detail; the extraction-failure branch keeps `actionExecuted = false`. Guarded by a new `remainingFakeSuccess.test.ts` route test plus a `buildYouTubeSummary` unit test proving a no-content video yields an empty summary with `success: true`; negative-validated (revert-only-server → `1 failed \| 38 passed`; restored → `39 passed`). `toolDispatchTruth.test.ts`'s `caseBody` gained a `max` parameter because the case grew past its 1400-char view. Gates: lint exit 0; `toolDispatchTruth` **15 passed**; full suite **114 files / 1537 tests passed** (20.98 s); build exit 0 (`dist/server.cjs` 940914 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited (`UNKNOWN`), and the unrouted `set_name` / `time_inquiry` cases remain to be handled. **2026-09-27 18:53 UTC (00:23 IST 2026-09-28) — the live `/api/chat` `emergency_stop` / `emergency_resume` cases.** Both cases in `server.ts` (~lines 8556–8583) called `toggleEmergencyStop(...)`, which *flips* `emergencyState.emergencyPaused` — so a second "emergency stop" RELEASED the freeze and an "emergency resume" while nothing was paused ENGAGED it, while each unconditionally spoke a success and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter. Fixed via a new `emergencyToggleVerdict(action, state)` in `src/utils/computerOperator/offlineEmergencyTruth.ts`, derived from the pre-transition state and **gating the flip** so a no-op transition cannot change state: repeated stop → `Already Active` (`actionExecuted: false`), resume with nothing paused → `Not Active` (`false`), resume under a latched hard kill switch → `NOT Released` (`false`, freeze honestly reported as still in force), first stop and genuine resume → `actionExecuted: true`. Guarded by a new `describe('emergencyToggleVerdict never credits a toggle that changed nothing')` block in `src/tests/offlineEmergencyTruth.test.ts` (6 tests incl. a `server.ts` source-pin); negative-validated — the forbidden literal is present in `git show HEAD~1:server.ts` (count 1) and absent in `server.ts` (count 0). Gates observed: lint (`tsc --noEmit`) exit 0; targeted `src/tests/offlineEmergencyTruth.test.ts` **10 tests passed**; full suite **114 files / 1530 tests passed** (21.48 s); build exit 0 (`dist/server.cjs` 938697 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another fake-success class closed and a genuine safety inversion removed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited — `UNKNOWN`. **2026-09-27 18:15 UTC (23:45 IST 2026-09-27) — the live `/api/chat` `cancel_computer_task` case.** The `/api/chat` `cancel_computer_task` case in `server.ts` (~line 8569) called `TaskTracker.cancelActiveTask('User requested stop')` and unconditionally spoke `Computer operator task has been immediately cancelled.`, titled the action `Task Cancelled` and set `actionExecuted = true` — but `cancelActiveTask` returns `{ cancelled: false }` when no task is active, and the case ignored it. With nothing running, nothing was cancelled, yet the case still bumped the user-visible "Autonomous Actions Executed" counter (`memoryState.stats.actionsExecuted`). Fixed via a new `cancelComputerTaskVerdict(result)` in `src/utils/computerOperator/operatorReplyTruth.ts` (the module that already carries the honest `fix_project_error` / `inspect_screen` verdicts): false/absent result → `actionExecuted: false`, title `Nothing to Cancel (no task running)`, reply stating nothing was cancelled; a real cancellation → `actionExecuted: true`, title `Running Host Task Cancelled`; both replies have Hindi variants. Guarded by a new `describe('cancelComputerTaskVerdict never credits a stop that stopped nothing')` block in `src/tests/operatorReplyTruth.test.ts` (no-task, null/undefined, actual-cancel and a `server.ts` source-pin); negative-validated — reverting only the `server.ts` change fails the source-pin (`1 failed | 19 passed`), restored → `20 passed`. Gates observed: lint (`tsc --noEmit`) exit 0; targeted `src/tests/operatorReplyTruth.test.ts` **20 tests passed**; full suite **114 files / 1524 tests passed** (21.34 s); build exit 0 (`dist/server.cjs` 934519 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited — `UNKNOWN`. **2026-09-27 18:10 UTC (23:40 IST 2026-09-27) — the offline outbound-call cancellation branch.** The offline cancel branch in `src/utils/localJarvisEngine.ts` (रहने दो, "cancel call", "don't call", कॉल रद्द करो) cleared the module-level `stagedOutboundCall` slot and unconditionally returned `actionExecuted: true` with the reply `Outbound call has been cancelled.` and title `Outbound Call Cancelled`, then incremented the user-visible "Autonomous Actions Executed" counter (`updatedMemory.stats.actionsExecuted`). The phrase fires whether or not a call was ever requested in the session; with nothing staged, nothing was cancelled, and a carrier call can only be cancelled if one was first requested (a staged request is never dialed: `The outbound call request was recorded, not dialed.`). Fixed via a new `offlineOutboundCancelVerdict(stagedByThisCommand)` in `src/utils/computerOperator/offlineCallTruth.ts`: no staged request → `actionExecuted: false`, title `Nothing Cancelled (no staged call)`, reply "nothing was cancelled"; a staged request dropped → `actionExecuted: true` with the honest title `Outbound Call Cancelled (device was never dialed)`. The counter is gated on the verdict via `countAction(updatedMemory, verdict.actionExecuted)` and the reply answers in English, Hindi and Hinglish. Guarded by 3 new assertions in `src/tests/offlineCallTruth.test.ts` (file now 23 tests); negative-validated — reverting only the engine fix fails the new block (`3 failed | 20 passed`), restored → 23/23. Gates observed: lint (`tsc --noEmit`) exit 0; full suite **114 files / 1520 tests passed** (21.30 s); build exit 0 (`dist/server.cjs` 911.8 kB). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed; the `actionExecuted: true` sites in `server.ts` (~8498–8816) are still not individually audited — `UNKNOWN`. **2026-09-27 16:42 UTC (22:12 IST 2026-09-27) ŌĆö the live `/api/chat` informational cases.** `get_name`, `capabilities_inquiry` and `system_diagnostic` in the `server.ts` `/api/chat` intent switch set `actionExecuted = true`, which flows into `if (actionExecuted) memoryState.stats.actionsExecuted += …` and advanced the user-visible "Autonomous Actions Executed" counter; `handleExecuteAction()` in `src/App.tsx` has no case for any of them, so a name look-up, a capability list and a clock-only diagnostic were recorded as performed work. The offline engine already reports `actionExecuted: false` for the same intents. Fixed: all three set `actionExecuted = false` with explicitly informational titles (`Memory Query (informational, no action taken)`, `JARVIS Capabilities (informational, no action taken)`, `Diagnostics (informational, no probe run)`); honest reply text and the counter are unchanged. Guarded by 3 new cases in `src/tests/remainingFakeSuccess.test.ts`; negative-validated ŌĆö stashing only `server.ts` fails all 3 (`3 failed \| 31 passed`), restored → `34 passed`. Gates on `f3cdf6b`: lint exit 0; targeted truth suites **3 files / 62 tests passed**; full suite **114 files / 1512 tests passed** (21.49 s); build exit 0 (`dist/server.cjs` 929257 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö see other entries for the remaining `actionExecuted: true` claims, which are still not individually audited (`UNKNOWN`). **2026-09-26 22:22 UTC (03:52 IST 2026-09-27) ŌĆö the offline video-upload branch.** `src/utils/localJarvisEngine.ts` section 2 replied *"payload is staged"* with `actionExecuted: true` and incremented the user-visible "Autonomous Actions Executed" counter for an upload it never staged ŌĆö the module holds no staged-upload state and the caller's `handleExecuteAction` switch has no `youtube_upload_request` case (`default: break`), so no side effect was possible; the two `src/tests/voiceAndHindiModes.test.ts` Level-4 gate tests encoded the same fake contract. Fixed: `actionExecuted: false`, counter unchanged, `payload.staged: false`, honest EN/HI/Hinglish reply that the video was not staged and Level-4 authorization is still required. Guarded by `src/tests/offlineCallTruth.test.ts` (18 tests, up from 16) plus the two updated gate tests; negative-validated ŌĆö reintroducing the fake success fails exactly 2 of 18 (`2 failed \| 16 passed`), restored ŌåÆ 18/18. Gates on `7cadeac`: lint exit 0; full suite **112 files / 1491 tests passed**; build exit 0 (`dist/server.cjs` 928643 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success class closed; `actionExecuted: true` claims outside the audited branches remain `UNKNOWN`. **2026-09-26 21:40 UTC (03:10 IST 2026-09-27) ŌĆö the `/api/chat` tool-intent dispatch.** Every tool intent in the `/api/chat` switch asserted `actionExecuted = true` regardless of the tool result: `list_files_tool` announced the workspace index even when `realFsList` failed, `web_research_tool` spoke *"Web analysis complete"* even when `realWebFetch` failed, `github_repos_tool` replied *"Authenticated as GitHub user @ŌĆ”"* with no token or a failed listing, `summarize_youtube_video`'s failure path still counted, an unparseable `math_computation` still counted, and `youtube_upload_request` claimed *"Video is staged"* for an upload never performed. Each inflated the user-visible "Autonomous Actions Executed" counter (`memoryState.stats.actionsExecuted`). Fixed via `src/utils/toolDispatchTruth.ts` (`toolActionExecuted` credits only `success: true`; `toolActionResultReply` names the failed tool and states no action was executed, EN/HI; `countedItems` never fabricates a count), wired into all seven intents. Guarded by `src/tests/toolDispatchTruth.test.ts` (15 tests, source guards ŌĆö `server.ts` binds a port on import); negative-validated ŌĆö reverting the `web_research_tool` guard fails exactly that assertion (`1 failed \| 14 passed`), restored ŌåÆ green. Gates on `112396d`: lint exit 0; full suite **112 files / 1486 tests passed**; build exit 0 (`dist/server.cjs` 928107 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success class closed; `actionExecuted: true` claims outside this switch remain `UNKNOWN`. **2026-09-26 21:26 UTC (02:56 IST 2026-09-27) ŌĆö the offline Local JARVIS Engine emergency stop / resume branches.** `src/utils/localJarvisEngine.ts` replied *"Emergency Stop is now activeŌĆ” are frozen."* / *"Emergency Stop deactivatedŌĆ” resumed under normal Level 1-4 permission gating."* with `actionExecuted: true` and an incremented counter while touching no emergency state; the live kill switch is server-side (`toggleEmergencyStop` / `isEmergencyStopActive()`). Fixed via `src/utils/computerOperator/offlineEmergencyTruth.ts` ŌĆö `actionExecuted: false` in every case with the observed reason in English/Hindi/Hinglish, no counter increment. Guarded by `src/tests/offlineEmergencyTruth.test.ts` (4 tests) and the two updated contract tests in `src/tests/voiceAndHindiModes.test.ts`; negative-validated ŌĆö forcing `actionExecuted: true` fails exactly 4 (`4 failed \| 18 passed`), restored ŌåÆ green. Gates on `91a2d20`: lint exit 0; full suite **111 files / 1471 tests passed**; build exit 0 (`dist/server.cjs` 926807 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success path closed; more remain, the remaining `actionExecuted: true` claims in that file are still `UNKNOWN`. **2026-09-26 20:25 UTC (01:55 IST 2026-09-27) ŌĆö the offline Local JARVIS Engine telephony call intents.** `src/utils/localJarvisEngine.ts` spoke and counted carrier call work the tab cannot perform: `make_call` narrated *"Placing outbound call to <number> through carrier gateway"* (title `Calling <number>`), `hangup_call` narrated *"Terminating active phone call"* (title `Call Ended`), `answer_call` narrated *"Connecting call with caller"* (title `Call Connected`), all with `actionExecuted: true` and an incremented "Autonomous Actions Executed" counter; the `human_handoff` branch promised a transfer whenever a provider was merely configured and incremented the counter while reporting `actionExecuted: false`. Fixed via `src/utils/computerOperator/offlineCallTruth.ts` ŌĆö a verdict derived from the telephony engine mode actually active (`activeTelephonyEngineMode()`), so offline mode never confirms a carrier action, the fake titles are gone, and every phase reports `actionExecuted: false` in every mode. Guarded by `src/tests/offlineCallTruth.test.ts` (13 tests: phase ├Ś mode matrix, banned titles, reply text, language selection, end-to-end offline branches, and a source guard scoped to telephony section 7.1ŌĆō7.4); negative-validated ŌĆö reintroducing `title: 'Call Ended'` fails exactly the source guard (`1 failed | 12 passed`), restored ŌåÆ 13/13. Gates on `8fb9f1d`: lint exit 0; full suite **110 files / 1460 tests passed**; build exit 0 (`dist/server.cjs` 921146 bytes). E2E: NOT RUN ŌĆö no handset, no carrier gateway. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success path closed; more remain; the remaining `actionExecuted: true` claims in that file were not individually audited this slot ŌĆö `UNKNOWN`. **2026-09-26 19:50 UTC (01:20 IST 2026-09-27) ŌĆö the offline Local JARVIS Engine operator intents.** `src/utils/localJarvisEngine.ts` reported `actionExecuted: true` and incremented the user-visible "Autonomous Actions Executed" counter for seven operator branches the browser cannot perform ŌĆö `fix_project_error` narrated a Screen-Research loop "applying surgical fix with test verification", `inspect_screen` claimed to be analyzing the active window, and `operate_vscode`/`operate_browser`/`operate_terminal`/`cancel_computer_task` made equivalent host claims, all without leaving the tab. Fixed via one verdict map in `src/utils/computerOperator/offlineOperatorTruth.ts`; six report `actionExecuted: false` with an honest reply in English/Hindi/Hinglish, and only `open_computer_operator` (in-app HUD) stays a genuine page action. Guarded by 13 new tests in `src/tests/localJarvisEngine.test.ts` (file now 46); negative-validated ŌĆö forcing `actionExecuted: true` on `inspect_screen` fails exactly the truth assertion (`1 failed | 1 passed | 44 skipped`), restored ŌåÆ 46/46. Gates on `4ffb4bf`: lint exit 0; full suite **109 files / 1447 tests passed**; build exit 0 (`dist/server.cjs` 914923 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`; the 40 other `actionExecuted: true` claims in that file were not individually audited this slot ŌĆö `UNKNOWN`. **2026-09-25 22:25 UTC (03:55 IST 2026-09-26) ŌĆö the screenshot, volume and power intents.** `/api/chat` `take_screenshot`, `volume_up`/`volume_down` and `pc_shutdown`/`pc_restart` set `actionExecuted = true` and spoke an unqualified success ("Capturing screen display right now.", "Increasing master audio output level.", "Simulating system shutdown protocol.") while reaching no capture backend, no audio mixer and no power transition; `src/utils/localJarvisEngine.ts` repeated the same three claims. Fixed with `screenshotVerdict()`/`screenshotReply()` (`src/utils/computerOperator/screenshotDispatchTruth.ts`), `volumeVerdict()`/`volumeReply()` (`audioDispatchTruth.ts`) and `powerVerdict()`/`powerReply()` (`powerDispatchTruth.ts`): a screenshot is `VERIFIED` only when the receipt is `VERIFIED` **and** the file is verified on disk (a missing file downgrades to `UNVERIFIED`; headless ŌåÆ `NOT_AVAILABLE`); the volume verdict reports the in-app voice-output level and states the system output level was not changed, with `actionExecuted` false in every case; power is never executed and reports `NOT_IMPLEMENTED` with `permissionRequired`, `BLOCKED` on an engaged emergency stop, `NOT_AVAILABLE` without a display session. `open_notepad` now routes through the real `evaluateLaunchDispatch()` executor path; the in-app-only intents (telephony hub, call history, calculator, paint, chrome, browser navigation) keep `actionExecuted = true` but disclose that no external app or phone dialer was opened. Guarded by `src/tests/remainingFakeSuccess.test.ts` (24 tests); negative-validated ŌĆö reverting both source files fails **10 of 24**, restored ŌåÆ 24/24. Two pre-existing `src/tests/localJarvisEngine.test.ts` tests encoded the old fake-success contract and now assert `actionExecuted === false` with the honest reply. Gates observed: lint exit 0; full suite **107 files / 1410 tests passed**; build exit 0 (`dist/server.cjs` 909349 bytes). E2E: NOT RUN ŌĆö no display session, no handset. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö more fake-success paths remain. **2026-09-25 21:15 UTC (02:45 IST 2026-09-26) ŌĆö the launch intents and the offline local engine.** The /api/chat intents `operate_vscode`, `operate_browser` and `operate_terminal` set `actionExecuted = true` and spoke an unqualified success without touching the host, and `src/utils/localJarvisEngine.ts` claimed VS Code reached the active foreground, PowerShell activated and a Chrome window opened ŌĆö on a headless host, none of it happened. Fixed: new `src/utils/computerOperator/launchDispatchTruth.ts` and `evaluateLaunchDispatch()` in `server.ts` route the intent through the real `HostActionExecutor` `LAUNCH_APP` action and derive the verdict from the host capability map plus the executor receipt ŌĆö `NO_DISPLAY_SESSION`, `DISPATCHED_AWAITING_OBSERVATION`, `FOREGROUND_CONFIRMED` (the only case with `actionExecuted = true`), `FAILED`, `BLOCKED`, `UNVERIFIED`; the offline engine branches now state offline mode cannot launch a real OS application. Guarded by `src/tests/launchDispatchTruth.test.ts` (11 tests); negative-validated ŌĆö forcing `actionExecuted = true` in the `operate_vscode` case fails exactly the source guard (`1 failed \| 10 passed`), restored ŌåÆ 11/11. Gates observed: lint exit 0; targeted **5 files / 101 tests passed**; full suite and build deferred to the finalization slot. E2E: NOT RUN ŌĆö no display session, no handset. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success path closed; more remain. **2026-09-25 18:52 UTC (00:22 IST 2026-09-26) ŌĆö the receipt evidence guard itself.** `buildReceipt()` in `src/utils/executionTruth.ts` downgraded a `VERIFIED` claim only when evidence was absent (`!evidence`), so a present evidence object of kind `none` ŌĆö the vocabulary's own "nothing was observed" ŌĆö passed the guard and any caller could reach `verified: true` with `makeEvidence('none', ...)`. The only caller doing so was `github.executeFixPlan()` (`src/utils/github/automationWorkflow.ts`) for an empty plan, which returned `outcome: 'VERIFIED'` / `verified: true` after doing no work. Fixed: the new exported `isSubstantiveEvidence()` requires kind !== `none`; kind `none` downgrades `VERIFIED` ŌåÆ `UNVERIFIED` with an explicit `failureReason`, absent evidence still ŌåÆ `DISPATCHED`, and the empty-plan branch now reports `NOT_CONFIGURED` with `verified: false`. Guarded by the new `src/tests/executionTruthReceipt.test.ts` (6 tests) plus 2 assertions in `src/tests/githubAutomationWorkflow.test.ts`; negative-validated both ways ŌĆö reverting the guard fails exactly the kind-`none` assertion (`1 failed \| 5 passed`), restoring `outcome: 'VERIFIED'` fails exactly the new empty-plan assertion (`1 failed \| 19 passed`), both restored green. Gates observed: lint exit 0; targeted **2 files / 26 tests passed**; full suite **103 files / 1355 tests passed**; build exit 0 (`dist/server.cjs` 864.3 kb). E2E: NOT RUN ŌĆö no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö the shared guard hole is closed; call-site violations may remain. **2026-09-25 18:12 UTC (23:42 IST) ŌĆö the daemon scheduler block.** `GET /api/daemon/status` (`server.ts`) answered a literal `activeJobsCount: 4` and per-job `nextRun` literals (`'09:00 AM Tomorrow'`, `'10:30 PM Tonight'`) presented as observations, while the process schedules five recurring routines. `ProactiveRoutinesModal.tsx` reads this endpoint. Fixed via `daemonSchedulerTruth()` in `src/utils/hardening/mobileTelemetryTruth.ts`: the count derives from the routine table handed in plus the registered scheduled-goal count, an unrecorded last run reads `not recorded`, and every `nextRun` reads `ŌĆ” (configured plan; not observed)`; `server.ts` builds the block from the five routines it schedules. Guarded by 5 new assertions in `src/tests/mobileTelemetryTruth.test.ts` (13 tests in file); negative-validated ŌĆö restoring `activeJobsCount: 4` fails exactly the two count assertions (`2 failed \| 11 passed`), restored ŌåÆ 13/13. Gates observed: lint exit 0; targeted **1 file / 13 tests passed**; full suite **102 files / 1349 tests passed**; build exit 0 (`dist/server.cjs` 884598 bytes). E2E: NOT RUN ŌĆö no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö one more real violation closed, more remain. **2026-09-25 16:45 UTC (22:15 IST) ŌĆö the OS-executor finance guard.** `PermissionGuard.permanentBlock()` in `src/utils/computerOperator/permissionGuard.ts` ŌĆö the gate the real host executor consults ŌĆö still matched its short finance tokens with a bare `desc.includes(kw)`, the exact substring rule `isFinanceBlocked()` had already replaced in `server_tools.ts`. Measured against the live guard: benign `Read file jupiter_notes.txt` returned `BLOCK / FINANCE_RESTRICTION` (`upi` inside "jupiter"), while real financial instructions had no signature and were `ALLOW`ed ŌĆö `Initiate fund transfer`, `Deposit via NEFT`, `Enter debit card details`, `RTGS settlement`, `IMPS transfer`. Tokens now require an ASCII word boundary and multi-word / Devanagari phrases stay substring matches (`\b` cannot bound Devanagari); the five demonstrated misses were added as signatures. Guarded by 17 new assertions in `src/tests/permissionGuard.test.ts` (26 tests in file); negative-validated both ways ŌĆö restoring substring matching fails the false-positive case (`1 failed \| 25 passed`), removing the new signatures fails the five false-negative cases (`5 failed \| 21 passed`), restored ŌåÆ 26/26. Gates observed: lint exit 0; targeted **4 files / 53 tests passed**; full suite **99 files / 1312 tests passed**; build exit 0 (`dist/server.cjs` 874490 bytes). E2E: NOT RUN ŌĆö no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö one more real violation closed, more remain. **2026-09-25 15:50 UTC (21:20 IST) ŌĆö the audit-trail truth fields.** `addAuditLog()` in `server.ts` hardcoded `verificationStatus` and `finalTruthState` to `'VERIFIED'` while writing the caller's `status` verbatim, so a row logged `FAILED`, `BLOCKED` or `PENDING` rendered a green *confirmed* badge in the Security Matrix that contradicted its own status string. Fixed via `deriveAuditVerificationStatus()`/`deriveAuditFinalTruthState()` in `src/utils/hardening/auditTrailTruth.ts`; `src/tests/hardening/auditTrailTruth.test.ts` 19 tests (5 new), negative-validated (3 failed | 16 passed with the derivation disabled). Lint exit 0; full suite 98 files / 1290 tests passed; build exit 0 (`dist/server.cjs` 872300 bytes). **2026-09-24 22:15 UTC (03:45 IST) ŌĆö the mobile telemetry privacy matrix and scheduler job count.** `GET /api/mobile/telemetry` (`server.ts`) answered `privacyMatrix.level4Enforced: true` and `systemScheduler.activeJobs: 4` as literals, neither measured. The Level 4 gate is operator-flippable via `/api/security/matrix` (`humanApprovalForExternal`), so a process with the gate off still told the phone external actions required human approval; the scheduler defines five recurring routines, not four. Fixed via new `src/utils/hardening/mobileTelemetryTruth.ts`: `privacyMatrixTruth()` is a tri-state (`false` ŌåÆ `DISABLED`, unobserved ŌåÆ `null` / `UNKNOWN ŌĆö not observed`, only `true` ŌåÆ enabled) and `schedulerTruth()` counts the defined routines plus registered goals and labels the next briefing as scheduled, not observed-as-run. Guarded by 8 assertions in `src/tests/mobileTelemetryTruth.test.ts` (tri-state mapping, count 5 ŌēĀ 4, goal addition, honest briefing label, `server.ts` source guard); negative-validated ŌĆö restoring the two literals fails exactly 1 test (`1 failed \| 7 passed`), restored ŌåÆ 8/8. Gates observed: lint exit 0; targeted **1 file / 8 tests passed**; full suite **97 files / 1279 tests passed**; build exit 0 (`dist/server.cjs` 870439 bytes). E2E: NOT RUN ŌĆö no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. **2026-09-24 21:45 UTC (03:15 IST) ŌĆö the offline local call turn.** `processTelephonyTurn()` in `src/utils/telephonyEngine.ts` falls back to `generateLocalCallTurn()` whenever `POST /api/telephony/handle-turn` is unreachable ŌĆö the offline-first case this app exists for ŌĆö and that rule-based path only regex-matches the caller's words: it writes no calendar, sends no Telegram message and blocks no number. Its replies still asserted completed work ("I have locked this into Alex's calendar and synced our reminders", "I have added the session to the calendar and notified the team", "adding your caller ID to our blocked directory") and every captured follow-up read as a finished receipt ("Call completed successfully", "Calendar event dispatched", "Blocked spam marketing number", "Medical appointment confirmed for Friday 3:00 PM"); `App.tsx` (lines 672, 805) surfaces both as the call's outcome. Fixed: the reply is routed through `formatLocalTurnReply()` and every follow-up through `formatLocalTurnFollowUp()` (new exports of `src/utils/hardening/callSummaryTruth.ts`) ŌĆö the disclosure states the reply is a local automated response, not a record of executed actions, and each follow-up carries the captured-offline marker; the four follow-up literals were rephrased as outstanding requests ("Flag spam marketing number for blocking", "Note medical appointment for Friday 3:00 PM", ŌĆ”). Guarded by 16 new assertions in `src/tests/callSummaryTruth.test.ts` (now 44 tests); negative-validated ŌĆö bypassing the wrapper (`return buildLocalCallTurn(params)`) fails exactly 6 tests (`6 failed \| 38 passed`), restored ŌåÆ 44/44. Gates observed: lint exit 0; targeted **1 file / 44 tests passed**; full suite **96 files / 1271 tests passed**; build exit 0 (`dist/server.cjs` 869141 bytes). E2E: NOT RUN ŌĆö no telephony provider credentials, no handset. Deploy: NOT_CONFIGURED. **2026-09-24 21:20 UTC (02:50 IST) ŌĆö the Telegram mobile approval reply.** (02:50 IST) ŌĆö the Telegram mobile approval reply.** `handleTelegramCallback()` in `server.ts` handles the `approve_perm_` inline button that `/api/approvals/create` sends to the operator's phone for a Level 4 action. That branch does exactly one thing ŌĆö records the human decision via `updateActionRequestStatus(permId, 'EXECUTED', ...)` ŌĆö and dispatches nothing: no LinkedIn publish, no GitHub issue, no provider call. It still replied `Ō£ģ *LEVEL 4 ACTION APPROVED & EXECUTED* ŌĆ” ŌĆó *Status*: EXECUTED (Verified)`, and `PermissionGateway.tsx` rendered the same `EXECUTED` status as "Action was authorized and executed successfully." Fixed by `formatUnconfirmedMobileApprovalReply()` in `src/utils/hardening/approvalResolution.ts` (now the only builder of that reply): it derives its wording from the recorded status alone, states the external action was **NOT dispatched by this path**, and reports the action as `UNVERIFIED`; a non-`EXECUTED` status is reported as-is. The client `EXECUTED` panel now reads "Authorization recorded. Provider confirmation is required before this action can be reported as executed." and shows `UNVERIFIED ŌĆö no provider result` when no `resultUrn` exists. Guarded by 6 new assertions in `src/tests/approvalResolutionTruth.test.ts` (now 14 tests); negative-validated ŌĆö restoring the old reply string fails exactly the two `server.ts` guard tests (`2 failed \| 12 passed`), restored ŌåÆ 14/14. Gates observed: lint exit 0; targeted 1 file / 14 tests passed; full suite **96 files / 1256 tests passed**; build exit 0 (`dist/server.cjs` 869141 bytes). E2E: NOT RUN ŌĆö no Telegram bot credentials, no handset. Deploy: NOT_CONFIGURED. **2026-09-24 19:40 UTC (01:10 IST) ŌĆö the live whisper-tip surface.** `POST /api/telephony/handle-turn` returned `parsed.whisperTip` verbatim from its Gemini branch, and the model answered with receipts for actions that route never dispatches (`Appointment slot confirmed for Thursday 2:30 PM`, `Provided gate access #4829 to courier`, `Robocall / telemarketer identified and terminated`). `App.tsx` surfaces the value as a `whisper` transcript turn and `ActiveCallHUD.tsx` renders it under `AI Whisper Tip`, so an unmarked receipt read as an observed event. The fallbacks fabricated too (`|| 'Call proceeding smoothly'`, `let whisperTip = "AI tracking call turns"`), as did `src/utils/telephonyEngine.ts` (`Spam detected. Terminating line automatically.`). Fixed with `whisperTipForDisplay()` in `src/utils/hardening/callSummaryTruth.ts`: a model-authored tip is marked `AI suggestion ŌĆö not an observed system event`, an absent tip stays empty; fallback tips reworded as suggestions. Guarded by 8 new assertions in `src/tests/callSummaryTruth.test.ts` (now 29 tests); negative-validated ŌĆö reverting the marker fails exactly the marker assertion (`1 failed \| 28 passed`), restored ŌåÆ 29/29. Gates observed: lint exit 0; targeted 1 file / 29 tests passed; full suite **96 files / 1250 tests passed**; build exit 0 (`dist/server.cjs` 868545 bytes / 848.2 kB). E2E: NOT RUN ŌĆö no handset, no telephony provider credentials. Deploy: NOT_CONFIGURED. **2026-09-24 19:15 UTC (00:45 IST) ŌĆö the server turn path (`/api/telephony/handle-turn`).** Slot 6 fixed the client-side summariser but the server route that the Telephony Hub actually calls still returned follow-ups phrased as completed work. The Gemini branch returned `parsed.followUpActions` verbatim, and the rule-based fallback returned `Calendar updated: Thursday 2:30 PM`, `Send confirmation SMS`, `Notify resident of package delivery at foyer` and `Add number to local blocklist`. Neither branch dispatches a calendar write, an SMS, a blocklist change or a package follow-up ŌĆö the route only produces the reply text, and the UI renders the returned list as the call's action items. Fixed with `formatLiveActionItem()` in `src/utils/hardening/callSummaryTruth.ts` (appends `recorded live ŌĆö not confirmed as performed`, idempotent); both branches map through it. Guarded by 8 new assertions in `src/tests/callSummaryTruth.test.ts` (now 21 tests) ŌĆö formatter truth table, idempotence, distinct marker from the summary note, and server source guards. Negative-validated: reverting both `map()` calls fails exactly the two matching guards (`2 failed \| 19 passed`), restored ŌåÆ 21/21. Gates: lint exit 0; targeted 1 file / 21 tests; full vitest **96 files / 1242 tests passed**; build exit 0 (`dist/server.cjs` 867819 bytes / 847.5 kb). E2E: NOT RUN ŌĆö no handset, no telephony provider credentials. Deploy: NOT_CONFIGURED. **2026-09-24 18:10 UTC (23:40 IST) ŌĆö the call-summary action items.** `summarizeCallTranscript()` in `src/utils/telephonyEngine.ts` regex-matches the transcript and pushed follow-ups phrased as completed work (`Added caller to spam blocklist`, `Calendar appointment updated`, `Calendar event dispatched`, `Call completed successfully`), rendered under `Assigned Action Items & Next Steps` with a green check, and a summary claiming `Successfully conveyed objectives ... synced action items`. Nothing there dispatches a calendar event, blacklists a number, or sends an SMS. Fixed with `src/utils/hardening/callSummaryTruth.ts` (`formatActionItem` appends `not performed ŌĆö recorded for human follow-up`; `describeOutboundCall`/`describeInboundCall` state only that a call took place; `ACTION_ITEM_LIST_NOTE` under the heading); items rephrased to imperatives. Guarded by `src/tests/callSummaryTruth.test.ts` (13 tests); negative-validated ŌĆö restoring the removed literals fails the matching source guards, and reverting the sentiment default fails exactly the two new tests (`2 failed \| 11 passed`); both restored ŌåÆ 13/13. The same function's `sentiment` defaulted to `'positive'` for a transcript that matched no keyword, so an unassessed call rendered a green `POSITIVE` badge in `TelephonyHubModal.tsx`; the default is now `'neutral'`. Gates: lint exit 0; targeted 1 file / 13 tests; full vitest **96 files / 1234 tests passed**; build exit 0 (`dist/server.cjs` 846.8 kB). **2026-09-24 16:41 UTC (22:11 IST) ŌĆö the telephony spam-screen verdict.** `evaluateSpamRisk()` in `src/utils/telephonyEngine.ts` returned the literal reason `'Verified Legitimate Caller'` whenever none of its nine keywords matched. The matcher reads first-line text only ŌĆö no carrier reputation query, no STIR/SHAKEN attestation, no contact lookup ŌĆö so a caller it could not assess was reported as vetted. Fixed with `src/utils/hardening/spamVerdictTruth.ts` (`spamReasonLabel`): the absent reason now yields `NO_SPAM_MATCH_REASON` ("No spam indicator matched ŌĆö caller not vetted"), a real match reason preserved verbatim. Guarded by `src/tests/spamVerdictTruth.test.ts` (7 tests); negative-validated ŌĆö restoring the literal fails exactly the matching pair (`2 failed \| 5 passed`), restored ŌåÆ 7/7. Gates on `c6b5352`: lint exit 0; targeted 2 files / 16 tests; full vitest **93 files / 1208 tests passed**; build exit 0 (`dist/server.cjs` 867083 bytes). **2026-09-23 20:05 UTC (01:35 IST) ŌĆö the Oracle Always Free cost claim.** The Telegram `cloud_telemetry` reply printed a fixed `ŌĆó *Cost*: Ōé╣0 / Always Free Guaranteed` beside live CPU/RAM readings, and `/api/blueprint/report` printed `Ōé╣0.00 / Always Free (Strict Zero-Cost Guarantee)`, for every process ŌĆö nothing here queries the OCI billing/entitlement API, and the Oracle Cloud modal already labels that fact `NOT_PROBED`. Fixed with `src/utils/hardening/billingEntitlementTruth.ts` (`describeBillingCost`, `describeDeclaredCost`): a cost figure appears only for an observed entitlement, otherwise the absent probe is named; `oracleCloudState.billingEntitlement` seeded `null`. Guarded by `src/tests/hardening/billingEntitlementTruth.test.ts` (9 tests); negative-validated ŌĆö restoring the hardcoded reply fails exactly the matching guard (`1 failed | 8 passed`), restored ŌåÆ 9/9. Gates: lint exit 0; targeted 9 files / 96 tests; full vitest **88 files / 1157 tests passed**; build exit 0 (`dist/server.cjs` 844.1 kB). **2026-09-23 19:19 UTC (00:49 IST) ŌĆö the voice visualiser and the call level bars.** `App.tsx` seeded `volumeLevel` from `Math.floor(20 + Math.random() * 60)` on a 100 ms interval when recognition started, and `ActiveCallHUD.tsx` sized each of six `Audio Waveform Bars` from `Math.floor(Math.random() * 16 + 4)` on every render; both meters moved as if they followed live audio while no analyser is wired into either path. Fixed with `src/utils/hardening/micInputTruth.ts` (a level is returned only for a finite measurement in `0..100`, else `0`) and `src/utils/hardening/callWaveform.ts` (a fixed decorative profile with a clamped lookup). Guarded by `src/tests/hardening/micInputTruth.test.ts` (4 tests) and `src/tests/hardening/callWaveform.test.ts` (4 tests); negative-validated both ŌĆö restoring each fabricated expression fails exactly 1 of 4, restored ŌåÆ 4/4. Gates: lint exit 0; targeted 2 files / 8 tests passed; full vitest **86 files / 1140 tests passed**; build exit 0 (`dist/server.cjs` 843.2 kB). **2026-09-23 18:12 UTC (23:42 IST) ŌĆö the HUD sync pill.** `HUDHeader.tsx` printed green `SYNCED` from an `isOnline` prop seeded `typeof navigator !== 'undefined' ? navigator.onLine : true` (prop default also `true`), so the pill asserted that local state had reached the server whenever the *browser* had a network path ŌĆö the exact case (backend unreachable) the offline-first app exists for. The `online` handler also announced `BACKEND RECONNECTED` on the browser event alone. Fixed: new `src/utils/syncTruth.ts` (`syncLiveness`/`syncStatusLabel`/`reconnectStatusText`) is a tri-state over two observed facts ŌĆö `SYNCED` only for `{browserOnline:true, serverReachable:true}`, `OFFLINE_READY` only when the browser is offline, `LOCAL_ONLY` otherwise (null/undefined included); `App.tsx` tracks `serverReachable` (`null` until observed), sets it from `/api/health` + the startup `/api/memory` response, clears it on `offline`, and probes `/api/health` on `online` before claiming a reconnect; `HUDHeader` no longer takes `isOnline` and defaults `OFFLINE_READY`. Guarded by `src/tests/syncTruth.test.ts` (9 tests: truth table, label guard that no non-`SYNCED` state prints `SYNCED`, reconnect wording, source guards). Gates: lint exit 0; targeted **1 file / 9 tests passed**; full vitest **83 files / 1125 tests passed**; build exit 0. **2026-09-23 17:46 UTC (23:16 IST) ŌĆö the finance exclusion filter's own correctness.** `isFinanceBlocked()` in `server_tools.ts` combined a word-boundary regex with a bare `lower.includes(kw)` fallback; short finance tokens (`eth`, `btc`, `upi`, `cvv`) occur inside ordinary English words ("whether", "together", "method", "recall"), so benign operator text was returned as a blocked financial operation. Fallback removed ŌĆö word-boundary matching only; real financial phrasings still block. Guarded by `src/tests/financeGuardFalsePositives.test.ts` (8 tests); negative-validated (restoring the fallback ŌåÆ `3 failed \| 5 passed`). Gates on `7d9ea03`: lint exit 0, vitest **82 files / 1116 tests passed**, build exit 0 (`dist/server.cjs` 862985 bytes). **2026-09-22 22:48 UTC (04:18 IST) ŌĆö the live `/api/chat` weather path still invented a reading.** Slot 3 fixed the offline intent engine (`localJarvisEngine.ts`, `4a98514`) but the live HTTP path was missed: `server.ts` `case 'weather_inquiry'` in `POST /api/chat` and `GET /api/mobile/telemetry` returned a constant 27┬░C / 48% / 'New Delhi' snapshot as current conditions, though no weather provider is wired into the process. Both now report the absence (`actionExecuted: false`, "no weather source connected" EN/HI; `weatherSnapshot.available: false`). Live-confirmed on the running daemon. Guarded by `src/tests/liveWeatherHonesty.test.ts` (4 tests); negative-validated, re-adding the constant fails 2 of 4. Gates on `e209bf8`: lint exit 0, vitest **80 files / 1093 tests passed**, build exit 0 (`dist/server.cjs` 860748 bytes). **2026-09-22 19:15 UTC (00:45 IST) ŌĆö the Dashboard geolocation radar asserted a live fix for coordinates that were not live.** `DashboardMapSnippet.tsx` printed the constant `ACTIVE POSITION FIX` / `CURRENT FIX` for *any* non-null `coords` and a fabricated `┬▒{Math.round(coords.accuracy)}m` precision, yet the coordinates it receives are just as often loaded from `loadCachedLocation()`, applied as a tactical preset, or typed manually. Slot 6 had centralised provenance in `src/utils/locationService.ts` (`CoordsSource`, `locationSourceLabel()`, `accuracyDisplay()`) and put a `source` on `LocationServicesModal`'s `onCoordinatesUpdated`, but `App.tsx` still passed only `coords`/`address` down, so the HUD could not distinguish a cache entry from a device read. Fixed: `App.tsx` tracks `userCoordsSource` (`CoordsSource \| null`), seeds it `'cache'` only when `loadCachedLocation()` returned coordinates (never a fabricated `'live'`), sets `'live'` only on the `getCurrentPosition` success path, forwards it as `source={userCoordsSource}`, and wires the modal callback's third argument through. The snippet's banner and precision now render `locationSourceLabel(source)` and `accuracyDisplay(source, coords.accuracy)`. Guard by `src/tests/locationServicesTruth.test.ts` extended to 12 tests (source guards on the removed literals, `App.tsx` provenance guards); negative-validated, restoring `ACTIVE POSITION FIX` fails exactly 1 of 12 (observed `1 failed \| 11 passed`), restored ŌåÆ 12/12. Gates on `4701be6`: lint exit 0, vitest **75 files / 1046 tests passed**, build exit 0 (`dist/server.cjs` 836.6 kb). Still `PARTIAL` ŌĆö no physical device has exercised the live branch here. **2026-09-22 18:12 UTC (23:42 IST) ŌĆö the Mobile Personal Status briefing card claimed TTS readiness and live telemetry it never observed.** `MobilePersonalStatusModal.tsx` printed the constant `SPEECH SYNTHESIZER READY` in the briefing hero card before the Web Speech API had been queried, and kept it even where `window.speechSynthesis` is unavailable; the real `SpeechDiagnostics` computed in `speechTtsEngine.ts` was never passed to the component. The same card's spoken-script provenance read `Generated from live telemetry reads` for every snapshot not flagged `isSample` ŌĆö including the `null` snapshot left by a failed fetch, where no read had completed. Fixed: new `src/utils/spokenBriefingTruth.ts` (`speechReadiness`/`speechReadinessLabel`, `briefingProvenance`/`briefingProvenanceLabel`) renders `SPEECH STATUS UNKNOWN` until a diagnostics snapshot exists, then `READY`/`UNAVAILABLE` from the observed boolean (and `READY` while an utterance plays), and labels provenance `UNKNOWN` / `SAMPLE` / `LIVE` with `LIVE` only for a real read; `App.tsx` passes `speechDiagnostics` and `isSpeaking` down. Guarded by `src/tests/spokenBriefingTruth.test.ts` (7 tests); negative-validated ŌĆö restoring both fabrications fails exactly 2 of 7, restored ŌåÆ 7/7. Gates on `5f2a73f`: lint exit 0, vitest **73 files / 1028 tests passed**, build exit 0 (`dist/server.cjs` 832.9 kb). Still `PARTIAL` ŌĆö pattern-driven sweep; the speaking branch is unit-asserted, not exercised on a real speech platform here. **2026-09-22 18:10 UTC ŌĆö the Location Services modal fabricated a GPS fix.** On a `getCurrentPosition` error the modal seeded `TACTICAL_PRESETS[0]` as the device position, persisted it with `saveCachedLocation()`, and drew an "Active Orbital Fix" with a fabricated `┬▒25m` accuracy and an always-on satellite-lock ping; the voice briefing read a preset/cached/manual point as "your current geospatial fix". Fixed: the error path sets no coordinates; provenance is centralised in `src/utils/locationService.ts` (`CoordsSource = live \| cache \| preset \| manual`, `locationSourceLabel()`, `accuracyDisplay()`, `locationBriefing()`). Only a device read is `LIVE GPS`; other sources render `SIMULATED PRESET` / `MANUAL ENTRY` / `LAST KNOWN (CACHED)` (or `NO FIX` when `null`) with `N/A ŌĆö no GPS fix`, and the briefing states there is no live fix. Guarded by `src/tests/locationServicesTruth.test.ts` (7 tests) plus source guards on the removed fallback. `PARTIAL`: no device exercised the live branch. **2026-09-22 01:36 IST (20:06 UTC) ŌĆö the outbound email / SMTP conduit.** `realEmailStatus()` reported `configured: true` from credential presence alone with the message *"SMTP Transport Active. Level 4 confirmation required for all sends."*, the Integrations Matrix `email` entry was hardcoded `REAL_WORKING` ("SMTP Conduit verified for client notifications and quotations", capabilities `Quotation Email Dispatch` / `Client Inquiries`), and `AutonomousToolsModal.tsx` rendered an emerald `READY` badge and green panel border from that flag. No SMTP client or send route exists in this build (`nodemailer` absent from `package.json`/`package-lock.json`; no `createTransport`/socket path anywhere but the new helper). Fixed via `src/utils/emailConduitTruth.ts`: `transportImplemented` is always false until a real sender is shipped, the badge reads `CREDENTIALS ONLY ŌĆö NO SENDER`, and the integration is pinned `NOT_AVAILABLE`. Guarded by `src/tests/emailConduitTruthfulness.test.ts` (6 tests); negative-validated (flipping `isEmailTransportImplemented()` to `true` fails exactly 3 of 6). Gates on `b1103fa`: lint exit 0, vitest 65 files / 930 tests passed, build exit 0 (`dist/server.cjs` 846921 bytes). **2026-09-22 01:05 IST (19:36 UTC) ŌĆö the Android Bridge app-launch path.** `openApplication()` recorded an `APP_OPENED` audit event with `result: 'UNSUPPORTED'` but ran no gates, and `SimulatedAndroidAdapter.openApp()` returned hardcoded `success: true` ŌĆö a launch could be shown as done on a disconnected bridge, under emergency stop, or on a device without launch capability. Now the four real gates are checked (connection + capability handshake, emergency stop, `canOpenApp`, app privacy rule); every path returns `success: false` with a `blockedReason` and audits its refusal with the matching result (privacy-denied ŌåÆ `ACTION_DENIED`). The simulated adapter delegates to the engine, and `App.tsx` speaks the real message. Guarded by `androidMobileBridge.test.ts` Scenarios 17ŌĆō18 (37 tests; negative-validated: removing the connection gate fails Scenario 17, 1 failed \| 36 skipped). Gates on `ffc5949`: lint exit 0, vitest 64 files / 924 tests passed, build exit 0. **2026-09-22 00:36 IST (19:06 UTC) ŌĆö the Computer Operator / Screen Researcher panel.** `ComputerOperatorModal.tsx` drew a green `STANDBY: SCREEN SYNCHRONIZED` dot, a `0x0` resolution badge, and a `Resolution:` field whose value was the platform string (default `linux-arm64`) ŌĆö three live-screen claims that hold even when the host is unobservable. New `src/utils/computerOperator/observationTruth.ts` derives them from the real observation (`UNOBSERVED`/`ILLUSTRATIVE`/`SCREEN OBSERVED FROM HOST`; `UNKNOWN` instead of `0x0`). Guarded by `src/tests/observationTruth.test.ts` (19 tests, negative-validated: restoring the literal fails 1/19). Gates on `61ad02e`: lint exit 0, vitest 64 files / 922 tests passed, build exit 0. **2026-09-21 21:43 IST (16:13 UTC) ŌĆö telephony provider adapters fabricate confirmed provider actions.** `TelnyxTelephonyProvider` and `PlivoTelephonyProvider` in `src/utils/telephonyAdapters.ts` returned `startOutboundCall: { success: true, providerCallId: 'telnyx_<ts>' }` / `'plivo_<ts>'` although neither adapter ever calls its carrier API, and `transferCall` returned `providerConfirmed: true` unconditionally. This reached a caller: `telephonySessionManager.ts` announces *"Transferring your call to our clinic staff now, please hold the line."* and sets `handoffStatus: 'CONFIRMED'` whenever `providerConfirmed` is true, so a patient heard a live handoff that never happened. `TwilioTelephonyProvider.transferCall` had the same defect ŌĆö its `<Dial>` TwiML is an instruction that only reaches the carrier inside a live webhook response, but it was returned to a caller that discards it. Also, all three `getCallStatus` implementations returned `'IDLE'`, asserting the call was not active when nothing had been observed. Fixed: the adapters return `TELEPHONY_PROVIDER_DISPATCH_NOT_IMPLEMENTED` with `providerConfirmed: false`, `getCallStatus` returns a new `UNKNOWN` state (`src/types/telephonyProvider.ts`), and the `/api/telephony/outbound-call` route in `server.ts` returns 502 `PROVIDER_DISPATCH_FAILED` instead of `success: true` when dispatch is unconfirmed. Guarded by `src/tests/telephonyProviderHonesty.test.ts` (6 tests; negative-validated: all 6 fail when the fix is reverted ŌĆö `expected 'IDLE' to be 'UNKNOWN'`, and the Telnyx/Plivo assertions observe the fabricated `providerCallId`). Gates on `b043386`: lint exit 0, vitest 60 files / 830 tests passed, build exit 0. Still `PARTIAL` ŌĆö the sweep remains pattern-driven; the wider tool-by-tool inventory is outstanding. **2026-09-21 02:19 IST (20:49 UTC) ŌĆö sample-fixture gap closed.** The `SAMPLE_*` fixtures in `mobileStatusEngine.ts` carry `available: true`, so `processOfflineCommand()`'s `available`-only gate spoke them as readings; the engine now gates on `isSample` too, and the weather path no longer falls back to 27C / 48% / 'New Delhi'. `MobilePersonalStatusModal.tsx` briefing badge no longer claims 'Real-Time Generated Telemetry' for sample data. Guarded by `src/tests/localJarvisEngine.test.ts` and `src/tests/mobileStatusEngine.test.ts` (46 tests across the two files, all passing; negative-validated: reverting the `isSample` gate makes the engine test fail with the fixture values spoken as real). Gates on `dbd3385`: lint exit 0, vitest 781/781, build exit 0. Still `PARTIAL` ŌĆö the sweep is pattern-driven and no physical device exercised the live branch. **2026-09-21 01:05 IST ŌĆö third widening, UI + offline intent engine.** `SecurityMatrixModal.tsx` footer hardcoded `Security Matrix Status: 100% Operational` regardless of whether `/api/security` answered; now renders the fetched level or says the state is unavailable. `mobileStatusEngine.ts` `SAMPLE_NOTIFICATIONS` asserted `Always Free ARM VM health check: 100% nominal uptime` as a notification body; reworded to a maintenance notice. `src/utils/localJarvisEngine.ts`: the `mobile_personal_status` briefing defaulted every permission to `true` and every reading to a plausible constant (78% battery, 27C, 5 notifications, 3 events, 2 emails), so a no-phone briefing looked measured; the weather inquiry answered 27C / 48% / 'New Delhi' with no provider; `how are you` answered `All systems nominal. Ready to assist.` with no health check. Fixed: permissions now default `false`, unmeasured fields are nullable and the briefing reports no phone connected, the weather inquiry returns `actionExecuted: false`, and the greeting refuses to claim health. Guarded by `src/tests/toolSurfaceTruthfulness.test.ts` (14 tests over `server.ts` and the engine source; negative-validated: restoring `temperatureC ?? 27` fails the telemetry guard and the code was restored). Four assertions pinning the old strings were rewritten (`localJarvisEngine.test.ts`, `conversationalPipelineRegression.test.ts`, `voiceAndHindiModes.test.ts`). **Still NOT `VERIFIED`** - the sweep is pattern-driven, so it shows the audited strings are gone, not that every surface is honest. Known remaining gap: the `SAMPLE_*` fixtures in `mobileStatusEngine.ts` are sample data that `compileMobileStatusData` renders as if real and the UI does not label them as samples. A tool-by-tool inventory of all surfaces is still outstanding. |  Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. **2026-09-20 23:35 IST ŌĆö the claim did not hold repo-wide:** `realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned `success: true` on *every* git failure with invented data (branch `main`, three fabricated commit subjects, `"Diff tool nominal."`), which propagated to the Autonomous Tools HUD, `/api/tools/git/*` and the `git_status_tool` voice intent. Fixed; guarded by `src/tests/gitToolsTruthfulness.test.ts` (6 tests, negative-validated: 4 of 6 fail with the fix reverted). Remaining scope before this can return to `VERIFIED`: the same audit has not yet been run across every tool surface. **2026-09-21 02:25 IST ŌĆö the Oracle Cloud VM surface.** `OracleCloudModal.tsx` invented uptime (342 h), a public IP (`129.154.42.108`), a constant `ONLINE` and static shape/disk specs whenever `/api/oracle-cloud/status` was partial or absent; all now go through `src/utils/vmTelemetryDisplay.ts` and render `UNKNOWN`/em dash when unreported. Guards: `src/tests/vmTelemetryDisplay.test.ts` (6 tests) and the Oracle block in `src/tests/toolSurfaceTruthfulness.test.ts` (18 tests in file); negative-validated, 3 of 18 fail with the fabrications restored. Gates on 42cd1e0: lint exit 0, vitest 56 files / 791 tests passed, build exit 0. **2026-09-21 02:36 IST ŌĆö the Oracle VCN firewall surface.** `oracleCloudState.firewallRules` in `server.ts` declared all five ingress rules `active: true` and `OracleCloudModal.tsx` drew an unconditional tick per rule under a `<Lock /> Zero Accidental Ingress` heading ŌĆö a security claim about ports nothing in this process ever probed (it never contacts the VCN). `active` is now tri-state (`boolean \| null`), every declared rule ships `active: null`, `resolveFirewallRuleState()` maps an observation to `OBSERVED_OPEN`/`OBSERVED_CLOSED`/`NOT_PROBED`, and the "Zero Accidental Ingress" text sits behind `firewallSummary.verified` (false until all rules carry a real observation); the heading otherwise reads `Ingress NOT_PROBED (0/5 rules observed)`. Four more plausible defaults in the same modal removed (`4 OCPUs`, `?? 200` GB disk, hardcoded Ubuntu footer now the reported `os`, Always Free checklist relabelled `PROGRAMME LIMITS (NOT VERIFIED FOR THIS INSTANCE)`). Guards: `src/tests/vmTelemetryDisplay.test.ts` + 2 source guards in `toolSurfaceTruthfulness.test.ts` (22 in file); negative-validated, restoring `active: true` fails exactly the firewall guard (1 failed \| 19 passed), restoring `active: null` passes 20/20. Gates on d1ae25b: lint exit 0, vitest 56 files / 795 tests passed, build exit 0 (`dist/server.cjs` 816.6 kb).  **2026-09-21 03:07 IST ŌĆö the UI status-badge surface.** Three more surfaces asserted unmeasured state on the human-facing approval/routine path. `PermissionGateway.tsx` printed a fixed `Payload Checksum: Verified SHA-Safe` on *every* approval card while nothing hashed the payload; `ProactiveRoutinesModal.tsx` footer hardcoded `Telegram Push Ready` and `Cron Scheduler: Active on Oracle ARM Node` irrespective of whether any daemon or Telegram bot was reachable; `BlueprintRoadmapModal.tsx` seeded `completionPercentage: 100` and a `100% Free Architecture Verified` header *before* `/api/blueprint` answered. New `src/utils/checksumTruth.ts` supplies real measurements: `payloadChecksumLine()` computes an FNV-1a32 over the actual request payload and labels it `(local integrity marker, not SHA-2)` rather than claiming a cryptographic verification; `telegramPushLabel()`/`cronSchedulerLabel()` return `UNKNOWN` until `/api/telegram/status` / `/api/daemon/status` answer, then `live-connected`/`NOT CONNECTED` and `running`/`not running`; the blueprint state starts at zero. Guards: `src/tests/fabricatedStatusClaims.test.ts` (8 tests); negative-validated by restoring all four fabrications, which fails exactly the three component guards (3 failed | 5 passed) and passes 8/8 with them removed. Gates on a8c1422: lint exit 0, vitest 57 files / 803 tests passed, build exit 0 (`dist/server.cjs` 816.6 kb). **2026-09-21 03:37 IST ŌĆö the approval-resolution path.** `/api/approvals/resolve` in `server.ts` defaulted `executionResult` to `{ executed: true }`, stamped `status: 'EXECUTED'` with `verificationStatus`/`finalTruthState` both `'VERIFIED'` unconditionally, and fell back to a synthetic `urn:jarvis:executed:<id>` result id. A request whose execution branch never ran was recorded and displayed as an executed, verified Level 4 action. `src/utils/hardening/approvalResolution.ts` (`classifyApprovalOutcome`) now derives the outcome from the real dispatcher result: `VERIFIED` only with a real provider URN or issue URL, `UNVERIFIED` otherwise, `FAILED` on a provider error, no synthetic URN. `PermissionGateway.tsx` renders `UNVERIFIED` as not confirmed. Guarded by `src/tests/approvalResolutionTruth.test.ts` (8 tests); negative-validated, restoring the old default fails exactly 2 of 8. Gates on 2769c31: lint exit 0, vitest 58 files / 811 tests, build exit 0. **2026-09-21 04:06 IST ŌĆö the Oracle Cloud instance run-state and address.** `oracleCloudState` in `server.ts` seeded `status: 'RUNNING'` and a literal `publicIp`, plus a `+342` h uptime offset and `Math.random()` jitter around constants; a supplied value passes through the UI normalisers unchanged, so the modal rendered an observed run state and an `ssh`-copyable address that no server had reported. The OCI control plane owns both facts and is never queried here. `src/utils/hardening/ociInstanceTruth.ts` keeps only what is provable in-process (a hostname match proves this process runs on the instance, a lower bound); `publicIp`/`status` now seed `null` with a `statusObservedAt` stamp and render through `describeRunState`/`describePublicIp` as `NOT_OBSERVED`; the modal header labels the shape/OCPU/RAM figures as the declared plan. Guards: `src/tests/ociInstanceTruth.test.ts` + the Oracle block in `src/tests/toolSurfaceTruthfulness.test.ts` (33 tests across the two files); negative-validated, restoring the literal address fails exactly 2 tests (2 failed | 31 passed) and passes 33/33 with the fix. Gates on be203c2: lint exit 0, vitest 59 files / 824 tests passed, build exit 0 (`dist/server.cjs` 822.0 kb). **Still `PARTIAL`** ŌĆö this remains a pattern-driven sweep over known surfaces, not proof that no unmeasured claim survives. **2026-09-21 21:54 IST (16:24 UTC) ŌĆö the audit-trail row-count surface.** `/api/actions/audit` returned `totalLogs: memoryState.auditLogs.length` as its only count. `jarvis_memory.json` ships 23 persisted rows that carry no `source` field, so a client reading `totalLogs` as the number of recorded security events counted carried-over rows as confirmed work; `/api/system/health` reported the same number as `auditLogsCount`. Both endpoints now report `recordedLogs` / `recordedAuditLogs` from `auditTrailCounts().recorded` (entries that carry `AUDIT_LOG_SOURCE_RECORDED`) alongside `describeAuditTrail()`'s plain-language summary; `totalLogs` is retained but is explicitly the raw array length. Guarded by `src/tests/hardening/auditTrailTruth.test.ts` (14 tests, including a cold-start guard that the seed array is empty); negative-validated by restoring the previously seeded `Read Git Repository Status (Level 1)` row, which fails exactly 2 of 14 (`does not seed a repository read as EXECUTED`, `starts a cold process with an empty audit trail`) and passes 14/14 with it removed. Gates on `3d18aa4`: lint exit 0, vitest 61 files / 844 tests passed, build exit 0 (`dist/server.cjs` 842830 bytes / 823.1 kb). | **2026-09-21 23:10 IST (17:40 UTC) ŌĆö the telephony webhook-endpoint surface.** The Telephony Hub panel listed `POST /api/telephony/twiml/voice` as `TwiML ACTIVE` and the Twilio adapter used that same path as its post-answer callback (`src/utils/telephonyAdapters.ts`), but `server.ts` registers only `/api/telephony/incoming`, `/api/telephony/handle-turn` and `/api/telephony/twiml/turn`. A carrier following the advertised callback would have reached a 404. The panel's other two badges were also hardcoded green (`LIVE & READY`, `GEMINI BRAIN READY`) although nothing measured them. Fixed: new `src/utils/telephonyEndpointTruth.ts` exports the exact registered-route inventory, a `telephonyEndpointLabel()` that returns `NO SUCH ROUTE` for an unregistered path and holds readiness at `UNKNOWN` until the status request answers, and a `telephonyBrainLabel()` that reports `OFFLINE ENGINE (no API key)` when `/api/health`'s measured `geminiEnabled` is false; the panel renders those, the adapter callback now targets the real `/api/telephony/twiml/turn`, and `BlueprintRoadmapModal.tsx`'s footer no longer asserts `Security Matrix: Active` for a posture it never queried. Guarded by `src/tests/telephonyEndpointTruth.test.ts` (11 tests); negative-validated ŌĆö restoring the non-existent path in the adapter fails exactly the callback-path guard (1 failed | 10 passed) and passes 11/11 with the fix. Gates on `afdf463`: lint exit 0, vitest 62 files / 882 tests passed, build exit 0 (`dist/server.cjs` 842396 bytes / 822.7 kb). **2026-09-22 22:36 IST ŌĆö kill-switch liveness honesty on the Autonomous Tools Hub.** `AutonomousToolsModal.tsx`, the panel that writes workspace files and queues external GitHub issues, seeded `{ emergencyPaused: false }`, fetched `/api/emergency/status` inside a `try` that swallowed failures, and rendered a constant green `­¤¤ó DAEMON ACTIVE` badge for every non-paused state ŌĆö so an unanswered status request read as a confirmed-released kill switch and the two Level-3 controls (Write File to Workspace, Queue for Human Approval) were enabled on a value nobody had fetched; non-boolean shapes fell through the same green branch. The modal now seeds `null`, keeps a status only when `emergencyStatusKnown(data)` is true, renders `STATUS UNKNOWN` via the shared `emergencyTruth.ts` tri-state, and derives `actionBlocked = loading || emergencyPaused || !statusKnown` for both controls; the toggle checks `res.ok` and the boolean shape and reports failure honestly. Guarded by `src/tests/autonomousToolsEmergencyLiveness.test.ts` (5 tests); negative-validated, restoring the seed/raw reads/constant badge fails 3 of 5. Gates on `feda88d`: lint exit 0, vitest **70 files / 1002 tests passed**, build exit 0 (`dist/server.cjs` 852719 bytes). **2026-09-22 18:43 UTC (00:13 IST) ŌĆö the credential leak into the LLM context.** `SecurityMatrixModal.tsx` printed the hardcoded literal `Zero Credential Leaks to LLM Memory ŌĆö PROTECTED` while `securityMatrixState.credentialLeakProtection` had no reader anywhere, and `assembleAiContext()` in `src/utils/memory/aiContext.ts` injected `memoryState.name`, `customKeyValues`, note titles/bodies and conversation history into the Gemini system prompt with no redaction. Fixed: every outbound string is passed through the existing `auditSecrets()` redactor by default, `redactedSecretsCount`/`redactedCategories` are reported, `server.ts` passes the real `credentialLeakProtection` flag and logs the redacted categories, and the badge renders `PROTECTED`/`DISABLED`/`UNKNOWN` from observed state. Guarded by `src/tests/llmContextLeakProtection.test.ts` (7 tests); negative-validated (forcing `protect = false` fails 4 of 7). Gates on `413ff16`: lint exit 0, vitest 74 files / 1035 tests passed, build exit 0. |**2026-09-21 23:35 IST (18:05 UTC) ŌĆö the same panel's unconditional liveness badges.** Slot 6 stopped at the three endpoint badges and missed the panel's two most prominent ones: the header's green pulsing `VOICE AGENT ACTIVE` pill and the AI Receptionist's green `READY TO ANSWER` badge were still hardcoded, so with no telephony provider configured the UI asserted a live agent and an answering receptionist. Separately, both endpoint labels were invoked as `telephonyEndpointLabel(path, true)` ŌĆö a literal `true` for `statusKnown` ŌĆö so they always read `ROUTE REGISTERED` and could never hold at `UNKNOWN`, contradicting the "Known limitations" text written the same night. Fixed: `telephonyEndpointTruth.ts` now exports `telephonyReadiness()` (tri-state; `UNKNOWN` until a boolean `isConfigured` is seen), `voiceAgentLabel()` and `receptionistLabel()`; the modal derives all four badges from the single measured `/api/telephony/status` snapshot and passes `readiness !== 'UNKNOWN'` as `statusKnown`. Guard test extended to 15 tests, including source guards pinning the absence of `VOICE AGENT ACTIVE` / `READY TO ANSWER` and the literal-`true` call form; negative-validated by restoring `VOICE AGENT ACTIVE`, which fails exactly the source guard (1 failed | 14 passed) and passes 15/15 with the fix. Gates on `ff5a3c3`: lint exit 0, vitest 62 files / 886 tests passed, build exit 0 (`dist/server.cjs` 842396 bytes / 822.7 kb). **2026-09-22 20:09 UTC (01:39 IST) ŌĆö the Telegram security-posture claim.** The Telegram `security_audit` reply printed a fixed `Human Approval: Enforced for all external actions` and `Credential Protection: Passwords & API tokens strictly isolated` for every process, and the `/start` welcome asserted `Level 4 actions strictly require your mobile confirmation` ŌĆö none of which read the state. `humanApprovalForExternal` and `maskSensitiveData` are operator-flippable via `POST /api/security/matrix`, and `credentialLeakProtection` gates the outbound redactor, so a gate turned off was still reported as enforced. Fixed: `src/utils/hardening/securityMatrixTruth.ts` (`securityMatrixPosture()`, `triState()`) derives the line from the observed flags and holds `UNKNOWN ŌĆö not observed` for an unread value. Guarded by `src/tests/hardening/securityMatrixTruth.test.ts` (9 tests); negative-validated, restoring the literal fails exactly 2 of 9 (`2 failed | 7 passed`), restored ŌåÆ 9/9. Gates on `2b1558e`: lint exit 0, vitest **76 files / 1056 tests passed**, build exit 0 (`dist/server.cjs` 837.7 kb). **2026-09-22 21:12 UTC (02:42 IST) ŌĆö one more fabricated grant, client-side this time.** Slot 11 fixed the *server* to report real granted scopes, but `SocialMediaModal.tsx` still short-circuited on `status === 'API_VERIFIED'` and printed the literal `Scopes: youtube.upload, youtube.readonly`, so a read-only channel (upload scope not granted) displayed upload authorization. The header now prints the scopes the server returned (`describeGrantedScopes`) and states explicitly that upload is not authorized unless the server confirmed `canPublish` (`youtubeCanPublishMeasured`). Guarded by 6 tests in `src/tests/socialPublishHonesty.test.ts`; negative-validated (removing the `canPublish` check fails 2 of 24). **2026-09-22 21:43 UTC (03:13 IST) ŌĆö the call UI printed the raw number of the caller it claimed to mask.** `ActiveCallHUD.tsx` rendered a `MASKED` badge (`isMaskActive && isUnknownInbound`) while printing `{activeCall.callerNumber}` ŌĆö the raw carrier value ŌĆö directly beneath it, and the Telephony Hub call-history panel did the same with `selectedLog.callerNumber`: the name read "Unknown Caller" and the full number was shown anyway. New `src/utils/telephonyPrivacyDisplay.ts` (`shouldMaskParty`, `resolveDisplayNumber`) derives the printed number from the same predicate the badge uses, and the HUD badge is now tied to `counterpartIsMasked`. Guarded by `src/tests/telephonyPrivacyDisplay.test.ts` (7 tests); negative-validated ŌĆö both guarded patterns are present at HEAD and absent after the fix. Gates on `8b6787b`: lint exit 0, vitest **77 files / 1074 tests passed**, build exit 0 (`dist/server.cjs` 860517 bytes). Still `PARTIAL` ŌĆö one more real violation closed, not proof the sweep is exhausted. **2026-09-22 22:12 UTC (03:42 IST) ŌĆö the Master Blueprint modal rendered an unmeasured progress figure as 0%.** `BlueprintRoadmapModal.tsx` seeds `completionPercentage: 0`, fetched `/api/blueprint` without checking `res.ok`, and on any failure kept the seed, so the "Readiness Progress" bar, the `{...}%` readout and the footer `(...% checklist items ticked)` all rendered a measured "0% complete" that nothing measured; the header also printed a hardcoded `TOTAL PHASES: 10 (Phase 0 to 9)`. New `src/utils/blueprintTruth.ts` (`blueprintProgress`, `blueprintPercentageLabel`, `blueprintProgressLabel`, `blueprintFooterLabel`, `blueprintPhaseCountLabel`) marks a figure `UNMEASURED`/`MEASURED`, returns `null` ŌĆö never a coerced `0` ŌĆö for an unread flag or an out-of-range/non-numeric value, and renders `UNKNOWN` for an unmeasured figure; the component sets a `blueprintRead` flag only after a `res.ok` response carrying `phases`. Guarded by `src/tests/blueprintProgressTruth.test.ts` (9 tests); negative-validated ŌĆö reverting the read guard and the bar width expression fails 6 of 9, restored ŌåÆ 9/9. Gates on `a425c88`: lint exit 0, vitest **78 files / 1083 tests passed**, build exit 0 (`dist/server.cjs` 860517 bytes). **2026-09-23 16:23 UTC (21:53 IST) ŌĆö the Computer Operator semantic interpretation card.** `ComputerOperatorModal.tsx` rendered `ScreenInterpreter.interpret(...).summary` unconditionally, and `ScreenInterpreter` always emits a confident `Screen showing "<app>" ... N interactive UI elements detected.` summary, so an illustrative preview or an unreachable host still narrated a live screen; the panel's status dot, resolution badge and platform field had already been gated, this card was missed. `observationInterpretationNotice()` in `src/utils/computerOperator/observationTruth.ts` (built on `screenSyncState`) now withholds it for `ILLUSTRATIVE`/`UNOBSERVED`. Guarded by 5 assertions in `src/tests/observationTruth.test.ts`; negative-validated ŌĆö reverting the modal guard fails exactly the source guard (1 failed | 23 passed), restored ŌåÆ 24/24. Gates on `3d3a7f7`: lint exit 0, vitest **80 files / 1098 tests passed**, build exit 0. **2026-09-23 16:46 UTC (22:16 IST) ŌĆö the engine completion summaries.** `computerOperatorEngine.ts` emitted a fixed `All N step(s) executed and visually verified. System state nominal.` summary for every run, even when `ScreenObserver` served the built-in illustrative view (whose pre/post frames are both synthetic, so the step comparisons proved nothing about a real screen). `resumeApprovedTask` also awaited nothing ŌĆö it called `this.executor.executeAction(...)` without reading the result and then stamped `COMPLETED` / `Authorized action completed and verified`, so a rejected Level-4 action read as verified. Now `ScreenObserver.isHostBacked()` gates the claim (`verified against the host desktop` vs a `SIMULATION_ONLY` prefix), and `resumeApprovedTask` ends `FAILED` with the real error on a non-success executor result. Guarded by `src/tests/computerOperatorTaskStatus.test.ts` (6 tests); negative-validated ŌĆö reverting the resume guard fails 2 of 6 (`expected 'COMPLETED' to be 'FAILED'`), restored ŌåÆ 6/6. Gates on `2afb84b`: lint exit 0, vitest **81 files / 1104 tests passed**, build exit 0 (`dist/server.cjs` 863007 bytes). **2026-09-23 17:10 UTC (22:40 IST) ŌĆö the HUD GPS pill.** `HUDHeader.tsx` rendered a hardcoded green `GPS: GEO-SERVICES` pill for every state ŌĆö no fix, cached, simulated preset or manual entry alike ŌĆö asserting a device GPS link the HUD never checked. New `locationFixBadge()` in `src/utils/locationService.ts` returns `{live:true}` only for a live source; the pill renders it and is grey for anything else, and `App.tsx` forwards `locationSource={userCoordsSource}`. Guarded by `src/tests/locationServicesTruth.test.ts` (now 16 tests); negative-validated ŌĆö restoring the hardcoded label fails 1 of 16, restored ŌåÆ 16/16. Gates on `144a995`: lint exit 0, vitest **81 files / 1108 tests passed**, build exit 0 (`dist/server.cjs` 842.8 kB). **2026-09-25 17:45 UTC (23:15 IST) ŌĆö the YouTube voice status reply.** The `/api/chat` `youtube_status_inquiry` branch answered every passing `ensureValidYouTubeToken()` with "YouTube Channel \"<name>\" is active, verified, and ready. OAuth 2.0 token status is nominal." ŌĆö the helper only proves a stored-or-refreshed credential, never reads the channel, and nothing measures quota; it also invented `'Connected Channel'` when the stored title was empty. `youtubeVoiceStatusReply()` in `src/utils/hardening/youtubeVoiceStatusTruth.ts` now derives the reply from credential validity plus the recorded scope grant (`publishScopeGranted()`/`describeGrantedScopes()`, `socialPublishHonesty.ts`), reporting upload authorization as confirmed/not confirmed/unknown and the channel as recorded-or-not-read. The reply no longer contains "verified", "nominal" or "ready" in either language. Guarded by `src/tests/youtubeVoiceStatusTruth.test.ts` (9 tests); negative-validated ŌĆö restoring the hardcoded phrase fails 1 of 9, restored ŌåÆ 9/9. Gates on `db19e40`: lint exit 0, targeted 1 file / 9 passed, full suite **101 files / 1331 tests passed**, build exit 0 (`dist/server.cjs` 880184 bytes).
+| 13 | Zero-fake-success for all tools | `PARTIAL` | **2026-10-03 17:53 UTC (23:23 IST 2026-10-03) — the bundled telephony test suite pinned fabricated call success.** Four of the 20 mandatory cases in `src/utils/telephonyTestRunner.ts` asserted the pre-hardening, fake behaviour the engine has since been fixed to refuse: #3 recited unverified clinic hours as fact, #5 recited the sample clinic's `9:00` opening as fact, #11 credited a simulation-only transfer as `CONFIRMED`, and #17 reported a call as "placed" with only a simulation adapter active (observed `total 20 / passed 16 / failed 4`). The assertions now pin the honest behaviour: #3/#5 report unverified hours as unverified and never recite a time; #11 requires `handoffStatus !== 'CONFIRMED'` + `handoff_unavailable_message_taking` + `simProvider.callTransferred === false`; #17 requires `actionExecuted === false` + `TELEPHONY_NOT_CONFIGURED`. New `src/tests/telephonyTestRunnerHonesty.test.ts` (1 case) runs the suite in CI and pins the outbound evidence string (`actionExecuted: false`, `TELEPHONY_NOT_CONFIGURED`). Negative-validated: restoring the old `9:00` assertion for #5 fails exactly the wrapper test (`1 failed \| 0 passed`); restored → suite 20/20 and wrapper 1/1. No engine change — the engine already refused all four; only its stale expectations were corrected. Gates on `597b0ce`: lint exit 0; full suite **143 files / 1857 tests passed** (23.64 s); build exit 0 (`dist/server.cjs` 992442 bytes). E2E: NOT RUN (no carrier / no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted. **2026-10-02 22:12 UTC (03:42 IST 2026-10-03) — the telephony call-history delete routes reported a deletion that never happened.** `DELETE /api/telephony/calls` and `DELETE /api/telephony/calls/:id` (`server.ts`) both answered `{ success: true, message: … }` unconditionally, so clearing an already-empty history, or deleting an id that was never recorded, read as a completed deletion while the store was unchanged. New `classifyTelephonyCallDeletion(removed, targetId?)` (`src/utils/hardening/telephonyCallDeleteTruth.ts`) derives the verdict from the actual removed count: a real removal reports `success: true` + count + `outcome: 'DELETED'`; an empty clear reports `success: false` + `outcome: 'NOTHING_TO_CLEAR'`; an unknown id reports `success: false` + `outcome: 'NOT_FOUND'` naming the id. Both routes return that verdict. Guarded by `src/tests/telephonyCallDeleteTruth.test.ts` (8 cases: real/empty clear, real/unknown id, non-finite removed, plus source guards that both routes call the classifier and neither old `success: true` literal survives). Negative-validated: restoring the two literals fails exactly the three route guards (`3 failed \| 5 passed`), restored → 8/8. Gates: lint exit 0; targeted 1 file / 8 passed; full suite **140 files / 1840 tests passed** (23.95 s); build exit 0 (`dist/server.cjs` 963.2 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted; the other two delete sites named by the prior slot were audited and are already truthful (`/api/tools/fs/delete` returns `realFsDelete()`'s real result; `DELETE /api/autonomous/schedule/:id` 404s an unknown id). **2026-10-02 19:30 UTC (01:00 IST 2026-10-03) — the telephony permission-update route reported unapplied changes as saved.** `POST /api/telephony/permissions` (`server.ts`) merged any caller-supplied object over the stored matrix and answered `success: true` unconditionally, so unknown keys or an empty body read as an applied change on the surface that gates outbound calling, private-data access and recording. New `classifyPhonePermissionUpdate()` (`src/utils/hardening/phonePermissionUpdateTruth.ts`) accepts only real `PHONE_PERMISSION_DEFINITIONS` keys carrying a valid state; the route applies just `verdict.applied` and answers `success: false`, `applied: false` with a naming `reason` when nothing real was supplied. `TelephonyHubModal.tsx` reverts a rejected toggle and shows a notice. Guarded by `src/tests/telephonyPermissionUpdateTruth.test.ts` (11 cases); negative-validated (pre-fix route → `3 failed \| 8 passed`, restored → 11/11). Gates: lint exit 0; full suite **135 files / 1794 tests passed** (27.30 s); build exit 0 (`dist/server.cjs` 979414 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted. **2026-10-02 18:44 UTC (00:14 IST 2026-10-03) — the social OAuth disconnect routes reported a credential removal that never happened.** `POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect` (`server.ts`) both answered `success: true` and wrote a `… Disconnected (…)` `VERIFIED` audit row unconditionally, clearing an already-absent connection; the Social Media Hub announced a disconnection while nothing was linked. Both routes now guard on an existing connection: a no-op returns `success: false`, `outcome: 'NOT_CONNECTED'`, writes no audit row, and only the confirmed path clears the credential. `SocialMediaModal.tsx` surfaces the honest message in the not-connected branch. Guarded by `src/tests/oauthDisconnectTruth.test.ts` (4 cases); negative-validated (both guards disabled → `2 failed \| 2 passed`, restored → 4/4). Gates: lint exit 0; targeted 1 file / 4 passed; full suite **134 files / 1783 tests passed** (22.81 s); build exit 0 (`dist/server.cjs` 970016 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted. **2026-10-02 18:20 UTC (23:50 IST 2026-10-02) — the scheduler routines logged `Executed <routine>` before doing anything.** `checkAndRunSchedulerJobs()` in `server.ts` wrote `Executed Morning Briefing …` / `Executed Nightly Work Summary …` the instant a routine's time window opened, and for the two push routines while the outbound Telegram call was fire-and-forget (`sendRealTelegramMessage(...).catch(...)` swallows every failure) — so a failed push, or a routine with no `activeTelegramChatId` that never sent at all, still read as a delivered briefing. The Morning and Night routines now `await deliverTelegramMessage(...)`, take its strict `DeliveryInterpretation` verdict, and record through new `recordSchedulerOutcome(name, push, detail)` (`src/utils/hardening/schedulerRunTruth.ts` `schedulerRunLogLine`): `✅ … message delivered to Telegram (VERIFIED)` only on a confirmed delivery, `⚠️ … message NOT delivered (<verdict>)` otherwise; the two no-push routines record `schedule advanced; no outbound push in this routine`. The per-day marker is still stamped first, so the awaited push cannot re-fire the window; `detail: delivery.status` (a non-existent field) is corrected to `delivery.errorReason \|\| delivery.outcome`. Guarded by `src/tests/schedulerRunTruth.test.ts` (7 cases: the three log-line outcomes plus source guards that the four unconditional `Executed …` strings are gone, all routines route through `recordSchedulerOutcome`, the pushes are awaited via `deliverTelegramMessage`, and the marker precedes the awaited push). Targeted 1 file / 7 passed; related truth tests 4 files / 80 passed. Gates: lint exit 0; full suite **133 files / 1779 tests passed** (22.48 s); build exit 0 (`dist/server.cjs` 969608 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted. **2026-10-02 18:03 UTC (23:33 IST 2026-10-02) — `POST /api/system/resume` faked the release, in the response and in the audit trail.** `server.ts` answered `success: true` and wrote a `🟢 SYSTEM RESUMED … VERIFIED` audit row unconditionally, so a resume while nothing was frozen — or while a latched hard kill switch still held autonomy frozen — read as released autonomy. Fixed: the route derives the verdict from the **pre-transition** state via `emergencyResumeVerdict(getEmergencyState())` (new in `src/utils/emergencyTruth.ts`); a no-op resume returns `success: false` with an `outcome` and writes **no** resumed audit row; `resumeSystemOperation` is called only once a release is confirmed. `HUDHeader.tsx` adopts only an observed state and shows the honest message. Guarded by `src/tests/emergencyResumeTruth.test.ts` (7 cases: engaged / already-active / latched / unobserved pre-states plus source guards that the verdict precedes the mutation and the early return precedes the resumed audit row); negative-validated (weakening the unobserved-state guard fails exactly the `UNKNOWN` case, `1 failed \| 6 passed`, restored 7/7). Also fixed a **pre-existing false failure**: `src/tests/actionExecutedRemainingSites.test.ts` counted a `success: true` inside a telephony doc comment as a flag site (`3 != 2`); the pin now strips comments before counting. Gates: lint exit 0; targeted 2 files / 16 passed; full suite **131 files / 1763 tests passed** (22.58 s); build exit 0 (`dist/server.cjs` 967919 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted. **2026-10-02 17:05 UTC (22:35 IST 2026-10-02) — the offline engine's action counter drifted from its verdict.** `src/utils/localJarvisEngine.ts` advanced `stats.actionsExecuted` in 15 places with a bare `updatedMemory.stats.actionsExecuted += 1` while the `actionExecuted` verdict was decided separately in each return literal, so the counter could disagree with what the engine reported as done. All 15 sites now call the single gated `countAction(updatedMemory, true)` helper (`if (actionExecuted !== false) memory.stats.actionsExecuted += 1;`). The `language_switch` branch was the one live drift a 48-command matrix surfaced: it returned `actionExecuted: true` without advancing the counter, so the reply claimed the mode changed while the total stayed still; it now counts. (`set_name` keeps its own increment because it also rewrites `memory.name`; audited, matches the verdict.) Guarded by `src/tests/offlineActionCounterConsistency.test.ts` (4 cases: source pin against ad-hoc increments, the 48-command verdict/counter matrix over true/false/no-action branches in English/Hindi/Hinglish, a `language_switch` regression pin, and a refusal/unrecognised-command pin). Negative-validated (removing the switch's `countAction` call → `2 failed \| 2 passed`, restored → 4/4). Gates: lint (`tsc --noEmit`) exit 0; targeted 3 files / 55 passed; full suite **129 files / 1742 tests passed** (22.70 s); build exit 0 (`dist/server.cjs` 965651 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted. **2026-10-02 15:56 UTC (21:26 IST 2026-10-02) — the computer-operator execute route reported success for failed runs.** `POST /api/computer-operator/execute` (`server.ts`, ~6246) awaited `ComputerOperatorEngine.executeTask(...)` and answered `res.json({ success: true, task })` unconditionally, so a `FAILED`, `BLOCKED`, `NEEDS_APPROVAL` or `CANCELLED` run — and a run that never reached a terminal state — all read as performed host work. Fixed: the flag is now `operatorTaskExecuted(task)` (the same helper the `/api/chat` `fix_project_error` branch already uses) and the route names the engine verdict in a new `outcome` field. Guarded by `src/tests/computerOperatorExecuteRouteTruth.test.ts` (5 cases: bounded source guard that the route body no longer contains `res.json({ success: true, task })` and does contain `success: operatorTaskExecuted(task)`, plus behavioural runs of the real engine for COMPLETED / FAILED / BLOCKED / NEEDS_APPROVAL, asserting the verdict each time). Negative-validated (restoring `success: true` → `1 failed | 4 passed`, restored → 5/5). Gates: lint (`tsc --noEmit`) exit 0; targeted 1 file / 5 passed; full suite **128 files / 1730 tests passed** (22.69 s); build exit 0 (`dist/server.cjs` 965733 bytes). E2E: NOT RUN (no display session / handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — another real fake-success class closed, the sweep is not exhausted. **2026-10-01 22:17 UTC (03:47 IST 2026-10-02) — the real bridge adapter, and the telephony simulator status.** `RealAndroidBridgeAdapter.connect()` (`src/utils/androidBridgeAdapter.ts`) returned `success: true` on any HTTP 200 and discarded the `androidBridgeEngine.connectDevice(...)` result, overwriting the honest `LIMITED_CAPABILITY`/`PERMISSION_REQUIRED` verdict the 02:35 slot had just made truthful. Fixed: `success: status === 'CONNECTED'` with a message naming the degraded status otherwise. `TelephonyProviderRegistry.getActiveStatus()` (`src/utils/telephonyAdapters.ts`) returned `READY` off the simulator's unconditional `isConfigured()`; it now reports `NOT_CONFIGURED` for `SIMULATION_PROVIDER_ID` (no PSTN carrier), matching the `SIMULATION_ONLY` mode elsewhere. Guarded by `src/tests/realAndroidBridgeAdapter.test.ts` (+2 cases) and `src/tests/telephonyGatewayTruth.test.ts` (+2 cases); negative-validated (restore adapter `success: true` → `2 failed \| 7 passed`; remove simulator guard → `1 failed \| 11 passed`; both restored green). Gates: lint exit 0; targeted 2 files / 21 passed; full suite **127 files / 1718 tests passed** (23.23 s); build exit 0 (`dist/server.cjs` 964691 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 21:05 UTC (02:35 IST 2026-10-02) — `connectDevice` reported `success: true` for a device it refused.** `AndroidBridgeManager.connectDevice` (`src/utils/androidBridgeEngine.ts`) returned `{ success: true }` unconditionally while the honest `status` said `LIMITED_CAPABILITY` (simulated/testbed device, or missing call-answer/telecom-dialer capability) or `PERMISSION_REQUIRED` (no notification-access and no call-detection grant) — a caller reading `.success` would believe a live, fully-permitted device had connected. Fixed: `{ success: this.status === 'CONNECTED', status: this.status }`; no in-repo consumer read the flag (grep-verified), so no runtime change. Closed the last three unaudited `success: true` sites the 02:05 slot named via new `src/tests/actionExecutedRemainingSites.test.ts` (5 tests): telephony authorization flag truthful (success follows a recorded `AUTHORIZED`/`REJECTED`; unknown id → `false`), simulated adapter `SIMULATION_ONLY` (never `CONNECTED`), real adapter propagates a server rejection, fixed engine behaviour for all three connect outcomes, plus a source guard pinning `success: true` counts (adapter 2 / engine 0 / telephony 2). Negative-validated: restoring `{ success: true }` → `2 failed \| 3 passed`; restored → 5/5. Gates: lint (`tsc --noEmit`) exit 0; targeted bridge suite 6 files / 71 passed; full suite **126 files / 1703 tests passed**; build exit 0 (`dist/server.cjs` 942.0 kb). E2E: NOT RUN (no Android hardware). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 20:13 UTC (01:43 IST 2026-10-02) — the offline search branch named a lookup the in-app Browser never loaded.** `src/utils/localJarvisEngine.ts`'s offline `google_search` branch prepared the query for the in-app Browser but emitted only `payload.query`. The client (`src/App.tsx` `handleExecuteAction`) reads the destination from `payload.target` and hands it to `BrowserModal` as `initialUrl`; `BrowserModal` ignores `initialQuery` whenever `initialUrl` is set, so with the target missing the view stayed on its Google home while the action card and reply named the query — the class the `/api/chat` path already fixed via `searchDispatch()`. Fixed: the offline branch routes through the same `searchDispatch()` helper and emits `payload: { query, target: dispatch.url }`. Guarded by a new case in `src/tests/localJarvisEngine.test.ts` (`carries the search URL in payload.target so the in-app Browser loads it`); negative-validated (reverting to `{ query }` → `1 failed \| 46 skipped`, restored → green). Gates: lint (`tsc --noEmit`) exit 0; targeted `localJarvisEngine`+`browserDispatchTruth` 2 files / 70 passed; full suite **124 files / 1694 tests passed** (24.26 s); build exit 0 (`dist/server.cjs` 964583 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 19:46 UTC (01:16 IST 2026-10-02) — the browser-open dispatch case answered Hindi users in English.** During the item-13 sweep of `actionExecuted: true` sites in `server.ts`, the `open_google` / `open_youtube` / `open_gmail` / `open_chatgpt` case gated its Hindi reply on `language === 'hi'`. The client (`src/App.tsx`) posts `voiceSettings.language` to `/api/chat` — a locale such as `hi-IN` or `hinglish`, never a bare `hi` — so the comparison was dead code and every Hindi user got `verdict.replyEn`. It is the only bare-`hi` comparison in `server.ts`; the other language gates use `language.startsWith('hi')`. Fixed: `server.ts` now uses `language.startsWith('hi')`, matching the rest of the file. Guarded by a new case in `src/tests/browserDispatchTruth.test.ts` (bounds the `open_google` case body and asserts the `startsWith('hi')` form is present and the `language === 'hi'` form is absent). Negative-validated (restoring the bare `hi` comparison → `1 failed \| 10 passed`, restored → 11/11). Gates: lint (`tsc --noEmit`) exit 0; targeted `browserDispatchTruth` 23/23 (remote branch adds cases); full suite **124 files / 1693 tests passed** (22.24 s); build exit 0 (`dist/server.cjs` 964517 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 19:33 UTC (01:03 IST 2026-10-02) — the telephony adapter family reported `success: true` for provider documents it never delivered to a carrier.** `src/utils/telephonyAdapters.ts` (Twilio / Telnyx / Plivo) returned `{ success: true }` from `answerIncomingCall`, `rejectIncomingCall`, `endCall`, `playAudio`, `streamAudio` and `collectSpeech` while only *building* a provider document (TwiML / a provider command / Plivo XML) and never handing it to the carrier or an HTTP client — so a caller reading `success` would believe an audio prompt had played, speech collection had started, or a call had ended when nothing left the machine. All six methods now return `success: false` with the shared `TELEPHONY_DOCUMENT_NOT_DELIVERED` reason; the document fields are still returned so a caller can transmit them explicitly. The methods are exported but have no in-repo consumers, so no runtime behaviour changed. Also audited: `SocialMediaModal.tsx`'s YouTube upload-draft flow is already guarded by a real `providerUrn` check and is **not** a fake-success site. Guarded by `src/tests/telephonyProviderHonesty.test.ts` (8 tests); negative-validated (reverting the adapter verdicts → `1 failed \| 7 passed`, restored → 8/8). Gates: lint (`tsc --noEmit`) exit 0; targeted 8/8; full suite **124 files / 1692 tests passed** (21.66 s); build exit 0 (`dist/server.cjs` 964509 bytes). E2E: NOT RUN (no in-repo consumer). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 19:26 UTC (00:56 IST 2026-10-02) — the outbound-dial authorize route dialled through the simulator.** `POST /api/telephony/outbound/authorize` (`server.ts`) gated its dial on the raw `provider.isConfigured()` boolean and then called `startOutboundCall()`. The `simulation_test_provider`'s `isConfigured()` is unconditionally `true` and its `startOutboundCall()` returns a fabricated `providerCallId`, so once the simulator was the selected engine the route answered `success: true` with a `providerCallId` although no carrier ever saw a call. Fixed: `telephonyEngineCanObserveCall(mode)` added to `src/utils/telephonyGatewayTruth.ts`; the route derives the active engine mode from the registry via the existing `telephonyEngineMode()` and refuses any dial the engine cannot actually place, naming the mode (`SIMULATION_ONLY` / `TELEPHONY_NOT_CONFIGURED` / `TELEPHONY_ENGINE_UNSUPPORTED`) with the matching refusal text; the simulator response no longer carries `success: true` or a `providerCallId`. Guarded by `src/tests/telephonyOutboundDialTruth.test.ts` (9 tests); negative-validated (reverting the gate → `2 failed \| 7 passed`, restored → 9/9). Live E2E on `node dist/server.cjs` (PORT 4013): select simulator (`engineApplied: true`) then authorize → HTTP 400 `status: SIMULATION_ONLY`; default twilio engine → HTTP 400 `status: NOT_CONFIGURED`. Gates: lint exit 0; targeted `telephonyOutboundDialTruth`+`telephonyGatewayTruth` 2 files / 19 passed; full suite **124 files / 1690 tests passed** (22.42 s); build exit 0 (`dist/server.cjs` 963512 bytes). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 18:20 UTC (23:50 IST 2026-10-01) — the offline blueprint branch claimed phases 0 to 9 were active.** The offline `check_project` branch of `src/utils/localJarvisEngine.ts` spoke `Displaying Master Blueprint Phase 0 to 9.` / `All phases active hain.` / `मास्टर ब्लूप्रिंट खोला जा रहा है। फेज 0 से 9 सक्रिय हैं।` while opening the Master Blueprint view, although that path never reads `/api/blueprint` and so cannot know the phase list or its active state — the same readiness claim the blueprint-truth work removed from `BlueprintRoadmapModal.tsx`, still alive in the spoken reply. Fixed: `blueprintRoadmapReply(lang)` in `src/utils/blueprintTruth.ts` (English/Hindi/Hinglish) states the view is opening and that the phase list is unconfirmed; the engine branch calls it. Guarded by `src/tests/blueprintProgressTruth.test.ts` (3 new cases + engine source guard); targeted `blueprintProgressTruth`+`localJarvisEngine` 2 files / 59 passed; negative-validated (restoring the hardcoded claim → `1 failed \| 12 passed`, restored → 13/13). Gates: lint exit 0; full suite **123 files / 1681 tests passed** (22.55 s); build exit 0 (`dist/server.cjs` 962913 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 16:57 UTC (22:27 IST 2026-10-01) — the telephony handoff confirmed a staff transfer no carrier observed.** `TelephonySessionManager.processTurn`'s handoff branch confirmed the transfer whenever `provider.isConfigured() \|\| session?.isSimulated` and the adapter returned `providerConfirmed: true`. The simulator's `transferCall()` is hardcoded `providerConfirmed: true` (`src/utils/telephonyAdapters.ts`), and an unconfigured real carrier cannot be observed, so `transfer me to a doctor` was answered "Transferring your call to our clinic staff now, please hold the line" and the session advanced to `CONFIRMED` although no carrier handled anything; the fallback additionally invented "all staff members are currently occupied on another line". Fixed: the branch now derives the active engine mode from the registry (`telephonyEngineMode(activeEngine.id, activeEngine.isConfigured())`) and only attempts a transfer when `telephonyEngineCanObserveCall()` — i.e. a live gateway; the unconfirmed fallback now says the transfer could not be confirmed (no live carrier) instead of claiming a busy line. Guarded by `src/tests/telephonyHandoffTruth.test.ts` (4 tests); negative-validated (reverting the gate → `2 failed \| 2 passed`, restored → 4/4). Gates: lint exit 0; full suite **122 files / 1667 tests passed** (23.07 s); build exit 0 (`dist/server.cjs` 958584 bytes). E2E: NOT RUN (no handset/SIM/Twilio). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 16:23 UTC (21:53 IST 2026-10-01) — call-control phrases containing "phone call" dialled as outbound calls.** The outbound branch also keys on the substring `phone call`, which appears inside call-control phrases: `end phone call`, `disconnect phone call`, `reject phone call`, `hang up the phone call`, `phone call history`. Each was classified `outbound_call_authorization` and staged a dial to the default contact instead of answering, hanging up, rejecting, or opening the call log. Fixed via shared `isAnswerCallRequest()` / `isHangupCallRequest()` / `isRejectCallRequest()` / `isTelephonyControlRequest()` in `src/utils/telephonyIntentRouting.ts`; the outbound branch in `server.ts` (~861) and `src/utils/localJarvisEngine.ts` (~1355) excludes the whole control family, and the control branches route through the shared predicates. Guarded by `src/tests/telephonyIntentRouting.test.ts` (20 tests); negative-validated (removing the engine guard → `14 failed \| 6 passed`, restored → 20/20). Live `/api/chat` E2E on `node dist/server.cjs` (PORT 4012): `end phone call`→`hangup_call`, `disconnect phone call`→`hangup_call`, `reject phone call`→`reject_call`, `phone call history`→`call_history`, `call hub`→`telephony_hub`, `call Dr Wayne`→`make_call` target `Dr Wayne`. Gates: lint exit 0; full suite **121 files / 1663 tests passed** (22.56 s); build exit 0 (`dist/server.cjs` 958252 bytes). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 16:02 UTC (21:32 IST 2026-10-01) — the telephony console/history phrases swallowed by the outbound-call branch.** The outbound branch in `server.ts` `classifyIntentLocally()` (~833) and `src/utils/localJarvisEngine.ts` (~1329) keyed on the bare prefix `call `, so `call hub` and `call history` were classified `outbound_call_authorization`, staged an outbound request to the literal strings `hub`/`history` behind a Level-4 prompt, and never opened the console/history view. Fixed via shared `isTelephonyHubRequest()`/`isCallHistoryRequest()` in `src/utils/telephonyIntentRouting.ts`, used by both surfaces. Guarded by `src/tests/telephonyIntentRouting.test.ts` (6 tests); negative-validated (removing the engine guard → `2 failed \| 4 passed`, restored → 6/6). Gates: lint exit 0; full suite **121 files / 1649 tests passed** (22.04 s); build exit 0 (`dist/server.cjs` 959143 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-10-01 20:11 UTC (01:41 IST 2026-10-01) — the offline Android message-reply decline branch.** `src/utils/localJarvisEngine.ts`'s MESSAGE reject branch returned `actionExecuted: true` with detail `{ type: 'open_notepad', title: 'Message Dismissed' }` and counted the action, although declining a reply performs no work (it only clears a locally mirrored approval prompt) and opens no view. The call-reject twin already reported `false`. Fixed via `offlineAndroidMessageRejectVerdict(connected)` in `src/utils/computerOperator/offlineCallTruth.ts` (`actionExecuted: false`, title `Message Reply Declined Locally (nothing was sent)`), wired into the branch, with `reject_message` added to `IntentCategory` (`src/types.ts`). Guarded by `src/tests/androidInquiryTruth.test.ts` (asserts no `answer_call`/`open_notepad` intent, no `actionExecuted: true`, and pins title/reply); negative-validated by flipping the verdict to credit the decline, restored → green. Gates: lint exit 0; targeted `androidInquiryTruth`+`offlineCallTruth` 2 files / 30 passed; full suite **118 files / 1627 tests passed** (22.35 s); build exit 0 (`dist/server.cjs` 955360 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`. **2026-09-30 18:16 UTC (23:46 IST 2026-09-30) — the Computer Operator engine's single safe retry.** The retry path in `src/utils/computerOperator/computerOperatorEngine.ts` re-executed the action but **discarded the result** (`await this.executor.executeAction(action);`) and **never re-observed the screen**, then fell straight through to the loop tail and the `COMPLETED` summary that claims *"All N step(s) executed and verified against the host desktop"* — so a retry that failed to execute, or that produced no observable change, still reported the step as verified. Fixed: the retry is now re-executed **and re-verified** — a failed re-execution ends the task `FAILED` with the executor error, an unverified retry ends it `FAILED` with the verification message, and only a confirmed change adopts the retry as the step result (feeding the RESULT event and the completion summary). Guarded by three new cases in `src/tests/computerOperatorTaskStatus.test.ts` (9 tests): unverified-retry → `FAILED` (and the action was actually retried, `calls() >= 2`), verified-retry → `COMPLETED` with the host-backed claim, retry-execution-failure → `FAILED` with `RETRY_EXECUTOR_REJECTED`. Negative-validated: reverting only the engine fix fails `2 failed | 7 passed` (the unverified-retry and retry-execution-failure cases, `expected 'COMPLETED' to be 'FAILED'`); restored → `9/9`. The pre-existing host-backed-summary case was also corrected — its stub observer never changed the screen, so it had only passed because of this bug. Gates observed: lint (`tsc --noEmit`) exit 0; targeted 9 passed; full suite **118 files / 1603 tests passed** (22.10 s); build exit 0 (`dist/server.cjs` 948625 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed, but the item still spans tool-level success flags beyond the computer-operator verdicts. **2026-09-30 18:07 UTC — the browser `getDisplayMedia` blank-frame capture claim.** `ScreenshotModal.tsx` sized its canvas with `video.videoWidth \|\| 1280` / `video.videoHeight \|\| 720`; a stream that resolved without a decoded frame drew a black 1280×720 image reported as `Live display captured at 1280x720`. Fixed by `browserCaptureVerdict()` in `src/utils/computerOperator/screenshotDispatchTruth.ts` (credits a capture only on non-zero finite dimensions); the modal now reports `failed` and clears the stale image on a frameless stream. Guarded by 4 new cases in `src/tests/remainingFakeSuccess.test.ts` (45 tests); negative-validated (reintroducing the fallback → `1 failed \| 44 passed`, restored → 45/45). Gates: lint exit 0; targeted 45 passed; `+screenshotStore` 58 passed; full suite 118 files / 1600 tests passed; build exit 0 (`dist/server.cjs` 946569 bytes). **2026-09-30 16:25 UTC (21:55 IST 2026-09-30) — the `actionExecuted = true` sweep enumerated and pinned.** Every literal `actionExecuted = true;` in `server.ts` (21 sites, 21 distinct intents) was audited by reading its case body: 19 are routed by `App.tsx` to a real view, `find_document` counts only on `realFsSearch()` matches, `set_name` only after a persisted `memoryState.name` write; none is a bare unconditional assignment. Guarded by `src/tests/actionExecutedSweepAudit.test.ts` (4 tests); negative-validated (an injected un-audited site fails `2 failed \| 2 passed`, removed → 4/4). Full suite **118 files / 1592 tests passed**; lint exit 0; build exit 0 (`dist/server.cjs` 945471 bytes). Item 13 stays `PARTIAL` — the sweep is proven complete for the literal `true` assignments, but the item also spans tool-level success flags beyond this counter. **2026-09-30 15:51 UTC (21:05 IST 2026-09-30) — the browser-open destination emitted in the wrong field.** Slot 15 of the 2026-09-28 window made `server.ts` emit the destination as a top-level `actionDetail.target`, but the app dispatcher is called as `handleExecuteAction(data.intent, data.actionDetail?.payload)` and its open_google/open_youtube/open_gmail/open_chatgpt case reads `payload?.target`. A top-level `target` is dropped, `setBrowserInitialUrl('')` runs and BrowserModal stays on its Google home, so three sites were still claimed without being loaded; the prior slot's source-text test asserted the wrong shape (`target: verdict.url,`) and passed over the bug. Live probe on the running server showed `actionDetail` = `{type,title,target}` with no `payload`. Fixed: `browserDispatchTruth.ts` gains `browserOpenActionDetail(verdict)` returning the detail with the URL inside `payload.target`; `server.ts` uses it. Guarded by `src/tests/browserDispatchTruth.test.ts` (16 tests: unit coverage of `payload.target`, absence of top-level `target`, default-home fallback, plus a wiring guard reading the real dispatcher call). Live E2E against `node dist/server.cjs` (PORT 4011): open youtube → `payload.target=https://www.youtube.com`, gmail → `https://mail.google.com`, chatgpt → `https://chatgpt.com`, google → `https://www.google.com`. Negative-validated — reverting `server.ts` to the top-level shape fails the wiring guard (`1 failed | 15 passed`), restored → 16/16. Gates: lint exit 0; full suite **117 files / 1583 tests passed** (21.07 s); build exit 0 (`dist/server.cjs` 923.1kb). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real violation closed; the `actionExecuted: true` sweep is still not proven complete (`UNKNOWN`). **2026-09-27 21:05 UTC (02:35 IST 2026-09-28) — the live `/api/chat` `time_inquiry` case and its offline engine twin.** Both the `/api/chat` case (`server.ts` ~line 9157) and the engine's time branch (`src/utils/localJarvisEngine.ts`) set `actionExecuted = true` and advanced the user-visible "Autonomous Actions Executed" counter for a question. `handleExecuteAction` in `src/App.tsx` routes `time_inquiry` only to `setActiveApp('mobile_personal_status')` — a view switch that cannot read the clock (the read already happened inside the handler) — so the intent performed no work and opened no view. Same inflation class as the earlier `get_name`/`capabilities_inquiry`/`system_diagnostic` fix. Both surfaces now report `actionExecuted = false` with the inert `Clock Query (informational, no action taken)` detail; the clock answers are unchanged. Guarded by two new cases in `src/tests/remainingFakeSuccess.test.ts` (a `server.ts` source-pin and an offline-engine branch guard; file now 41 tests) and the aligned `conversationalPipelineRegression.test.ts` case B (which previously encoded the fake contract, matching cases C/D in the same file). Negative-validated — reverting only `src/utils/localJarvisEngine.ts` fails exactly the new engine guard (`1 failed | 40 passed`); restored → 41/41. Gates: lint exit 0; targeted `remainingFakeSuccess` **41 passed**; full suite **115 files / 1546 tests passed** (23.11 s); build exit 0 (`dist/server.cjs` 943006 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed; the earlier-named unrouted `time_inquiry` case is now handled, while the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited (`UNKNOWN`). **2026-09-27 20:42 UTC (02:12 IST 2026-09-28) — the live `/api/chat` `set_name` case and its offline engine twin.** Both the `set_name` case in `server.ts` (~line 8913) and the identity branch in `src/utils/localJarvisEngine.ts` (~line 833) stored whatever text followed the name phrase verbatim as `memoryState.name`, spoke a "recorded" success and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter. The name group is greedy over a whitespace class and accepts digits, so a live probe confirmed `"my name is hello how are you"` stored the sentence as the name, `"my name is 123"` stored `123`, and each bumped the counter. Fixed: a new `src/utils/identityTruth.ts` `judgeSetNameIntent()`/`canonicalizeNameCandidate()` accepts only a plausible name (letter-bearing, no digits, ≤3 words after trimming punctuation and the trailing Hindi copula/honorific) and both call sites route through it; an unusable payload leaves the stored name untouched, does not count, and answers honestly with the inert `set_name_rejected` detail. Guarded by `src/tests/identityTruth.test.ts` (9 tests); negative-validated (disabling only the `MAX_NAME_WORDS` guard → `2 failed | 5 passed`, restored → 7/7). Live probe before/after: `"my name is hello how are you"` `actionExecuted` `true`→`false`, name unchanged; `"my name is Ravi Kumar"` still `true` (name `ravi kumar`). Gates: lint exit 0; targeted 4 files / 81 passed; full suite **115 files / 1544 tests passed** (21.08 s); build exit 0 (`dist/server.cjs` 942642 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed; remaining `actionExecuted: true` sites still not individually audited (`UNKNOWN`), and the unrouted `time_inquiry` case remains. **2026-09-27 20:15 UTC (01:45 IST 2026-09-28) — the live `/api/chat` `summarize_youtube_video` case.** The case (~line 8709) gated `actionExecuted` on `summaryRes.success` alone. `summarizeYouTubeVideoCore` returns `success: true` as soon as the video *metadata* is fetched, and a video exposing no transcript and no description comes back `success: true` with an empty summary (`source: 'none'`), so the case spoke the title as if a summarization had happened and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter for work that produced nothing. Fixed: the success branch derives `const hasSummary = Boolean(summaryRes.summary && summaryRes.summary.trim())` and sets `actionExecuted = hasSummary`; a summary-less result gets the honest "nothing to summarize" line and the inert `youtube_summary_empty` detail; the extraction-failure branch keeps `actionExecuted = false`. Guarded by a new `remainingFakeSuccess.test.ts` route test plus a `buildYouTubeSummary` unit test proving a no-content video yields an empty summary with `success: true`; negative-validated (revert-only-server → `1 failed \| 38 passed`; restored → `39 passed`). `toolDispatchTruth.test.ts`'s `caseBody` gained a `max` parameter because the case grew past its 1400-char view. Gates: lint exit 0; `toolDispatchTruth` **15 passed**; full suite **114 files / 1537 tests passed** (20.98 s); build exit 0 (`dist/server.cjs` 940914 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited (`UNKNOWN`), and the unrouted `set_name` / `time_inquiry` cases remain to be handled. **2026-09-27 18:53 UTC (00:23 IST 2026-09-28) — the live `/api/chat` `emergency_stop` / `emergency_resume` cases.** Both cases in `server.ts` (~lines 8556–8583) called `toggleEmergencyStop(...)`, which *flips* `emergencyState.emergencyPaused` — so a second "emergency stop" RELEASED the freeze and an "emergency resume" while nothing was paused ENGAGED it, while each unconditionally spoke a success and set `actionExecuted = true`, advancing the user-visible "Autonomous Actions Executed" counter. Fixed via a new `emergencyToggleVerdict(action, state)` in `src/utils/computerOperator/offlineEmergencyTruth.ts`, derived from the pre-transition state and **gating the flip** so a no-op transition cannot change state: repeated stop → `Already Active` (`actionExecuted: false`), resume with nothing paused → `Not Active` (`false`), resume under a latched hard kill switch → `NOT Released` (`false`, freeze honestly reported as still in force), first stop and genuine resume → `actionExecuted: true`. Guarded by a new `describe('emergencyToggleVerdict never credits a toggle that changed nothing')` block in `src/tests/offlineEmergencyTruth.test.ts` (6 tests incl. a `server.ts` source-pin); negative-validated — the forbidden literal is present in `git show HEAD~1:server.ts` (count 1) and absent in `server.ts` (count 0). Gates observed: lint (`tsc --noEmit`) exit 0; targeted `src/tests/offlineEmergencyTruth.test.ts` **10 tests passed**; full suite **114 files / 1530 tests passed** (21.48 s); build exit 0 (`dist/server.cjs` 938697 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another fake-success class closed and a genuine safety inversion removed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited — `UNKNOWN`. **2026-09-27 18:15 UTC (23:45 IST 2026-09-27) — the live `/api/chat` `cancel_computer_task` case.** The `/api/chat` `cancel_computer_task` case in `server.ts` (~line 8569) called `TaskTracker.cancelActiveTask('User requested stop')` and unconditionally spoke `Computer operator task has been immediately cancelled.`, titled the action `Task Cancelled` and set `actionExecuted = true` — but `cancelActiveTask` returns `{ cancelled: false }` when no task is active, and the case ignored it. With nothing running, nothing was cancelled, yet the case still bumped the user-visible "Autonomous Actions Executed" counter (`memoryState.stats.actionsExecuted`). Fixed via a new `cancelComputerTaskVerdict(result)` in `src/utils/computerOperator/operatorReplyTruth.ts` (the module that already carries the honest `fix_project_error` / `inspect_screen` verdicts): false/absent result → `actionExecuted: false`, title `Nothing to Cancel (no task running)`, reply stating nothing was cancelled; a real cancellation → `actionExecuted: true`, title `Running Host Task Cancelled`; both replies have Hindi variants. Guarded by a new `describe('cancelComputerTaskVerdict never credits a stop that stopped nothing')` block in `src/tests/operatorReplyTruth.test.ts` (no-task, null/undefined, actual-cancel and a `server.ts` source-pin); negative-validated — reverting only the `server.ts` change fails the source-pin (`1 failed | 19 passed`), restored → `20 passed`. Gates observed: lint (`tsc --noEmit`) exit 0; targeted `src/tests/operatorReplyTruth.test.ts` **20 tests passed**; full suite **114 files / 1524 tests passed** (21.34 s); build exit 0 (`dist/server.cjs` 934519 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another fake-success class closed; the remaining `actionExecuted: true` sites in `server.ts` are still not individually audited — `UNKNOWN`. **2026-09-27 18:10 UTC (23:40 IST 2026-09-27) — the offline outbound-call cancellation branch.** The offline cancel branch in `src/utils/localJarvisEngine.ts` (रहने दो, "cancel call", "don't call", कॉल रद्द करो) cleared the module-level `stagedOutboundCall` slot and unconditionally returned `actionExecuted: true` with the reply `Outbound call has been cancelled.` and title `Outbound Call Cancelled`, then incremented the user-visible "Autonomous Actions Executed" counter (`updatedMemory.stats.actionsExecuted`). The phrase fires whether or not a call was ever requested in the session; with nothing staged, nothing was cancelled, and a carrier call can only be cancelled if one was first requested (a staged request is never dialed: `The outbound call request was recorded, not dialed.`). Fixed via a new `offlineOutboundCancelVerdict(stagedByThisCommand)` in `src/utils/computerOperator/offlineCallTruth.ts`: no staged request → `actionExecuted: false`, title `Nothing Cancelled (no staged call)`, reply "nothing was cancelled"; a staged request dropped → `actionExecuted: true` with the honest title `Outbound Call Cancelled (device was never dialed)`. The counter is gated on the verdict via `countAction(updatedMemory, verdict.actionExecuted)` and the reply answers in English, Hindi and Hinglish. Guarded by 3 new assertions in `src/tests/offlineCallTruth.test.ts` (file now 23 tests); negative-validated — reverting only the engine fix fails the new block (`3 failed | 20 passed`), restored → 23/23. Gates observed: lint (`tsc --noEmit`) exit 0; full suite **114 files / 1520 tests passed** (21.30 s); build exit 0 (`dist/server.cjs` 911.8 kB). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — another real fake-success class closed; the `actionExecuted: true` sites in `server.ts` (~8498–8816) are still not individually audited — `UNKNOWN`. **2026-09-27 16:42 UTC (22:12 IST 2026-09-27) ŌĆö the live `/api/chat` informational cases.** `get_name`, `capabilities_inquiry` and `system_diagnostic` in the `server.ts` `/api/chat` intent switch set `actionExecuted = true`, which flows into `if (actionExecuted) memoryState.stats.actionsExecuted += …` and advanced the user-visible "Autonomous Actions Executed" counter; `handleExecuteAction()` in `src/App.tsx` has no case for any of them, so a name look-up, a capability list and a clock-only diagnostic were recorded as performed work. The offline engine already reports `actionExecuted: false` for the same intents. Fixed: all three set `actionExecuted = false` with explicitly informational titles (`Memory Query (informational, no action taken)`, `JARVIS Capabilities (informational, no action taken)`, `Diagnostics (informational, no probe run)`); honest reply text and the counter are unchanged. Guarded by 3 new cases in `src/tests/remainingFakeSuccess.test.ts`; negative-validated ŌĆö stashing only `server.ts` fails all 3 (`3 failed \| 31 passed`), restored → `34 passed`. Gates on `f3cdf6b`: lint exit 0; targeted truth suites **3 files / 62 tests passed**; full suite **114 files / 1512 tests passed** (21.49 s); build exit 0 (`dist/server.cjs` 929257 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö see other entries for the remaining `actionExecuted: true` claims, which are still not individually audited (`UNKNOWN`). **2026-09-26 22:22 UTC (03:52 IST 2026-09-27) ŌĆö the offline video-upload branch.** `src/utils/localJarvisEngine.ts` section 2 replied *"payload is staged"* with `actionExecuted: true` and incremented the user-visible "Autonomous Actions Executed" counter for an upload it never staged ŌĆö the module holds no staged-upload state and the caller's `handleExecuteAction` switch has no `youtube_upload_request` case (`default: break`), so no side effect was possible; the two `src/tests/voiceAndHindiModes.test.ts` Level-4 gate tests encoded the same fake contract. Fixed: `actionExecuted: false`, counter unchanged, `payload.staged: false`, honest EN/HI/Hinglish reply that the video was not staged and Level-4 authorization is still required. Guarded by `src/tests/offlineCallTruth.test.ts` (18 tests, up from 16) plus the two updated gate tests; negative-validated ŌĆö reintroducing the fake success fails exactly 2 of 18 (`2 failed \| 16 passed`), restored ŌåÆ 18/18. Gates on `7cadeac`: lint exit 0; full suite **112 files / 1491 tests passed**; build exit 0 (`dist/server.cjs` 928643 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success class closed; `actionExecuted: true` claims outside the audited branches remain `UNKNOWN`. **2026-09-26 21:40 UTC (03:10 IST 2026-09-27) ŌĆö the `/api/chat` tool-intent dispatch.** Every tool intent in the `/api/chat` switch asserted `actionExecuted = true` regardless of the tool result: `list_files_tool` announced the workspace index even when `realFsList` failed, `web_research_tool` spoke *"Web analysis complete"* even when `realWebFetch` failed, `github_repos_tool` replied *"Authenticated as GitHub user @ŌĆ”"* with no token or a failed listing, `summarize_youtube_video`'s failure path still counted, an unparseable `math_computation` still counted, and `youtube_upload_request` claimed *"Video is staged"* for an upload never performed. Each inflated the user-visible "Autonomous Actions Executed" counter (`memoryState.stats.actionsExecuted`). Fixed via `src/utils/toolDispatchTruth.ts` (`toolActionExecuted` credits only `success: true`; `toolActionResultReply` names the failed tool and states no action was executed, EN/HI; `countedItems` never fabricates a count), wired into all seven intents. Guarded by `src/tests/toolDispatchTruth.test.ts` (15 tests, source guards ŌĆö `server.ts` binds a port on import); negative-validated ŌĆö reverting the `web_research_tool` guard fails exactly that assertion (`1 failed \| 14 passed`), restored ŌåÆ green. Gates on `112396d`: lint exit 0; full suite **112 files / 1486 tests passed**; build exit 0 (`dist/server.cjs` 928107 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success class closed; `actionExecuted: true` claims outside this switch remain `UNKNOWN`. **2026-09-26 21:26 UTC (02:56 IST 2026-09-27) ŌĆö the offline Local JARVIS Engine emergency stop / resume branches.** `src/utils/localJarvisEngine.ts` replied *"Emergency Stop is now activeŌĆ” are frozen."* / *"Emergency Stop deactivatedŌĆ” resumed under normal Level 1-4 permission gating."* with `actionExecuted: true` and an incremented counter while touching no emergency state; the live kill switch is server-side (`toggleEmergencyStop` / `isEmergencyStopActive()`). Fixed via `src/utils/computerOperator/offlineEmergencyTruth.ts` ŌĆö `actionExecuted: false` in every case with the observed reason in English/Hindi/Hinglish, no counter increment. Guarded by `src/tests/offlineEmergencyTruth.test.ts` (4 tests) and the two updated contract tests in `src/tests/voiceAndHindiModes.test.ts`; negative-validated ŌĆö forcing `actionExecuted: true` fails exactly 4 (`4 failed \| 18 passed`), restored ŌåÆ green. Gates on `91a2d20`: lint exit 0; full suite **111 files / 1471 tests passed**; build exit 0 (`dist/server.cjs` 926807 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success path closed; more remain, the remaining `actionExecuted: true` claims in that file are still `UNKNOWN`. **2026-09-26 20:25 UTC (01:55 IST 2026-09-27) ŌĆö the offline Local JARVIS Engine telephony call intents.** `src/utils/localJarvisEngine.ts` spoke and counted carrier call work the tab cannot perform: `make_call` narrated *"Placing outbound call to <number> through carrier gateway"* (title `Calling <number>`), `hangup_call` narrated *"Terminating active phone call"* (title `Call Ended`), `answer_call` narrated *"Connecting call with caller"* (title `Call Connected`), all with `actionExecuted: true` and an incremented "Autonomous Actions Executed" counter; the `human_handoff` branch promised a transfer whenever a provider was merely configured and incremented the counter while reporting `actionExecuted: false`. Fixed via `src/utils/computerOperator/offlineCallTruth.ts` ŌĆö a verdict derived from the telephony engine mode actually active (`activeTelephonyEngineMode()`), so offline mode never confirms a carrier action, the fake titles are gone, and every phase reports `actionExecuted: false` in every mode. Guarded by `src/tests/offlineCallTruth.test.ts` (13 tests: phase ├Ś mode matrix, banned titles, reply text, language selection, end-to-end offline branches, and a source guard scoped to telephony section 7.1ŌĆō7.4); negative-validated ŌĆö reintroducing `title: 'Call Ended'` fails exactly the source guard (`1 failed | 12 passed`), restored ŌåÆ 13/13. Gates on `8fb9f1d`: lint exit 0; full suite **110 files / 1460 tests passed**; build exit 0 (`dist/server.cjs` 921146 bytes). E2E: NOT RUN ŌĆö no handset, no carrier gateway. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success path closed; more remain; the remaining `actionExecuted: true` claims in that file were not individually audited this slot ŌĆö `UNKNOWN`. **2026-09-26 19:50 UTC (01:20 IST 2026-09-27) ŌĆö the offline Local JARVIS Engine operator intents.** `src/utils/localJarvisEngine.ts` reported `actionExecuted: true` and incremented the user-visible "Autonomous Actions Executed" counter for seven operator branches the browser cannot perform ŌĆö `fix_project_error` narrated a Screen-Research loop "applying surgical fix with test verification", `inspect_screen` claimed to be analyzing the active window, and `operate_vscode`/`operate_browser`/`operate_terminal`/`cancel_computer_task` made equivalent host claims, all without leaving the tab. Fixed via one verdict map in `src/utils/computerOperator/offlineOperatorTruth.ts`; six report `actionExecuted: false` with an honest reply in English/Hindi/Hinglish, and only `open_computer_operator` (in-app HUD) stays a genuine page action. Guarded by 13 new tests in `src/tests/localJarvisEngine.test.ts` (file now 46); negative-validated ŌĆö forcing `actionExecuted: true` on `inspect_screen` fails exactly the truth assertion (`1 failed | 1 passed | 44 skipped`), restored ŌåÆ 46/46. Gates on `4ffb4bf`: lint exit 0; full suite **109 files / 1447 tests passed**; build exit 0 (`dist/server.cjs` 914923 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL`; the 40 other `actionExecuted: true` claims in that file were not individually audited this slot ŌĆö `UNKNOWN`. **2026-09-25 22:25 UTC (03:55 IST 2026-09-26) ŌĆö the screenshot, volume and power intents.** `/api/chat` `take_screenshot`, `volume_up`/`volume_down` and `pc_shutdown`/`pc_restart` set `actionExecuted = true` and spoke an unqualified success ("Capturing screen display right now.", "Increasing master audio output level.", "Simulating system shutdown protocol.") while reaching no capture backend, no audio mixer and no power transition; `src/utils/localJarvisEngine.ts` repeated the same three claims. Fixed with `screenshotVerdict()`/`screenshotReply()` (`src/utils/computerOperator/screenshotDispatchTruth.ts`), `volumeVerdict()`/`volumeReply()` (`audioDispatchTruth.ts`) and `powerVerdict()`/`powerReply()` (`powerDispatchTruth.ts`): a screenshot is `VERIFIED` only when the receipt is `VERIFIED` **and** the file is verified on disk (a missing file downgrades to `UNVERIFIED`; headless ŌåÆ `NOT_AVAILABLE`); the volume verdict reports the in-app voice-output level and states the system output level was not changed, with `actionExecuted` false in every case; power is never executed and reports `NOT_IMPLEMENTED` with `permissionRequired`, `BLOCKED` on an engaged emergency stop, `NOT_AVAILABLE` without a display session. `open_notepad` now routes through the real `evaluateLaunchDispatch()` executor path; the in-app-only intents (telephony hub, call history, calculator, paint, chrome, browser navigation) keep `actionExecuted = true` but disclose that no external app or phone dialer was opened. Guarded by `src/tests/remainingFakeSuccess.test.ts` (24 tests); negative-validated ŌĆö reverting both source files fails **10 of 24**, restored ŌåÆ 24/24. Two pre-existing `src/tests/localJarvisEngine.test.ts` tests encoded the old fake-success contract and now assert `actionExecuted === false` with the honest reply. Gates observed: lint exit 0; full suite **107 files / 1410 tests passed**; build exit 0 (`dist/server.cjs` 909349 bytes). E2E: NOT RUN ŌĆö no display session, no handset. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö more fake-success paths remain. **2026-09-25 21:15 UTC (02:45 IST 2026-09-26) ŌĆö the launch intents and the offline local engine.** The /api/chat intents `operate_vscode`, `operate_browser` and `operate_terminal` set `actionExecuted = true` and spoke an unqualified success without touching the host, and `src/utils/localJarvisEngine.ts` claimed VS Code reached the active foreground, PowerShell activated and a Chrome window opened ŌĆö on a headless host, none of it happened. Fixed: new `src/utils/computerOperator/launchDispatchTruth.ts` and `evaluateLaunchDispatch()` in `server.ts` route the intent through the real `HostActionExecutor` `LAUNCH_APP` action and derive the verdict from the host capability map plus the executor receipt ŌĆö `NO_DISPLAY_SESSION`, `DISPATCHED_AWAITING_OBSERVATION`, `FOREGROUND_CONFIRMED` (the only case with `actionExecuted = true`), `FAILED`, `BLOCKED`, `UNVERIFIED`; the offline engine branches now state offline mode cannot launch a real OS application. Guarded by `src/tests/launchDispatchTruth.test.ts` (11 tests); negative-validated ŌĆö forcing `actionExecuted = true` in the `operate_vscode` case fails exactly the source guard (`1 failed \| 10 passed`), restored ŌåÆ 11/11. Gates observed: lint exit 0; targeted **5 files / 101 tests passed**; full suite and build deferred to the finalization slot. E2E: NOT RUN ŌĆö no display session, no handset. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö another real fake-success path closed; more remain. **2026-09-25 18:52 UTC (00:22 IST 2026-09-26) ŌĆö the receipt evidence guard itself.** `buildReceipt()` in `src/utils/executionTruth.ts` downgraded a `VERIFIED` claim only when evidence was absent (`!evidence`), so a present evidence object of kind `none` ŌĆö the vocabulary's own "nothing was observed" ŌĆö passed the guard and any caller could reach `verified: true` with `makeEvidence('none', ...)`. The only caller doing so was `github.executeFixPlan()` (`src/utils/github/automationWorkflow.ts`) for an empty plan, which returned `outcome: 'VERIFIED'` / `verified: true` after doing no work. Fixed: the new exported `isSubstantiveEvidence()` requires kind !== `none`; kind `none` downgrades `VERIFIED` ŌåÆ `UNVERIFIED` with an explicit `failureReason`, absent evidence still ŌåÆ `DISPATCHED`, and the empty-plan branch now reports `NOT_CONFIGURED` with `verified: false`. Guarded by the new `src/tests/executionTruthReceipt.test.ts` (6 tests) plus 2 assertions in `src/tests/githubAutomationWorkflow.test.ts`; negative-validated both ways ŌĆö reverting the guard fails exactly the kind-`none` assertion (`1 failed \| 5 passed`), restoring `outcome: 'VERIFIED'` fails exactly the new empty-plan assertion (`1 failed \| 19 passed`), both restored green. Gates observed: lint exit 0; targeted **2 files / 26 tests passed**; full suite **103 files / 1355 tests passed**; build exit 0 (`dist/server.cjs` 864.3 kb). E2E: NOT RUN ŌĆö no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö the shared guard hole is closed; call-site violations may remain. **2026-09-25 18:12 UTC (23:42 IST) ŌĆö the daemon scheduler block.** `GET /api/daemon/status` (`server.ts`) answered a literal `activeJobsCount: 4` and per-job `nextRun` literals (`'09:00 AM Tomorrow'`, `'10:30 PM Tonight'`) presented as observations, while the process schedules five recurring routines. `ProactiveRoutinesModal.tsx` reads this endpoint. Fixed via `daemonSchedulerTruth()` in `src/utils/hardening/mobileTelemetryTruth.ts`: the count derives from the routine table handed in plus the registered scheduled-goal count, an unrecorded last run reads `not recorded`, and every `nextRun` reads `ŌĆ” (configured plan; not observed)`; `server.ts` builds the block from the five routines it schedules. Guarded by 5 new assertions in `src/tests/mobileTelemetryTruth.test.ts` (13 tests in file); negative-validated ŌĆö restoring `activeJobsCount: 4` fails exactly the two count assertions (`2 failed \| 11 passed`), restored ŌåÆ 13/13. Gates observed: lint exit 0; targeted **1 file / 13 tests passed**; full suite **102 files / 1349 tests passed**; build exit 0 (`dist/server.cjs` 884598 bytes). E2E: NOT RUN ŌĆö no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö one more real violation closed, more remain. **2026-09-25 16:45 UTC (22:15 IST) ŌĆö the OS-executor finance guard.** `PermissionGuard.permanentBlock()` in `src/utils/computerOperator/permissionGuard.ts` ŌĆö the gate the real host executor consults ŌĆö still matched its short finance tokens with a bare `desc.includes(kw)`, the exact substring rule `isFinanceBlocked()` had already replaced in `server_tools.ts`. Measured against the live guard: benign `Read file jupiter_notes.txt` returned `BLOCK / FINANCE_RESTRICTION` (`upi` inside "jupiter"), while real financial instructions had no signature and were `ALLOW`ed ŌĆö `Initiate fund transfer`, `Deposit via NEFT`, `Enter debit card details`, `RTGS settlement`, `IMPS transfer`. Tokens now require an ASCII word boundary and multi-word / Devanagari phrases stay substring matches (`\b` cannot bound Devanagari); the five demonstrated misses were added as signatures. Guarded by 17 new assertions in `src/tests/permissionGuard.test.ts` (26 tests in file); negative-validated both ways ŌĆö restoring substring matching fails the false-positive case (`1 failed \| 25 passed`), removing the new signatures fails the five false-negative cases (`5 failed \| 21 passed`), restored ŌåÆ 26/26. Gates observed: lint exit 0; targeted **4 files / 53 tests passed**; full suite **99 files / 1312 tests passed**; build exit 0 (`dist/server.cjs` 874490 bytes). E2E: NOT RUN ŌĆö no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` ŌĆö one more real violation closed, more remain. **2026-09-25 15:50 UTC (21:20 IST) ŌĆö the audit-trail truth fields.** `addAuditLog()` in `server.ts` hardcoded `verificationStatus` and `finalTruthState` to `'VERIFIED'` while writing the caller's `status` verbatim, so a row logged `FAILED`, `BLOCKED` or `PENDING` rendered a green *confirmed* badge in the Security Matrix that contradicted its own status string. Fixed via `deriveAuditVerificationStatus()`/`deriveAuditFinalTruthState()` in `src/utils/hardening/auditTrailTruth.ts`; `src/tests/hardening/auditTrailTruth.test.ts` 19 tests (5 new), negative-validated (3 failed | 16 passed with the derivation disabled). Lint exit 0; full suite 98 files / 1290 tests passed; build exit 0 (`dist/server.cjs` 872300 bytes). **2026-09-24 22:15 UTC (03:45 IST) ŌĆö the mobile telemetry privacy matrix and scheduler job count.** `GET /api/mobile/telemetry` (`server.ts`) answered `privacyMatrix.level4Enforced: true` and `systemScheduler.activeJobs: 4` as literals, neither measured. The Level 4 gate is operator-flippable via `/api/security/matrix` (`humanApprovalForExternal`), so a process with the gate off still told the phone external actions required human approval; the scheduler defines five recurring routines, not four. Fixed via new `src/utils/hardening/mobileTelemetryTruth.ts`: `privacyMatrixTruth()` is a tri-state (`false` ŌåÆ `DISABLED`, unobserved ŌåÆ `null` / `UNKNOWN ŌĆö not observed`, only `true` ŌåÆ enabled) and `schedulerTruth()` counts the defined routines plus registered goals and labels the next briefing as scheduled, not observed-as-run. Guarded by 8 assertions in `src/tests/mobileTelemetryTruth.test.ts` (tri-state mapping, count 5 ŌēĀ 4, goal addition, honest briefing label, `server.ts` source guard); negative-validated ŌĆö restoring the two literals fails exactly 1 test (`1 failed \| 7 passed`), restored ŌåÆ 8/8. Gates observed: lint exit 0; targeted **1 file / 8 tests passed**; full suite **97 files / 1279 tests passed**; build exit 0 (`dist/server.cjs` 870439 bytes). E2E: NOT RUN ŌĆö no handset, no bridge pairing secret. Deploy: NOT_CONFIGURED. **2026-09-24 21:45 UTC (03:15 IST) ŌĆö the offline local call turn.** `processTelephonyTurn()` in `src/utils/telephonyEngine.ts` falls back to `generateLocalCallTurn()` whenever `POST /api/telephony/handle-turn` is unreachable ŌĆö the offline-first case this app exists for ŌĆö and that rule-based path only regex-matches the caller's words: it writes no calendar, sends no Telegram message and blocks no number. Its replies still asserted completed work ("I have locked this into Alex's calendar and synced our reminders", "I have added the session to the calendar and notified the team", "adding your caller ID to our blocked directory") and every captured follow-up read as a finished receipt ("Call completed successfully", "Calendar event dispatched", "Blocked spam marketing number", "Medical appointment confirmed for Friday 3:00 PM"); `App.tsx` (lines 672, 805) surfaces both as the call's outcome. Fixed: the reply is routed through `formatLocalTurnReply()` and every follow-up through `formatLocalTurnFollowUp()` (new exports of `src/utils/hardening/callSummaryTruth.ts`) ŌĆö the disclosure states the reply is a local automated response, not a record of executed actions, and each follow-up carries the captured-offline marker; the four follow-up literals were rephrased as outstanding requests ("Flag spam marketing number for blocking", "Note medical appointment for Friday 3:00 PM", ŌĆ”). Guarded by 16 new assertions in `src/tests/callSummaryTruth.test.ts` (now 44 tests); negative-validated ŌĆö bypassing the wrapper (`return buildLocalCallTurn(params)`) fails exactly 6 tests (`6 failed \| 38 passed`), restored ŌåÆ 44/44. Gates observed: lint exit 0; targeted **1 file / 44 tests passed**; full suite **96 files / 1271 tests passed**; build exit 0 (`dist/server.cjs` 869141 bytes). E2E: NOT RUN ŌĆö no telephony provider credentials, no handset. Deploy: NOT_CONFIGURED. **2026-09-24 21:20 UTC (02:50 IST) ŌĆö the Telegram mobile approval reply.** (02:50 IST) ŌĆö the Telegram mobile approval reply.** `handleTelegramCallback()` in `server.ts` handles the `approve_perm_` inline button that `/api/approvals/create` sends to the operator's phone for a Level 4 action. That branch does exactly one thing ŌĆö records the human decision via `updateActionRequestStatus(permId, 'EXECUTED', ...)` ŌĆö and dispatches nothing: no LinkedIn publish, no GitHub issue, no provider call. It still replied `Ō£ģ *LEVEL 4 ACTION APPROVED & EXECUTED* ŌĆ” ŌĆó *Status*: EXECUTED (Verified)`, and `PermissionGateway.tsx` rendered the same `EXECUTED` status as "Action was authorized and executed successfully." Fixed by `formatUnconfirmedMobileApprovalReply()` in `src/utils/hardening/approvalResolution.ts` (now the only builder of that reply): it derives its wording from the recorded status alone, states the external action was **NOT dispatched by this path**, and reports the action as `UNVERIFIED`; a non-`EXECUTED` status is reported as-is. The client `EXECUTED` panel now reads "Authorization recorded. Provider confirmation is required before this action can be reported as executed." and shows `UNVERIFIED ŌĆö no provider result` when no `resultUrn` exists. Guarded by 6 new assertions in `src/tests/approvalResolutionTruth.test.ts` (now 14 tests); negative-validated ŌĆö restoring the old reply string fails exactly the two `server.ts` guard tests (`2 failed \| 12 passed`), restored ŌåÆ 14/14. Gates observed: lint exit 0; targeted 1 file / 14 tests passed; full suite **96 files / 1256 tests passed**; build exit 0 (`dist/server.cjs` 869141 bytes). E2E: NOT RUN ŌĆö no Telegram bot credentials, no handset. Deploy: NOT_CONFIGURED. **2026-09-24 19:40 UTC (01:10 IST) ŌĆö the live whisper-tip surface.** `POST /api/telephony/handle-turn` returned `parsed.whisperTip` verbatim from its Gemini branch, and the model answered with receipts for actions that route never dispatches (`Appointment slot confirmed for Thursday 2:30 PM`, `Provided gate access #4829 to courier`, `Robocall / telemarketer identified and terminated`). `App.tsx` surfaces the value as a `whisper` transcript turn and `ActiveCallHUD.tsx` renders it under `AI Whisper Tip`, so an unmarked receipt read as an observed event. The fallbacks fabricated too (`|| 'Call proceeding smoothly'`, `let whisperTip = "AI tracking call turns"`), as did `src/utils/telephonyEngine.ts` (`Spam detected. Terminating line automatically.`). Fixed with `whisperTipForDisplay()` in `src/utils/hardening/callSummaryTruth.ts`: a model-authored tip is marked `AI suggestion ŌĆö not an observed system event`, an absent tip stays empty; fallback tips reworded as suggestions. Guarded by 8 new assertions in `src/tests/callSummaryTruth.test.ts` (now 29 tests); negative-validated ŌĆö reverting the marker fails exactly the marker assertion (`1 failed \| 28 passed`), restored ŌåÆ 29/29. Gates observed: lint exit 0; targeted 1 file / 29 tests passed; full suite **96 files / 1250 tests passed**; build exit 0 (`dist/server.cjs` 868545 bytes / 848.2 kB). E2E: NOT RUN ŌĆö no handset, no telephony provider credentials. Deploy: NOT_CONFIGURED. **2026-09-24 19:15 UTC (00:45 IST) ŌĆö the server turn path (`/api/telephony/handle-turn`).** Slot 6 fixed the client-side summariser but the server route that the Telephony Hub actually calls still returned follow-ups phrased as completed work. The Gemini branch returned `parsed.followUpActions` verbatim, and the rule-based fallback returned `Calendar updated: Thursday 2:30 PM`, `Send confirmation SMS`, `Notify resident of package delivery at foyer` and `Add number to local blocklist`. Neither branch dispatches a calendar write, an SMS, a blocklist change or a package follow-up ŌĆö the route only produces the reply text, and the UI renders the returned list as the call's action items. Fixed with `formatLiveActionItem()` in `src/utils/hardening/callSummaryTruth.ts` (appends `recorded live ŌĆö not confirmed as performed`, idempotent); both branches map through it. Guarded by 8 new assertions in `src/tests/callSummaryTruth.test.ts` (now 21 tests) ŌĆö formatter truth table, idempotence, distinct marker from the summary note, and server source guards. Negative-validated: reverting both `map()` calls fails exactly the two matching guards (`2 failed \| 19 passed`), restored ŌåÆ 21/21. Gates: lint exit 0; targeted 1 file / 21 tests; full vitest **96 files / 1242 tests passed**; build exit 0 (`dist/server.cjs` 867819 bytes / 847.5 kb). E2E: NOT RUN ŌĆö no handset, no telephony provider credentials. Deploy: NOT_CONFIGURED. **2026-09-24 18:10 UTC (23:40 IST) ŌĆö the call-summary action items.** `summarizeCallTranscript()` in `src/utils/telephonyEngine.ts` regex-matches the transcript and pushed follow-ups phrased as completed work (`Added caller to spam blocklist`, `Calendar appointment updated`, `Calendar event dispatched`, `Call completed successfully`), rendered under `Assigned Action Items & Next Steps` with a green check, and a summary claiming `Successfully conveyed objectives ... synced action items`. Nothing there dispatches a calendar event, blacklists a number, or sends an SMS. Fixed with `src/utils/hardening/callSummaryTruth.ts` (`formatActionItem` appends `not performed ŌĆö recorded for human follow-up`; `describeOutboundCall`/`describeInboundCall` state only that a call took place; `ACTION_ITEM_LIST_NOTE` under the heading); items rephrased to imperatives. Guarded by `src/tests/callSummaryTruth.test.ts` (13 tests); negative-validated ŌĆö restoring the removed literals fails the matching source guards, and reverting the sentiment default fails exactly the two new tests (`2 failed \| 11 passed`); both restored ŌåÆ 13/13. The same function's `sentiment` defaulted to `'positive'` for a transcript that matched no keyword, so an unassessed call rendered a green `POSITIVE` badge in `TelephonyHubModal.tsx`; the default is now `'neutral'`. Gates: lint exit 0; targeted 1 file / 13 tests; full vitest **96 files / 1234 tests passed**; build exit 0 (`dist/server.cjs` 846.8 kB). **2026-09-24 16:41 UTC (22:11 IST) ŌĆö the telephony spam-screen verdict.** `evaluateSpamRisk()` in `src/utils/telephonyEngine.ts` returned the literal reason `'Verified Legitimate Caller'` whenever none of its nine keywords matched. The matcher reads first-line text only ŌĆö no carrier reputation query, no STIR/SHAKEN attestation, no contact lookup ŌĆö so a caller it could not assess was reported as vetted. Fixed with `src/utils/hardening/spamVerdictTruth.ts` (`spamReasonLabel`): the absent reason now yields `NO_SPAM_MATCH_REASON` ("No spam indicator matched ŌĆö caller not vetted"), a real match reason preserved verbatim. Guarded by `src/tests/spamVerdictTruth.test.ts` (7 tests); negative-validated ŌĆö restoring the literal fails exactly the matching pair (`2 failed \| 5 passed`), restored ŌåÆ 7/7. Gates on `c6b5352`: lint exit 0; targeted 2 files / 16 tests; full vitest **93 files / 1208 tests passed**; build exit 0 (`dist/server.cjs` 867083 bytes). **2026-09-23 20:05 UTC (01:35 IST) ŌĆö the Oracle Always Free cost claim.** The Telegram `cloud_telemetry` reply printed a fixed `ŌĆó *Cost*: Ōé╣0 / Always Free Guaranteed` beside live CPU/RAM readings, and `/api/blueprint/report` printed `Ōé╣0.00 / Always Free (Strict Zero-Cost Guarantee)`, for every process ŌĆö nothing here queries the OCI billing/entitlement API, and the Oracle Cloud modal already labels that fact `NOT_PROBED`. Fixed with `src/utils/hardening/billingEntitlementTruth.ts` (`describeBillingCost`, `describeDeclaredCost`): a cost figure appears only for an observed entitlement, otherwise the absent probe is named; `oracleCloudState.billingEntitlement` seeded `null`. Guarded by `src/tests/hardening/billingEntitlementTruth.test.ts` (9 tests); negative-validated ŌĆö restoring the hardcoded reply fails exactly the matching guard (`1 failed | 8 passed`), restored ŌåÆ 9/9. Gates: lint exit 0; targeted 9 files / 96 tests; full vitest **88 files / 1157 tests passed**; build exit 0 (`dist/server.cjs` 844.1 kB). **2026-09-23 19:19 UTC (00:49 IST) ŌĆö the voice visualiser and the call level bars.** `App.tsx` seeded `volumeLevel` from `Math.floor(20 + Math.random() * 60)` on a 100 ms interval when recognition started, and `ActiveCallHUD.tsx` sized each of six `Audio Waveform Bars` from `Math.floor(Math.random() * 16 + 4)` on every render; both meters moved as if they followed live audio while no analyser is wired into either path. Fixed with `src/utils/hardening/micInputTruth.ts` (a level is returned only for a finite measurement in `0..100`, else `0`) and `src/utils/hardening/callWaveform.ts` (a fixed decorative profile with a clamped lookup). Guarded by `src/tests/hardening/micInputTruth.test.ts` (4 tests) and `src/tests/hardening/callWaveform.test.ts` (4 tests); negative-validated both ŌĆö restoring each fabricated expression fails exactly 1 of 4, restored ŌåÆ 4/4. Gates: lint exit 0; targeted 2 files / 8 tests passed; full vitest **86 files / 1140 tests passed**; build exit 0 (`dist/server.cjs` 843.2 kB). **2026-09-23 18:12 UTC (23:42 IST) ŌĆö the HUD sync pill.** `HUDHeader.tsx` printed green `SYNCED` from an `isOnline` prop seeded `typeof navigator !== 'undefined' ? navigator.onLine : true` (prop default also `true`), so the pill asserted that local state had reached the server whenever the *browser* had a network path ŌĆö the exact case (backend unreachable) the offline-first app exists for. The `online` handler also announced `BACKEND RECONNECTED` on the browser event alone. Fixed: new `src/utils/syncTruth.ts` (`syncLiveness`/`syncStatusLabel`/`reconnectStatusText`) is a tri-state over two observed facts ŌĆö `SYNCED` only for `{browserOnline:true, serverReachable:true}`, `OFFLINE_READY` only when the browser is offline, `LOCAL_ONLY` otherwise (null/undefined included); `App.tsx` tracks `serverReachable` (`null` until observed), sets it from `/api/health` + the startup `/api/memory` response, clears it on `offline`, and probes `/api/health` on `online` before claiming a reconnect; `HUDHeader` no longer takes `isOnline` and defaults `OFFLINE_READY`. Guarded by `src/tests/syncTruth.test.ts` (9 tests: truth table, label guard that no non-`SYNCED` state prints `SYNCED`, reconnect wording, source guards). Gates: lint exit 0; targeted **1 file / 9 tests passed**; full vitest **83 files / 1125 tests passed**; build exit 0. **2026-09-23 17:46 UTC (23:16 IST) ŌĆö the finance exclusion filter's own correctness.** `isFinanceBlocked()` in `server_tools.ts` combined a word-boundary regex with a bare `lower.includes(kw)` fallback; short finance tokens (`eth`, `btc`, `upi`, `cvv`) occur inside ordinary English words ("whether", "together", "method", "recall"), so benign operator text was returned as a blocked financial operation. Fallback removed ŌĆö word-boundary matching only; real financial phrasings still block. Guarded by `src/tests/financeGuardFalsePositives.test.ts` (8 tests); negative-validated (restoring the fallback ŌåÆ `3 failed \| 5 passed`). Gates on `7d9ea03`: lint exit 0, vitest **82 files / 1116 tests passed**, build exit 0 (`dist/server.cjs` 862985 bytes). **2026-09-22 22:48 UTC (04:18 IST) ŌĆö the live `/api/chat` weather path still invented a reading.** Slot 3 fixed the offline intent engine (`localJarvisEngine.ts`, `4a98514`) but the live HTTP path was missed: `server.ts` `case 'weather_inquiry'` in `POST /api/chat` and `GET /api/mobile/telemetry` returned a constant 27┬░C / 48% / 'New Delhi' snapshot as current conditions, though no weather provider is wired into the process. Both now report the absence (`actionExecuted: false`, "no weather source connected" EN/HI; `weatherSnapshot.available: false`). Live-confirmed on the running daemon. Guarded by `src/tests/liveWeatherHonesty.test.ts` (4 tests); negative-validated, re-adding the constant fails 2 of 4. Gates on `e209bf8`: lint exit 0, vitest **80 files / 1093 tests passed**, build exit 0 (`dist/server.cjs` 860748 bytes). **2026-09-22 19:15 UTC (00:45 IST) ŌĆö the Dashboard geolocation radar asserted a live fix for coordinates that were not live.** `DashboardMapSnippet.tsx` printed the constant `ACTIVE POSITION FIX` / `CURRENT FIX` for *any* non-null `coords` and a fabricated `┬▒{Math.round(coords.accuracy)}m` precision, yet the coordinates it receives are just as often loaded from `loadCachedLocation()`, applied as a tactical preset, or typed manually. Slot 6 had centralised provenance in `src/utils/locationService.ts` (`CoordsSource`, `locationSourceLabel()`, `accuracyDisplay()`) and put a `source` on `LocationServicesModal`'s `onCoordinatesUpdated`, but `App.tsx` still passed only `coords`/`address` down, so the HUD could not distinguish a cache entry from a device read. Fixed: `App.tsx` tracks `userCoordsSource` (`CoordsSource \| null`), seeds it `'cache'` only when `loadCachedLocation()` returned coordinates (never a fabricated `'live'`), sets `'live'` only on the `getCurrentPosition` success path, forwards it as `source={userCoordsSource}`, and wires the modal callback's third argument through. The snippet's banner and precision now render `locationSourceLabel(source)` and `accuracyDisplay(source, coords.accuracy)`. Guard by `src/tests/locationServicesTruth.test.ts` extended to 12 tests (source guards on the removed literals, `App.tsx` provenance guards); negative-validated, restoring `ACTIVE POSITION FIX` fails exactly 1 of 12 (observed `1 failed \| 11 passed`), restored ŌåÆ 12/12. Gates on `4701be6`: lint exit 0, vitest **75 files / 1046 tests passed**, build exit 0 (`dist/server.cjs` 836.6 kb). Still `PARTIAL` ŌĆö no physical device has exercised the live branch here. **2026-09-22 18:12 UTC (23:42 IST) ŌĆö the Mobile Personal Status briefing card claimed TTS readiness and live telemetry it never observed.** `MobilePersonalStatusModal.tsx` printed the constant `SPEECH SYNTHESIZER READY` in the briefing hero card before the Web Speech API had been queried, and kept it even where `window.speechSynthesis` is unavailable; the real `SpeechDiagnostics` computed in `speechTtsEngine.ts` was never passed to the component. The same card's spoken-script provenance read `Generated from live telemetry reads` for every snapshot not flagged `isSample` ŌĆö including the `null` snapshot left by a failed fetch, where no read had completed. Fixed: new `src/utils/spokenBriefingTruth.ts` (`speechReadiness`/`speechReadinessLabel`, `briefingProvenance`/`briefingProvenanceLabel`) renders `SPEECH STATUS UNKNOWN` until a diagnostics snapshot exists, then `READY`/`UNAVAILABLE` from the observed boolean (and `READY` while an utterance plays), and labels provenance `UNKNOWN` / `SAMPLE` / `LIVE` with `LIVE` only for a real read; `App.tsx` passes `speechDiagnostics` and `isSpeaking` down. Guarded by `src/tests/spokenBriefingTruth.test.ts` (7 tests); negative-validated ŌĆö restoring both fabrications fails exactly 2 of 7, restored ŌåÆ 7/7. Gates on `5f2a73f`: lint exit 0, vitest **73 files / 1028 tests passed**, build exit 0 (`dist/server.cjs` 832.9 kb). Still `PARTIAL` ŌĆö pattern-driven sweep; the speaking branch is unit-asserted, not exercised on a real speech platform here. **2026-09-22 18:10 UTC ŌĆö the Location Services modal fabricated a GPS fix.** On a `getCurrentPosition` error the modal seeded `TACTICAL_PRESETS[0]` as the device position, persisted it with `saveCachedLocation()`, and drew an "Active Orbital Fix" with a fabricated `┬▒25m` accuracy and an always-on satellite-lock ping; the voice briefing read a preset/cached/manual point as "your current geospatial fix". Fixed: the error path sets no coordinates; provenance is centralised in `src/utils/locationService.ts` (`CoordsSource = live \| cache \| preset \| manual`, `locationSourceLabel()`, `accuracyDisplay()`, `locationBriefing()`). Only a device read is `LIVE GPS`; other sources render `SIMULATED PRESET` / `MANUAL ENTRY` / `LAST KNOWN (CACHED)` (or `NO FIX` when `null`) with `N/A ŌĆö no GPS fix`, and the briefing states there is no live fix. Guarded by `src/tests/locationServicesTruth.test.ts` (7 tests) plus source guards on the removed fallback. `PARTIAL`: no device exercised the live branch. **2026-09-22 01:36 IST (20:06 UTC) ŌĆö the outbound email / SMTP conduit.** `realEmailStatus()` reported `configured: true` from credential presence alone with the message *"SMTP Transport Active. Level 4 confirmation required for all sends."*, the Integrations Matrix `email` entry was hardcoded `REAL_WORKING` ("SMTP Conduit verified for client notifications and quotations", capabilities `Quotation Email Dispatch` / `Client Inquiries`), and `AutonomousToolsModal.tsx` rendered an emerald `READY` badge and green panel border from that flag. No SMTP client or send route exists in this build (`nodemailer` absent from `package.json`/`package-lock.json`; no `createTransport`/socket path anywhere but the new helper). Fixed via `src/utils/emailConduitTruth.ts`: `transportImplemented` is always false until a real sender is shipped, the badge reads `CREDENTIALS ONLY ŌĆö NO SENDER`, and the integration is pinned `NOT_AVAILABLE`. Guarded by `src/tests/emailConduitTruthfulness.test.ts` (6 tests); negative-validated (flipping `isEmailTransportImplemented()` to `true` fails exactly 3 of 6). Gates on `b1103fa`: lint exit 0, vitest 65 files / 930 tests passed, build exit 0 (`dist/server.cjs` 846921 bytes). **2026-09-22 01:05 IST (19:36 UTC) ŌĆö the Android Bridge app-launch path.** `openApplication()` recorded an `APP_OPENED` audit event with `result: 'UNSUPPORTED'` but ran no gates, and `SimulatedAndroidAdapter.openApp()` returned hardcoded `success: true` ŌĆö a launch could be shown as done on a disconnected bridge, under emergency stop, or on a device without launch capability. Now the four real gates are checked (connection + capability handshake, emergency stop, `canOpenApp`, app privacy rule); every path returns `success: false` with a `blockedReason` and audits its refusal with the matching result (privacy-denied ŌåÆ `ACTION_DENIED`). The simulated adapter delegates to the engine, and `App.tsx` speaks the real message. Guarded by `androidMobileBridge.test.ts` Scenarios 17ŌĆō18 (37 tests; negative-validated: removing the connection gate fails Scenario 17, 1 failed \| 36 skipped). Gates on `ffc5949`: lint exit 0, vitest 64 files / 924 tests passed, build exit 0. **2026-09-22 00:36 IST (19:06 UTC) ŌĆö the Computer Operator / Screen Researcher panel.** `ComputerOperatorModal.tsx` drew a green `STANDBY: SCREEN SYNCHRONIZED` dot, a `0x0` resolution badge, and a `Resolution:` field whose value was the platform string (default `linux-arm64`) ŌĆö three live-screen claims that hold even when the host is unobservable. New `src/utils/computerOperator/observationTruth.ts` derives them from the real observation (`UNOBSERVED`/`ILLUSTRATIVE`/`SCREEN OBSERVED FROM HOST`; `UNKNOWN` instead of `0x0`). Guarded by `src/tests/observationTruth.test.ts` (19 tests, negative-validated: restoring the literal fails 1/19). Gates on `61ad02e`: lint exit 0, vitest 64 files / 922 tests passed, build exit 0. **2026-09-21 21:43 IST (16:13 UTC) ŌĆö telephony provider adapters fabricate confirmed provider actions.** `TelnyxTelephonyProvider` and `PlivoTelephonyProvider` in `src/utils/telephonyAdapters.ts` returned `startOutboundCall: { success: true, providerCallId: 'telnyx_<ts>' }` / `'plivo_<ts>'` although neither adapter ever calls its carrier API, and `transferCall` returned `providerConfirmed: true` unconditionally. This reached a caller: `telephonySessionManager.ts` announces *"Transferring your call to our clinic staff now, please hold the line."* and sets `handoffStatus: 'CONFIRMED'` whenever `providerConfirmed` is true, so a patient heard a live handoff that never happened. `TwilioTelephonyProvider.transferCall` had the same defect ŌĆö its `<Dial>` TwiML is an instruction that only reaches the carrier inside a live webhook response, but it was returned to a caller that discards it. Also, all three `getCallStatus` implementations returned `'IDLE'`, asserting the call was not active when nothing had been observed. Fixed: the adapters return `TELEPHONY_PROVIDER_DISPATCH_NOT_IMPLEMENTED` with `providerConfirmed: false`, `getCallStatus` returns a new `UNKNOWN` state (`src/types/telephonyProvider.ts`), and the `/api/telephony/outbound-call` route in `server.ts` returns 502 `PROVIDER_DISPATCH_FAILED` instead of `success: true` when dispatch is unconfirmed. Guarded by `src/tests/telephonyProviderHonesty.test.ts` (6 tests; negative-validated: all 6 fail when the fix is reverted ŌĆö `expected 'IDLE' to be 'UNKNOWN'`, and the Telnyx/Plivo assertions observe the fabricated `providerCallId`). Gates on `b043386`: lint exit 0, vitest 60 files / 830 tests passed, build exit 0. Still `PARTIAL` ŌĆö the sweep remains pattern-driven; the wider tool-by-tool inventory is outstanding. **2026-09-21 02:19 IST (20:49 UTC) ŌĆö sample-fixture gap closed.** The `SAMPLE_*` fixtures in `mobileStatusEngine.ts` carry `available: true`, so `processOfflineCommand()`'s `available`-only gate spoke them as readings; the engine now gates on `isSample` too, and the weather path no longer falls back to 27C / 48% / 'New Delhi'. `MobilePersonalStatusModal.tsx` briefing badge no longer claims 'Real-Time Generated Telemetry' for sample data. Guarded by `src/tests/localJarvisEngine.test.ts` and `src/tests/mobileStatusEngine.test.ts` (46 tests across the two files, all passing; negative-validated: reverting the `isSample` gate makes the engine test fail with the fixture values spoken as real). Gates on `dbd3385`: lint exit 0, vitest 781/781, build exit 0. Still `PARTIAL` ŌĆö the sweep is pattern-driven and no physical device exercised the live branch. **2026-09-21 01:05 IST ŌĆö third widening, UI + offline intent engine.** `SecurityMatrixModal.tsx` footer hardcoded `Security Matrix Status: 100% Operational` regardless of whether `/api/security` answered; now renders the fetched level or says the state is unavailable. `mobileStatusEngine.ts` `SAMPLE_NOTIFICATIONS` asserted `Always Free ARM VM health check: 100% nominal uptime` as a notification body; reworded to a maintenance notice. `src/utils/localJarvisEngine.ts`: the `mobile_personal_status` briefing defaulted every permission to `true` and every reading to a plausible constant (78% battery, 27C, 5 notifications, 3 events, 2 emails), so a no-phone briefing looked measured; the weather inquiry answered 27C / 48% / 'New Delhi' with no provider; `how are you` answered `All systems nominal. Ready to assist.` with no health check. Fixed: permissions now default `false`, unmeasured fields are nullable and the briefing reports no phone connected, the weather inquiry returns `actionExecuted: false`, and the greeting refuses to claim health. Guarded by `src/tests/toolSurfaceTruthfulness.test.ts` (14 tests over `server.ts` and the engine source; negative-validated: restoring `temperatureC ?? 27` fails the telemetry guard and the code was restored). Four assertions pinning the old strings were rewritten (`localJarvisEngine.test.ts`, `conversationalPipelineRegression.test.ts`, `voiceAndHindiModes.test.ts`). **Still NOT `VERIFIED`** - the sweep is pattern-driven, so it shows the audited strings are gone, not that every surface is honest. Known remaining gap: the `SAMPLE_*` fixtures in `mobileStatusEngine.ts` are sample data that `compileMobileStatusData` renders as if real and the UI does not label them as samples. A tool-by-tool inventory of all surfaces is still outstanding. |  Operator path now routes through `executionTruth.ts` receipts. Hardcoded `C:\Jarvis\Screenshots` text and the invented `Tests: 141 passed` terminal line were removed. **2026-09-20 23:35 IST ŌĆö the claim did not hold repo-wide:** `realGitStatus`/`realGitLog`/`realGitDiff` in `server_tools.ts` returned `success: true` on *every* git failure with invented data (branch `main`, three fabricated commit subjects, `"Diff tool nominal."`), which propagated to the Autonomous Tools HUD, `/api/tools/git/*` and the `git_status_tool` voice intent. Fixed; guarded by `src/tests/gitToolsTruthfulness.test.ts` (6 tests, negative-validated: 4 of 6 fail with the fix reverted). Remaining scope before this can return to `VERIFIED`: the same audit has not yet been run across every tool surface. **2026-09-21 02:25 IST ŌĆö the Oracle Cloud VM surface.** `OracleCloudModal.tsx` invented uptime (342 h), a public IP (`129.154.42.108`), a constant `ONLINE` and static shape/disk specs whenever `/api/oracle-cloud/status` was partial or absent; all now go through `src/utils/vmTelemetryDisplay.ts` and render `UNKNOWN`/em dash when unreported. Guards: `src/tests/vmTelemetryDisplay.test.ts` (6 tests) and the Oracle block in `src/tests/toolSurfaceTruthfulness.test.ts` (18 tests in file); negative-validated, 3 of 18 fail with the fabrications restored. Gates on 42cd1e0: lint exit 0, vitest 56 files / 791 tests passed, build exit 0. **2026-09-21 02:36 IST ŌĆö the Oracle VCN firewall surface.** `oracleCloudState.firewallRules` in `server.ts` declared all five ingress rules `active: true` and `OracleCloudModal.tsx` drew an unconditional tick per rule under a `<Lock /> Zero Accidental Ingress` heading ŌĆö a security claim about ports nothing in this process ever probed (it never contacts the VCN). `active` is now tri-state (`boolean \| null`), every declared rule ships `active: null`, `resolveFirewallRuleState()` maps an observation to `OBSERVED_OPEN`/`OBSERVED_CLOSED`/`NOT_PROBED`, and the "Zero Accidental Ingress" text sits behind `firewallSummary.verified` (false until all rules carry a real observation); the heading otherwise reads `Ingress NOT_PROBED (0/5 rules observed)`. Four more plausible defaults in the same modal removed (`4 OCPUs`, `?? 200` GB disk, hardcoded Ubuntu footer now the reported `os`, Always Free checklist relabelled `PROGRAMME LIMITS (NOT VERIFIED FOR THIS INSTANCE)`). Guards: `src/tests/vmTelemetryDisplay.test.ts` + 2 source guards in `toolSurfaceTruthfulness.test.ts` (22 in file); negative-validated, restoring `active: true` fails exactly the firewall guard (1 failed \| 19 passed), restoring `active: null` passes 20/20. Gates on d1ae25b: lint exit 0, vitest 56 files / 795 tests passed, build exit 0 (`dist/server.cjs` 816.6 kb).  **2026-09-21 03:07 IST ŌĆö the UI status-badge surface.** Three more surfaces asserted unmeasured state on the human-facing approval/routine path. `PermissionGateway.tsx` printed a fixed `Payload Checksum: Verified SHA-Safe` on *every* approval card while nothing hashed the payload; `ProactiveRoutinesModal.tsx` footer hardcoded `Telegram Push Ready` and `Cron Scheduler: Active on Oracle ARM Node` irrespective of whether any daemon or Telegram bot was reachable; `BlueprintRoadmapModal.tsx` seeded `completionPercentage: 100` and a `100% Free Architecture Verified` header *before* `/api/blueprint` answered. New `src/utils/checksumTruth.ts` supplies real measurements: `payloadChecksumLine()` computes an FNV-1a32 over the actual request payload and labels it `(local integrity marker, not SHA-2)` rather than claiming a cryptographic verification; `telegramPushLabel()`/`cronSchedulerLabel()` return `UNKNOWN` until `/api/telegram/status` / `/api/daemon/status` answer, then `live-connected`/`NOT CONNECTED` and `running`/`not running`; the blueprint state starts at zero. Guards: `src/tests/fabricatedStatusClaims.test.ts` (8 tests); negative-validated by restoring all four fabrications, which fails exactly the three component guards (3 failed | 5 passed) and passes 8/8 with them removed. Gates on a8c1422: lint exit 0, vitest 57 files / 803 tests passed, build exit 0 (`dist/server.cjs` 816.6 kb). **2026-09-21 03:37 IST ŌĆö the approval-resolution path.** `/api/approvals/resolve` in `server.ts` defaulted `executionResult` to `{ executed: true }`, stamped `status: 'EXECUTED'` with `verificationStatus`/`finalTruthState` both `'VERIFIED'` unconditionally, and fell back to a synthetic `urn:jarvis:executed:<id>` result id. A request whose execution branch never ran was recorded and displayed as an executed, verified Level 4 action. `src/utils/hardening/approvalResolution.ts` (`classifyApprovalOutcome`) now derives the outcome from the real dispatcher result: `VERIFIED` only with a real provider URN or issue URL, `UNVERIFIED` otherwise, `FAILED` on a provider error, no synthetic URN. `PermissionGateway.tsx` renders `UNVERIFIED` as not confirmed. Guarded by `src/tests/approvalResolutionTruth.test.ts` (8 tests); negative-validated, restoring the old default fails exactly 2 of 8. Gates on 2769c31: lint exit 0, vitest 58 files / 811 tests, build exit 0. **2026-09-21 04:06 IST ŌĆö the Oracle Cloud instance run-state and address.** `oracleCloudState` in `server.ts` seeded `status: 'RUNNING'` and a literal `publicIp`, plus a `+342` h uptime offset and `Math.random()` jitter around constants; a supplied value passes through the UI normalisers unchanged, so the modal rendered an observed run state and an `ssh`-copyable address that no server had reported. The OCI control plane owns both facts and is never queried here. `src/utils/hardening/ociInstanceTruth.ts` keeps only what is provable in-process (a hostname match proves this process runs on the instance, a lower bound); `publicIp`/`status` now seed `null` with a `statusObservedAt` stamp and render through `describeRunState`/`describePublicIp` as `NOT_OBSERVED`; the modal header labels the shape/OCPU/RAM figures as the declared plan. Guards: `src/tests/ociInstanceTruth.test.ts` + the Oracle block in `src/tests/toolSurfaceTruthfulness.test.ts` (33 tests across the two files); negative-validated, restoring the literal address fails exactly 2 tests (2 failed | 31 passed) and passes 33/33 with the fix. Gates on be203c2: lint exit 0, vitest 59 files / 824 tests passed, build exit 0 (`dist/server.cjs` 822.0 kb). **Still `PARTIAL`** ŌĆö this remains a pattern-driven sweep over known surfaces, not proof that no unmeasured claim survives. **2026-09-21 21:54 IST (16:24 UTC) ŌĆö the audit-trail row-count surface.** `/api/actions/audit` returned `totalLogs: memoryState.auditLogs.length` as its only count. `jarvis_memory.json` ships 23 persisted rows that carry no `source` field, so a client reading `totalLogs` as the number of recorded security events counted carried-over rows as confirmed work; `/api/system/health` reported the same number as `auditLogsCount`. Both endpoints now report `recordedLogs` / `recordedAuditLogs` from `auditTrailCounts().recorded` (entries that carry `AUDIT_LOG_SOURCE_RECORDED`) alongside `describeAuditTrail()`'s plain-language summary; `totalLogs` is retained but is explicitly the raw array length. Guarded by `src/tests/hardening/auditTrailTruth.test.ts` (14 tests, including a cold-start guard that the seed array is empty); negative-validated by restoring the previously seeded `Read Git Repository Status (Level 1)` row, which fails exactly 2 of 14 (`does not seed a repository read as EXECUTED`, `starts a cold process with an empty audit trail`) and passes 14/14 with it removed. Gates on `3d18aa4`: lint exit 0, vitest 61 files / 844 tests passed, build exit 0 (`dist/server.cjs` 842830 bytes / 823.1 kb). | **2026-09-21 23:10 IST (17:40 UTC) ŌĆö the telephony webhook-endpoint surface.** The Telephony Hub panel listed `POST /api/telephony/twiml/voice` as `TwiML ACTIVE` and the Twilio adapter used that same path as its post-answer callback (`src/utils/telephonyAdapters.ts`), but `server.ts` registers only `/api/telephony/incoming`, `/api/telephony/handle-turn` and `/api/telephony/twiml/turn`. A carrier following the advertised callback would have reached a 404. The panel's other two badges were also hardcoded green (`LIVE & READY`, `GEMINI BRAIN READY`) although nothing measured them. Fixed: new `src/utils/telephonyEndpointTruth.ts` exports the exact registered-route inventory, a `telephonyEndpointLabel()` that returns `NO SUCH ROUTE` for an unregistered path and holds readiness at `UNKNOWN` until the status request answers, and a `telephonyBrainLabel()` that reports `OFFLINE ENGINE (no API key)` when `/api/health`'s measured `geminiEnabled` is false; the panel renders those, the adapter callback now targets the real `/api/telephony/twiml/turn`, and `BlueprintRoadmapModal.tsx`'s footer no longer asserts `Security Matrix: Active` for a posture it never queried. Guarded by `src/tests/telephonyEndpointTruth.test.ts` (11 tests); negative-validated ŌĆö restoring the non-existent path in the adapter fails exactly the callback-path guard (1 failed | 10 passed) and passes 11/11 with the fix. Gates on `afdf463`: lint exit 0, vitest 62 files / 882 tests passed, build exit 0 (`dist/server.cjs` 842396 bytes / 822.7 kb). **2026-09-22 22:36 IST ŌĆö kill-switch liveness honesty on the Autonomous Tools Hub.** `AutonomousToolsModal.tsx`, the panel that writes workspace files and queues external GitHub issues, seeded `{ emergencyPaused: false }`, fetched `/api/emergency/status` inside a `try` that swallowed failures, and rendered a constant green `­¤¤ó DAEMON ACTIVE` badge for every non-paused state ŌĆö so an unanswered status request read as a confirmed-released kill switch and the two Level-3 controls (Write File to Workspace, Queue for Human Approval) were enabled on a value nobody had fetched; non-boolean shapes fell through the same green branch. The modal now seeds `null`, keeps a status only when `emergencyStatusKnown(data)` is true, renders `STATUS UNKNOWN` via the shared `emergencyTruth.ts` tri-state, and derives `actionBlocked = loading || emergencyPaused || !statusKnown` for both controls; the toggle checks `res.ok` and the boolean shape and reports failure honestly. Guarded by `src/tests/autonomousToolsEmergencyLiveness.test.ts` (5 tests); negative-validated, restoring the seed/raw reads/constant badge fails 3 of 5. Gates on `feda88d`: lint exit 0, vitest **70 files / 1002 tests passed**, build exit 0 (`dist/server.cjs` 852719 bytes). **2026-09-22 18:43 UTC (00:13 IST) ŌĆö the credential leak into the LLM context.** `SecurityMatrixModal.tsx` printed the hardcoded literal `Zero Credential Leaks to LLM Memory ŌĆö PROTECTED` while `securityMatrixState.credentialLeakProtection` had no reader anywhere, and `assembleAiContext()` in `src/utils/memory/aiContext.ts` injected `memoryState.name`, `customKeyValues`, note titles/bodies and conversation history into the Gemini system prompt with no redaction. Fixed: every outbound string is passed through the existing `auditSecrets()` redactor by default, `redactedSecretsCount`/`redactedCategories` are reported, `server.ts` passes the real `credentialLeakProtection` flag and logs the redacted categories, and the badge renders `PROTECTED`/`DISABLED`/`UNKNOWN` from observed state. Guarded by `src/tests/llmContextLeakProtection.test.ts` (7 tests); negative-validated (forcing `protect = false` fails 4 of 7). Gates on `413ff16`: lint exit 0, vitest 74 files / 1035 tests passed, build exit 0. |**2026-09-21 23:35 IST (18:05 UTC) ŌĆö the same panel's unconditional liveness badges.** Slot 6 stopped at the three endpoint badges and missed the panel's two most prominent ones: the header's green pulsing `VOICE AGENT ACTIVE` pill and the AI Receptionist's green `READY TO ANSWER` badge were still hardcoded, so with no telephony provider configured the UI asserted a live agent and an answering receptionist. Separately, both endpoint labels were invoked as `telephonyEndpointLabel(path, true)` ŌĆö a literal `true` for `statusKnown` ŌĆö so they always read `ROUTE REGISTERED` and could never hold at `UNKNOWN`, contradicting the "Known limitations" text written the same night. Fixed: `telephonyEndpointTruth.ts` now exports `telephonyReadiness()` (tri-state; `UNKNOWN` until a boolean `isConfigured` is seen), `voiceAgentLabel()` and `receptionistLabel()`; the modal derives all four badges from the single measured `/api/telephony/status` snapshot and passes `readiness !== 'UNKNOWN'` as `statusKnown`. Guard test extended to 15 tests, including source guards pinning the absence of `VOICE AGENT ACTIVE` / `READY TO ANSWER` and the literal-`true` call form; negative-validated by restoring `VOICE AGENT ACTIVE`, which fails exactly the source guard (1 failed | 14 passed) and passes 15/15 with the fix. Gates on `ff5a3c3`: lint exit 0, vitest 62 files / 886 tests passed, build exit 0 (`dist/server.cjs` 842396 bytes / 822.7 kb). **2026-09-22 20:09 UTC (01:39 IST) ŌĆö the Telegram security-posture claim.** The Telegram `security_audit` reply printed a fixed `Human Approval: Enforced for all external actions` and `Credential Protection: Passwords & API tokens strictly isolated` for every process, and the `/start` welcome asserted `Level 4 actions strictly require your mobile confirmation` ŌĆö none of which read the state. `humanApprovalForExternal` and `maskSensitiveData` are operator-flippable via `POST /api/security/matrix`, and `credentialLeakProtection` gates the outbound redactor, so a gate turned off was still reported as enforced. Fixed: `src/utils/hardening/securityMatrixTruth.ts` (`securityMatrixPosture()`, `triState()`) derives the line from the observed flags and holds `UNKNOWN ŌĆö not observed` for an unread value. Guarded by `src/tests/hardening/securityMatrixTruth.test.ts` (9 tests); negative-validated, restoring the literal fails exactly 2 of 9 (`2 failed | 7 passed`), restored ŌåÆ 9/9. Gates on `2b1558e`: lint exit 0, vitest **76 files / 1056 tests passed**, build exit 0 (`dist/server.cjs` 837.7 kb). **2026-09-22 21:12 UTC (02:42 IST) ŌĆö one more fabricated grant, client-side this time.** Slot 11 fixed the *server* to report real granted scopes, but `SocialMediaModal.tsx` still short-circuited on `status === 'API_VERIFIED'` and printed the literal `Scopes: youtube.upload, youtube.readonly`, so a read-only channel (upload scope not granted) displayed upload authorization. The header now prints the scopes the server returned (`describeGrantedScopes`) and states explicitly that upload is not authorized unless the server confirmed `canPublish` (`youtubeCanPublishMeasured`). Guarded by 6 tests in `src/tests/socialPublishHonesty.test.ts`; negative-validated (removing the `canPublish` check fails 2 of 24). **2026-09-22 21:43 UTC (03:13 IST) ŌĆö the call UI printed the raw number of the caller it claimed to mask.** `ActiveCallHUD.tsx` rendered a `MASKED` badge (`isMaskActive && isUnknownInbound`) while printing `{activeCall.callerNumber}` ŌĆö the raw carrier value ŌĆö directly beneath it, and the Telephony Hub call-history panel did the same with `selectedLog.callerNumber`: the name read "Unknown Caller" and the full number was shown anyway. New `src/utils/telephonyPrivacyDisplay.ts` (`shouldMaskParty`, `resolveDisplayNumber`) derives the printed number from the same predicate the badge uses, and the HUD badge is now tied to `counterpartIsMasked`. Guarded by `src/tests/telephonyPrivacyDisplay.test.ts` (7 tests); negative-validated ŌĆö both guarded patterns are present at HEAD and absent after the fix. Gates on `8b6787b`: lint exit 0, vitest **77 files / 1074 tests passed**, build exit 0 (`dist/server.cjs` 860517 bytes). Still `PARTIAL` ŌĆö one more real violation closed, not proof the sweep is exhausted. **2026-09-22 22:12 UTC (03:42 IST) ŌĆö the Master Blueprint modal rendered an unmeasured progress figure as 0%.** `BlueprintRoadmapModal.tsx` seeds `completionPercentage: 0`, fetched `/api/blueprint` without checking `res.ok`, and on any failure kept the seed, so the "Readiness Progress" bar, the `{...}%` readout and the footer `(...% checklist items ticked)` all rendered a measured "0% complete" that nothing measured; the header also printed a hardcoded `TOTAL PHASES: 10 (Phase 0 to 9)`. New `src/utils/blueprintTruth.ts` (`blueprintProgress`, `blueprintPercentageLabel`, `blueprintProgressLabel`, `blueprintFooterLabel`, `blueprintPhaseCountLabel`) marks a figure `UNMEASURED`/`MEASURED`, returns `null` ŌĆö never a coerced `0` ŌĆö for an unread flag or an out-of-range/non-numeric value, and renders `UNKNOWN` for an unmeasured figure; the component sets a `blueprintRead` flag only after a `res.ok` response carrying `phases`. Guarded by `src/tests/blueprintProgressTruth.test.ts` (9 tests); negative-validated ŌĆö reverting the read guard and the bar width expression fails 6 of 9, restored ŌåÆ 9/9. Gates on `a425c88`: lint exit 0, vitest **78 files / 1083 tests passed**, build exit 0 (`dist/server.cjs` 860517 bytes). **2026-09-23 16:23 UTC (21:53 IST) ŌĆö the Computer Operator semantic interpretation card.** `ComputerOperatorModal.tsx` rendered `ScreenInterpreter.interpret(...).summary` unconditionally, and `ScreenInterpreter` always emits a confident `Screen showing "<app>" ... N interactive UI elements detected.` summary, so an illustrative preview or an unreachable host still narrated a live screen; the panel's status dot, resolution badge and platform field had already been gated, this card was missed. `observationInterpretationNotice()` in `src/utils/computerOperator/observationTruth.ts` (built on `screenSyncState`) now withholds it for `ILLUSTRATIVE`/`UNOBSERVED`. Guarded by 5 assertions in `src/tests/observationTruth.test.ts`; negative-validated ŌĆö reverting the modal guard fails exactly the source guard (1 failed | 23 passed), restored ŌåÆ 24/24. Gates on `3d3a7f7`: lint exit 0, vitest **80 files / 1098 tests passed**, build exit 0. **2026-09-23 16:46 UTC (22:16 IST) ŌĆö the engine completion summaries.** `computerOperatorEngine.ts` emitted a fixed `All N step(s) executed and visually verified. System state nominal.` summary for every run, even when `ScreenObserver` served the built-in illustrative view (whose pre/post frames are both synthetic, so the step comparisons proved nothing about a real screen). `resumeApprovedTask` also awaited nothing ŌĆö it called `this.executor.executeAction(...)` without reading the result and then stamped `COMPLETED` / `Authorized action completed and verified`, so a rejected Level-4 action read as verified. Now `ScreenObserver.isHostBacked()` gates the claim (`verified against the host desktop` vs a `SIMULATION_ONLY` prefix), and `resumeApprovedTask` ends `FAILED` with the real error on a non-success executor result. Guarded by `src/tests/computerOperatorTaskStatus.test.ts` (6 tests); negative-validated ŌĆö reverting the resume guard fails 2 of 6 (`expected 'COMPLETED' to be 'FAILED'`), restored ŌåÆ 6/6. Gates on `2afb84b`: lint exit 0, vitest **81 files / 1104 tests passed**, build exit 0 (`dist/server.cjs` 863007 bytes). **2026-09-23 17:10 UTC (22:40 IST) ŌĆö the HUD GPS pill.** `HUDHeader.tsx` rendered a hardcoded green `GPS: GEO-SERVICES` pill for every state ŌĆö no fix, cached, simulated preset or manual entry alike ŌĆö asserting a device GPS link the HUD never checked. New `locationFixBadge()` in `src/utils/locationService.ts` returns `{live:true}` only for a live source; the pill renders it and is grey for anything else, and `App.tsx` forwards `locationSource={userCoordsSource}`. Guarded by `src/tests/locationServicesTruth.test.ts` (now 16 tests); negative-validated ŌĆö restoring the hardcoded label fails 1 of 16, restored ŌåÆ 16/16. Gates on `144a995`: lint exit 0, vitest **81 files / 1108 tests passed**, build exit 0 (`dist/server.cjs` 842.8 kB). **2026-09-25 17:45 UTC (23:15 IST) ŌĆö the YouTube voice status reply.** The `/api/chat` `youtube_status_inquiry` branch answered every passing `ensureValidYouTubeToken()` with "YouTube Channel \"<name>\" is active, verified, and ready. OAuth 2.0 token status is nominal." ŌĆö the helper only proves a stored-or-refreshed credential, never reads the channel, and nothing measures quota; it also invented `'Connected Channel'` when the stored title was empty. `youtubeVoiceStatusReply()` in `src/utils/hardening/youtubeVoiceStatusTruth.ts` now derives the reply from credential validity plus the recorded scope grant (`publishScopeGranted()`/`describeGrantedScopes()`, `socialPublishHonesty.ts`), reporting upload authorization as confirmed/not confirmed/unknown and the channel as recorded-or-not-read. The reply no longer contains "verified", "nominal" or "ready" in either language. Guarded by `src/tests/youtubeVoiceStatusTruth.test.ts` (9 tests); negative-validated ŌĆö restoring the hardcoded phrase fails 1 of 9, restored ŌåÆ 9/9. Gates on `db19e40`: lint exit 0, targeted 1 file / 9 passed, full suite **101 files / 1331 tests passed**, build exit 0 (`dist/server.cjs` 880184 bytes).
 
 ### Computer control ŌĆö what is real vs. not
 
@@ -3662,7 +5224,7 @@ Bugs found and fixed while building this:
 | :--- | :--- | :--- | :--- |
 | 30 | Real Telegram delivery | `PARTIAL` | Delivery is now verified against Telegram's returned `message_id`. A confirmed send is `VERIFIED`; a 2xx without an id is `UNVERIFIED`; a blocked bot reports `PERMISSION_REQUIRED`. Evidence: `src/utils/communication/telegramDelivery.ts`, `src/tests/telegramDelivery.test.ts` (10 tests), `src/tests/telegramDelivery.e2e.test.ts` (3 tests against a real server with a local Telegram stand-in). The physical leg ŌĆö a message reaching a real phone over api.telegram.org ŌĆö still needs the operator's bot token and a real send. |
 | 31 | Real notification reply | `PARTIAL` | Reply route requires an explicit `approved: true` and reports `DISPATCHED`, never success, until the device confirms. Delivery on a real handset is unverified. **2026-09-23 19:35 UTC (01:05 IST 2026-09-24)** ŌĆö the real adapter depended entirely on the server for the approval gate and flattened the server's `outcome` (`DISPATCHED`/`BLOCKED`/`NOT_CONFIGURED`) into `FAILED`; it now refuses an unapproved reply locally with `AUTHORIZATION_REQUIRED` and surfaces the real verdict. Guarded by `src/tests/realAndroidBridgeAdapter.test.ts`. **2026-09-22 03:35 IST ŌĆö the pending-approval REPLY button on the bridge screen no longer fabricates the approval or the dispatch.** `MobileBridgeModal.tsx` `dispatchReply` asked for no approval, sent no request, and set the event `AUTHORIZED` while speaking "Dispatching via the Android bridge"; its approval ternary had two identical branches, so the computed answer was discarded, and the route it claimed to have reached refuses every request without `approved: true`. The decision is now `src/utils/mobileReplyDispatchTruth.ts` (`replyDispatchDecision` refuses `NOT_REPLY_EVENT` / `SENSITIVE_CONTENT` / `NO_REPLY_TEXT` / `NO_DISTINCT_APPROVAL`; `replyDispatchOutcome` never infers success from an HTTP status), the UI takes a reply body plus a distinct `I APPROVE SENDING THIS REPLY` checkbox, leaves the event `PENDING_APPROVAL` on refusal, reports `NOT_CONFIGURED` without a paired session token, and drives status/audit/speech from the observed response. Guarded by `src/tests/mobileReplyDispatchTruth.test.ts` (16 tests; negative-validated ŌĆö restoring the old component fails exactly the 3 source guards, `3 failed \| 13 passed`, restored ŌåÆ 16/16, full suite 68 files / 979 tests passed). **2026-09-22 04:05 IST ŌĆö the dispatch outcome is no longer read as a delivery.** The same `dispatchReply` still marked a positive outcome `EXECUTED` and wrote `result: 'SUCCESS'` into the audit log, but the only response that produces a positive outcome is the server's `DISPATCHED, verified: false` ŌĆö the reply was handed to the bridge, not confirmed by the device, which reports separately via `action/confirm`. Status and audit now come from `replyEventStatusForOutcome` / `replyAuditProjection` in the same helper: `DISPATCHED`/`UNVERIFIED` ŌåÆ event `AUTHORIZED`, audit `UNVERIFIED`; `BLOCKED` ŌåÆ `REJECTED` / `DENIED`; `NOT_CONFIGURED` ŌåÆ `PENDING_APPROVAL`; only `action/confirm` may record `EXECUTED`/`SUCCESS`. The queue label reads `AUTHORIZED ŌĆö AWAITING DEVICE CONFIRMATION` and `EXECUTED` renders as `CONFIRMED BY DEVICE`, so the screen states which of the two is known. `MobileAuditEntry.result` gained `UNVERIFIED` as a legitimate value. Test file now 21 tests; negative-validated (`1 failed \| 20 passed` with the old expressions restored). Still `PARTIAL`: no real handset and no paired device received a reply, so device-side delivery remains unconfirmed. |
-| 32 | Call detection E2E | `PARTIAL` | Call state is reported from device telemetry, and the E2E suite covers the telemetry chain. No physical call has been detected by this host. |
+| 32 | Call detection E2E | `PARTIAL` | Call state is reported from device telemetry, and the E2E suite covers the telemetry chain. No physical call has been detected by this host. **2026-10-01 03:35 IST** — the live-call turn handler no longer fabricates weather: `TelephonySessionManager.processTurn` (wired to `/api/telephony/twiml/turn` in `server.ts`) answered a weather question with an invented "25 to 28 degrees Celsius" band when no source was connected, and filled missing telemetry fields with `26°C`/`Clear`/`Gurugram / SFO`. The no-source branch now reports that no weather source is connected and speaks no reading; a partial telemetry object counts as no reading. Guarded by `src/tests/telephonyWeatherHonesty.test.ts` (4 tests), negative-validated (`3 failed \| 1 passed` on the reverted branch; `4 passed` restored). |
 | 33 | Call answering | `PERMISSION_REQUIRED` | Answering is refused unless the device holds the dialer role; the refusal names the required grant. No real call has been answered. |
 | 34 | Message sending with approval | `PARTIAL` | Approval gate verified server-side (`approved: true` required, kill switch honoured). Real-device delivery unverified. **2026-09-21 22:06 IST** ŌĆö the shared `evaluateOwnerApproval` parser read Hindi refusals as consent for both calls and messages: the bare verb stem `ÓżēÓżĀÓżŠ` was an approval keyword and Devanagari matching used a prefix fallback, so `ÓżĢÓźēÓż▓ Óż«Óżż ÓżēÓżĀÓżŠÓżō` returned `APPROVE`. Stem dropped, whole-token matching enforced, rejection evaluated first. Guarded by `src/tests/androidMobileBridge.test.ts` (18 assertions), negative-validated (**7 tests fail** with the fix reverted, measured 22:47 IST). |
 
@@ -3796,7 +5358,7 @@ is connected to this environment.
 | 51 | Complete security audit | `PARTIAL` | `src/utils/hardening/securityAudit.ts` scans tracked files and `GET /api/security/audit-secrets` runs it against the live repository. The executed run scanned 156 files and returned clean (0 CRITICAL, 0 HIGH; 2 LOW test fixtures). The audit is a pattern scan, not a proof of security, and no external penetration test was performed. **2026-09-22 02:35 IST ŌĆö the Level-4 finance exclusion gate on the dispatch path.** The executor that actually touches the OS (`HostActionExecutor.execute`) never consulted `PermissionGuard` at all: it resolved the workspace path, then ran the command, so a `TERMINAL_COMMAND` carrying financial text was executed by the real shell, and the `approved` flag (added to the engine's resume path) lifted the Level-4 approval gate unconditionally. `PermissionGuard.permanentBlock()` now owns the never-permissible rules (emergency stop, finance exclusion, security bypass), `evaluateHostSafety()` and the browser-side `ActionExecutor.forwardToHost()` both call it, the host gate maps a held destructive command to `PERMISSION_REQUIRED` and everything else (finance / bypass / kill switch) to `BLOCKED`, and `approved` cannot lift the finance exclusion. `server.ts`'s `emergencyActive()` now delegates to the shared `isEmergencyStopActive()` so the HTTP layer and the executor cannot drift. Guarded by the new `HostActionExecutor ŌĆö Level-4 safety gate` block in `src/tests/hostActionExecutor.test.ts` (6 cases). Negative-validated: returning `null` from `safetyRefusal` fails exactly 5 of the 6 (observed `5 failed | 39 passed` of 44), and all 44 pass with the gate restored. Gates on `bd79593`: lint exit 0, vitest **66 files / 954 tests passed**, build exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb). **2026-09-22 03:05 IST ŌĆö kill-switch liveness honesty on the Permission Gateway itself.** `PermissionGateway.tsx` ŌĆö the screen a human reads before approving an irreversible Level 4 action ŌĆö derived its emergency badge from `emergency.emergencyPaused` alone, seeded that state as `{ emergencyPaused: false }`, and fetched `/api/emergency/status` inside the same `try` block as the approval queue lists, so a failed status request was swallowed and the component kept the initial "not paused" value: green `ACTIVE` pill, no lockout banner, and an enabled `YES / APPROVE & EXECUTE` button on the strength of a value nobody had fetched. Any non-boolean shape also fell through to the green branch. `src/utils/emergencyTruth.ts` is now a pure tri-state (`emergencyLiveness` / `emergencyStatusKnown` / `emergencyLivenessLabel`): `ENGAGED` when the pause or hard switch is set, `UNKNOWN` until a real boolean is observed. The component seeds `null`, fetches the emergency status separately so a failure cannot resolve to "not paused", renders an explicit `STATUS UNKNOWN` badge and banner, and derives `approvalBlocked = killSwitchEngaged || !statusKnown` so approval is disabled and `handleApprove()` returns early while the state is unknown; no render path reads the raw flag. Guarded by the new `src/tests/permissionGatewayEmergencyLiveness.test.ts` (9 cases). Negative-validated: restoring one raw read (`disabled={loading || emergency.emergencyPaused || killSwitchEngaged}`) fails exactly the source guard ŌĆö observed `1 failed | 8 passed` of 9; restored ŌåÆ 9/9, and the full suite **67 files / 963 tests passed**. Gates on `8d37cea`: lint (`tsc --noEmit`) exit 0, build exit 0 (`dist/server.cjs` 852453 bytes / 832.5 kb). |
 | 52 | Permission matrix finalization | `VERIFIED` | `src/utils/hardening/permissionMatrix.ts` holds one ordered matrix that all callers share. The first matching entry wins, so a command containing both `read` and `delete` classifies as destructive. An unrecognised action is refused at level 4 and requires approval ŌĆö it is never defaulted to safe. `POST /api/security/evaluate` exposes it. 19 unit tests plus E2E. |
 | 53 | Kill-switch testing | `VERIFIED` | `POST /api/security/evaluate` checks the emergency stop before the level check, so an engaged kill switch blocks even a level-1 read action with category `kill_switch`. E2E toggles the switch on, asserts the block, then releases it. `isBlockedByKillSwitch` unit-tested both ways. |
-| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; HUD surfaces that asserted unverified credential/link state; and ŌĆö 2026-09-20 22:35 IST ŌĆö a caller-ID masking leak. `maskPhoneNumber` in `src/utils/telephonyPermissions.ts` returned `+9198765*****` for `+91 9876543210`, exposing the country code plus eight subscriber digits, while the sibling helper in `androidBridgeEngine.ts` already masked the same input as `+91 ******3210`. The telephony helper now matches that canonical `+91 ******3210` form (`src/tests/telephonyPermissions.test.ts`, 24 tests; negative-validated ŌĆö 8 of 24 fail against the old implementation). `HUDHeader.tsx` no longer printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; it polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). **2026-09-22 21:35 IST ŌĆö the `androidBridgeEngine.ts` sibling itself leaked.** The helper the 2026-09-20 cycle cited as the canonical *good* mask had its own defect on the digit-free path: it sliced the last four characters of the input, so `'Unknown'` ŌåÆ `'******nown'`, `'private'` ŌåÆ `'******vate'`, and `'+1 415 890 2134'` ŌåÆ `'+1  ******2134'` (double space from a `slice(0,3)` prefix plus an appended space). This is the path taken when the bridge reports a call with no resolvable number (`callerNumber || 'Unknown'`). Now digits are extracted first: a digit-free identifier returns `'Unknown Number'`, and a real number keeps its matched `+<area> ` prefix and last four digits with spacing normalised. Guarded by `androidMobileBridge.test.ts` Scenarios 19ŌĆō20 (39 tests in file); negative-validated (`2 failed | 37 passed` with the pre-fix body restored). Verified `src/utils/telephonyPermissions.ts` does *not* share this path ŌĆö it already returns `'Unknown / Private'` for a digit-free input. **2026-09-22 22:06 IST ŌĆö the HTTP bridge route itself had a weaker mask.** Slot 2 fixed the canonical helper, but `POST /api/mobile/bridge/event` in `server.ts` still used its own inline regex `/(\d{2,3})\d{4,6}(\d{3,4})/`, which is anchored to *contiguous* digits: a spaced number was echoed back to the audit trail completely unmasked (`+1 415 890 2134` unchanged, verified by running the regex), and a matching number leaked extra digits (`+91 9876543210` -> `+91 987******210`). The route now calls `maskAndroidCallerNumber` (`src/utils/androidBridgePrivacy.ts`), a wrapper over the canonical `maskPhoneNumber`; observed `+1 415 890 2134` -> `+1 ******2134`, `+91 9876543210` -> `+91 ******3210`. The `simulate` route stores nothing and needed no change. Guarded by `src/tests/androidBridgeHttpPrivacy.test.ts` (7 tests); negative-validated (restoring the inline regex: `2 failed | 5 passed`). Gates on `ab5bb6e`: lint exit 0, vitest 69 files / 997 tests passed, build exit 0.<br>`git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (22 tests). A second leak sweep on 2026-09-20 23:55 UTC found six more families that passed through unredacted (Google OAuth client secrets, Discord bot tokens, GitLab PATs, DigitalOcean tokens, labelled AWS secret keys, connection-string passwords); they are now covered. No credential rotation was performed against live providers here. **2026-09-22 18:43 UTC (00:13 IST) ŌĆö the model-context path.** Six credential families were already redacted, but the path that actually ships memory to a third-party model was not: `assembleAiContext()` built the Gemini system prompt from notes, custom key/values and history verbatim. Now redacted by default via `auditSecrets()`, with the redaction count and categories reported and logged; the Security Matrix `credentialLeakProtection` flag is read and displayed instead of asserted. `src/tests/llmContextLeakProtection.test.ts` (7 tests, negative-validated 4/7 without the fix). Gates on `413ff16`: lint exit 0, vitest 74 files / 1035 tests passed, build exit 0. **2026-09-25 22:51 UTC (04:21 IST) ŌĆö the filesystem tools could still read and write the project's own credentials.** The sibling-prefix containment fix already on this branch stopped paths *leaving* `PROJECT_ROOT`, but `realFsRead`/`realFsWrite`/`realFsDelete` still accepted `.env` and `.git/config` inside it; probed on this head, `.git/config` read back 315 bytes and `.env` was writable, and `.git/config` carries any credential embedded in a remote URL. `safeResolvePath` now rejects non-string/blank and NUL-containing paths, and `isProtectedPath()` denies `.git`/`.ssh`/`.gnupg`/`.aws` segments plus `.env*`, `.npmrc`, `.pypirc`, `.netrc`, `.yarnrc(.yml)`, `.git-credentials`, SSH private keys and `*.pem|key|p12|pfx|keystore|jks`. `.gitignore` gains `.env.local`/`.env.*.local`. Guarded by `src/tests/workspaceFsSecurity.test.ts` (7 tests); negative-validated (disabling `isProtectedPath`: `2 failed | 5 passed`). Still `PARTIAL` ŌĆö the audit covers the known surfaces, not a proof of absence. |
+| 54 | Secret/token protection audit | `PARTIAL` | Real bugs found and fixed across cycles (see below): a malformed OpenAI key regex that matched no key at all; a `.gitignore` that was UTF-16 encoded so git did not honour its `.env` line; five token families (Stripe, Slack, npm, Hugging Face, SendGrid) that passed through `redactSecrets` unchanged; HUD surfaces that asserted unverified credential/link state; and ŌĆö 2026-09-20 22:35 IST ŌĆö a caller-ID masking leak. `maskPhoneNumber` in `src/utils/telephonyPermissions.ts` returned `+9198765*****` for `+91 9876543210`, exposing the country code plus eight subscriber digits, while the sibling helper in `androidBridgeEngine.ts` already masked the same input as `+91 ******3210`. The telephony helper now matches that canonical `+91 ******3210` form (`src/tests/telephonyPermissions.test.ts`, 24 tests; negative-validated ŌĆö 8 of 24 fail against the old implementation). `HUDHeader.tsx` no longer printed `TELEGRAM ONLINE` and `LEVEL 2 SAFE` as constants; it polls `/api/telegram/status` (which returns only `botTokenMasked`, never the raw token) and `/api/security`, rendering `OFFLINE`/`UNKNOWN` when unknown (`src/tests/hudTelemetry.test.ts`, 7 tests). **2026-09-22 21:35 IST ŌĆö the `androidBridgeEngine.ts` sibling itself leaked.** The helper the 2026-09-20 cycle cited as the canonical *good* mask had its own defect on the digit-free path: it sliced the last four characters of the input, so `'Unknown'` ŌåÆ `'******nown'`, `'private'` ŌåÆ `'******vate'`, and `'+1 415 890 2134'` ŌåÆ `'+1  ******2134'` (double space from a `slice(0,3)` prefix plus an appended space). This is the path taken when the bridge reports a call with no resolvable number (`callerNumber || 'Unknown'`). Now digits are extracted first: a digit-free identifier returns `'Unknown Number'`, and a real number keeps its matched `+<area> ` prefix and last four digits with spacing normalised. Guarded by `androidMobileBridge.test.ts` Scenarios 19ŌĆō20 (39 tests in file); negative-validated (`2 failed | 37 passed` with the pre-fix body restored). Verified `src/utils/telephonyPermissions.ts` does *not* share this path ŌĆö it already returns `'Unknown / Private'` for a digit-free input. **2026-09-22 22:06 IST ŌĆö the HTTP bridge route itself had a weaker mask.** Slot 2 fixed the canonical helper, but `POST /api/mobile/bridge/event` in `server.ts` still used its own inline regex `/(\d{2,3})\d{4,6}(\d{3,4})/`, which is anchored to *contiguous* digits: a spaced number was echoed back to the audit trail completely unmasked (`+1 415 890 2134` unchanged, verified by running the regex), and a matching number leaked extra digits (`+91 9876543210` -> `+91 987******210`). The route now calls `maskAndroidCallerNumber` (`src/utils/androidBridgePrivacy.ts`), a wrapper over the canonical `maskPhoneNumber`; observed `+1 415 890 2134` -> `+1 ******2134`, `+91 9876543210` -> `+91 ******3210`. The `simulate` route stores nothing and needed no change. Guarded by `src/tests/androidBridgeHttpPrivacy.test.ts` (7 tests); negative-validated (restoring the inline regex: `2 failed | 5 passed`). Gates on `ab5bb6e`: lint exit 0, vitest 69 files / 997 tests passed, build exit 0.<br>`git check-ignore` confirms `.env` is ignored; the vault secret is no longer hardcoded; credential patterns are covered by `src/tests/credentialRedactor.test.ts` (22 tests). A second leak sweep on 2026-09-20 23:55 UTC found six more families that passed through unredacted (Google OAuth client secrets, Discord bot tokens, GitLab PATs, DigitalOcean tokens, labelled AWS secret keys, connection-string passwords); they are now covered. No credential rotation was performed against live providers here. **2026-09-22 18:43 UTC (00:13 IST) ŌĆö the model-context path.** Six credential families were already redacted, but the path that actually ships memory to a third-party model was not: `assembleAiContext()` built the Gemini system prompt from notes, custom key/values and history verbatim. Now redacted by default via `auditSecrets()`, with the redaction count and categories reported and logged; the Security Matrix `credentialLeakProtection` flag is read and displayed instead of asserted. `src/tests/llmContextLeakProtection.test.ts` (7 tests, negative-validated 4/7 without the fix). Gates on `413ff16`: lint exit 0, vitest 74 files / 1035 tests passed, build exit 0. **2026-09-25 22:51 UTC (04:21 IST) ŌĆö the filesystem tools could still read and write the project's own credentials.** The sibling-prefix containment fix already on this branch stopped paths *leaving* `PROJECT_ROOT`, but `realFsRead`/`realFsWrite`/`realFsDelete` still accepted `.env` and `.git/config` inside it; probed on this head, `.git/config` read back 315 bytes and `.env` was writable, and `.git/config` carries any credential embedded in a remote URL. `safeResolvePath` now rejects non-string/blank and NUL-containing paths, and `isProtectedPath()` denies `.git`/`.ssh`/`.gnupg`/`.aws` segments plus `.env*`, `.npmrc`, `.pypirc`, `.netrc`, `.yarnrc(.yml)`, `.git-credentials`, SSH private keys and `*.pem|key|p12|pfx|keystore|jks`. `.gitignore` gains `.env.local`/`.env.*.local`. Guarded by `src/tests/workspaceFsSecurity.test.ts` (7 tests); negative-validated (disabling `isProtectedPath`: `2 failed | 5 passed`). Still `PARTIAL` ŌĆö the audit covers the known surfaces, not a proof of absence. **2026-09-30 21:06 UTC (02:36 IST 2026-10-01) — three more provider secrets leaked.** A live probe of ten credential formats found Slack app-level tokens (`xapp-…`, not covered by the `xox[baprs]-` pattern), Stripe webhook signing secrets (`whsec_…`, not covered by the `sk_`/`rk_` pattern) and Mailgun API keys (`key-` + 32 hex, no pattern) passing through `redactSecrets()` byte-for-byte. Added pattern branches 38–40 and 3 tests (`src/tests/credentialRedactor.test.ts`, 42→45 tests); negative-validated (stash engine only: `3 failed | 42 passed`). Commits `b24b96a`. |
 | 55 | Real-device E2E test suite | `NOT_AVAILABLE` | No Android device or Windows host is attached in this environment. The server-side legs are covered by E2E tests; the on-device checklist remains in `docs/ANDROID_BRIDGE.md`. |
 | 56 | Offline-mode E2E tests | `VERIFIED` | `src/tests/offlineOnline.e2e.test.ts` boots a real server with `GEMINI_API_KEY` blanked and asserts health, memory read/write round-trip, local intent classification, a verified backup, and that permissions stay enforced offline. 6 offline tests. |
 | 57 | Online-mode E2E tests | `VERIFIED` | Same file. Confirms core endpoints answer, and that each integration status endpoint with `configured: false` never reports `connected: true` or `status: connected`. 2 online tests. |
@@ -4153,7 +5715,163 @@ engine fix fails the new block (`3 failed | 20 passed`); restored → 23/23.
 
 ---
 
+## Bugs found and fixed (cycle 10 — screenshot live-capture frame truth)
+
+- **A browser display capture drew a blank canvas and reported a live capture.**
+  The `getDisplayMedia` branch in `src/components/ScreenshotModal.tsx` fell back to
+  `video.videoWidth || 1280` / `video.videoHeight || 720`, so a stream that resolved
+  without decoding a frame produced a black 1280×720 image presented as a verified
+  live capture at that resolution. Fixed via `browserCaptureVerdict()` in
+  `src/utils/computerOperator/screenshotDispatchTruth.ts`; the modal credits a
+  capture only on non-zero finite dimensions and otherwise reports `failed` and
+  clears `capturedImage`. Covered by 4 cases in `src/tests/remainingFakeSuccess.test.ts`;
+  negative-validated (restoring the fallback fails the source-pin, `1 failed | 44 passed`;
+  restored → 45/45).
+
+---
+
+## Bugs found and fixed (cycle 11 — scheduler routine outcome truth)
+
+1. **The scheduler logged `Executed <routine>` before attempting anything.** In
+   `checkAndRunSchedulerJobs()` (`server.ts`), each of the four routines pushed
+   `Executed Morning Briefing (09:00 AM IST)` / `Executed Midday Health Audit
+   (02:00 PM IST)` / `Executed Evening Social Pulse (06:30 PM IST)` / `Executed
+   Nightly Work Summary (10:30 PM IST)` into `schedulerRunLog` and `memoryState`
+   the moment its time window opened. Nothing was checked, so a routine that
+   later threw, or that produced no output, still read as executed. The two
+   no-push routines now record `schedule advanced; no outbound push in this
+   routine`, and the two push routines record the real delivery verdict (below).
+2. **The two push routines claimed a Telegram delivery they never awaited.** The
+   Morning and Night routines called `sendRealTelegramMessage(...).catch(...)`,
+   whose wrapper swallows every failure, and immediately logged the briefing as
+   executed — so a failed push, or a routine with no `activeTelegramChatId` that
+   sent nothing, was indistinguishable from a delivered briefing. Both now
+   `await deliverTelegramMessage(...)` and record the strict
+   `DeliveryInterpretation` verdict via the new `recordSchedulerOutcome` helper
+   (`src/utils/hardening/schedulerRunTruth.ts`): `✅ … message delivered to
+   Telegram (VERIFIED)` only on a confirmed delivery, `⚠️ … message NOT
+   delivered (<verdict>)` otherwise. The per-day marker is still stamped first,
+   so the awaited push cannot re-open the window.
+3. **`detail: delivery.status` named a field that does not exist.** The previous
+   slot's edit set the push `detail` from `delivery.status`, but
+   `DeliveryInterpretation` carries no `status` field (`delivery.status` was
+   `undefined`), so the failure detail would have been empty. Corrected to
+   `delivery.errorReason || delivery.outcome`, the real fields.
+
+All three are guarded by `src/tests/schedulerRunTruth.test.ts` (7 tests: the
+confirmed / failed / not-attempted log-line outcomes, plus source guards that the
+four unconditional `Executed …` strings are absent, every routine routes through
+`recordSchedulerOutcome`, the pushes are awaited via `deliverTelegramMessage`,
+and the run-date marker precedes the awaited push). Targeted run 1 file / 7
+passed; related truth tests 4 files / 80 passed; full suite 133 files / 1779
+tests passed.
+
+---
+
 ## Known limitations
+
+- **Finalization slot, 2026-10-02 23:06 UTC (04:36 IST 2026-10-03) — window
+  closed; no new backlog item was advanced.** Froze and re-verified the tip
+  `e99aaaf` on `feature/hermes-full-completion`: `npm run lint` (`tsc --noEmit`)
+  exit 0; full `npx vitest run` **141 files / 1849 tests passed** (24.00 s);
+  `npm run build` exit 0 with artifact `dist/server.cjs` 964.8 kb. Security
+  checks clean: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status
+  --short` empty; no `.env`, token, key, `node_modules/` or `dist/` tracked or
+  staged; the diff-vs-main secret scan returned exactly one hit — a synthetic
+  LinkedIn-token fixture at `src/tests/credentialRedactor.test.ts:273`, not a
+  real credential (`npm audit`: NOT RUN). PR #5 is open, non-draft and
+  `mergeable_state: clean`. **Not merged — awaiting human approval.** Item 13
+  (`Zero-fake-success for all tools`) remains `PARTIAL` — the tail of
+  unclassified `success: true` sites in `server.ts` / `server_tools.ts` is still
+  not individually audited (truthfulness `UNKNOWN`), and the sweep is not
+  exhaustive. E2E: NOT RUN — no handset and no display session in this sandbox.
+  Deploy: `NOT_CONFIGURED`. Hardware-blocked items #1/#50/#55 remain
+  `NOT_AVAILABLE`.
+
+- **2026-10-02 18:20 UTC (23:50 IST 2026-10-02) — scheduler routines, item 13
+  slice only.** Item 13 (`Zero-fake-success for all tools`) stays `PARTIAL`. This
+  slot removed the `Executed <routine>` claim that `checkAndRunSchedulerJobs()`
+  wrote the moment a routine's window opened, and made the two push routines
+  report the awaited Telegram delivery verdict instead. What is proven is that
+  the log line and the `schedulerRunLog` entry no longer claim a delivery that
+  was not confirmed; the routines still run only inside a live server process, so
+  the awaited `deliverTelegramMessage` path was not exercised against a real bot
+  in this environment (no `TELEGRAM_BOT_TOKEN`), and the log is in-memory only.
+  The rest of the `success: true` sweep across `server.ts` and the tools is not
+  exhaustive.
+- **2026-10-02 17:05 UTC (22:35 IST 2026-10-02) — item 13 slice only.** Item 13
+  (`Zero-fake-success for all tools`) stays `PARTIAL`. This slot made the offline
+  engine's `stats.actionsExecuted` counter provably follow the `actionExecuted`
+  verdict (single gated `countAction` helper, no ad-hoc bumps) and fixed the
+  `language_switch` branch that reported the switch as executed without counting
+  it. The invariant is verified over a 48-command matrix at the verdict/counter
+  layer; the **many `actionExecuted: true` sites in `server.ts` are still not
+  individually audited and their truthfulness is `UNKNOWN`**, and the offline
+  sweep is not exhausted. E2E: NOT RUN. Deploy: `NOT_CONFIGURED`. Hardware-blocked
+  items #1/#50/#55 remain `NOT_AVAILABLE`.
+
+- **2026-10-01 16:57 UTC (22:27 IST 2026-10-01) — item 13 slice only; telephony
+  hardware still absent.** Item 13 (`Zero-fake-success for all tools`) stays
+  `PARTIAL`. This slot closed the human-handoff confirmation class: the
+  transfer is now attempted only when a live gateway can observe it
+  (`telephonyEngineCanObserveCall`), so a simulated or unconfigured carrier can
+  no longer report a confirmed staff handoff, and the fallback no longer invents
+  a busy line. The **carrier path itself is NOT RUN** — no handset, no SIM and no
+  Twilio credentials in this sandbox — so the transfer is verified at the
+  verdict/routing layer, not against a live carrier; `E2E: NOT RUN`. The many
+  `actionExecuted: true` sites in `server.ts` are still not individually audited
+  and their truthfulness is `UNKNOWN`. Lint, full suite and build all ran and
+  passed this slot. Deploy: `NOT_CONFIGURED`. Hardware-blocked items #1/#50/#55
+  remain `NOT_AVAILABLE`.
+
+- **2026-10-01 16:23 UTC (21:53 IST 2026-10-01) — item 13 slice only; telephony
+  hardware still absent.** Item 13 (`Zero-fake-success for all tools`) stays
+  `PARTIAL`. This slot closed the call-control misrouting class (the `phone call`
+  substring swallowed by the outbound branch) in both classifiers, with a live
+  `/api/chat` E2E on the built server. The **carrier path itself is NOT RUN** —
+  no handset, no SIM and no Twilio credentials in this sandbox, so the control
+  branches report `Call Action Not Executed (no carrier)` and `actionExecuted:
+  false`; the fix is verified at the routing/classification layer, not against a
+  live carrier. The many `actionExecuted: true` sites in `server.ts` are still
+  not individually audited and their truthfulness is `UNKNOWN`. Lint, full suite
+  and build all ran and passed this slot. Deploy: `NOT_CONFIGURED`. Hardware-
+  blocked items #1/#50/#55 remain `NOT_AVAILABLE`.
+
+- **Finalization slot, 2026-09-30 23:06 UTC (04:36 IST 2026-10-01) — window
+  closed; no new backlog item was advanced.** Froze and re-verified the tip
+  `3c1d19f` on `feature/hermes-full-completion`: `npm run lint` (`tsc --noEmit`)
+  exit 0; full `npx vitest run` **120 files / 1643 tests passed** (23.10 s);
+  `npm run build` exit 0 with artifact `dist/server.cjs` **958266 bytes**. Security
+  checks clean: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status
+  --short` empty; no `.env`, token, key, `node_modules/` or `dist/` tracked or
+  staged; the diff-vs-main secret scan returned only synthetic fixtures and
+  redactor pattern documentation. Prior PR #4 was **merged by the human owner**
+  (`gahonsh-blip`, 2026-09-28T05:13:29Z, merge commit `6db07ce`, = current `main`
+  tip); the branch has advanced well past it, so a **new PR** was opened for this
+  window's work. Item 13 (`Zero-fake-success for all tools`) remains `PARTIAL` —
+  the many `actionExecuted: true` sites in `server.ts` are still not individually
+  audited and their truthfulness is `UNKNOWN`. E2E: NOT RUN — no handset, no
+  Windows host and no display session in this sandbox. Deploy: `NOT_CONFIGURED`.
+  Hardware-blocked items #1/#50/#55 remain `NOT_AVAILABLE`. **Not merged —
+  awaiting human approval.**
+
+- **2026-09-30 19:35 UTC (01:05 IST 2026-10-01) — item 54, four more token
+  families; the list is still not provably exhaustive.** Meta (`EAA…`), Google
+  OAuth refresh (`1//`), authorization-code (`4/0A`) and access (`ya29.`) tokens
+  are now redacted, but item 54 remains `PARTIAL` — the redactor is a pattern
+  list, not a proof of absence, and new providers will keep appearing. The
+  patterns are matched against synthetic fixtures; no real leaked credential was
+  present in this sandbox. Live E2E (a real screen capture or log line carrying a
+  live key) is NOT RUN — no display session and no live provider credentials here.
+
+- **2026-09-30 18:07 UTC — no new backlog item advanced; item 13 slice only.**
+  Item 13 (`Zero-fake-success for all tools`) stays `PARTIAL`. This slot closed
+  the browser `getDisplayMedia` blank-frame claim (unit verdict + `ScreenshotModal`
+  source-pin). The live display path itself could not be exercised here — no
+  display session — so that branch is `PARTIAL`, not `VERIFIED`. The many
+  `actionExecuted: true` sites in `server.ts` are still not individually audited
+  and their truthfulness is `UNKNOWN`. Full suite and build were NOT RUN this slot
+  (30-minute wall cap); targeted tests, the full suite and the build were all run and passed. E2E: NOT RUN.
 
 - **Finalization slot, 2026-09-27 23:05 UTC (04:35 IST 2026-09-28) — window
   closed; no new backlog item was advanced.** Froze and re-verified the tip on

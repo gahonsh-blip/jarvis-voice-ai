@@ -167,6 +167,29 @@ export class ActionExecutor {
 
   /** Local screen capture inside the browser, with honest labelling. */
   private static async inspectScreen(action: ComputerAction, finish: Finish): Promise<ActionExecutionResult> {
+    // The illustrative (non-host-backed) observer draws a synthetic canvas image
+    // of an imagined VS Code / Chrome / Terminal desktop and returns it as
+    // `screenshotBase64`. That image is a picture of a screen this process never
+    // saw, so a capture credited from it is a fabricated success. Only a
+    // host-backed observer may claim a screen was inspected.
+    if (!ScreenObserver.isHostBacked()) {
+      return finish({
+        success: false,
+        message:
+          'NOT_AVAILABLE: the screen could not be observed — this observer renders an illustrative view, not the real desktop. Nothing was captured.',
+        receipt: buildReceipt({
+          action: action.type,
+          target: action.description,
+          outcome: 'NOT_AVAILABLE',
+          detailEn:
+            'The screen observer is not host-backed, so its output is an illustrative view rather than a real desktop capture.',
+          detailHi: 'स्क्रीन ऑब्ज़र्वर वास्तविक डेस्कटॉप से जुड़ा नहीं है, इसलिए कोई वास्तविक कैप्चर नहीं हुआ।',
+          evidence: null,
+          failureReason: 'ILLUSTRATIVE_OBSERVATION_SOURCE',
+        }),
+      });
+    }
+
     const observation = await ScreenObserver.observeScreen({
       preferredApp: action.targetApp,
       includeScreenshot: true,

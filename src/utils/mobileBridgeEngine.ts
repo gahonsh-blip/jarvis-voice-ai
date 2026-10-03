@@ -66,6 +66,33 @@ export function getBridgeConnectionState(): 'MOBILE_NOT_CONNECTED' | 'PERMISSION
    return 'CONNECTED';
 }
 
+/**
+ * Presentation tone for a bridge status badge.
+ *
+ * A status is only `live` when the device is genuinely CONNECTED. Every other
+ * status — including PARTIALLY_CONNECTED and LIMITED_CAPABILITY — is degraded:
+ * the badge must not render green, because a green badge reads as "connected"
+ * even when the device cannot do the work. A status that is not recognised is
+ * treated as unknown, never promoted.
+ */
+export type BridgeStatusTone = 'live' | 'degraded' | 'inactive';
+
+export function bridgeStatusTone(status: string): BridgeStatusTone {
+  switch (status) {
+    case 'CONNECTED':
+      return 'live';
+    case 'PARTIALLY_CONNECTED':
+    case 'LIMITED_CAPABILITY':
+    case 'PERMISSION_REQUIRED':
+      return 'degraded';
+    case 'MOBILE_NOT_CONNECTED':
+    case 'ERROR':
+      return 'inactive';
+    default:
+      return 'inactive';
+  }
+}
+
 export function maskCallerId(raw?: string): string {
   if (!raw) return 'unknown number';
    const trimmed = raw.trim();

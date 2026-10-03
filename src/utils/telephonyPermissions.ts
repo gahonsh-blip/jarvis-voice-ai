@@ -149,9 +149,17 @@ export function maskPhoneNumber(phoneNumber: string): string {
 }
 
 /**
- * Public Clinic Data (Verified & Configured)
+ * Public Clinic Data.
+ *
+ * This is a *sample* dataset, not verified live data. `configured` is false,
+ * which the telephony session manager treats as "no clinic facts supplied": it
+ * then refuses to recite hours, availability or a booking process as fact and
+ * asks the caller to confirm with clinic staff instead. A real deployment sets
+ * `configured: true` (or supplies its own ClinicConfig to processTurn) only
+ * after a human has verified the values.
  */
 export interface ClinicConfig {
+  configured: boolean;
   name: string;
   doctorName: string;
   address: string;
@@ -173,6 +181,7 @@ export interface ClinicConfig {
 }
 
 export const DEFAULT_CLINIC_CONFIG: ClinicConfig = {
+  configured: false,
   name: 'Apollo Health & Wellness Clinic',
   doctorName: 'Dr. Julian Wayne, MD (Physician)',
   address: 'Suite 402, Medical Enclave, Sector 14, Gurugram / SF Medical Hub',

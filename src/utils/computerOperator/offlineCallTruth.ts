@@ -132,6 +132,61 @@ export function offlineCallVerdict(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Missing-number truth
+//
+// The outbound-call and schedule branches in localJarvisEngine fall back to a
+// literal '+91 9876543210' whenever no number was captured from the command, so
+// "make a call" or "schedule call tomorrow" staged a pending outbound request to
+// a fabricated placeholder number — a number the user never named, behind the
+// same Level-4 authorization prompt used for a real target. The number is not a
+// default the user configured; it is invented by the engine. Staging a call to
+// it is not performed work and must never be spoken as a staged request.
+// ---------------------------------------------------------------------------
+
+export interface OfflineCallMissingNumberVerdict {
+  /** Always false: no request can be staged without a real number. */
+  actionExecuted: boolean;
+  title: string;
+  replyEn: string;
+  replyHi: string;
+  replyHinglish: string;
+}
+
+/**
+ * Pull a dialable number out of a captured target string. Returns the trimmed
+ * original when it carries at least a few digits, otherwise null. A target with
+ * no digits (an empty capture, or a name like "Dr. Wayne") is not a number.
+ */
+export function extractDialTarget(raw: string | undefined | null): string | null {
+  if (typeof raw !== 'string') return null;
+  const digits = raw.replace(/[^\d]/g, '');
+  if (digits.length < 3) return null;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function offlineCallMissingNumberVerdict(
+  phase: 'dial' | 'schedule',
+): OfflineCallMissingNumberVerdict {
+  const scheduled = phase === 'schedule';
+  return {
+    actionExecuted: false,
+    title: scheduled
+      ? 'No Number to Schedule (nothing recorded)'
+      : 'No Number to Call (nothing staged)',
+    replyEn: scheduled
+      ? 'You asked me to schedule a call, but no phone number was given — nothing was recorded. Which number should I schedule?'
+      : 'You asked me to make a call, but no phone number was given — nothing was staged. Which number should I call?',
+    replyHi: scheduled
+      ? 'आपने कॉल शेड्यूल करने को कहा, लेकिन कोई फ़ोन नंबर नहीं दिया गया — कुछ दर्ज नहीं हुआ। किस नंबर पर शेड्यूल करूँ?'
+      : 'आपने कॉल करने को कहा, लेकिन कोई फ़ोन नंबर नहीं दिया गया — कुछ स्टेज नहीं हुआ। किस नंबर पर कॉल करूँ?',
+    replyHinglish: scheduled
+      ? 'Aapne call schedule karne ko kaha, par koi phone number nahi diya gaya — kuch record nahi hua. Kis number par schedule karun?'
+      : 'Aapne call karne ko kaha, par koi phone number nahi diya gaya, Sir — kuch stage nahi hua. Kis number par call karun?',
+  };
+}
+
 /** Reply in the caller's language; unknown languages fall back to English. */
 export function offlineCallReply(
   phase: OfflineCallPhase,
@@ -235,6 +290,55 @@ export function offlineAndroidRejectVerdict(connected: boolean): OfflineAndroidR
     replyEn: `Dismissed this call in the app only — ${detail.en}.`,
     replyHi: `यह कॉल केवल ऐप में हटाई गई — ${detail.hi}।`,
     replyHinglish: `Call sirf app mein dismiss hui, Sir — ${detail.hinglish}.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Android-bridge message-reject truth
+//
+// The sibling MESSAGE reject branch in localJarvisEngine (owner declines a
+// pending notification reply) cleared the locally mirrored pending event and
+// returned `actionExecuted: true` with the detail `{ type: 'open_notepad',
+// title: 'Message Dismissed' }` — a green "Action: Message Dismissed" banner and
+// a bump to the user-visible "Autonomous Actions Executed" counter. But the
+// branch only drops a local approval prompt: the reply was already refused, so
+// it was never handed to the device, and no notepad view is opened for a
+// decline. Unlike the call-reject twin (`offlineAndroidRejectVerdict`, always
+// `false`), this branch credited the cancel as executed work. Cancelling a
+// prompt is not performed work.
+// ---------------------------------------------------------------------------
+
+export interface OfflineAndroidMessageRejectVerdict {
+  /** Always false: refusing to send a reply is not an executed action. */
+  actionExecuted: boolean;
+  /** True when only the locally mirrored pending event was cleared. */
+  localMirrorCleared: boolean;
+  title: string;
+  replyEn: string;
+  replyHi: string;
+  replyHinglish: string;
+}
+
+export function offlineAndroidMessageRejectVerdict(connected: boolean): OfflineAndroidMessageRejectVerdict {
+  const detail = connected
+    ? {
+        en: 'the connected Android device was never told to send anything',
+        hi: 'कनेक्टेड Android डिवाइस को कुछ भेजने के लिए कहा ही नहीं गया',
+        hinglish: 'connected Android device ko kuch bhejne ko kaha hi nahi gaya',
+      }
+    : {
+        en: 'no Android device is connected, so the physical phone was not told to send anything',
+        hi: 'कोई Android डिवाइस कनेक्टेड नहीं है, इसलिए असली फोन को कुछ भेजने के लिए नहीं कहा गया',
+        hinglish: 'koi Android device connected nahi hai, isliye asli phone ko kuch bhejne ko nahi kaha gaya',
+      };
+
+  return {
+    actionExecuted: false,
+    localMirrorCleared: true,
+    title: 'Message Reply Declined Locally (nothing was sent)',
+    replyEn: `Declined this message reply in the app only — ${detail.en}.`,
+    replyHi: `यह संदेश उत्तर केवल ऐप में अस्वीकार किया गया — ${detail.hi}।`,
+    replyHinglish: `Message reply sirf app mein decline ki, Sir — ${detail.hinglish}.`,
   };
 }
 

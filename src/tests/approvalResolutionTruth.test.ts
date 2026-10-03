@@ -139,3 +139,24 @@ describe('server.ts mobile approval branch routes through the honest reply', () 
     expect(serverSource).toContain('formatUnconfirmedMobileApprovalReply(updated)');
   });
 });
+
+describe('updateActionRequestStatus is the source of truth for resolution', () => {
+  it('returns null for an unknown action id instead of a phantom request', async () => {
+    const { updateActionRequestStatus } = await import('../../server_tools');
+    expect(updateActionRequestStatus('no-such-action-xyz', 'REJECTED')).toBeNull();
+  });
+});
+
+describe('server.ts rejection branch does not fake a resolution', () => {
+  const serverSource = fs.readFileSync(path.resolve(__dirname, '../../server.ts'), 'utf8');
+
+  it('guards the reject branch when updateActionRequestStatus returns null', () => {
+    const routeStart = serverSource.indexOf("app.post('/api/approvals/resolve'");
+    expect(routeStart).toBeGreaterThan(-1);
+    const rejectStart = serverSource.indexOf("if (decision === 'REJECT')", routeStart);
+    expect(rejectStart).toBeGreaterThan(-1);
+    const branch = serverSource.slice(rejectStart, rejectStart + 500);
+    expect(branch).toContain('if (!updated)');
+    expect(branch).toContain('status(404)');
+  });
+});
