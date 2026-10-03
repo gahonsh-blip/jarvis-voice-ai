@@ -124,6 +124,7 @@ describe('telegram delivery through the real server', () => {
     expect(body.success).toBe(true);
     expect(body.outcome).toBe('VERIFIED');
     expect(body.verified).toBe(true);
+    expect(body.executed).toBe(true);
     expect(body.messageId).toBe(777);
   });
 
@@ -133,6 +134,9 @@ describe('telegram delivery through the real server', () => {
 
     expect(body.success).toBe(false);
     expect(body.verified).toBe(false);
+    // The send was attempted but nothing reached the target: reporting
+    // `executed: true` here let the UI read a failed briefing as delivered.
+    expect(body.executed).toBe(false);
     expect(body.outcome).toBe('UNVERIFIED');
     expect(body.message).toContain('not confirmed');
   });

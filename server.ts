@@ -4224,9 +4224,11 @@ app.post('/api/telegram/broadcast', async (req: Request, res: Response) => {
     return res.json({
       // Only a verified delivery is a success. Anything else is reported with
       // its true outcome so the UI cannot claim the briefing went out.
+      // `executed` tracks the same proof: the send was attempted but the
+      // message did not reach the target, so executing is not delivering.
       success: interpretation.delivered,
       outcome: interpretation.outcome,
-      executed: true,
+      executed: interpretation.delivered,
       verified: receipt.verified,
       liveSent: interpretation.delivered,
       messageId: interpretation.messageId,
