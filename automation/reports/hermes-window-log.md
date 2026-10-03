@@ -10323,3 +10323,42 @@ Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
 exhausted. Note: this slot's first commit was based on a stale shallow clone;
 the branch was reset onto the real remote tip (`9c92586`) before the fix, so no
 prior slot's work was lost.
+
+## Slot 8 — WORK — 2026-10-04 01:05 IST (2026-10-03 → 2026-10-04 window)
+
+**Item #13 — Zero-fake-success for all tools: the outbound-call authorization
+route.**
+
+**Bug.** `POST /api/telephony/outbound/authorize` (`server.ts`) answered
+`success: true, authorized: false, message: 'Outbound call cancelled.'` for any
+decision that was not `APPROVE`, even when `requestId` had never been staged. The
+`APPROVE` branch marked an unknown id `authorized: true` for the same reason. This
+route is the Level-4 gate on placing a call, so a fabricated "cancelled" or
+"authorized" answer tells the operator that an outbound action was withdrawn or
+cleared when the session manager held no such request — a false record on the
+surface that is supposed to record human consent.
+
+**Fix.** The route now passes the manager result through
+`classifyOutboundAuthorization()` (`src/utils/hardening/outboundAuthorizationTruth.ts`),
+which reports `NOT_FOUND` (HTTP 404, no success flag) unless a real request record
+was found and its decision recorded. `APPROVED`/`REJECTED` are reported only for
+real records.
+
+**Evidence.** `src/tests/outboundAuthorizationTruth.test.ts` (new, 9 cases):
+NOT_FOUND for a missing/refused/request-less record under both decisions,
+APPROVED/REJECTED on real records, agreement with the live
+`TelephonySessionManager`, and a source guard that the route routes through the
+helper and no longer emits the fake cancellation literal. Negative-validated:
+reverting `server.ts` fails exactly the 2 route assertions (observed
+`2 failed | 7 passed`); restored → 9/9.
+
+**Gates (observed).** lint (`tsc --noEmit`) exit 0; full suite **145 files / 1871
+tests passed** (23.58 s, 0 failed); build exit 0 (`dist/server.cjs` 994056 bytes).
+E2E: NOT RUN (no browser/handset harness). Deploy: NOT_CONFIGURED. Security:
+`.env` ignored (`.gitignore:4:.env`), `git status --short` clean, 0 forbidden files
+in the diff vs origin/main.
+
+**Commits.** 4072027 (fix + test), d38dde7 (docs).
+
+Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
+exhausted.
