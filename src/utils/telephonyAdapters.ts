@@ -30,6 +30,31 @@ export const TELEPHONY_WEBHOOK_BASE_URL_MISSING =
   'TELEPHONY_WEBHOOK_BASE_URL_MISSING: no carrier-reachable webhook base URL is configured (set TELEPHONY_WEBHOOK_BASE_URL to a public https URL), so the call-answer callback cannot be given to the provider.';
 
 /**
+ * Returned by every provider webhook handler. Like the document-only methods
+ * above, the handler neither verifies the provider signature nor performs a
+ * call action, so receiving a request is not evidence that anything was done.
+ * It used to answer `success: true` unconditionally — the same fake success
+ * item 13 removes elsewhere. `success` therefore stays false, while `received`
+ * records the only thing this handler can honestly attest to.
+ */
+export const TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED =
+  'TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED: the webhook was received but this handler verifies no provider signature and performs no call action, so it cannot report a verified success.';
+
+/** The only honest payload a signature-less, action-less webhook handler can return. */
+export function telephonyWebhookAcknowledgement(
+  provider: string,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    success: false,
+    received: true,
+    provider,
+    error: TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED,
+    ...extra,
+  };
+}
+
+/**
  * Whether a webhook base URL is one a PSTN carrier could actually reach back
  * on: an absolute `https` URL whose host is not loopback, a `.local` name, or a
  * private (RFC 1918) address. `http`, `localhost`, `127.0.0.1`, `0.0.0.0`,
@@ -254,7 +279,7 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
   }
 
   async handleWebhook(req: any, res: any): Promise<any> {
-    return res.json({ success: true, provider: 'twilio' });
+    return res.json(telephonyWebhookAcknowledgement('twilio'));
   }
 }
 
@@ -339,7 +364,7 @@ export class TelnyxTelephonyProvider implements TelephonyProvider {
   }
 
   async handleWebhook(req: any, res: any): Promise<any> {
-    return res.json({ success: true, provider: 'telnyx' });
+    return res.json(telephonyWebhookAcknowledgement('telnyx'));
   }
 }
 
@@ -419,7 +444,7 @@ export class PlivoTelephonyProvider implements TelephonyProvider {
   }
 
   async handleWebhook(req: any, res: any): Promise<any> {
-    return res.json({ success: true, provider: 'plivo' });
+    return res.json(telephonyWebhookAcknowledgement('plivo'));
   }
 }
 
@@ -530,7 +555,7 @@ export class SimulatedTestTelephonyProvider implements TelephonyProvider {
   }
 
   async handleWebhook(req: any, res: any): Promise<any> {
-    return res.json({ success: true, simulationMarker: 'SIMULATION_ONLY' });
+    return res.json(telephonyWebhookAcknowledgement('simulation_test_provider', { simulationMarker: 'SIMULATION_ONLY' }));
   }
 }
 

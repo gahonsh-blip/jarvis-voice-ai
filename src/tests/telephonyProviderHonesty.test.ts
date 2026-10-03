@@ -3,7 +3,9 @@ import {
   TwilioTelephonyProvider,
   TelnyxTelephonyProvider,
   PlivoTelephonyProvider,
+  SimulatedTestTelephonyProvider,
   TELEPHONY_WEBHOOK_BASE_URL_MISSING,
+  TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED,
 } from '../utils/telephonyAdapters';
 
 // Zero-fake-success guard for the telephony providers.
@@ -210,5 +212,49 @@ describe('telephony providers never fabricate confirmed provider actions', () =>
     });
     expect(res.success).toBe(false);
     expect(res.error).toContain(TELEPHONY_WEBHOOK_BASE_URL_MISSING);
+  });
+});
+
+// Zero-fake-success guard for the provider webhook handlers.
+//
+// Every adapter's handleWebhook used to answer `success: true` without
+// verifying a provider signature or performing any call action. Receiving an
+// HTTP request is not evidence that a call was answered or a turn advanced, so
+// the handler must report `success: false` and say only that it received the
+// request.
+describe('Telephony webhook handlers never report fake success', () => {
+  function captureJson() {
+    const captured: { body?: any } = {};
+    const res = {
+      json(body: any) {
+        captured.body = body;
+        return body;
+      },
+    };
+    return { res, captured };
+  }
+
+  const cases: Array<[string, any]> = [
+    ['twilio', TwilioTelephonyProvider],
+    ['telnyx', TelnyxTelephonyProvider],
+    ['plivo', PlivoTelephonyProvider],
+  ];
+
+  it.each(cases)('%s webhook reports received-but-unverified, never success', async (name, Ctor) => {
+    const provider = new Ctor();
+    const { res, captured } = captureJson();
+    await provider.handleWebhook({ body: {} }, res);
+    expect(captured.body.success).toBe(false);
+    expect(captured.body.received).toBe(true);
+    expect(captured.body.error).toContain(TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED);
+  });
+
+  it('simulated test provider webhook also reports received-but-unverified', async () => {
+    const provider = new SimulatedTestTelephonyProvider();
+    const { res, captured } = captureJson();
+    await provider.handleWebhook({ body: {} }, res);
+    expect(captured.body.success).toBe(false);
+    expect(captured.body.received).toBe(true);
+    expect(captured.body.simulationMarker).toBe('SIMULATION_ONLY');
   });
 });

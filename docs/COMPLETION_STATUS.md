@@ -4,6 +4,28 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-03 22:44 UTC (04:14 IST 2026-10-04) — **WORK SLOT 14** of the
+2026-10-03 → 2026-10-04 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the telephony provider webhook handlers.**
+
+All four telephony adapters' `handleWebhook` answered `res.json({ success: true,
+provider })` unconditionally. The handler verifies no provider signature and
+performs no call action, so receiving an HTTP request is not evidence that a call
+was answered or a turn advanced — the same fake-success shape item 13 removes
+everywhere else, on the one route an external carrier drives. New
+`telephonyWebhookAcknowledgement(provider)` and
+`TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED` in `src/utils/telephonyAdapters.ts`
+return `success: false, received: true` plus the reason; `received` records the
+only thing the handler can attest to. Twilio, Telnyx, Plivo and the simulated
+test provider all route through it (the simulated provider keeps its
+`SIMULATION_ONLY` marker). Evidence: `src/utils/telephonyAdapters.ts` (helper
+~44; handlers ~281/366/446/557); `src/tests/telephonyProviderHonesty.test.ts`
+(new `describe('Telephony webhook handlers never report fake success')`, 4
+cases). Negative-validated — flipping the helper's `success` back to `true`
+fails exactly the 4 new cases (`4 failed | 10 passed`); restored → 14/14. Gates:
+lint (`tsc --noEmit`) exit 0; targeted 1 file / 14 passed. E2E: NOT RUN (no
+carrier call / no handset). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` —
+the sweep is not exhausted.
+
 Last cycle: 2026-10-03 22:14 UTC (03:44 IST 2026-10-04) — **WORK SLOT 13** of the
 2026-10-03 → 2026-10-04 window, the 03:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the live social account identity.**
 
