@@ -10015,3 +10015,87 @@ Next Slot:
   को दोबारा सत्यापित किया — lint पास, 141 फ़ाइल / 1849 टेस्ट पास, build पास;
   सुरक्षा जाँच स्वच्छ (केवल एक संश्लेषित टेस्ट टोकन मिला, असली क्रेडेंशियल नहीं);
   PR #5 मानव स्वीकृति की प्रतीक्षा में मर्ज नहीं किया गया।
+
+---
+
+# Slot 1 — 2026-10-03 21:05 IST (WORK)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK (slot 1 of 16)  |  IST time: 21:05 (report 21:26)
+Window date: 2026-10-03   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — offline telephony missing-number branches.
+  The offline outbound-call and schedule branches (`src/utils/localJarvisEngine.ts`)
+  fell back to a hardcoded placeholder number whenever the command captured no
+  dial target, so "make a call" / "schedule call tomorrow" staged a pending
+  outbound request behind the Level-4 authorization prompt to a number the user
+  never named. `server.ts` did the same with a fabricated `'Contact'` default in
+  `classifyIntentLocally` and the `make_call` handler. New `extractDialTarget` /
+  `offlineCallMissingNumberVerdict` (`src/utils/computerOperator/offlineCallTruth.ts`)
+  make a target a number only when it carries >=3 digits and give the honest
+  refusal otherwise: `outbound_call_authorization`, `actionExecuted: false`, title
+  `No Number to Call (nothing staged)` / `No Number to Schedule (nothing recorded)`,
+  reply asking which number. Evidence: 4 new cases in
+  `src/tests/offlineCallTruth.test.ts` (file total 27) — "make a call" refused with
+  `actionExecuted: false` and `memory.stats.actionsExecuted` still 0; "schedule call
+  tomorrow" refused; real number `call +91 98765 43210` still staged; source guard
+  that the placeholder literal is gone.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. The `server.ts` /
+  `server_tools.ts` tail of unclassified `success: true` sites is still not
+  exhausted; the offline telephony slice is the part closed this slot.
+
+Remaining:
+- #13 (continuing sweep), then the mandated order beyond it. Hardware-blocked:
+  real Android E2E, real screenshot, live Computer Operator screen observation.
+
+Bugs Found:
+- Offline engine staged a call/schedule to a fabricated placeholder number with no
+  dial target, behind a Level-4 prompt. Found by reading the offline branches while
+  sweeping item 13.
+
+Bugs Fixed:
+- Replaced the placeholder fallback with the refusal verdict. Negative-validated:
+  reintroducing the fallback in the outbound branch fails exactly 2 of 27
+  (`2 failed | 25 passed`); restored -> 27/27. Committed as
+  `fix(telephony): refuse calls with no number instead of staging a placeholder`
+  (f85cc2b).
+
+Tests:    141 files / 1853 tests passed, 0 failed (22.58 s) — observed this run
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 — observed this run
+Build:    exit 0, `dist/server.cjs` 968.3 kb — observed this run
+E2E:      NOT RUN — no handset, emulator, or carrier/PSTN in this sandbox
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status --short`
+          empty; no `node_modules/` or `dist/` tracked; diff-vs-main secret scan
+          returned only the synthetic LinkedIn-token fixture
+          `src/tests/credentialRedactor.test.ts:273`. `npm audit`: NOT RUN.
+
+Documentation: docs/COMPLETION_STATUS.md; docs/CHANGELOG.md; docs/SECURITY.md;
+               automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  f85cc2b (fix) + d115a78 (docs) + this report commit
+Push:    succeeded -> origin/feature/hermes-full-completion
+         state branch automation/hermes-state -> 543f09c
+
+PR:         #5 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/5
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified artifact (`dist/server.cjs`) is the deployment unit.
+
+Blocked:
+- Real Android E2E / real screenshot / live Computer Operator screen observation —
+  require a device, emulator, or host screen not present in this sandbox.
+
+Human Approval Required:
+- Merge of PR #5 to `main` — owner must read this report and approve.
+
+Next Slot:
+- #13 (continued) — audit the next unclassified `success: true` site in
+  `server.ts` / `server_tools.ts` for a fabricated-success path, same method.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में ऑफ़लाइन इंजन का वह दोष ठीक किया गया जो बिना नंबर के कॉल/शेड्यूल को
+  नकली प्लेसहोल्डर नंबर पर स्टेज कर रहा था — अब यह स्पष्ट इनकार करता है; 141 फ़ाइल /
+  1853 टेस्ट पास, lint और build पास; PR #5 मानव स्वीकृति की प्रतीक्षा में है।
