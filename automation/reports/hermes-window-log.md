@@ -10362,3 +10362,43 @@ in the diff vs origin/main.
 
 Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
 exhausted.
+
+## Slot 9 — WORK — 2026-10-04 01:35 IST (2026-10-03 → 2026-10-04 window)
+
+**Item #13 — Zero-fake-success for all tools: the mobile bridge heartbeat route.**
+
+**Bug.** `POST /api/mobile/bridge/heartbeat` (`server.ts`) answered
+`success: true, outcome: 'VERIFIED'` for every heartbeat the gateway accepted,
+including a device whose `capabilities.isSimulation` was true and a heartbeat
+whose session had already lapsed so `bridgeGateway.getStatus()` read
+`MOBILE_NOT_CONNECTED`. A caller reading `outcome`/`success` was told a live,
+real device had been verified when the bridge had served a simulation or was
+no longer live — a false success on the surface that tells the operator their
+phone is connected to JARVIS.
+
+**Fix.** The route now passes the observed heartbeat through
+`classifyBridgeHeartbeat()` (`src/utils/hardening/bridgeHeartbeatTruth.ts`, new):
+real + live + non-simulated → `VERIFIED`; simulated → `SIMULATION_ONLY`;
+heartbeat that did not leave the bridge live → `PARTIAL`; not accepted →
+`FAILED`. `success` equals `VERIFIED` and a new `verified` field carries the
+same proof.
+
+**Evidence.** `src/tests/bridgeHeartbeatTruth.test.ts` (new, 9 cases): the four
+helper outcomes, agreement with the real `AndroidBridgeGateway` (paired live →
+VERIFIED, simulated → SIMULATION_ONLY, lapsed → PARTIAL), and source guards that
+the route routes through the helper and no longer emits the unconditional
+`success: true, outcome: 'VERIFIED', status: bridgeGateway.getStatus()` literal.
+Negative-validated: the removed literal is present in the pre-fix `server.ts`
+(confirmed via `git show HEAD:server.ts`), so the route guard fails without the
+fix; restored → 9/9.
+
+**Gates (observed).** lint (`tsc --noEmit`) exit 0; full suite **146 files / 1880
+tests passed** (23.86 s, 0 failed); build exit 0 (`dist/server.cjs` 995370 bytes).
+E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Security: `.env` ignored
+(`.gitignore:4:.env`), `git status --short` clean, no forbidden files tracked
+(no `.env`, `node_modules`, `dist/`, key material).
+
+**Commits.** db067c7 (fix + test), 1f23035 (docs).
+
+Item #13 remains PARTIAL — the sweep of remaining fake-success sites is not
+exhausted.
