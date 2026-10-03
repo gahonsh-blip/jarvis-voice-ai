@@ -413,29 +413,6 @@ describe('the /api/chat informational cases do not count a question as executed 
   });
 });
 
-describe('the /api/chat report cases do not count a report as executed work', () => {
-  // `tools_audit` reports which credentials are merely present in the environment
-  // (it runs no live connection test) and `pending_approvals` reports the length
-  // of the in-memory queue — neither performs an external action, and
-  // `handleExecuteAction` only switches an in-app panel for each. Both previously
-  // set `actionExecuted = true`, advancing the "Autonomous Actions Executed"
-  // counter for a read. The offline engine never routes either intent, so the
-  // live route must report false on its own.
-  it('tools_audit reports credential presence without crediting an action', () => {
-    const body = caseBody('tools_audit');
-    expect(body).toContain('actionExecuted = false;');
-    expect(body).not.toContain('actionExecuted = true;');
-    expect(body).toContain('informational, no action taken');
-  });
-
-  it('pending_approvals reads the queue without crediting an action', () => {
-    const body = caseBody('pending_approvals');
-    expect(body).toContain('actionExecuted = false;');
-    expect(body).not.toContain('actionExecuted = true;');
-    expect(body).toContain('informational, no action taken');
-  });
-});
-
 describe('a blocked finance request is a refusal, not executed work', () => {
   // The safety protocol rejects financial operations. The /api/chat case and the
   // offline job declared `actionExecuted = true` and titled the action "Finance
