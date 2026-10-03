@@ -31,6 +31,7 @@ import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatr
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
 import { classifyOutboundAuthorization } from './src/utils/hardening/outboundAuthorizationTruth';
+import { classifyBridgeHeartbeat } from './src/utils/hardening/bridgeHeartbeatTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -7697,10 +7698,24 @@ app.post('/api/mobile/bridge/heartbeat', (req: Request, res: Response) => {
     });
   }
 
+  // A heartbeat is recorded against the device, but a simulated device, or one
+  // whose session has lapsed, is not a verified live bridge. Report what the
+  // heartbeat actually established instead of a blanket VERIFIED.
+  const device = bridgeGateway.getDevice();
+  const bridgeStatus = bridgeGateway.getStatus();
+  const verdict = classifyBridgeHeartbeat({
+    accepted: result.accepted,
+    isSimulation: Boolean(device?.capabilities.isSimulation),
+    bridgeStatus,
+    deviceLive: bridgeGateway.isDeviceLive(),
+  });
+
   return res.json({
-    success: true,
-    outcome: 'VERIFIED',
-    status: bridgeGateway.getStatus(),
+    success: verdict.success,
+    outcome: verdict.outcome,
+    verified: verdict.verified,
+    message: verdict.message,
+    status: bridgeStatus,
     lastHeartbeatAt: result.lastHeartbeatAt,
     reconnectCount: bridgeGateway.reconnectCount(),
     telemetryAccepted: {
