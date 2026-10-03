@@ -10099,3 +10099,8 @@ Next Slot:
 - इस स्लॉट में ऑफ़लाइन इंजन का वह दोष ठीक किया गया जो बिना नंबर के कॉल/शेड्यूल को
   नकली प्लेसहोल्डर नंबर पर स्टेज कर रहा था — अब यह स्पष्ट इनकार करता है; 141 फ़ाइल /
   1853 टेस्ट पास, lint और build पास; PR #5 मानव स्वीकृति की प्रतीक्षा में है।
+
+> Correction (slot 1): state branch tip after this slot is `4d7d905` (the earlier
+> line cited `543f09c`). The remote state branch already held a correct slot-1 state for
+> the 2026-10-03 window; the local remote-tracking ref was stale, which briefly showed a
+> false non-fast-forward. No roll-over was needed.
