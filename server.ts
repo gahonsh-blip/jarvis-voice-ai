@@ -8963,8 +8963,13 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       case 'tools_audit': {
         const audit = getIntegrationsAuditReport();
         spokenResponse = `Integrations audit: ${audit.summary.credentialsPresent} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
-        actionExecuted = true;
-        actionDetail = { type: 'tools_audit', title: 'Integrations Matrix', payload: audit };
+        // Reporting which credentials are present runs no connection test and
+        // contacts nothing outside the process, so it is an informational read.
+        // `handleExecuteAction` only switches to the tools panel; counting this
+        // as executed work inflated the "Autonomous Actions Executed" counter,
+        // the same way an offline `cloud_telemetry` (no live source) does not count.
+        actionExecuted = false;
+        actionDetail = { type: 'tools_audit', title: 'Integrations Matrix (informational, no action taken)', payload: audit };
         break;
       }
       case 'pending_approvals': {
@@ -8972,8 +8977,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         spokenResponse = pending.length > 0
           ? `You have ${pending.length} pending action approval(s) in queue requiring Level 3/4 human authorization.`
           : 'Zero pending action approvals. The approval queue is clean.';
-        actionExecuted = true;
-        actionDetail = { type: 'pending_approvals', title: 'Approvals Queue', payload: { count: pending.length, pending } };
+        // Reading the in-memory approval queue approves and executes nothing, so
+        // it must not advance the user-visible "Autonomous Actions Executed"
+        // counter. `handleExecuteAction` only opens the permission gateway panel.
+        actionExecuted = false;
+        actionDetail = { type: 'pending_approvals', title: 'Approvals Queue (informational, no action taken)', payload: { count: pending.length, pending } };
         break;
       }
       case 'check_project': {
