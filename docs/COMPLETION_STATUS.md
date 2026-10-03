@@ -4,7 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-03 21:05 UTC (02:35 IST 2026-10-04) — **WORK SLOT 10** of the
+Last cycle: 2026-10-03 21:20 UTC (02:50 IST 2026-10-04) — **WORK SLOT 11** of the
+2026-10-03 → 2026-10-04 window, the 02:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the freelance lead intake.**
+
+`POST /api/freelance/create-lead` in `server.ts` filled every omitted field with
+a plausible constant — a `₹50,000` budget (`Number(budgetAmount) || 50000`),
+`'Telegram AI Bot'`, `'Full-Stack Web App'`, `'New Client Inquiry'`, status
+`'AI Requirements Extracted'` — and then auto-generated a three-milestone
+quotation priced against that invented ₹50,000, so a lead entered without a
+number was shown a real-looking `₹5,000 + ₹22,500 + ₹10,000` breakdown under a
+status claiming AI requirements had been extracted. New
+`buildNewLeadRecord` / `recordedBudgetAmount` in `src/utils/freelanceLeadTruth.ts`
+store only supplied values: an unrecorded budget is `null` (no ₹50,000), the
+quotation is attached only when a budget exists, and the status is `'Lead
+Entered'` because no AI has run. `FreelancePipelineModal.tsx` and the Telegram
+listing render `'Budget not recorded'` instead of a fabricated figure, and
+`FreelanceLead.budgetEstimate.amount` is now `number | null` in `src/types.ts`.
+Evidence: `server.ts` (`/api/freelance/create-lead`); `src/utils/freelanceLeadTruth.ts`
+(`buildNewLeadRecord`, `recordedBudgetAmount`, `formatLeadBudget`);
+`src/components/FreelancePipelineModal.tsx`; `src/types.ts`;
+`src/tests/freelanceLeadTruth.test.ts` (14 cases). Negative-validated — restoring
+the `: 50000` fallback in `recordedBudgetAmount` fails exactly 3 of 14; restored
+→ 14/14. Gates on `fa3684c`: lint (`tsc --noEmit`) exit 0; targeted 1 file /
+14 passed; full suite **147 files / 1895 tests passed** (23.95 s, 0 failed);
+build exit 0 (`dist/server.cjs` 997687 bytes). E2E: NOT RUN (no handset).
+Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — the sweep is not exhausted.
+
+Previous cycle: 2026-10-03 21:05 UTC (02:35 IST 2026-10-04) — **WORK SLOT 10** of the
 2026-10-03 → 2026-10-04 window, the 02:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the staged YouTube target channel.**
 
 Both YouTube draft routes (`POST /api/social/youtube/upload-draft` and

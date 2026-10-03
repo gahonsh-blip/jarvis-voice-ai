@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 02:50 IST (2026-10-03 21:20 UTC) — window slot 11: the freelance lead intake invents no client, budget or quotation
+
+### Fixed
+- **`POST /api/freelance/create-lead` in `server.ts` defaulted every omitted field — a `₹50,000` budget (`Number(budgetAmount) || 50000`), `'Telegram AI Bot'`, `'Full-Stack Web App'`, `'New Client Inquiry'`, status `'AI Requirements Extracted'` — and auto-generated a three-milestone quotation priced against the fabricated ₹50,000.** New `buildNewLeadRecord` / `recordedBudgetAmount` in `src/utils/freelanceLeadTruth.ts` store only supplied values: an unrecorded budget is `null`, a quotation is attached only when a budget exists, and the status is `'Lead Entered'`. `FreelancePipelineModal.tsx` and the Telegram listing render `'Budget not recorded'`; `FreelanceLead.budgetEstimate.amount` is now `number | null`.
+
+### Tests
+- `src/tests/freelanceLeadTruth.test.ts` — expanded to 14 cases: `recordedBudgetAmount` accepts only a real positive amount (omitted/blank/zero/negative/non-numeric → `null`), `buildNewLeadRecord` never substitutes ₹50,000 or a sample name, the quotation is priced against the supplied amount only, and source guards that the route no longer contains `50000` / `'New Client Inquiry'`.
+- Negative-validated: restoring `: 50000` in `recordedBudgetAmount` fails exactly 3 of 14; restored → 14/14.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; targeted 1 file / 14 passed; full suite **147 files / 1895 tests passed** (23.95 s, 0 failed); build exit 0 (`dist/server.cjs` 997687 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 02:35 IST (2026-10-03 21:05 UTC) — window slot 10: the staged YouTube target channel is never invented
 
 ### Fixed
