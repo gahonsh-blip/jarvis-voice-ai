@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 00:26 IST (2026-10-03 18:56 UTC) — window slot 6: the Android bridge connect route stops reporting a degraded handshake as VERIFIED
+
+### Fixed
+- **`POST /api/mobile/bridge/connect` (`server.ts`) answered `outcome: 'VERIFIED'` on every successful handshake.** The `status` field already reported the truth — `PERMISSION_REQUIRED`, `LIMITED_CAPABILITY` or `SIMULATION_ONLY` — but a caller reading `outcome`, the field the honesty vocabulary reserves for confirmed work, was told a refused or simulation-only device had connected.
+- The `outcome` and `success` flag now follow `bridgeGateway.getStatus()`: only a live, fully-permitted `CONNECTED` handshake is `VERIFIED`; a permission refusal maps to `PERMISSION_REQUIRED`, a limited/partial handshake to `NOT_AVAILABLE`, and no live device to `NOT_CONFIGURED`. This matches `androidBridgeEngine.ts` (`success: this.status === 'CONNECTED'`) and the client adapter, so the server route no longer contradicts the engine that produced the status.
+
+### Tests
+- `src/tests/androidBridge.e2e.test.ts` — the full-chain case now asserts `success === true`, `outcome === 'VERIFIED'` and `verified === true` on a fully granted handshake, driven against the real server process (1 file / 11 passed).
+- `src/tests/actionExecutedRemainingSites.test.ts` — now 6 cases; a bounded source guard pins `const bridgeStatus = bridgeGateway.getStatus()`, `success: bridgeStatus === 'CONNECTED'` and the `CONNECTED ? 'VERIFIED'` mapping, and forbids the old unconditional `outcome: 'VERIFIED', status:` literal from returning to the connect handler.
+- Negative-validated: restoring the unconditional claim fails exactly that source guard (`1 failed | 5 passed`); restored → 6/6.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **143 files / 1858 tests passed** (24.43 s, 0 failed); build exit 0 (`dist/server.cjs` 993006 bytes). E2E: Android bridge E2E ran against the real server process (1 file / 11 passed) — server-side leg only, no physical handset. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-03 23:23 IST (2026-10-03 17:53 UTC) — window slot 4: the bundled telephony suite stops asserting fabricated call success
 
 ### Fixed
