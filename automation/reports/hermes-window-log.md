@@ -10141,3 +10141,44 @@ is no transcript or description - already honest; no change needed.
 
 Commits this slot (no force-push): a44d6fc (attempt) -> 49d9fcf (revert).
 No backlog item advanced. Item #13 remains PARTIAL.
+
+---
+
+## Slot 2026-10-03 22:35 IST — WORK SLOT 3 (item 13: LinkedIn status truth)
+
+**Window:** 2026-10-03 → 2026-10-04, the 22:35 IST fire. Slots completed so far: 3.
+
+**Item:** #13 `Zero-fake-success for all tools` — the LinkedIn status route.
+
+**Bug found and fixed.** `GET /api/auth/linkedin/status` (`server.ts`) answered
+`connected: true` for a static `LINKEDIN_ACCESS_TOKEN` read straight from the
+environment. Nothing had probed that token against LinkedIn, so an unmeasured
+credential was presented as a live account — the fabricated success this project
+forbids. The defect was internally inconsistent: the canonical
+`/api/social/platforms` card already labels the same token `CONFIGURED`
+("Credentials present but not verified"), and the YouTube status route already
+keeps its static-token branch honest (`connected: false`, `status: 'CONFIGURED'`,
+`canPublish: false`). LinkedIn contradicted both.
+
+**Fix.** The static-token branch now answers `connected: false`,
+`status: 'CONFIGURED'`, `configured: true`, `authType: 'STATIC_ENV_TOKEN'`, with a
+message directing the user to "Test connection". Only `/api/social/platforms/test`
+can confirm the account. The OAuth-connected branch (a real authenticated userinfo
+probe) is unchanged and still reports `connected: true`. The response exposes only
+the token's presence, never the token.
+
+**Evidence.** New `src/tests/linkedinStatusTruth.test.ts` (1 file / 3 tests):
+static branch never contains `connected: true` and does contain `connected: false`
++ `status: 'CONFIGURED'` + "has not been verified against LinkedIn"; the OAuth
+branch still contains `connected: true`; and the branch does not echo the token.
+Negative-validated: reverting the branch to `connected: true` fails exactly 1 of
+the 3 (`1 failed | 2 passed`); restored → 3/3.
+
+**Gates (observed).** lint (`tsc --noEmit`) exit 0; full suite **142 files / 1856
+tests passed** (24.28 s, 0 failed); build exit 0 (`dist/server.cjs` 968.6 kb /
+991806 bytes). E2E: NOT RUN (no LinkedIn credential / no device). Deploy:
+NOT_CONFIGURED.
+
+**Commits.** `21df127` (fix + test), `0853325` (docs).
+
+Item #13 remains `PARTIAL` — the sweep is not exhausted.
