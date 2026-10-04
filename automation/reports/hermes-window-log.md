@@ -10792,3 +10792,31 @@ Next Slot:
     window_started_at 16:06Z, slots_completed 1. Updated to 2 and pushed (7801697).
 - Next slot: audit the remaining social routes (publish/schedule success flags) for the
   same fake-success shape; #13 stays PARTIAL until the sweep is exhausted.
+
+---
+
+## 2026-10-04T17:15Z — slot 3/16 (WORK) — IST 22:35
+
+- Item worked: #13 Zero-fake-success for all tools
+- Status: PARTIAL (freelance lead status update truth)
+- Tests: full suite 152 files / 1942 tests passed (24.83 s, 0 failed); targeted 1 file / 9 passed; tsc --noEmit exit 0; build exit 0 (dist/server.cjs 979.1 kb)
+- Commit: 9a0077e (fix) + 196037f (docs)  Push: ok (feature/hermes-full-completion)
+- Notes / blockers:
+  - `POST /api/freelance/update-status` in `server.ts` stored any status string the
+    caller supplied and answered `{ success: true, lead }` for every request that
+    matched a stored lead — an unknown status became a real pipeline state and a
+    repeat of the stored status announced a saved change that never happened.
+  - New `src/utils/hardening/freelanceLeadStatusTruth.ts` (`classifyLeadStatusUpdate`,
+    `FREELANCE_LEAD_STATUSES`) accepts only the four UI statuses and returns a verdict
+    (APPLIED / UNCHANGED / UNKNOWN_STATUS / NO_STATUS) with `status: null` for
+    everything but APPLIED. The route writes only `verdict.applied`; a missing lead
+    answers `success: false` with a message and no write.
+  - `src/components/FreelancePipelineModal.tsx` surfaced a refused update as a silent
+    no-op; it now shows an amber notice and clears it on a real change.
+  - `src/tests/freelanceLeadStatusTruth.test.ts` (new, 9 cases). Negative-validated:
+    restoring the pre-fix route fails exactly 3 of 9 (`3 failed | 6 passed`),
+    restored → 9/9.
+  - Security hygiene: `.env` ignored (`.gitignore:4`); no `node_modules`/`dist`
+    tracked; no secret-shaped strings in this slot's diff.
+- Next slot: continue the #13 sweep — audit the remaining freelance/social route
+  success flags for the same fake-success shape; #13 stays PARTIAL until exhausted.
