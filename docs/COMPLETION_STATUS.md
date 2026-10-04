@@ -4,6 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-04 16:47 UTC (22:17 IST 2026-10-04) — **WORK SLOT 2** of the
+2026-10-04 → 2026-10-05 window, the 22:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the social draft generation.**
+
+`POST /api/social/generate` substituted a fixed marketing template ("Perspective
+on … saves 10+ hours per week") whenever the AI provider was unconfigured or
+errored, then answered `success: true` with no field distinguishing model output
+from the canned fallback. The YouTube generator in `SocialMediaModal.tsx` read a
+non-existent `data.draft` (the route returns `post`) and announced "AI-generated
+YouTube title, description, and hashtags staged" even when the provider wrote
+nothing — so the template could be presented as AI copy. New
+`resolveSocialGeneration` (`src/utils/hardening/socialGenerationTruth.ts`) credits
+non-empty model output to the provider and otherwise returns an explicitly
+labelled local template plus a disclosure notice; the route records
+`generationSource`/`aiGenerated`/`generationNotice` on the post. The modal now
+reads `data.post ?? data.draft` and speaks honestly when the draft is a template;
+a banner renders in the post view for `generationSource === 'local_template'`.
+Evidence: `src/utils/hardening/socialGenerationTruth.ts` (new);
+`server.ts` route `POST /api/social/generate` (~4354) and `ServerSocialPost`
+interface (~374); `src/components/SocialMediaModal.tsx` (~309, ~1128);
+`src/types.ts` `SocialMediaPostDraft` (~553); `src/tests/socialGenerationTruth.test.ts`
+(new, 10 cases). Negative-validated: reverting the route to store raw
+`generatedContent` and claim `generationSource: 'ai'` fails 2 of the 10 cases.
+Gates: lint (`tsc --noEmit`) exit 0; targeted 4 files / 72 passed; full suite
+**151 files / 1933 tests passed** (24.35 s); `npm run build` exit 0,
+`dist/server.cjs` 1001047 bytes. E2E: NOT RUN (no provider key, no handset).
+Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — the sweep is not exhausted.
+
 Last cycle: 2026-10-04 16:06 UTC (21:36 IST 2026-10-04) — **WORK SLOT 1** of the
 2026-10-04 → 2026-10-05 window, the 21:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the live call-turn wire shape.**
 

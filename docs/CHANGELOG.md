@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 22:17 IST (2026-10-04 16:47 UTC) — window slot 2: the social draft discloses its real origin
+
+### Fixed
+- **`POST /api/social/generate` in `server.ts` substituted a fixed marketing template whenever the AI provider was unconfigured or errored, then answered `success: true` with no field distinguishing model output from the canned fallback.** Any caller could present the template as generated copy. The YouTube generator in `src/components/SocialMediaModal.tsx` read a non-existent `data.draft` (the route returns `post`) and announced "AI-generated YouTube title, description, and hashtags staged" even when the provider wrote nothing — the fake-success shape the zero-fake-success item removes. New `resolveSocialGeneration` (`src/utils/hardening/socialGenerationTruth.ts`) credits non-empty model output to the provider and otherwise returns an explicitly labelled local template plus a disclosure notice; the route records `generationSource`/`aiGenerated`/`generationNotice` on the post. The modal now reads `data.post ?? data.draft`, speaks honestly for a local template, and renders a disclosure banner in the post view.
+- **`data.draft` was never returned by the route**, so the AI-generated YouTube title, description, and hashtags were silently dropped. Reading `data.post ?? data.draft` restores them.
+
+### Tests
+- `src/tests/socialGenerationTruth.test.ts` — new, 10 cases: model output credited to the AI provider; empty/whitespace provider output falls back to a disclosed local template; the template names its topic and labels itself; the route routes through the helper, records the three generation fields, no longer stores raw provider text, and keeps the template in one place; the modal reads `post`, discloses a local template, and renders the banner.
+- Negative-validated: reverting the route to store raw `generatedContent` and claim `generationSource: 'ai'` fails 2 of the 10 cases.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; targeted 4 files / 72 passed; full suite **151 files / 1933 tests passed** (24.35 s, 0 failed); build exit 0 (`dist/server.cjs` 1001047 bytes). E2E: NOT RUN (no provider key, no handset). Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 21:36 IST (2026-10-04 16:06 UTC) — window slot 1: the live call turn is read from the server envelope
 
 ### Fixed
