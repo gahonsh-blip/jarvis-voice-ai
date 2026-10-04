@@ -142,6 +142,7 @@ import { maskAndroidCallerNumber } from './src/utils/androidBridgePrivacy';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
 import { classifyApprovalOutcome, formatUnconfirmedMobileApprovalReply } from './src/utils/hardening/approvalResolution';
 import { classifyApprovalCreate } from './src/utils/hardening/approvalCreateTruth';
+import { classifyOutboundStage } from './src/utils/hardening/outboundStageTruth';
 import { classifyApprovalDecision } from './src/utils/github/approvalQueue';
 import {
   observeInstanceFromHost,
@@ -8715,20 +8716,35 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Destination phone number is required' });
     }
 
+    // Run the safety gate before staging anything. The masked target is what
+    // would be dialled and what the finance guard must inspect; staging the
+    // pending request first left a blocked dial sitting in the pending queue.
+    const destinationMasked = maskPhoneNumber(destinationNumber);
+    const actionReq = createPendingActionRequest({
+      exactAction: `Outbound PSTN Call to ${destinationMasked}`,
+      target: destinationMasked,
+      contentChanges: `Purpose: ${purpose || 'Autonomous phone call by JARVIS'}`,
+      level: 4,
+      source: 'Telephony Gateway',
+    });
+    const verdict = classifyOutboundStage(actionReq);
+    if (!verdict.success) {
+      return res.status(409).json({
+        success: false,
+        staged: false,
+        outcome: verdict.outcome,
+        actionId: null,
+        message: verdict.message,
+      });
+    }
+
+    // Only a genuinely pending action is staged as an outbound request, so a
+    // blocked dial can never be authorized later through /outbound/authorize.
     const request = TelephonySessionManager.stageOutboundRequest({
       destinationNumber,
       purpose: purpose || 'Autonomous phone call by JARVIS',
       recipientName,
       language: language || 'hi-IN',
-    });
-
-    // Create a Level-4 Pending Action in safety system
-    const actionReq = createPendingActionRequest({
-      exactAction: `Outbound PSTN Call to ${request.destinationMasked}`,
-      target: request.destinationMasked,
-      contentChanges: `Purpose: ${request.purpose}`,
-      level: 4,
-      source: 'Telephony Gateway',
     });
 
     const promptText = (language || 'hi-IN').startsWith('hi')
@@ -8737,6 +8753,8 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      staged: true,
+      outcome: verdict.outcome,
       request,
       actionId: actionReq.request.id,
       promptText,
