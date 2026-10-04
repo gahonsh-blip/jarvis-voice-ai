@@ -36,6 +36,7 @@ import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadSta
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
 import { classifyOutboundAuthorization } from './src/utils/hardening/outboundAuthorizationTruth';
 import { classifyBridgeHeartbeat } from './src/utils/hardening/bridgeHeartbeatTruth';
+import { classifyBridgeEvent } from './src/utils/hardening/bridgeEventTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -7901,30 +7902,46 @@ app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
   // unchanged) and leaked four subscriber digits when it did match.
   const maskedNumber = maskAndroidCallerNumber(payload.callerNumber);
 
+  // A device event is only as real as the device that sent it. An event from a
+  // simulated device, or one whose session has lapsed, is not a verified live
+  // event — report what the event actually established instead of a blanket
+  // VERIFIED, and stamp the audit row with the same verdict so the trail cannot
+  // disagree with the reply.
+  const eventDevice = bridgeGateway.getDevice();
+  const eventVerdict = classifyBridgeEvent({
+    accepted: true,
+    isSimulation: Boolean(eventDevice?.capabilities.isSimulation),
+    bridgeStatus: bridgeGateway.getStatus(),
+    deviceLive: bridgeGateway.isDeviceLive(),
+    eventType,
+  });
+
   if (eventType === 'INCOMING_CALL') {
     bridgeGateway.recordAudit(
       'CALL_RECEIVED',
       `Incoming call from ${payload.callerName || maskedNumber || 'unknown'} (awaiting approval)`,
-      'VERIFIED',
+      eventVerdict.outcome,
       { sessionId: auth.sessionId, deviceId: session.deviceId }
     );
   } else if (eventType === 'INCOMING_NOTIFICATION') {
     bridgeGateway.recordAudit(
       'NOTIFICATION_RECEIVED',
       `Notification from ${payload.appName || payload.packageName || 'unknown app'}`,
-      'VERIFIED',
+      eventVerdict.outcome,
       { sessionId: auth.sessionId, deviceId: session.deviceId }
     );
   } else {
-    bridgeGateway.recordAudit('EVENT_RECEIVED', `Device event ${eventType}`, 'VERIFIED', {
+    bridgeGateway.recordAudit('EVENT_RECEIVED', `Device event ${eventType}`, eventVerdict.outcome, {
       sessionId: auth.sessionId,
       deviceId: session.deviceId,
     });
   }
 
   return res.json({
-    success: true,
-    outcome: 'VERIFIED',
+    success: eventVerdict.success,
+    outcome: eventVerdict.outcome,
+    verified: eventVerdict.verified,
+    message: eventVerdict.message,
     accepted: true,
     eventType,
     sequence: session.lastSequence,
