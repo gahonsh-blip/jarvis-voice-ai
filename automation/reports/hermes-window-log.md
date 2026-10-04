@@ -10764,3 +10764,31 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में टेलीफोनी के लाइव कॉल-टर्न की वायर-शेप बग ठीक की — क्लाइंट अब सर्वर के
   turn एनवेलप से जवाब पढ़ता है; 8 नए टेस्ट पास, lint/build पास, बदलाव पुश हो गया।
+
+---
+
+## 2026-10-04T16:50Z — slot 2/16 (WORK) — IST 22:05
+
+- Item worked: #13 Zero-fake-success for all tools
+- Status: PARTIAL (social draft origin disclosure)
+- Tests: full suite 151 files / 1933 tests passed (24.35 s); targeted 4 files / 72 passed; tsc --noEmit clean; build emitted dist/server.cjs (1001047 bytes)
+- Commit: 753ca36 (fix) + fcf4e1b (docs)  Push: ok (feature/hermes-full-completion)
+- Notes / blockers:
+  - `POST /api/social/generate` substituted a fixed marketing template when the AI
+    provider was unconfigured or errored, then answered `success: true` with no field
+    distinguishing model output from the canned fallback. New
+    `src/utils/hardening/socialGenerationTruth.ts` (`resolveSocialGeneration`) credits
+    non-empty model output to the provider and otherwise returns a labelled local
+    template + disclosure notice; the route now records `generationSource` /
+    `aiGenerated` / `generationNotice`.
+  - `src/components/SocialMediaModal.tsx` read `data.draft`, but the route returns
+    `post`, so AI-written YouTube fields were silently dropped; and it announced
+    "AI-generated YouTube title, description, and hashtags staged" even when the
+    provider wrote nothing. Now reads `data.post ?? data.draft`, speaks honestly for a
+    local template, and shows a disclosure banner.
+  - `src/tests/socialGenerationTruth.test.ts` (new, 10 cases). Negative-validated:
+    reverting the route to raw `generatedContent` + `generationSource: 'ai'` fails 2/10.
+  - State branch note: the state branch DID exist this run; slot 1 recorded
+    window_started_at 16:06Z, slots_completed 1. Updated to 2 and pushed (7801697).
+- Next slot: audit the remaining social routes (publish/schedule success flags) for the
+  same fake-success shape; #13 stays PARTIAL until the sweep is exhausted.
