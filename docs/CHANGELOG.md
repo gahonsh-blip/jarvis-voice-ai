@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 02:35 IST (2026-10-04 21:05 UTC) — window slot 11: YouTube draft `tags` routed through the truth verdict
+
+### Fixed
+- **`POST /api/social/youtube/update-draft` accepted `tags` but never classified them.** The route wrote `post.hashtags = tags` for any array while `classifyYouTubeDraftUpdate` was never given `tags`, so a tags-only edit fell through every verdict guard: the draft was mutated unnormalized yet the response reported `UNCHANGED` with `success: false` — a silent drop that still changed the stored draft. `classifyYouTubeDraftUpdate` (`src/utils/hardening/youtubeDraftUpdateTruth.ts`) now normalizes (`trim`, drop blanks) and compares `tags` against the stored hashtags, and the route writes only `changes.hashtags` from the verdict, never the raw request.
+
+### Tests
+- `src/tests/youtubeDraftUpdateTruth.test.ts` — extended to 13 cases: real-difference detection for each field including tags, empty-request refusal, tags-only apply, unchanged-tags no-op, non-array payload ignored, plus source guards that the route routes `tags` through the verdict.
+- Negative-validated: disabling the tags branch failed exactly the tags apply test (`1 failed | 12 passed`), restored → 13/13.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **158 files / 2003 tests passed** (25.16 s, 0 failed); build exit 0 (`dist/server.cjs` 1010750 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
+
 ## [Unreleased] - 2026-10-05 02:05 IST (2026-10-04 20:35 UTC) — window slot 10: outbound call stage reports only a real staged approval
 
 ### Fixed
