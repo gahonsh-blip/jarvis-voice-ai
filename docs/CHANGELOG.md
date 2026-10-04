@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 00:56 IST (2026-10-04 19:26 UTC) — window slot 7: the YouTube summarizer reply no longer renders a blank summary as a completed summary
+
+### Fixed
+- **The Telegram `summarize_youtube_video` reply rendered the `🎥 *YOUTUBE VIDEO SUMMARY*` heading with the title, channel and link followed by a blank body when `summarizeYouTubeVideoCore` returned `success: true` with `source: 'none'` and an empty `summary` (a video that exposes no transcript and no description).** The reply branched only on `success && videoInfo`; the summariser itself was honest, but the reply still framed an empty result as a completed summary. New `formatYouTubeSummaryNotice` (`src/utils/hardening/youtubeSummaryNoticeTruth.ts`) returns a leading notice whenever the result carries no real summary text (empty/whitespace, or `source === 'none'`) and `null` for a genuine extractive/gemini summary; the reply now leads with the notice (`actionData.type = 'youtube_summary_unavailable'`) and gates the confident reply behind it.
+
+### Tests
+- `src/tests/youtubeSummaryNoticeTruth.test.ts` — new, 9 cases: 6 unit (empty `none` summary; `none` with stray text; whitespace-only; missing-notice fallback; real extractive and real gemini both return `null`) and 3 source guards (the reply routes through `formatYouTubeSummaryNotice`, the unavailable branch precedes the confident one, and the confident reply sits in the `else` of the notice check).
+- Negative-validated: restoring the unguarded heading fails exactly the source guards (`1 failed | 8 passed`), restored → 9/9.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **155 files / 1970 tests passed** (25.13 s, 0 failed); build exit 0 (`dist/server.cjs` 1006273 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-05 00:21 IST (2026-10-04 18:51 UTC) — window slot 6: approval-create reports success only when an action is actually staged
 
 ### Fixed
