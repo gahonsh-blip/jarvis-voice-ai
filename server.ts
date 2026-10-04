@@ -19,6 +19,7 @@ import {
   deriveAuditVerificationStatus,
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
+import { resolveSocialGeneration } from './src/utils/hardening/socialGenerationTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
@@ -370,6 +371,10 @@ export interface ServerSocialPost {
   topic: string;
   topicHi?: string;
   content: string;
+  /** Origin of `content`: model output vs a fixed local fallback template. */
+  generationSource?: 'ai' | 'local_template';
+  aiGenerated?: boolean;
+  generationNotice?: string;
   hashtags: string[];
   creativePrompt: string;
   status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'not_published' | 'failed' | string;
@@ -4346,15 +4351,18 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
     }
   }
 
-  if (!generatedContent) {
-    generatedContent = `💡 Perspective on ${topic || 'Autonomous AI Workflows'}:\n\n1. Building with autonomous tools saves 10+ hours per week.\n2. Zero-cost infrastructure allows rapid prototyping.\n3. Human-in-the-loop verification guarantees precision.\n\nWhat are you automating next?\n\n#ArtificialIntelligence #Engineering #DevOps #Innovation #BuildInPublic`;
-  }
+  // Resolve the draft content and its true origin. An empty model output is a
+  // fixed local template, disclosed as such rather than presented as AI copy.
+  const generation = resolveSocialGeneration({ generatedContent, topic });
 
   const newPost: ServerSocialPost = {
     id: `post-${Date.now()}`,
     platform: platform as any,
     topic: topic || 'Autonomous AI Architecture',
-    content: generatedContent,
+    content: generation.content,
+    generationSource: generation.source,
+    aiGenerated: generation.aiGenerated,
+    generationNotice: generation.notice,
     hashtags,
     creativePrompt: `Modern aesthetic graphic visualizing ${topic}, sleek cyber-tech gradient.`,
     status: 'pending_approval',

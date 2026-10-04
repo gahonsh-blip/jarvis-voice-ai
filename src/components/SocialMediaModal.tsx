@@ -307,16 +307,24 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         }),
       });
       const data = await res.json();
-      if (data.success && data.draft) {
-        if (data.draft.videoTitle) setYtVideoTitle(data.draft.videoTitle.slice(0, 100));
-        if (data.draft.videoDescription || data.draft.content) {
-          setYtVideoDesc(data.draft.videoDescription || data.draft.content);
+      // The route returns the draft as `post`; reading `data.draft` meant the
+      // AI title/description/hashtags were never applied. Read `post` and report
+      // whether the provider wrote it or a local template stood in.
+      const draft = data.post ?? data.draft;
+      if (data.success && draft) {
+        if (draft.videoTitle) setYtVideoTitle(draft.videoTitle.slice(0, 100));
+        if (draft.videoDescription || draft.content) {
+          setYtVideoDesc(draft.videoDescription || draft.content);
         }
-        if (Array.isArray(data.draft.hashtags) && data.draft.hashtags.length > 0) {
-          const newTags = data.draft.hashtags.map((h: string) => h.replace(/^#/, '').trim()).filter(Boolean);
+        if (Array.isArray(draft.hashtags) && draft.hashtags.length > 0) {
+          const newTags = draft.hashtags.map((h: string) => h.replace(/^#/, '').trim()).filter(Boolean);
           setYtVideoTags(Array.from(new Set([...ytVideoTags, ...newTags])));
         }
-        onSpeak('AI-generated YouTube title, description, and hashtags staged, Sir.');
+        if (draft.generationSource === 'local_template') {
+          onSpeak('No AI provider was available, so a local template was staged for the YouTube title, description, and hashtags, Sir. It is not AI-generated.');
+        } else {
+          onSpeak('AI-generated YouTube title, description, and hashtags staged, Sir.');
+        }
       }
     } catch (err) {
       console.warn('AI generation for YouTube failed:', err);
@@ -1124,6 +1132,13 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                   <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs leading-relaxed whitespace-pre-wrap font-sans shadow-inner">
                     {selectedPost.content}
                   </div>
+
+                  {selectedPost.generationSource === 'local_template' && (
+                    <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800 text-[11px] leading-relaxed text-amber-200 font-mono">
+                      {selectedPost.generationNotice ||
+                        'No AI provider produced this draft; a fixed local template was used. This is not AI-generated text.'}
+                    </div>
+                  )}
                 </div>
 
                 {/* Creative Visual Asset Prompt */}

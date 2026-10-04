@@ -550,6 +550,10 @@ export interface SocialMediaPostDraft {
   topic: string;
   topicHi?: string;
   content: string;
+  /** Origin of `content`: model output vs a fixed local fallback template. */
+  generationSource?: 'ai' | 'local_template';
+  aiGenerated?: boolean;
+  generationNotice?: string;
   hashtags: string[];
   creativePrompt: string;
   status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'not_published' | 'failed' | string;
