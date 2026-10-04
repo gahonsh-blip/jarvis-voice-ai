@@ -10987,3 +10987,71 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - approval-create रूट अब किसी कार्रवाई को तभी सफल बताता है जब वह वाकई PENDING_APPROVAL में गई हो; finance/emergency block पर success:false और कोई Telegram कार्ड नहीं — 1961 टेस्ट पास, lint और build हरे।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35 (report written 00:56)
+Window date: 2026-10-04   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools — closed the Telegram `summarize_youtube_video`
+  reply's blank-summary-as-summary gap. `summarizeYouTubeVideoCore` returns
+  `success: true` with `source: 'none'` and an EMPTY `summary` when a video exposes
+  no transcript and no description; the reply branched only on `success && videoInfo`,
+  so it still printed the `🎥 *YOUTUBE VIDEO SUMMARY*` heading with title/channel/link
+  and a blank body. New `formatYouTubeSummaryNotice()`
+  (`src/utils/hardening/youtubeSummaryNoticeTruth.ts`) returns a leading notice for
+  any result with no real summary text (empty/whitespace, or `source === 'none'`) and
+  `null` for a genuine extractive/gemini summary; `server.ts` reply block now leads
+  with the notice (`actionData.type = 'youtube_summary_unavailable'`) and gates the
+  confident reply behind it. Evidence: new helper + `src/tests/youtubeSummaryNoticeTruth.test.ts`
+  (9 cases: 6 unit + 3 source guards) — 9/9 passing. Negative-validated: restoring the
+  unguarded heading fails exactly the source guards (1 failed | 8 passed), restored → 9/9.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the sweep is not exhausted; the unaudited tail
+  of `success: true` sites in `server.ts` / `server_tools.ts` remains (truthfulness UNKNOWN).
+
+Remaining:
+- #13 (continue per-slot sweep), plus the hardware/credential-blocked items #1/#50/#55.
+
+Bugs Found:
+- Telegram `summarize_youtube_video` reply rendered a confident summary heading with an
+  empty body when the summariser honestly returned `success: true, source: 'none'` and no
+  text. Found by auditing `success:true` paths that are rendered as a confident result.
+
+Bugs Fixed:
+- Gated the confident YouTube-summary reply behind a no-summary notice; a blank summary
+  now leads with the notice and `youtube_summary_unavailable` action type. Proven by the
+  9-case suite and its negative validation (fix reverted → source guards fail).
+
+Tests:    155 files / 1970 tests passed (25.13 s, 0 failed) — full `npx vitest run`
+Lint:     exit 0 (`tsc --noEmit`, via `npm run lint`)
+Build:    exit 0; artifact `dist/server.cjs` 1006273 bytes
+E2E:      NOT RUN (no handset, no display session in this sandbox)
+Security: NOT RUN this slot (finalization slot runs the security checks); no `.env`,
+          token or key touched or committed; no secret printed.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row + Known limitations),
+               docs/CHANGELOG.md (slot 7 entry)
+Branch:  feature/hermes-full-completion
+Commit:  fdd72fc (fix commit 1cf0d7c)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #5 (existing; not refreshed this work slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+
+Blocked:
+- #1 / #50 / #55 — require a physical Android device / Windows host / live third-party credentials.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13 — continue the zero-fake-success sweep on the next `success: true` route that can
+  mask an empty or absent payload (audit the unaudited tail in server.ts / server_tools.ts).
+
+हिंदी सारांश (एक पंक्ति):
+- YouTube summarizer का Telegram जवाब अब खाली summary को पूरा summary बताकर नहीं दिखाता — जब transcript/description कुछ न मिले तो पहले साफ़ notice आता है; 1970 टेस्ट पास, lint और build हरे, काम remote पर सुरक्षित।
