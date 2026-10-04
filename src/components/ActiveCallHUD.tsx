@@ -32,7 +32,7 @@ import {
 import { telephonyAudio } from '../utils/telephonyAudio';
 import { resolveDisplayNumber, shouldMaskParty } from '../utils/telephonyPrivacyDisplay';
 import { callWaveformBars, callWaveformBarHeight } from '../utils/hardening/callWaveform';
-import { ACOUSTIC_FILTER_LABEL } from '../utils/hardening/acousticFilterTruth';
+import { ACOUSTIC_FILTER_LABEL, acousticFilterToggleLabel } from '../utils/hardening/acousticFilterTruth';
 import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
 
 interface ActiveCallHUDProps {
@@ -466,7 +466,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
             title={`Toggle acoustic bandpass profile. ${ACOUSTIC_FILTER_LABEL}`}
           >
             <Radio className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{audioFilterActive ? 'Bandpass profile' : 'Full band'}</span>
+            <span className="hidden sm:inline">{acousticFilterToggleLabel(audioFilterActive)}</span>
           </button>
         </div>
 
