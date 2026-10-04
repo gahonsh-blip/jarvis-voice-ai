@@ -30,6 +30,10 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
   const [rawRequirement, setRawRequirement] = useState<string>('');
   const [budgetAmount, setBudgetAmount] = useState<number>(65000);
   const [copied, setCopied] = useState<boolean>(false);
+  // The server reports an update that changed nothing (an unknown status or a
+  // repeat of the stored one) as success:false; the operator is told rather
+  // than shown a silent no-op.
+  const [statusNotice, setStatusNotice] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
@@ -78,7 +82,7 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
     }
   };
 
-  const handleUpdateStatus = async (leadId: string, status: any) => {
+  const handleUpdateStatus = async (leadId: string, status: string) => {
     try {
       const res = await fetch('/api/freelance/update-status', {
         method: 'POST',
@@ -87,13 +91,17 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
       });
       const data = await res.json();
       if (data.success) {
+        setStatusNotice('');
         fetchLeads();
         if (selectedLead?.id === leadId) {
           setSelectedLead(data.lead);
         }
+      } else {
+        setStatusNotice(data.message || 'Status was not changed.');
       }
     } catch (err) {
       console.warn('Update lead status failed:', err);
+      setStatusNotice('Status update request failed.');
     }
   };
 
@@ -285,6 +293,12 @@ ${selectedLead.quotation.milestones.map((m, i) => `${i + 1}. ${m.title} - ₹${m
                   Delivered & Closed
                 </button>
               </div>
+              {statusNotice && (
+                <div className="flex items-center gap-1.5 text-xs font-mono text-amber-300">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{statusNotice}</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="w-full md:w-7/12 p-8 flex items-center justify-center text-slate-500 text-xs font-mono">

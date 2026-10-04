@@ -32,6 +32,7 @@ import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatu
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
+import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
 import { classifyOutboundAuthorization } from './src/utils/hardening/outboundAuthorizationTruth';
 import { classifyBridgeHeartbeat } from './src/utils/hardening/bridgeHeartbeatTruth';
@@ -4310,12 +4311,25 @@ app.post('/api/freelance/create-lead', (req: Request, res: Response) => {
 app.post('/api/freelance/update-status', (req: Request, res: Response) => {
   const { leadId, status } = req.body;
   const lead = memoryState.freelanceLeads.find((l) => l.id === leadId);
-  if (lead) {
-    lead.status = status;
-    persistMemory();
-    return res.json({ success: true, lead });
+  if (!lead) {
+    return res.status(404).json({ success: false, outcome: 'LEAD_NOT_FOUND', error: 'Lead not found' });
   }
-  res.status(404).json({ error: 'Lead not found' });
+  // The route used to write any string the caller supplied and report every
+  // request as a saved change. Only a recognised status that differs from the
+  // stored one is applied and reported as applied.
+  const verdict = classifyLeadStatusUpdate(status, lead.status);
+  if (!verdict.success) {
+    return res.json({
+      success: false,
+      outcome: verdict.outcome,
+      applied: false,
+      message: verdict.message,
+      lead,
+    });
+  }
+  lead.status = verdict.status as string;
+  persistMemory();
+  res.json({ success: true, outcome: verdict.outcome, applied: true, message: verdict.message, lead });
 });
 
 // Social Media Engine APIs
