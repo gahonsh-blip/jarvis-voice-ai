@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 03:35 IST (2026-10-04 22:06 UTC) — window slot 13: freelance create-lead refuses a payload with no real field
+
+### Fixed
+- **`POST /api/freelance/create-lead` answered `{ success: true, lead }` for every submission.** The route built a lead from the request body and stored it unconditionally, so a body carrying nothing but the auto-generated id produced a "lead" made entirely of `not recorded` placeholders, and `FreelancePipelineModal`'s Add Client form closed as though a client had been entered. New `classifyNewLeadIntake(body)` (`src/utils/freelanceLeadTruth.ts`) refuses a payload that supplied no client name, project type, requirement or budget (`reason: NO_FIELDS`) and reports `hasClientIdentity` so the route can tell whether a client was actually named. The route answers `success: false, stored: false` on a refusal and only stores a real record otherwise; the modal keeps the form open and shows the server's reason.
+
+### Tests
+- `src/tests/freelanceLeadTruth.test.ts` — extended to 20 cases: empty-payload refusal, blank/whitespace and malformed-budget refusal, acceptance of any single real field, `hasClientIdentity` reporting, plus source guards that the route gates on the verdict and the modal surfaces the refusal.
+- Negative-validated: removing the route gate fails exactly the route source guard (`1 failed | 19 passed`), restored → 20/20.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **159 files / 2020 tests passed** (24.79 s, 0 failed); build exit 0 (`dist/server.cjs` 1014650 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-05 03:05 IST (2026-10-04 21:36 UTC) — window slot 12: telephony settings route reports only a real saved change
 
 ### Fixed
