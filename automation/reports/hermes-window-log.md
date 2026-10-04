@@ -11055,3 +11055,54 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - YouTube summarizer का Telegram जवाब अब खाली summary को पूरा summary बताकर नहीं दिखाता — जब transcript/description कुछ न मिले तो पहले साफ़ notice आता है; 1970 टेस्ट पास, lint और build हरे, काम remote पर सुरक्षित।
+
+
+================================================================================
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK (slot 8 of 16)  |  IST time: 01:06
+Window date: 2026-10-04 (window runs into 2026-10-05)   Window slots completed so far: 7 (this makes 8)
+
+Completed:
+- #13 Zero-fake-success for all tools — GitHub approval decision route. POST /api/github/approvals/:id/decision answered {success:true, approval} for every id that existed, including one already APPROVED/REJECTED/EXPIRED, and wrote an audit entry claiming a human had just decided. New classifyApprovalDecision(before, after) in src/utils/github/approvalQueue.ts derives the reply from the state transition: DECIDED (only case that audits), ALREADY_SETTLED (no-op, success:false) or NOT_FOUND (404). Route updated in server.ts (~6883). Evidence: src/tests/approvalDecisionTruth.test.ts (new, 8 cases — 6 unit + 2 source guards), 8/8 pass; targeted approval suites 40/40.
+
+In Progress:
+- #13 Zero-fake-success for all tools — sweep not exhausted; remaining tool surfaces still to audit.
+
+Remaining:
+- #1 Android Bridge (BLOCKED — no physical handset)
+- #50, #55 (BLOCKED — hardware/credential as recorded in state)
+- Item 13 sweep continuation; then the rest of the backlog.
+
+Bugs Found:
+- POST /api/github/approvals/:id/decision fake success on already-settled/expired approvals, plus a false "human decided" audit entry.
+
+Bugs Fixed:
+- The decision route now claims success only when a PENDING request actually transitioned; a no-op returns success:false, outcome:ALREADY_SETTLED and does not write the audit entry. Verified by negative validation: reverting the route to the blanket res.json({ success: true, approval: updated }) fails exactly the two source guards (2 failed | 6 passed); restored → 8/8.
+
+Tests:    156 files / 1978 tests passed (full npx vitest run, 25.58 s, 0 failed)
+Lint:     tsc --noEmit exit 0
+Build:    npm run build exit 0; dist/server.cjs 1007258 bytes
+E2E:      NOT RUN — no handset and no display session in this sandbox
+Security: .env ignored (.gitignore:4); no .env, node_modules or dist staged; diff vs origin/main scanned for token/key literals — only identifier names, no literal secret. Permission gateway untouched.
+
+Documentation: docs/COMPLETION_STATUS.md (new Last cycle entry for slot 8)
+Branch:  feature/hermes-full-completion
+Commit:  556d047
+Push:    succeeded → origin/feature/hermes-full-completion (99b26a6..556d047)
+
+PR:         NONE opened this slot (PR work is the finalization slot job)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present in this environment.
+
+Blocked:
+- #1 Android Bridge — requires a physical Android device
+- #50, #55 — requires hardware/credential not present
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13 Zero-fake-success for all tools — continue the sweep; next candidate is the remaining GitHub automation routes and social automation reply surfaces.
+
+हिंदी सारांश (एक पंक्ति):
+- GitHub approval decision route se fake-success hata diya — ab sirf tab success kehta hai jab decision asli mein record hua ho; lint/test/build sab green.
