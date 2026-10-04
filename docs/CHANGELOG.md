@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 02:05 IST (2026-10-04 20:35 UTC) — window slot 10: outbound call stage reports only a real staged approval
+
+### Fixed
+- **`POST /api/telephony/outbound/stage` answered `{ success: true, request, actionId, promptText }` for every request.** The route discarded the result of `createPendingActionRequest`, so a finance-guard block or an active emergency stop still reported a staged Level-4 outbound call and returned an `actionId` for a request that could never be authorized. It also staged a pending outbound request in the session manager *before* the safety check, leaving a blocked dial sitting in the pending queue as if it awaited approval. New `classifyOutboundStage` (`src/utils/hardening/outboundStageTruth.ts`) claims success only when the created action reached `PENDING_APPROVAL`. The route now runs the safety gate first, returns `409` with `outcome: BLOCKED_FINANCE`/`BLOCKED_EMERGENCY` and `actionId: null` on a block, and stages the pending outbound request only after the action is genuinely pending.
+
+### Tests
+- `src/tests/outboundStageTruth.test.ts` — new, 12 cases: 5 unit verdicts (PENDING_APPROVAL stages; finance block, emergency block, non-pending status and a missing request never stage), 3 against the real `createPendingActionRequest` (benign → STAGED; finance purpose → BLOCKED_FINANCE; active emergency stop → BLOCKED_EMERGENCY) and 4 source guards (the route calls `classifyOutboundStage`; the safety gate precedes `stageOutboundRequest`; a blocked reply carries `actionId: null`; no blanket `success: true` remains).
+- Negative-validated: disabling the gate fails exactly the source guard (`1 failed | 11 passed`), restored → 12/12.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **158 files / 1999 tests passed** (26.40 s, 0 failed); build exit 0 (`dist/server.cjs` 986.6 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-05 01:35 IST (2026-10-04 20:05 UTC) — window slot 9: youtube draft update reports success only when a field actually changed
 
 ### Fixed
