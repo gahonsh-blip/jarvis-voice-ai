@@ -32,6 +32,7 @@ import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hard
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
+import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
@@ -8366,10 +8367,29 @@ app.get('/api/telephony/settings', (req: Request, res: Response) => {
 
 app.post('/api/telephony/settings', (req: Request, res: Response) => {
   try {
-    const updates = req.body;
+    // The route used to spread any caller-supplied object over the live
+    // settings and answer `success: true` unconditionally: an unknown or
+    // misspelled key was "stored", a malformed value corrupted state, and a
+    // body carrying no real setting still reported a save. Classify against
+    // the real keys and report what was actually stored.
+    const verdict = classifyTelephonySettingsUpdate(req.body, telephonySettingsState);
+    if (!verdict.accepted) {
+      return res.json({
+        success: false,
+        outcome: verdict.reason,
+        applied: false,
+        rejected: verdict.rejected,
+        message: verdict.message,
+        settings: {
+          ...telephonySettingsState,
+          twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',
+        },
+      });
+    }
+
     telephonySettingsState = {
       ...telephonySettingsState,
-      ...updates,
+      ...verdict.applied,
     };
 
     // Apply the selected engine to the live registry. Without this the
@@ -8377,13 +8397,13 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
     // TELEPHONY_PROVIDER had set at boot. The result is reported honestly so
     // the UI never claims a selection took effect when it did not.
     let engineApplied: boolean | null = null;
-    if (typeof updates?.provider === 'string') {
-      const providerId = telephonyEngineProviderId(updates.provider);
+    if (typeof verdict.applied.provider === 'string') {
+      const providerId = telephonyEngineProviderId(verdict.applied.provider);
       engineApplied = providerId !== null
         && TelephonyProviderRegistry.setActiveProvider(providerId);
       if (!engineApplied) {
         telephonySettingsState.engineApplyError =
-          `ENGINE_NOT_APPLIED: ${updates.provider}`;
+          `ENGINE_NOT_APPLIED: ${verdict.applied.provider}`;
       } else {
         delete telephonySettingsState.engineApplyError;
       }
@@ -8391,6 +8411,11 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      outcome: verdict.changed ? 'APPLIED' : 'UNCHANGED',
+      applied: verdict.changed,
+      changed: verdict.changed,
+      rejected: verdict.rejected,
+      message: verdict.message,
       settings: {
         ...telephonySettingsState,
         twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',

@@ -299,11 +299,17 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.success !== true) {
-        setSettingsSaveResult('SAVE FAILED — server rejected the settings');
+        setSettingsSaveResult(
+          data?.message ? `NOT SAVED — ${data.message}` : 'SAVE FAILED — server rejected the settings'
+        );
+      } else if (data.changed === false) {
+        setSettingsSaveResult('NO CHANGE — the submitted values matched what was already stored');
       } else if (data.engineApplied === false) {
         setSettingsSaveResult('SAVED BUT ENGINE NOT APPLIED — this engine is not routable in this build');
-      } else {
+      } else if (data.engineApplied === true) {
         setSettingsSaveResult('SAVED — engine applied to live gateway');
+      } else {
+        setSettingsSaveResult('SAVED — settings stored (no engine selection was submitted)');
       }
     } catch {
       setSettingsSaveResult('SAVE FAILED — could not reach the server');
