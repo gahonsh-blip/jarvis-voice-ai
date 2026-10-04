@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 00:21 IST (2026-10-04 18:51 UTC) — window slot 6: approval-create reports success only when an action is actually staged
+
+### Fixed
+- **`POST /api/approvals/create` answered `{ success: true, request }` for every request that matched a stored record — including one the finance exclusion guard or the emergency stop had blocked — and pushed a Telegram approval card for it.** The route decided `success` from the shape of the response, not from whether the request was actually staged, so a blocked action read as a successful staging. New `classifyApprovalCreate` (`src/utils/hardening/approvalCreateTruth.ts`) derives `success`/`staged` from the observed request status: `PENDING_APPROVAL` is the only success; a finance block, an emergency block, or any other terminal status is a no-op. The route gates the success reply behind `verdict.staged` and sends no Telegram card for a non-staged request.
+
+### Tests
+- `src/tests/approvalCreateTruth.test.ts` — new, 7 cases: 5 unit (pending request staged; finance block, emergency block, non-pending status and missing request all not staged) and 2 source guards (the route calls `classifyApprovalCreate` and contains no blanket `res.json({ success: true, request })`; the success reply is gated behind `if (!verdict.staged)`).
+- Negative-validated: restoring the blanket reply and disabling the staged gate fails exactly the 2 source guards (`2 failed | 5 passed`), restored → 7/7.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **154 files / 1961 tests passed** (24.87 s, 0 failed); build exit 0 (`dist/server.cjs` 1005300 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 23:55 IST (2026-10-04 18:25 UTC) — window slot 5: the mobile bridge stops reporting every device event as verified
 
 ### Fixed

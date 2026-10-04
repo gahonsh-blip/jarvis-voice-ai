@@ -4,6 +4,30 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-04 18:51 UTC (00:21 IST 2026-10-05) — **WORK SLOT 6** of the
+2026-10-04 → 2026-10-05 window, the 00:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the approval-create route.**
+
+`POST /api/approvals/create` answered `{ success: true, request }` for every
+request that matched a stored record. When the finance exclusion guard or the
+emergency stop had blocked the action the request object was still returned, but
+the route decided `success` from the *shape of the response* rather than from
+whether the request was actually staged — so a blocked action was reported as a
+successful staging and, worse, a Telegram approval card was pushed for a request
+that would never be pending. New `classifyApprovalCreate`
+(`src/utils/hardening/approvalCreateTruth.ts`) derives `success`/`staged` from the
+observed request status: `PENDING_APPROVAL` is the only success; a finance block,
+an emergency block, or any other terminal status is a no-op. The route now gates
+the success reply behind `verdict.staged` and sends no Telegram card for a
+non-staged request. Evidence: `src/utils/hardening/approvalCreateTruth.ts` (new);
+`server.ts` route `POST /api/approvals/create` (~6189) and import (~142);
+`src/tests/approvalCreateTruth.test.ts` (new, 7 cases — 5 unit + 2 source guards).
+Negative-validated: restoring the blanket `res.json({ success: true, request })`
+and disabling the staged gate fails exactly the 2 source guards (`2 failed | 5
+passed`), restored → 7/7. Gates: lint (`tsc --noEmit`) exit 0; full suite **154
+files / 1961 tests passed** (24.87 s, 0 failed); `npm run build` exit 0,
+`dist/server.cjs` 1005300 bytes. E2E: NOT RUN (no handset, no display session).
+Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — the sweep is not exhausted.
+
 Last cycle: 2026-10-04 18:25 UTC (23:55 IST 2026-10-04) — **WORK SLOT 5** of the
 2026-10-04 → 2026-10-05 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the mobile bridge device-event route.**
 

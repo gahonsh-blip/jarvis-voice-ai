@@ -10925,3 +10925,65 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - मोबाइल ब्रिज के device-event रूट ने हर event को VERIFIED बताना बंद किया — अब असली, लाइव डिवाइस पर ही VERIFIED, सिम्युलेशन पर SIMULATION_ONLY, और session खत्म होने पर UNVERIFIED; 1954 टेस्ट पास, lint और build हरे।
+
+---
+
+## Slot 6 — 2026-10-05 00:05 IST (2026-10-04 18:51 UTC) — WORK
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:06
+Window date: 2026-10-05 (window opened 2026-10-04)   Window slots completed so far: 6
+
+Completed:
+- #13 Zero-fake-success for all tools — the approval-create route.
+  `POST /api/approvals/create` answered `{ success: true, request }` for every
+  request that matched a stored record, including one the finance guard or the
+  emergency stop had blocked, and pushed a Telegram approval card for it. New
+  `classifyApprovalCreate` (src/utils/hardening/approvalCreateTruth.ts) derives
+  success/staged from the observed request status — `PENDING_APPROVAL` is the
+  only success. server.ts gates the success reply behind `verdict.staged`.
+  Evidence: src/utils/hardening/approvalCreateTruth.ts (new); server.ts route
+  (~6189) + import (~142); src/tests/approvalCreateTruth.test.ts (new, 7 cases).
+  Negative-validated: reverted route fails exactly 2 source guards
+  (`2 failed | 5 passed`), restored → 7/7.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the multi-slot sweep is not exhausted.
+
+Remaining:
+- #13 remaining routes; then Real Android E2E → Real Screenshot → Computer
+  Operator → GitHub Automation → Social Automation → Communication → AI/Memory →
+  Autonomous Tasks → Voice → Wake Word → Production Hardening.
+
+Bugs Found:
+- /api/approvals/create reported a blocked action as a successful staging and
+  sent a Telegram approval card for a request that would never be pending.
+
+Bugs Fixed:
+- /api/approvals/create now answers success only when the request reached
+  PENDING_APPROVAL (7 tests; negative validation: revert → 2 source guards fail).
+
+Tests:    154 files / 1961 tests passed (24.87 s, 0 failed) — full `npx vitest run`
+Lint:     `tsc --noEmit` exit 0
+Build:    `npm run build` exit 0; dist/server.cjs 1005300 bytes
+E2E:      NOT RUN (no handset, no display session)
+Security: no .env, token, key, node_modules or dist staged (manual check)
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  fee9645 (code) + docs commit
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         NONE this slot (work slot; PR refreshed at finalization)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present
+
+Blocked:
+- #1 Real Android E2E — requires a physical handset (not present).
+- #50 / #55 — require credentials/hardware not present in this sandbox.
+
+Next Slot:
+- #13 — continue the sweep on the next route that still answers a blanket success.
+
+हिंदी सारांश (एक पंक्ति):
+- approval-create रूट अब किसी कार्रवाई को तभी सफल बताता है जब वह वाकई PENDING_APPROVAL में गई हो; finance/emergency block पर success:false और कोई Telegram कार्ड नहीं — 1961 टेस्ट पास, lint और build हरे।
