@@ -1,19 +1,19 @@
 {
-  "window_date": "2026-10-03",
-  "window_started_at": "2026-10-03T15:35:00Z",
-  "last_slot_at": "2026-10-03T23:07:00Z",
-  "slots_completed": 15,
+  "window_date": "2026-10-04",
+  "window_started_at": "2026-10-04T16:06:00Z",
+  "last_slot_at": "2026-10-04T16:18:00Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "62ab3d5",
+  "last_commit": "5bb8004",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "verification-only: lint exit 0; vitest 149 files / 1915 tests passed (25.96s, 0 failed); build exit 0 (dist/server.cjs 1000117 bytes); npm audit 3 moderate (transitive qs), 0 high/critical; PR #5 open non-draft mergeable_state clean; not merged (awaiting human approval)",
+  "finalized": false,
+  "finalization_result": null,
   "blocked_items": [
-    "Real Android E2E requires a physical handset",
-    "Real Screenshot requires a display session",
-    "Live social account probes require real platform credentials"
+    "1",
+    "50",
+    "55"
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
