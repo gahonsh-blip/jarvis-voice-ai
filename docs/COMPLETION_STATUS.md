@@ -4,6 +4,31 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-04 18:25 UTC (23:55 IST 2026-10-04) — **WORK SLOT 5** of the
+2026-10-04 → 2026-10-05 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the mobile bridge device-event route.**
+
+`POST /api/mobile/bridge/event` answered `success: true, outcome: 'VERIFIED',
+accepted: true` for every device event the gateway accepted — including one whose
+device was a simulated testbed and one whose session had lapsed so the bridge read
+`MOBILE_NOT_CONNECTED`. The `CALL_RECEIVED` / `NOTIFICATION_RECEIVED` /
+`EVENT_RECEIVED` audit rows were stamped `VERIFIED` the same way, so the reply and
+the trail both claimed a verified live device event that no live device backed.
+New `classifyBridgeEvent` (`src/utils/hardening/bridgeEventTruth.ts`) derives the
+verdict from observed bridge state — `VERIFIED` only for a live, non-simulated
+device, `SIMULATION_ONLY` for a simulation (which outranks a `CONNECTED` status),
+`UNVERIFIED` when the bridge is not live, `FAILED` when the gateway did not accept
+the event — and the route stamps the audit rows with the same outcome so the trail
+cannot disagree with the reply. Evidence: `src/utils/hardening/bridgeEventTruth.ts`
+(new); `server.ts` route `POST /api/mobile/bridge/event` (~7905) and import (~39);
+`src/tests/bridgeEventTruth.test.ts` (new, 9 cases — 6 unit + 3 source guards).
+Negative-validated: reverting the route to the blanket `success: true` /
+`outcome: 'VERIFIED'` reply fails exactly the 3 source guards (`3 failed | 6
+passed`), restored → 9/9. Gates: lint (`tsc --noEmit`) exit 0; targeted 3 files /
+63 passed; full suite **153 files / 1954 tests passed** (24.33 s, 0 failed);
+`npm run build` exit 0, `dist/server.cjs` 1004008 bytes. E2E: NOT RUN (no
+handset, no display session). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` —
+the sweep is not exhausted.
+
 Last cycle: 2026-10-04 17:52 UTC (23:22 IST 2026-10-04) — **WORK SLOT 4** of the
 2026-10-04 → 2026-10-05 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the call HUD acoustic-filter toggle.**
 

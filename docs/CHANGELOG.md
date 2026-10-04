@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 23:55 IST (2026-10-04 18:25 UTC) — window slot 5: the mobile bridge stops reporting every device event as verified
+
+### Fixed
+- **`POST /api/mobile/bridge/event` answered `{ success: true, outcome: 'VERIFIED', accepted: true }` for every device event the gateway accepted, and stamped the `CALL_RECEIVED` / `NOTIFICATION_RECEIVED` / `EVENT_RECEIVED` audit rows `VERIFIED` — including an event from a simulated testbed device and one whose session had lapsed so the bridge read `MOBILE_NOT_CONNECTED`.** The reply told the caller a live device event was verified when no live device backed it, and the audit trail repeated the claim. New `classifyBridgeEvent` (`src/utils/hardening/bridgeEventTruth.ts`) derives the verdict from observed bridge state: `VERIFIED` only for a live, non-simulated device, `SIMULATION_ONLY` for a simulation (which outranks a `CONNECTED` status), `UNVERIFIED` when the bridge is not live, `FAILED` when the gateway did not accept the event. The route stamps the audit rows with the same outcome, so the reply and the trail cannot disagree.
+
+### Tests
+- `src/tests/bridgeEventTruth.test.ts` — new, 9 cases: 6 unit (live event verified; simulated device never verified even at `CONNECTED`; not-live and `MOBILE_NOT_CONNECTED` both `UNVERIFIED`; unaccepted event `FAILED`; the message names the event type) and 3 source guards (the route calls the classifier, stamps the audit rows with `eventVerdict.outcome` and contains no blanket `'VERIFIED'`, and no longer hard-codes `success: true`).
+- Negative-validated: reverting the route to the blanket reply fails exactly the 3 source guards (`3 failed | 6 passed`), restored → 9/9.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; targeted 3 files / 63 passed; full suite **153 files / 1954 tests passed** (24.33 s, 0 failed); build exit 0 (`dist/server.cjs` 1004008 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 23:22 IST (2026-10-04 17:52 UTC) — window slot 4: the call HUD stops labelling a disconnected bandpass as an applied filter
 
 ### Fixed
