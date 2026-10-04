@@ -4,6 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-05 01:05 IST — **WORK SLOT 8** of the
+2026-10-04 → 2026-10-05 window, the 01:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the GitHub approval decision route.**
+
+`POST /api/github/approvals/:id/decision` answered `{ success: true, approval }`
+for every id that existed. `ApprovalQueue.decide` returns the record unchanged
+when the request is already `APPROVED`, `REJECTED` or `EXPIRED`, so a duplicate
+or late click re-reported a success it did not produce — and the route wrote an
+`addAuditLog` entry claiming a human had just decided the action. A settled
+approval is the gate in front of an external action, so mislabelling a no-op as
+a recorded decision is the fake-success shape item 13 removes. New
+`classifyApprovalDecision(before, after)` (`src/utils/github/approvalQueue.ts`)
+derives the reply from the state transition: `DECIDED` (success, and the only
+case that writes the audit entry), `ALREADY_SETTLED` (no-op, `success: false`)
+or `NOT_FOUND` (404). The route reads the state before and after `decide` and
+returns the honest verdict. Evidence: `src/utils/github/approvalQueue.ts`
+(`classifyApprovalDecision`, new); `server.ts` decision route (~6883) and
+import (~144); `src/tests/approvalDecisionTruth.test.ts` (new, 8 cases — 6
+unit + 2 source guards). Negative-validated: reverting the route to the blanket
+`res.json({ success: true, approval: updated })` fails exactly the two source
+guards (`2 failed | 6 passed`); restored → 8/8. Gates: lint (`tsc --noEmit`)
+exit 0; targeted approval suites 40/40. Item 13 remains `PARTIAL` — the sweep is
+not exhausted.
+
 Last cycle: 2026-10-04 19:26 UTC (00:56 IST 2026-10-05) — **WORK SLOT 7** of the
 2026-10-04 → 2026-10-05 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the YouTube summarizer Telegram reply.**
 

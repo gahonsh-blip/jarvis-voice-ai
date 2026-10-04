@@ -141,6 +141,7 @@ import { maskAndroidCallerNumber } from './src/utils/androidBridgePrivacy';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
 import { classifyApprovalOutcome, formatUnconfirmedMobileApprovalReply } from './src/utils/hardening/approvalResolution';
 import { classifyApprovalCreate } from './src/utils/hardening/approvalCreateTruth';
+import { classifyApprovalDecision } from './src/utils/github/approvalQueue';
 import {
   observeInstanceFromHost,
   describeRunState,
@@ -6880,19 +6881,33 @@ app.post('/api/github/approvals/:id/decision', (req: Request, res: Response) => 
     });
   }
 
+  const before = githubApprovalQueue.get(req.params.id);
   const updated = githubApprovalQueue.decide(req.params.id, approved, decidedBy.trim(), reason);
-  if (!updated) {
-    return res.status(404).json({ success: false, error: 'No such approval request.' });
+  // `decide` returns the record unchanged for an id that is already settled or
+  // expired, so a duplicate or late click previously re-reported success and
+  // logged a decision it did not make. Classify from the state transition.
+  const verdict = classifyApprovalDecision(before?.state ?? null, updated?.state ?? null);
+  if (verdict.outcome === 'NOT_FOUND') {
+    return res.status(404).json({ success: false, error: verdict.message });
+  }
+  if (!verdict.recorded) {
+    return res.json({
+      success: false,
+      recorded: false,
+      outcome: verdict.outcome,
+      approval: updated,
+      error: verdict.message,
+    });
   }
 
   addAuditLog(
-    `${approved ? 'APPROVED' : 'REJECTED'} GitHub automation action "${updated.summary}" (${updated.id}) by ${decidedBy}`,
+    `${approved ? 'APPROVED' : 'REJECTED'} GitHub automation action "${updated!.summary}" (${updated!.id}) by ${decidedBy}`,
     4,
     decidedBy.trim(),
     approved ? 'VERIFIED' : 'BLOCKED'
   );
 
-  res.json({ success: true, approval: updated });
+  res.json({ success: true, recorded: true, outcome: verdict.outcome, approval: updated });
 });
 
 // Reports the nightly schedule and recent runs.

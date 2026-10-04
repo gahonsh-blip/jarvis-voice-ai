@@ -137,3 +137,58 @@ export class ApprovalQueue {
     }
   }
 }
+
+// ==============================================================================
+// Backlog item 13: "Zero-fake-success for all tools".
+//
+// `POST /api/github/approvals/:id/decision` answered `{ success: true, approval }`
+// for every id that existed, even one that was already settled (APPROVED,
+// REJECTED or EXPIRED). A late or duplicate click therefore re-reported a success
+// this request did not produce, and the audit log was written as though a human
+// had just decided. `decide` changes state only on a PENDING request, so the
+// route must claim success only when the state actually moved.
+// ==============================================================================
+
+export type ApprovalDecisionOutcome = 'DECIDED' | 'ALREADY_SETTLED' | 'NOT_FOUND';
+
+export interface ApprovalDecisionVerdict {
+  success: boolean;
+  recorded: boolean;
+  outcome: ApprovalDecisionOutcome;
+  message: string;
+}
+
+/**
+ * Derives the honest reply for an approval decision from the approval's state
+ * before and after the attempt. Success is claimed only when a PENDING request
+ * transitioned; an unknown id or an already-settled request is a no-op.
+ */
+export function classifyApprovalDecision(
+  before: ApprovalState | null,
+  after: ApprovalState | null
+): ApprovalDecisionVerdict {
+  if (before === null || after === null) {
+    return {
+      success: false,
+      recorded: false,
+      outcome: 'NOT_FOUND',
+      message: 'No such approval request.',
+    };
+  }
+
+  if (before !== 'PENDING') {
+    return {
+      success: false,
+      recorded: false,
+      outcome: 'ALREADY_SETTLED',
+      message: `Approval was already ${before.toLowerCase()}; this decision did not change it.`,
+    };
+  }
+
+  return {
+    success: true,
+    recorded: true,
+    outcome: 'DECIDED',
+    message: `Approval ${after.toLowerCase()}.`,
+  };
+}
