@@ -29,6 +29,7 @@ import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
+import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
@@ -3228,12 +3229,23 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       const summaryResult = await summarizeYouTubeVideoCore({ url: rawUrl, videoId: vidId || undefined });
       if (summaryResult.success && summaryResult.videoInfo) {
         const info = summaryResult.videoInfo;
-        const takeaways = summaryResult.keyTakeaways && summaryResult.keyTakeaways.length > 0
-          ? `\n\n💡 *Key Takeaways*:\n${summaryResult.keyTakeaways.slice(0, 5).join('\n')}`
-          : '';
-        const notice = summaryResult.notice ? `\n\n⚠️ _${summaryResult.notice}_` : '';
-        botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})${notice}\n\n${summaryResult.summary}${takeaways}`;
-        actionData = { type: 'youtube_summary', videoInfo: info, source: summaryResult.source };
+        // A summariser result can carry `success: true` and a video with an EMPTY
+        // summary (`source: 'none'` — no transcript and no description). The old
+        // reply rendered the "YOUTUBE VIDEO SUMMARY" heading with a blank body in
+        // that case, reading as a summary that was never produced. Lead with the
+        // truth instead.
+        const noSummaryNotice = formatYouTubeSummaryNotice(summaryResult);
+        if (noSummaryNotice) {
+          botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})\n\n⚠️ _${noSummaryNotice}_`;
+          actionData = { type: 'youtube_summary_unavailable', videoInfo: info, source: summaryResult.source };
+        } else {
+          const takeaways = summaryResult.keyTakeaways && summaryResult.keyTakeaways.length > 0
+            ? `\n\n💡 *Key Takeaways*:\n${summaryResult.keyTakeaways.slice(0, 5).join('\n')}`
+            : '';
+          const notice = summaryResult.notice ? `\n\n⚠️ _${summaryResult.notice}_` : '';
+          botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})${notice}\n\n${summaryResult.summary}${takeaways}`;
+          actionData = { type: 'youtube_summary', videoInfo: info, source: summaryResult.source };
+        }
       } else {
         botReplyText = `❌ *YouTube Summarizer Notice*:\n${summaryResult.success ? 'Failed to extract video content. Ensure the video is public and accessible.' : summaryResult.error}`;
       }
