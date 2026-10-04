@@ -4614,11 +4614,12 @@ app.post('/api/social/youtube/update-draft', (req: Request, res: Response) => {
   // request that changed nothing. Only a real difference is applied and
   // reported as applied; a repeat submission reads as a no-op.
   const verdict = classifyYouTubeDraftUpdate(
-    { title, description, privacyStatus },
+    { title, description, privacyStatus, tags },
     {
       videoTitle: post.videoTitle,
       videoDescription: post.videoDescription,
       privacyStatus: post.privacyStatus,
+      hashtags: post.hashtags,
     }
   );
 
@@ -4644,8 +4645,8 @@ app.post('/api/social/youtube/update-draft', (req: Request, res: Response) => {
   if (changes.privacyStatus !== undefined) {
     post.privacyStatus = changes.privacyStatus;
   }
-  if (tags && Array.isArray(tags)) {
-    post.hashtags = tags;
+  if (changes.hashtags !== undefined) {
+    post.hashtags = changes.hashtags;
   }
 
   persistMemory();

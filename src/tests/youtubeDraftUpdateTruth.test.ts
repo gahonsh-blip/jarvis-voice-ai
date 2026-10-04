@@ -68,6 +68,35 @@ describe('classifyYouTubeDraftUpdate only applies a real difference', () => {
     expect(verdict.success).toBe(false);
     expect(verdict.outcome).toBe('UNCHANGED');
   });
+
+  it('applies a tags-only change instead of silently dropping it', () => {
+    const verdict = classifyYouTubeDraftUpdate(
+      { tags: ['#jarvis', 'voice', '  ai  '] },
+      { videoTitle: 'T', videoDescription: 'D', privacyStatus: 'private', hashtags: ['#old'] }
+    );
+    expect(verdict.success).toBe(true);
+    expect(verdict.outcome).toBe('APPLIED');
+    expect(verdict.changes).toEqual({ hashtags: ['#jarvis', 'voice', 'ai'] });
+  });
+
+  it('reports unchanged tags as a no-op after trimming and dropping blanks', () => {
+    const verdict = classifyYouTubeDraftUpdate(
+      { tags: [' jarvis ', '', '#voice'] },
+      { videoTitle: 'T', videoDescription: 'D', privacyStatus: 'private', hashtags: ['jarvis', '#voice'] }
+    );
+    expect(verdict.success).toBe(false);
+    expect(verdict.outcome).toBe('UNCHANGED');
+    expect(verdict.changes).toEqual({});
+  });
+
+  it('ignores a non-array tags payload rather than inventing a change', () => {
+    const verdict = classifyYouTubeDraftUpdate(
+      { tags: 'not-an-array' },
+      { videoTitle: 'T', videoDescription: 'D', privacyStatus: 'private', hashtags: ['keep'] }
+    );
+    expect(verdict.success).toBe(false);
+    expect(verdict.changes).toEqual({});
+  });
 });
 
 describe('the update-draft route no longer fakes a saved update', () => {
@@ -85,6 +114,12 @@ describe('the update-draft route no longer fakes a saved update', () => {
     expect(route).toMatch(/if \(changes\.videoTitle !== undefined\)/);
     expect(route).toMatch(/if \(changes\.privacyStatus !== undefined\)/);
     expect(route).not.toMatch(/if \(title\) \{\s*post\.videoTitle = title\.trim\(\);/);
+  });
+
+  it('routes the tags field through the verdict instead of writing it raw', () => {
+    expect(route).toMatch(/classifyYouTubeDraftUpdate\(\s*\{ title, description, privacyStatus, tags \}/);
+    expect(route).toMatch(/if \(changes\.hashtags !== undefined\) \{\s*post\.hashtags = changes\.hashtags;/);
+    expect(route).not.toMatch(/if \(tags && Array\.isArray\(tags\)\)/);
   });
 
   it('answers a missing post with success:false rather than a bare error', () => {

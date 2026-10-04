@@ -19,12 +19,27 @@ export interface YouTubeDraftFields {
   videoTitle?: string;
   videoDescription?: string;
   privacyStatus?: 'private' | 'unlisted' | 'public';
+  hashtags?: string[];
 }
 
 export interface YouTubeDraftChanges {
   videoTitle?: string;
   videoDescription?: string;
   privacyStatus?: 'private' | 'unlisted' | 'public';
+  hashtags?: string[];
+}
+
+/** Trim each tag, drop blanks, and keep only string entries. */
+function normalizeTags(tags: unknown): string[] | null {
+  if (!Array.isArray(tags)) return null;
+  return tags
+    .filter((t): t is string => typeof t === 'string')
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+}
+
+function sameTags(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((tag, i) => tag === b[i]);
 }
 
 export interface YouTubeDraftUpdateVerdict {
@@ -51,6 +66,7 @@ export function classifyYouTubeDraftUpdate(
     title?: unknown;
     description?: unknown;
     privacyStatus?: unknown;
+    tags?: unknown;
   },
   current: YouTubeDraftFields
 ): YouTubeDraftUpdateVerdict {
@@ -72,6 +88,16 @@ export function classifyYouTubeDraftUpdate(
       ? requested.privacyStatus
       : 'private';
     if (privacy !== current.privacyStatus) changes.privacyStatus = privacy;
+  }
+
+  // Tags were the one field the route accepted but never classified: a request
+  // that changed only the tags fell through every guard, wrote nothing, and was
+  // reported as a no-op — a silent drop, not a truthful "unchanged". Compare the
+  // normalized list against the stored hashtags so a real tag change applies.
+  const tags = normalizeTags(requested.tags);
+  if (tags && tags.length > 0) {
+    const currentTags = current.hashtags ?? [];
+    if (!sameTags(tags, currentTags)) changes.hashtags = tags;
   }
 
   const applied = Object.keys(changes).length > 0;
