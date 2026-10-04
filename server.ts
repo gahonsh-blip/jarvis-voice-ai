@@ -24,6 +24,7 @@ import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
+import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
 import { observedAccountName, describeVerifiedAccount } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
@@ -4606,25 +4607,48 @@ app.post('/api/social/youtube/update-draft', (req: Request, res: Response) => {
   if (!postId) return res.status(400).json({ error: 'postId is required' });
 
   const post = memoryState.socialPosts.find((p) => p.id === postId);
-  if (!post) return res.status(404).json({ error: 'Post not found' });
+  if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
 
-  if (title) {
-    post.videoTitle = title.trim();
-    post.topic = title.trim();
+  // The route used to answer success for every matching post, including a
+  // request that changed nothing. Only a real difference is applied and
+  // reported as applied; a repeat submission reads as a no-op.
+  const verdict = classifyYouTubeDraftUpdate(
+    { title, description, privacyStatus },
+    {
+      videoTitle: post.videoTitle,
+      videoDescription: post.videoDescription,
+      privacyStatus: post.privacyStatus,
+    }
+  );
+
+  if (!verdict.success) {
+    return res.json({
+      success: false,
+      outcome: verdict.outcome,
+      applied: false,
+      message: verdict.message,
+      post,
+    });
   }
-  if (description !== undefined) {
-    post.videoDescription = description;
-    post.content = description;
+
+  const { changes } = verdict;
+  if (changes.videoTitle !== undefined) {
+    post.videoTitle = changes.videoTitle;
+    post.topic = changes.videoTitle;
   }
-  if (privacyStatus) {
-    post.privacyStatus = (privacyStatus === 'unlisted' || privacyStatus === 'public') ? privacyStatus : 'private';
+  if (changes.videoDescription !== undefined) {
+    post.videoDescription = changes.videoDescription;
+    post.content = changes.videoDescription;
+  }
+  if (changes.privacyStatus !== undefined) {
+    post.privacyStatus = changes.privacyStatus;
   }
   if (tags && Array.isArray(tags)) {
     post.hashtags = tags;
   }
 
   persistMemory();
-  res.json({ success: true, post });
+  res.json({ success: true, outcome: verdict.outcome, applied: true, message: verdict.message, post });
 });
 
 /**

@@ -708,7 +708,12 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       if (data.success && data.post) {
         setSelectedPost(data.post);
         setPosts((prev) => prev.map((p) => (p.id === data.post.id ? data.post : p)));
-        onSpeak('YouTube video parameters updated.');
+        onSpeak(data.message || 'YouTube video parameters updated.');
+      } else {
+        // The route only claims success when a field actually changed. A repeat
+        // submission or a blank form is a no-op, and the operator is told so
+        // rather than hearing that an update happened.
+        onSpeak(data.message || 'No YouTube draft change was applied.');
       }
     } catch (err) {
       console.warn('Update draft error:', err);
