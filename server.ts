@@ -139,6 +139,7 @@ import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/and
 import { maskAndroidCallerNumber } from './src/utils/androidBridgePrivacy';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
 import { classifyApprovalOutcome, formatUnconfirmedMobileApprovalReply } from './src/utils/hardening/approvalResolution';
+import { classifyApprovalCreate } from './src/utils/hardening/approvalCreateTruth';
 import {
   observeInstanceFromHost,
   describeRunState,
@@ -6195,10 +6196,16 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     actionPayload,
   });
 
+  // Success is derived from whether the request actually reached
+  // PENDING_APPROVAL — not from the route merely producing a request object.
+  // A finance or emergency block, or any other terminal status, is a no-op.
+  const verdict = classifyApprovalCreate(result);
+
   if (result.blockedByFinance) {
     return res.status(403).json({
       success: false,
       blocked: true,
+      outcome: verdict.outcome,
       reason: result.financeReason,
       request: result.request,
     });
@@ -6208,7 +6215,20 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     return res.status(423).json({
       success: false,
       blocked: true,
+      outcome: verdict.outcome,
       reason: 'Emergency Stop is active. Action creation paused.',
+      request: result.request,
+    });
+  }
+
+  if (!verdict.staged) {
+    // Defensive: a request that did not reach PENDING_APPROVAL must never be
+    // reported as a successful staging, and no Telegram card is sent for it.
+    return res.status(409).json({
+      success: false,
+      staged: false,
+      outcome: verdict.outcome,
+      reason: verdict.message,
       request: result.request,
     });
   }
@@ -6227,7 +6247,7 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     sendRealTelegramMessage(activeTelegramChatId, cardText, keyboard).catch(() => {});
   }
 
-  res.json({ success: true, request: result.request });
+  res.json({ success: true, staged: true, outcome: verdict.outcome, request: result.request });
 });
 
 app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
