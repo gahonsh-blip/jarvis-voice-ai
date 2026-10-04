@@ -11289,3 +11289,49 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - YouTube draft update route ka tags field ab truth verdict se guzarta hai;
   13/13 tests, lint/build green.
+
+## Slot 12 — WORK — 2026-10-05 03:05 IST (window 2026-10-04 → 2026-10-05)
+
+Completed:
+- #13 Zero-fake-success for all tools — telephony settings route.
+  `POST /api/telephony/settings` spread any caller-supplied object over the
+  live settings (`telephonySettingsState = { ...state, ...req.body }`) and
+  answered `success: true` unconditionally: an unknown or misspelled key was
+  "stored", a malformed value corrupted the settings the call engine reads, and
+  a body carrying no real setting still reported a save — while
+  `TelephonyHubModal` showed a green "SAVED — engine applied to live gateway"
+  badge. New `classifyTelephonySettingsUpdate(body, current)`
+  (`src/utils/hardening/telephonySettingsTruth.ts`) accepts only the real
+  setting keys with primitive values, rejects unknown/malformed keys, and
+  reports whether anything actually changed. The route stores only
+  `verdict.applied` and answers `success: false, applied: false` with a naming
+  `reason` (`NO_KEYS` / `NO_RECOGNISED_KEYS`) on a refusal, `outcome: UNCHANGED`
+  for a no-op. The modal now surfaces a refused or no-op save.
+  Evidence: `src/tests/telephonySettingsTruth.test.ts` 11/11.
+  Negative-validated: restoring the pre-fix route -> `3 failed | 8 passed`;
+  restored -> 11/11.
+
+Tests:    159 files / 2014 tests passed (25.32 s, 0 failed) — observed.
+Lint:     `tsc --noEmit` exit 0 — observed.
+Build:    exit 0, `dist/server.cjs` 989.8 kb — observed.
+E2E:      NOT RUN (no handset, no carrier, no display session).
+Security: no `.env` touched, no secret written. Audit: NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  e18cee0 (code) + 7f544a4 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #5 open — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/5
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present.
+
+Blocked:
+- #1 Android Bridge / real Android E2E / real screenshot — requires a handset.
+- #50, #55 — BLOCKED (recorded in prior slots).
+
+Next Slot:
+- #13 continue the sweep — remaining telephony/social reply surfaces.
+
+हिंदी सारांश (एक पंक्ति):
+- Telephony settings route ab truth verdict se guzarta hai; unknown key ya khaali body ko saved change nahi batata.
