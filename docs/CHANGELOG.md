@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 22:45 IST (2026-10-04 17:15 UTC) — window slot 3: the freelance lead status update stops faking a saved change
+
+### Fixed
+- **`POST /api/freelance/update-status` in `server.ts` stored any status string the caller supplied and answered `{ success: true, lead }` for every request that matched a stored lead.** An unknown status was written as a real pipeline state, and re-applying the stored status announced a saved change while nothing changed — the fake-success shape the zero-fake-success item removes. New `classifyLeadStatusUpdate` (`src/utils/hardening/freelanceLeadStatusTruth.ts`) accepts only the four statuses the UI can display and returns a verdict — `APPLIED` (recognised and different, written), `UNCHANGED`, `UNKNOWN_STATUS`, `NO_STATUS` — with `status: null` for everything but `APPLIED`. The route writes only `verdict.applied` and a missing lead now answers `success: false` with a `message` and no write.
+- **`FreelancePipelineModal.tsx` treated every response as a success** and refreshed silently, so a refused update looked identical to an applied one. It now surfaces the refusal as an amber notice and clears it on a real change.
+
+### Tests
+- `src/tests/freelanceLeadStatusTruth.test.ts` — new, 9 cases: every UI status applies (and a repeat is refused), an unknown status is refused without being stored, a missing/non-string status is refused, whitespace is trimmed before matching, plus source guards that the route classifies before writing, no longer does `lead.status = status`, and 404s with `success: false`.
+- Negative-validated: restoring the pre-fix route fails exactly 3 of 9 (`3 failed | 6 passed`), restored → 9/9.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **152 files / 1942 tests passed** (24.83 s, 0 failed); build exit 0 (`dist/server.cjs` 979.1 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 22:17 IST (2026-10-04 16:47 UTC) — window slot 2: the social draft discloses its real origin
 
 ### Fixed
