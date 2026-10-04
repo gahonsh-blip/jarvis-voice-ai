@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 03:05 IST (2026-10-04 21:36 UTC) — window slot 12: telephony settings route reports only a real saved change
+
+### Fixed
+- **`POST /api/telephony/settings` spread any caller-supplied object over the live settings and answered `success: true` unconditionally.** An unknown or misspelled key was "stored", a malformed value corrupted the settings the call engine reads, and a body carrying no real setting still reported a save — while `TelephonyHubModal` showed a green "SAVED — engine applied to live gateway" badge. New `classifyTelephonySettingsUpdate(body, current)` (`src/utils/hardening/telephonySettingsTruth.ts`) accepts only the real setting keys with primitive values, rejects unknown/malformed keys, and reports whether anything actually changed. The route stores only `verdict.applied` and answers `success: false, applied: false` with a naming `reason` (`NO_KEYS` / `NO_RECOGNISED_KEYS`) on a refusal, `outcome: UNCHANGED` when the submitted values matched what was already stored. The modal surfaces a refused or no-op save instead of a green saved badge.
+
+### Tests
+- `src/tests/telephonySettingsTruth.test.ts` — new, 11 cases: recognised apply, repeat no-op, every real key accepted, empty/array/string/null bodies refused, unknown and malformed values rejected, mixed body applies the real keys and names the rejected ones, plus source guards that the route classifies before storing and no longer spreads the raw request body.
+- Negative-validated: restoring the pre-fix route fails exactly the 3 source guards (`3 failed | 8 passed`), restored → 11/11.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **159 files / 2014 tests passed** (25.32 s, 0 failed); build exit 0 (`dist/server.cjs` 989.8 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-05 02:35 IST (2026-10-04 21:05 UTC) — window slot 11: YouTube draft `tags` routed through the truth verdict
 
 ### Fixed
