@@ -34,6 +34,9 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
   // repeat of the stored one) as success:false; the operator is told rather
   // than shown a silent no-op.
   const [statusNotice, setStatusNotice] = useState<string>('');
+  // A create-lead submission the server refused (no real field supplied) must
+  // keep the form open and say so, not close as though a client was entered.
+  const [createNotice, setCreateNotice] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
@@ -58,6 +61,7 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
 
   const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateNotice('');
     try {
       const res = await fetch('/api/freelance/create-lead', {
         method: 'POST',
@@ -76,9 +80,13 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
         setShowNewLeadModal(false);
         setClientName('');
         setRawRequirement('');
+      } else {
+        // The server stored nothing; keep the form open and show its reason.
+        setCreateNotice(data.message || 'The lead was not stored.');
       }
     } catch (err) {
       console.warn('Create lead failed:', err);
+      setCreateNotice('The lead was not stored — the server could not be reached.');
     }
   };
 
@@ -376,6 +384,12 @@ ${selectedLead.quotation.milestones.map((m, i) => `${i + 1}. ${m.title} - ₹${m
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
+                {createNotice && (
+                  <div className="flex items-center gap-1.5 mr-auto text-xs font-mono text-amber-300">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{createNotice}</span>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowNewLeadModal(false)}

@@ -167,3 +167,61 @@ export function formatLeadBudget(amount: number | null | undefined): string {
     ? `₹${amount.toLocaleString('en-IN')}`
     : 'Budget not recorded';
 }
+
+// ==============================================================================
+// NEW-LEAD INTAKE — THE ROUTE MUST NOT REPORT A STORED LEAD IT DID NOT STORE
+//
+// `POST /api/freelance/create-lead` built a record from the payload and
+// answered `{ success: true, lead }` unconditionally. A submission that carried
+// nothing but an auto-generated id — no client name, no requirement, no budget —
+// was still announced as a created lead, and the operator's "Add Client
+// Inquiry" form closed as though a client had been entered. The record holds
+// only "not recorded" placeholders in that case, so the reply described a lead
+// the operator never supplied.
+//
+// This classifier decides whether the payload carried anything a lead can be
+// built from. Any real field is enough; a body that supplied only an id (or
+// nothing) is refused, and the route answers honestly instead of reporting a
+// stored lead.
+// ==============================================================================
+
+export type NewLeadIntakeVerdict =
+  | { accepted: true; hasClientIdentity: boolean; message: string }
+  | { accepted: false; reason: 'NO_FIELDS'; message: string };
+
+/**
+ * Decide whether a create-lead payload carried any real lead field.
+ *
+ * A lead is accepted when at least one of clientName / projectType /
+ * rawRequirement / budget was really supplied. `hasClientIdentity` is false
+ * when no client name was given, so the caller can say the lead is stored
+ * without an identified client rather than presenting a placeholder as a name.
+ */
+export function classifyNewLeadIntake(input: {
+  clientName?: unknown;
+  projectType?: unknown;
+  rawRequirement?: unknown;
+  budget?: unknown;
+}): NewLeadIntakeVerdict {
+  const hasClientIdentity = text(input.clientName) !== null;
+  const hasProjectType = text(input.projectType) !== null;
+  const hasRequirement = text(input.rawRequirement) !== null;
+  const hasBudget = recordedBudgetAmount(input.budget) !== null;
+
+  if (!hasClientIdentity && !hasProjectType && !hasRequirement && !hasBudget) {
+    return {
+      accepted: false,
+      reason: 'NO_FIELDS',
+      message:
+        'No client name, project type, requirement or budget was supplied; no lead was stored.',
+    };
+  }
+
+  return {
+    accepted: true,
+    hasClientIdentity,
+    message: hasClientIdentity
+      ? 'Lead stored.'
+      : 'Lead stored without a client name; the client was not identified in the request.',
+  };
+}

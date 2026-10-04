@@ -9,7 +9,7 @@ import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
 import { isTelephonyHubRequest, isCallHistoryRequest, isAnswerCallRequest, isHangupCallRequest, isRejectCallRequest, isTelephonyControlRequest } from './src/utils/telephonyIntentRouting';
 import { judgeSetNameIntent } from './src/utils/identityTruth';
-import { freelanceLeadsReply, buildNewLeadRecord } from './src/utils/freelanceLeadTruth';
+import { freelanceLeadsReply, buildNewLeadRecord, classifyNewLeadIntake } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
 import {
   AUDIT_LOG_SOURCE_RECORDED,
@@ -4310,6 +4310,20 @@ app.get('/api/freelance/leads', (req: Request, res: Response) => {
 
 app.post('/api/freelance/create-lead', (req: Request, res: Response) => {
   const { clientName, source, projectType, rawRequirement, budgetAmount } = req.body;
+
+  // A submission that carried no real lead field used to be stored as a record
+  // of "not recorded" placeholders and still reported as a created lead. Refuse
+  // it instead of announcing a client that was never supplied.
+  const intake = classifyNewLeadIntake({ clientName, projectType, rawRequirement, budget: budgetAmount });
+  if (!intake.accepted) {
+    return res.json({
+      success: false,
+      stored: false,
+      outcome: intake.reason,
+      message: intake.message,
+    });
+  }
+
   // Store only what the operator actually supplied. A missing budget stays
   // unrecorded (no ₹50,000 default) and no quotation is fabricated from it.
   const newLead = buildNewLeadRecord({
@@ -4323,7 +4337,7 @@ app.post('/api/freelance/create-lead', (req: Request, res: Response) => {
   }) as ServerFreelanceLead;
   memoryState.freelanceLeads.unshift(newLead);
   persistMemory();
-  res.json({ success: true, lead: newLead });
+  res.json({ success: true, stored: true, clientIdentified: intake.hasClientIdentity, lead: newLead, message: intake.message });
 });
 
 app.post('/api/freelance/update-status', (req: Request, res: Response) => {

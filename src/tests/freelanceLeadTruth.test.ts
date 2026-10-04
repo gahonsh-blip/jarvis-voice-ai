@@ -6,6 +6,7 @@ import {
   buildNewLeadRecord,
   recordedBudgetAmount,
   formatLeadBudget,
+  classifyNewLeadIntake,
   CLIENT_NAME_NOT_RECORDED,
   REQUIREMENT_NOT_RECORDED,
 } from '../utils/freelanceLeadTruth';
@@ -156,5 +157,60 @@ describe('server create-lead route stores only supplied values', () => {
     expect(body).toContain('buildNewLeadRecord');
     expect(body).not.toContain('50000');
     expect(body).not.toContain('New Client Inquiry');
+  });
+});
+
+// Regression guard for the create-lead reply: the route answered
+// `{ success: true, lead }` unconditionally. A submission carrying no real
+// field at all still produced a "lead" made entirely of "not recorded"
+// placeholders, and the operator's Add Client form closed as though a client
+// had been entered.
+
+describe('classifyNewLeadIntake refuses a payload that carried no lead field', () => {
+  it('refuses a body with only an id (no real field)', () => {
+    const verdict = classifyNewLeadIntake({});
+    expect(verdict.accepted).toBe(false);
+    if (!verdict.accepted) {
+      expect(verdict.reason).toBe('NO_FIELDS');
+      expect(verdict.message).toContain('no lead was stored');
+    }
+  });
+
+  it('refuses blank and whitespace-only fields', () => {
+    expect(classifyNewLeadIntake({ clientName: '   ', rawRequirement: '' }).accepted).toBe(false);
+    expect(classifyNewLeadIntake({ budget: 0 }).accepted).toBe(false);
+    expect(classifyNewLeadIntake({ budget: 'not a number' }).accepted).toBe(false);
+  });
+
+  it('accepts a body that carries any one real field', () => {
+    expect(classifyNewLeadIntake({ clientName: 'Nimbus Analytics' }).accepted).toBe(true);
+    expect(classifyNewLeadIntake({ rawRequirement: 'Need a dashboard.' }).accepted).toBe(true);
+    expect(classifyNewLeadIntake({ budget: 40000 }).accepted).toBe(true);
+    expect(classifyNewLeadIntake({ projectType: 'AI Integration' }).accepted).toBe(true);
+  });
+
+  it('reports whether a client was actually identified', () => {
+    const named = classifyNewLeadIntake({ clientName: 'Nimbus Analytics' });
+    const unnamed = classifyNewLeadIntake({ rawRequirement: 'Need a dashboard.' });
+    expect(named.accepted && named.hasClientIdentity).toBe(true);
+    expect(unnamed.accepted && unnamed.hasClientIdentity).toBe(false);
+  });
+});
+
+describe('server create-lead route refuses an empty payload instead of reporting success', () => {
+  it('gates on classifyNewLeadIntake and answers success:false when nothing was supplied', () => {
+    const server = fs.readFileSync(path.resolve(__dirname, '../../server.ts'), 'utf8');
+    const route = server.slice(server.indexOf("'/api/freelance/create-lead'"));
+    const body = route.slice(0, route.indexOf('update-status'));
+    expect(body).toContain('classifyNewLeadIntake');
+    expect(body).toContain('if (!intake.accepted)');
+    expect(body).toContain('success: false');
+    expect(body).toContain('stored: false');
+  });
+
+  it('frontend keeps the form open and surfaces the refusal', () => {
+    const modal = fs.readFileSync(path.resolve(__dirname, '../components/FreelancePipelineModal.tsx'), 'utf8');
+    expect(modal).toContain('setCreateNotice');
+    expect(modal).toContain('The lead was not stored');
   });
 });
