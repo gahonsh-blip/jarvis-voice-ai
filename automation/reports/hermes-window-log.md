@@ -10684,3 +10684,83 @@ Next Slot:
 - यह फाइनलाइज़ेशन स्लॉट था: कोई नया विकास नहीं, टिप `340bd91` को फिर से
   सत्यापित किया — lint/test/build सभी पास, PR #5 खुला है और मानव स्वीकृति की
   प्रतीक्षा में है।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:36
+Window date: 2026-10-04   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — live call-turn wire shape. processTelephonyTurn
+  (src/utils/telephonyEngine.ts) read replyText/whisperTip off the top level of the
+  POST /api/telephony/handle-turn response, but the server nests them under turn
+  (server.ts:8294). Against the live server both were undefined while the route still
+  answered success: true — an empty spoken turn and a dropped whisper tip. The request
+  body also sent the engine's own names (latestInput/dialogueHistory/objective) where the
+  server destructures userUtterance/conversationHistory/callObjective/isOutbound, so every
+  live turn got the generic default line. New normalizeLiveTurn
+  (src/utils/hardening/liveTurnTruth.ts) lifts the turn out of the envelope and reports an
+  absent reply as empty rather than inventing one; the request now sends the server names.
+  Evidence: src/tests/liveTurnTruth.test.ts (new, 8 cases, all passing).
+
+In Progress:
+- #13 Zero-fake-success for all tools — the sweep is not exhausted. This slot audited the
+  remaining flagged success: true sites (server.ts ~5659 security-matrix, ~5774, ~6040,
+  ~6143, ~8740 telephony permissions, ~7600 bridge pairing, ~7905 bridge events, ~6430
+  computer-operator, tools-HUD sites) and found them honest — each is gated by a
+  validation/auth check or already hardened (computer-operator uses operatorTaskExecuted).
+  The one fake-success site left was the live call-turn shape, now fixed.
+
+Remaining:
+- #13 Zero-fake-success — keep sweeping success: true / actionExecuted: true sites.
+- #1/#50/#55 Android E2E, Real Screenshot, Computer Operator live host — NOT_AVAILABLE
+  (no handset, no display session).
+- Higher-order backlog items after item 13 remain per docs/COMPLETION_STATUS.md.
+
+Bugs Found:
+- Telephony live-turn response read from the wrong level (top level instead of turn), so
+  the client rendered an empty reply against the real server while success: true.
+- Telephony live-turn request used field names the server does not destructure, so the
+  route answered the generic default for every turn.
+
+Bugs Fixed:
+- Both above, in one coherent change. Verification: 8 new tests in
+  src/tests/liveTurnTruth.test.ts pass; negative-validated — reverting the client to read
+  the top level fails the reply/whisper assertions.
+
+Tests:    150 files / 1923 tests passed (25.17 s, 0 failed) — observed
+Lint:     npm run lint (tsc --noEmit) exit 0 — observed
+Build:    npm run build exit 0; dist/server.cjs 1000117 bytes — observed
+E2E:      NOT RUN — no handset, no carrier, no display session
+Security: NOT RUN this slot (finalization slot runs the security checks); no secrets
+          printed; remote URL holds the token only in the credential position, never a file
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle block), docs/CHANGELOG.md (new entry),
+               automation/reports/hermes-window-log.md (this section)
+Branch:  feature/hermes-full-completion
+Commit:  8e8814c
+Push:    succeeded → origin/feature/hermes-full-completion (62ab3d5..8e8814c)
+
+PR:         #5 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/5
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            dist/server.cjs (1000117 bytes) is the verified artifact
+
+Blocked:
+- Real Android E2E — requires a physical handset or emulator
+- Real Screenshot / Computer Operator screen observation — requires a display session
+- Live social/telephony provider probes — require real platform/provider credentials
+
+Human Approval Required:
+- Human review and approval of PR #5 before merge to main.
+
+Next Slot:
+- Continue item 13: the next un-swept success: true / actionExecuted: true site in
+  server.ts / server_tools.ts, or the live-telephony whisper/tip render path if the sweep
+  is exhausted.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में टेलीफोनी के लाइव कॉल-टर्न की वायर-शेप बग ठीक की — क्लाइंट अब सर्वर के
+  turn एनवेलप से जवाब पढ़ता है; 8 नए टेस्ट पास, lint/build पास, बदलाव पुश हो गया।

@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 21:36 IST (2026-10-04 16:06 UTC) — window slot 1: the live call turn is read from the server envelope
+
+### Fixed
+- **`processTelephonyTurn` in `src/utils/telephonyEngine.ts` read `replyText`/`whisperTip` straight off the `POST /api/telephony/handle-turn` response body, but the server nests them under `turn`.** Against the live server both were `undefined` while the route still reported `success: true`, so the transcript gained an empty spoken turn and the AI whisper tip was dropped — the fake-success shape the zero-fake-success item removes. The request body also sent the engine's own field names (`latestInput`, `dialogueHistory`, `objective`) where the server destructures `userUtterance`, `conversationHistory`, `callObjective` and `isOutbound`, so every live turn answered the generic default line. New `normalizeLiveTurn` (`src/utils/hardening/liveTurnTruth.ts`) lifts the turn out of the envelope and reports an absent reply as empty rather than inventing one; the request now sends the field names the server reads.
+
+### Tests
+- `src/tests/liveTurnTruth.test.ts` — new, 8 cases: nested-envelope parse, absent reply reported as empty (no invented line), flat legacy body accepted as a fallback, non-string reply coerced to empty, `processTelephonyTurn` returns the server reply/whisper, sends the server request field names, and source guards for both edits.
+- Negative-validated: reverting the client to read the top level fails the reply/whisper cases.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; targeted 1 file / 8 passed; full suite **150 files / 1923 tests passed** (25.17 s, 0 failed); build exit 0 (`dist/server.cjs` 1000117 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
+
 ## [Unreleased] - 2026-10-04 02:50 IST (2026-10-03 21:20 UTC) — window slot 11: the freelance lead intake invents no client, budget or quotation
 
 ### Fixed

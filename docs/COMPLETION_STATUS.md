@@ -4,6 +4,31 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-04 16:06 UTC (21:36 IST 2026-10-04) — **WORK SLOT 1** of the
+2026-10-04 → 2026-10-05 window, the 21:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the live call-turn wire shape.**
+
+`POST /api/telephony/handle-turn` answers `{ success, turn: { replyText,
+whisperTip, ... }, source }`, but `processTelephonyTurn`
+(`src/utils/telephonyEngine.ts`) read `replyText`/`whisperTip` straight off the
+top level. Against the live server both were `undefined` while the route still
+reported `success: true`: the transcript gained an empty spoken turn and the AI
+whisper tip was dropped — the fake-success shape item 13 removes. The request
+body also used the engine's own field names (`latestInput`, `dialogueHistory`,
+`objective`) where the server destructures `userUtterance`, `conversationHistory`,
+`callObjective` and `isOutbound`, so every live turn answered the generic default
+line. New `normalizeLiveTurn` (`src/utils/hardening/liveTurnTruth.ts`) lifts the
+turn out of the envelope and reports an absent reply as empty rather than
+inventing one; `processTelephonyTurn` now sends the field names the server reads.
+Evidence: `src/utils/hardening/liveTurnTruth.ts`; `src/utils/telephonyEngine.ts`
+(request body ~173, `normalizeLiveTurn(data)` ~196); `src/tests/liveTurnTruth.test.ts`
+(new, 8 cases — envelope parse, absent-reply honesty, flat-body fallback,
+request-field assertions). Negative-validated: reverting the client to read the
+top level fails the reply/whisper cases. Gates: lint (`tsc --noEmit`) exit 0;
+targeted 1 file / 8 passed; full suite **150 files / 1923 tests passed**;
+`npm run build` exit 0, `dist/server.cjs` 1000117 bytes. E2E: NOT RUN (no
+handset, no carrier). Deploy: NOT_CONFIGURED. Item 13 remains `PARTIAL` — the
+sweep is not exhausted.
+
 Finalization: 2026-10-04 23:07 UTC (04:37 IST 2026-10-04) — **FINALIZATION SLOT**
 of the 2026-10-03 → 2026-10-04 window, the 04:35 IST fire. No new development was
 started; the tip `340bd91` was frozen and re-verified end to end. Gates observed
