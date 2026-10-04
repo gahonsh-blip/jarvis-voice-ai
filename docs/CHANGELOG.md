@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 01:35 IST (2026-10-04 20:05 UTC) — window slot 9: youtube draft update reports success only when a field actually changed
+
+### Fixed
+- **`POST /api/social/youtube/update-draft` answered `{ success: true, post }` for every request that matched a staged post, including one that changed nothing, and the Social Hub announced "YouTube video parameters updated." for a repeat submission or a cleared form.** The route applied each field behind a truthiness guard and reported success unconditionally, so a no-op read as a saved update. New `classifyYouTubeDraftUpdate` (`src/utils/hardening/youtubeDraftUpdateTruth.ts`) decides which fields actually differ — a blank title, a non-string description and a repeat of the stored `private` privacy are all non-changes — and the route writes only those, answering `success: false, applied: false, outcome: UNCHANGED` for a no-op. `src/components/SocialMediaModal.tsx` now speaks the route's message, so a no-op is not voiced as an update. The missing-post 404 also carries `success: false`.
+
+### Tests
+- `src/tests/youtubeDraftUpdateTruth.test.ts` — new, 9 cases: 6 unit (title+description+privacy applied together; a full repeat is a no-op; an unrecognised privacy value coerces to the stored private default; only the changed field is applied; blank title and non-string description ignored; empty request refused) and 3 source guards (the route calls `classifyYouTubeDraftUpdate` and returns `success: false`; it writes only verdict-marked fields and drops the old `if (title)` block; the 404 carries `success: false`).
+- Negative-validated: reverting the route to its pre-fix form fails exactly the 2 write-path source guards (`2 failed | 7 passed`), restored → 9/9.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **157 files / 1987 tests passed** (24.89 s, 0 failed); build exit 0 (`dist/server.cjs` 985.2 kb). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-05 00:56 IST (2026-10-04 19:26 UTC) — window slot 7: the YouTube summarizer reply no longer renders a blank summary as a completed summary
 
 ### Fixed
