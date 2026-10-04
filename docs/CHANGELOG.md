@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-04 23:22 IST (2026-10-04 17:52 UTC) — window slot 4: the call HUD stops labelling a disconnected bandpass as an applied filter
+
+### Fixed
+- **The `ActiveCallHUD` acoustic-filter toggle rendered `Bandpass profile` / `Full band` from a state seeded `true`, while `telephonyAudio.enableTelephoneBandpass()` only creates a `BiquadFilterNode` that is never connected to any audio path.** The synthesizer emits tones straight to `ctx.destination` and has no call input, so the toggle changed nothing about call audio while its label read as an applied filter state. New `acousticFilterToggleLabel(configured)` (`src/utils/hardening/acousticFilterTruth.ts`) returns `Bandpass configured (not on call audio)` / `Bandpass off (not on call audio)`; `ActiveCallHUD.tsx` renders it so both branches carry the qualifier. The tooltip already used `ACOUSTIC_FILTER_LABEL`; this closes the visible label.
+
+### Tests
+- `src/tests/hardening/acousticFilterTruth.test.ts` — 2 new source guards (the HUD no longer renders a bare `'Bandpass profile'` / `'Full band'`; it calls `acousticFilterToggleLabel(audioFilterActive)`) and 2 new unit tests (both toggle states match `/not on call audio/i` and never claim `ON`/`3G`; configured vs off still distinguishable). 9 cases total.
+- Negative-validated: restoring the bare label fails the new source guard (`1 failed | 8 passed`), restored → 9/9.
+
+### Gates (observed)
+- lint (`tsc --noEmit`) exit 0; full suite **152 files / 1945 tests passed** (25.42 s, 0 failed); build exit 0 (`dist/server.cjs` 1002614 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED.
+
+---
+
 ## [Unreleased] - 2026-10-04 22:45 IST (2026-10-04 17:15 UTC) — window slot 3: the freelance lead status update stops faking a saved change
 
 ### Fixed

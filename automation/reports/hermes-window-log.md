@@ -10820,3 +10820,39 @@ Next Slot:
     tracked; no secret-shaped strings in this slot's diff.
 - Next slot: continue the #13 sweep — audit the remaining freelance/social route
   success flags for the same fake-success shape; #13 stays PARTIAL until exhausted.
+
+---
+
+## 2026-10-04T17:52Z — slot 4/16 (WORK) — IST 23:05
+
+- Item worked: #13 Zero-fake-success for all tools
+- Status: PARTIAL (call HUD acoustic-filter toggle truth)
+- Tests: full suite 152 files / 1945 tests passed (25.42 s, 0 failed); targeted 1 file / 9 passed; tsc --noEmit exit 0; build exit 0 (dist/server.cjs 1002614 bytes)
+- Commit: 114a86a (fix)  Push: ok (feature/hermes-full-completion, 39fd716..114a86a)
+- Notes / blockers:
+  - The `ActiveCallHUD` toggle rendered `Bandpass profile` / `Full band` from a state
+    seeded `true`, while `telephonyAudio.enableTelephoneBandpass()` only creates a
+    `BiquadFilterNode` that is never connected to any audio path. The synthesizer emits
+    tones straight to `ctx.destination` and has no call input, so the toggle changed
+    nothing about call audio while its label read as an applied filter state — the
+    fake-success shape item 13 removes. (The module's own doc comment already said so.)
+  - New `acousticFilterToggleLabel(configured)` in
+    `src/utils/hardening/acousticFilterTruth.ts` returns `Bandpass configured (not on
+    call audio)` / `Bandpass off (not on call audio)`; `ActiveCallHUD.tsx` (~469) renders
+    it so both branches carry the qualifier. Tooltip already used `ACOUSTIC_FILTER_LABEL`.
+  - `src/tests/hardening/acousticFilterTruth.test.ts` extended with 2 source guards
+    (no bare `'Bandpass profile'` / `'Full band'`; calls the helper) and 2 unit tests
+    (both states match /not on call audio/i and never claim ON/3G). 9 cases total.
+    Negative-validated: restoring the bare label fails the new source guard
+    (`1 failed | 8 passed`), restored → 9/9.
+  - Repo note: the clone is shallow-grafted at 6db07ce with a main-only refspec, so the
+    first push was rejected; the branch was re-based onto the real remote tip (fetched
+    as FETCH_HEAD) by re-applying this slot's 87-line patch, then pushed. No force-push,
+    no history rewrite.
+  - Security hygiene: `.env` ignored (`.gitignore:4`); no `node_modules`/`dist` tracked;
+    the token-shaped strings in the branch diff are deliberate redaction-test fixtures,
+    not real credentials.
+- Next slot: continue the #13 sweep — audit the remaining telephony/localJarvisEngine
+  informational branches that still return `executed: true` (candidates: `set_name`,
+  `location_services`); #13 stays PARTIAL until exhausted.
+

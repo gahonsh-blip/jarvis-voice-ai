@@ -4,6 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-04 17:52 UTC (23:22 IST 2026-10-04) — **WORK SLOT 4** of the
+2026-10-04 → 2026-10-05 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the call HUD acoustic-filter toggle.**
+
+The `ActiveCallHUD` toggle rendered `Bandpass profile` / `Full band` from a state
+seeded `true`, while `telephonyAudio.enableTelephoneBandpass()` only creates a
+`BiquadFilterNode` that is **never connected to any audio path** — its own doc
+comment says enabling it "does not filter call audio" and callers "must not
+surface it as 'applied' or 'ON'". The visible label therefore implied an acoustic
+filter was applied to call audio when nothing was — the fake-success shape this
+item removes. New `acousticFilterToggleLabel(configured)` in
+`src/utils/hardening/acousticFilterTruth.ts` returns
+`Bandpass configured (not on call audio)` / `Bandpass off (not on call audio)`;
+`ActiveCallHUD.tsx` renders it so both states carry the honest qualifier. The
+tooltip already used `ACOUSTIC_FILTER_LABEL`; this closes the visible label.
+Evidence: `src/utils/hardening/acousticFilterTruth.ts` (extended);
+`src/components/ActiveCallHUD.tsx` (~469); `src/tests/hardening/acousticFilterTruth.test.ts`
+(2 new source guards + 2 new unit tests, 9 cases total). Negative-validated:
+restoring the bare `'Bandpass profile'` / `'Full band'` label fails the new source
+guard (`1 failed | 8 passed`), restored → 9/9. Gates: lint (`tsc --noEmit`) exit
+0; full suite **152 files / 1945 tests passed** (25.42 s, 0 failed);
+`npm run build` exit 0, `dist/server.cjs` 1002614 bytes. E2E: NOT RUN. Deploy:
+NOT_CONFIGURED. Item 13 remains `PARTIAL` — the sweep is not exhausted.
+
 Last cycle: 2026-10-04 17:15 UTC (22:45 IST 2026-10-04) — **WORK SLOT 3** of the
 2026-10-04 → 2026-10-05 window, the 22:35 IST fire. **Item 13 (`Zero-fake-success for all tools`) — the freelance lead status update.**
 
