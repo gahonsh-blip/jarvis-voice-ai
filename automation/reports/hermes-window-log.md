@@ -11523,3 +11523,27 @@ Next Slot:
 - Commit 5ec101a. Branch `feature/hermes-full-completion` pushed (2b1b0e0..5ec101a).
 - Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display). Item 13 remains PARTIAL.
 
+
+
+---
+
+## 2026-10-06 23:35 IST — WORK SLOT 4 (window 2026-10-05 → 2026-10-06)
+
+Item #13 Zero-fake-success for all tools — the YouTube staging routes.
+
+- Bug: `POST /api/social/youtube/upload-draft` and `POST /api/social/youtube/draft-test`
+  (`server.ts`) discarded the result of `createPendingActionRequest` and always
+  answered `{ success: true, post }`. A finance-guard rejection or an active
+  Emergency Stop therefore still reported a staged Level-4 upload, and the Social
+  Media Hub showed a pending approval that never entered the permission queue.
+- Fix: both routes capture the gate result and classify it via `classifyStagedDraft`
+  (`src/utils/hardening/outboundStageTruth.ts`), returning 403/423/409 with
+  `success:false, staged:false, outcome` when the action never reached
+  `PENDING_APPROVAL`. The staging audit row's gate label now names the refusal.
+- Tests: new `src/tests/socialStageGateTruth.test.ts` — 6/6 passed. Negative
+  validation: reverting `server.ts` failed exactly the two route-source cases
+  (2 failed | 4 passed); restoring it returned 6/6.
+- Gates: `tsc --noEmit` clean; `npx vitest run` 161 files / 2044 tests passed;
+  build OK, `dist/server.cjs` 992.8 kb.
+- Commit 0db68a0. Branch `feature/hermes-full-completion` pushed (26ae3fb..0db68a0).
+- Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display). Item 13 remains PARTIAL.

@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 23:35 IST (2026-10-05 18:05 UTC) — window slot 3: YouTube staging reports the real gate outcome
+
+### Fixed
+- **`POST /api/social/youtube/upload-draft` and `POST /api/social/youtube/draft-test` answered `{ success: true, post }` unconditionally.** Both discarded the result of `createPendingActionRequest`, so a finance-guard rejection or an active Emergency Stop still reported a staged Level-4 upload — and the Social Media Hub showed a pending approval that never entered the permission queue. Both routes now capture the gate result and classify it via `classifyStagedDraft` (`src/utils/hardening/outboundStageTruth.ts`), returning a `403`/`423`/`409` refusal (`success: false, staged: false, outcome`) instead of a success payload when the action never reached `PENDING_APPROVAL`. The staging audit row's gate label now names the refusal reason rather than always reading `Level-4 authorization`.
+
+### Tests
+- New `src/tests/socialStageGateTruth.test.ts` (6 cases): both route blocks must capture and classify the gate result with the success payload behind the verdict guard; a genuinely `PENDING_APPROVAL` action is `STAGED`; a finance rejection is `BLOCKED_FINANCE`; an active Emergency Stop is `BLOCKED_EMERGENCY`; an unknown terminal status is `NOT_STAGED`. Negative-validated: reverting `server.ts` failed exactly the two route-source cases (2 failed | 4 passed); restoring it returned 6/6. Full suite: 161 files / 2044 tests passed.
+
+---
+
 ## [Unreleased] - 2026-10-05 21:35 IST (2026-10-05 16:05 UTC) — window slot 2: a Twilio dial needs a carrier call id
 
 ### Fixed
