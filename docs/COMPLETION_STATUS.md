@@ -3,6 +3,37 @@
 Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
+Last cycle: 2026-10-05 23:05 IST — **WORK SLOT 3** of the
+2026-10-05 → 2026-10-06 window, the 23:05 IST fire. **Item 13
+(`Zero-fake-success for all tools`) — the fabricated telephony call duration.**
+`App.tsx` finalised every ended call with
+`durationSeconds: Math.max(activeCall.durationSeconds || 14, 14)`. The record's
+counter is written as `0` when a call is created and never advanced — the only
+live counter lives in `ActiveCallHUD`'s local `useState` and is never written
+back — so the expression resolved to a **constant 14**: every persisted call,
+even one hung up in the first second, was stored, shown in the call history,
+printed in the post-call summary, and exported to CSV as lasting at least 14
+seconds. A duration may only be a value that was actually observed. New truth
+module `src/utils/hardening/callDurationTruth.ts` supplies
+`elapsedSecondsSince` (real start/end gap, `null` when unmeasurable),
+`recordedCallDurationSeconds` (stored count else timestamp gap else `null`), and
+`formatDurationClock` / `formatDurationWords` (`--:--` / `duration not
+recorded` for an unmeasured call). `App.tsx` now measures the ended call from
+`activeCall.startTime` to a real `endedAt`, and the declined-call path records
+its real gap instead of `0`. Display sites updated: `ActiveCallHUD.tsx`
+(post-call summary), `TelephonyHubModal.tsx` (call log), and the CSV export in
+`telephonyEngine.ts` (writes `duration not recorded`, not `0`, for an
+unmeasured call). Guarded by `src/tests/callDurationTruth.test.ts` (11 tests),
+**negative-validated**: restoring the `Math.max(... || 14, 14)` floor failed
+exactly the two App.tsx-source assertions (2 failed | 9 passed); removing it
+returned 11/11. Full suite on the pushed tip: `npm run lint` (`tsc --noEmit`)
+exit 0; `npx vitest run` **160 files / 2038 tests passed** (0 failed); `npm run
+build` exit 0, artifact `dist/server.cjs` **1015211 bytes**. Item 13 remains
+`PARTIAL` — other `success: true` / `actionExecuted: true` sites in `server.ts`
+/ `server_tools.ts` are still not individually audited (truthfulness `UNKNOWN`).
+E2E: NOT RUN — no handset and no display session. Deploy: `NOT_CONFIGURED`.
+Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`.
+
 Last cycle: 2026-10-05 21:35 IST — **WORK SLOT 2** of the
 2026-10-05 → 2026-10-06 window, the 21:35 IST fire. **Item 13
 (`Zero-fake-success for all tools`) — the Twilio outbound-dial success branch.**

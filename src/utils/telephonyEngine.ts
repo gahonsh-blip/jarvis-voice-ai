@@ -21,6 +21,7 @@ import {
   formatLocalTurnReply,
 } from './hardening/callSummaryTruth';
 import { normalizeLiveTurn } from './hardening/liveTurnTruth';
+import { DURATION_NOT_RECORDED, recordedCallDurationSeconds } from './hardening/callDurationTruth';
 
 const STORAGE_KEY_CALLS = 'hermes_jarvis_telephony_calls_v1';
 const STORAGE_KEY_SETTINGS = 'hermes_jarvis_telephony_settings_v1';
@@ -524,7 +525,8 @@ export function generateCallHistoryCsv(history: CallRecord[]): string {
     call.recipientNumber || '',
     call.startTime || '',
     call.endTime || '',
-    call.durationSeconds ?? 0,
+    // Never export an invented 0 for an unmeasured call; name the gap instead.
+    recordedCallDurationSeconds(call) ?? DURATION_NOT_RECORDED,
     call.status || '',
     call.mode || '',
     call.sentiment || '',

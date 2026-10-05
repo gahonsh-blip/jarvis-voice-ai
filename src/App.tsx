@@ -95,6 +95,7 @@ import {
 import { isSpeechInterruptionCommand } from './utils/languages';
 import { syncLiveness, syncStatusLabel, reconnectStatusText } from './utils/syncTruth';
 import { micInputLevel } from './utils/hardening/micInputTruth';
+import { elapsedSecondsSince } from './utils/hardening/callDurationTruth';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
 import { androidBridgeEngine } from './utils/androidBridgeEngine';
@@ -620,15 +621,22 @@ export default function App() {
     telephonyAudio.stopAll();
     telephonyAudio.playDisconnectTone();
 
+    // Measure the call from its real start and end timestamps. The record's
+    // stored counter is never advanced (the live counter lives in the HUD), so
+    // trusting it produced a constant 14-second floor on every persisted call.
+    const endedAt = new Date().toISOString();
+    const measuredDuration = elapsedSecondsSince(activeCall.startTime, endedAt) ?? 0;
+
     const finalizedSummary = generateCallSummary(activeCall);
 
     const endedCall: CallRecord = {
       ...activeCall,
       status: 'ended',
+      endTime: endedAt,
       summary: finalizedSummary.summary,
       followUpActions: finalizedSummary.followUpActions,
       sentiment: finalizedSummary.sentiment,
-      durationSeconds: Math.max(activeCall.durationSeconds || 14, 14),
+      durationSeconds: measuredDuration,
     };
 
     setActiveCall(endedCall);
@@ -647,11 +655,13 @@ export default function App() {
     telephonyAudio.stopAll();
     telephonyAudio.playBusyTone();
 
+    const declinedAt = new Date().toISOString();
     const declinedCall: CallRecord = {
       ...activeCall,
       status: 'declined',
+      endTime: declinedAt,
       summary: 'Call declined by user or spam filter.',
-      durationSeconds: 0,
+      durationSeconds: elapsedSecondsSince(activeCall.startTime, declinedAt) ?? 0,
     };
 
     setActiveCall(null);

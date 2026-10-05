@@ -58,6 +58,7 @@ import {
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
 import { ACOUSTIC_FILTER_STATUS, ACOUSTIC_FILTER_SPEC } from '../utils/hardening/acousticFilterTruth';
 import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
+import { formatDurationWords } from '../utils/hardening/callDurationTruth';
 import {
   downloadCallHistoryCsv,
   filterCallRecords,
@@ -1127,7 +1128,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                               )}
                             </div>
                             <span className="text-[10px] font-mono text-slate-400">
-                              {Math.floor(log.durationSeconds / 60)}m {log.durationSeconds % 60}s
+                              {formatDurationWords(log.durationSeconds ?? null)}
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-300 mt-1 line-clamp-1">{log.summary}</p>
