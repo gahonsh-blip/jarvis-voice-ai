@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 21:35 IST (2026-10-05 16:05 UTC) — window slot 2: a Twilio dial needs a carrier call id
+
+### Fixed
+- **`TwilioTelephonyProvider.startOutboundCall` reported a placed call without a call id.** It returned `{ success: true, providerCallId: data.sid }` whenever the carrier answered 2xx, so a body with no `sid` (or an empty/whitespace one) produced `success: true` with `providerCallId: undefined` — a dial recorded as placed with nothing proving a call resource exists. The adapter now requires a non-empty carrier-issued `sid` before reporting success and otherwise refuses with `TELEPHONY_DIAL_UNCONFIRMED_NO_SID` (`src/utils/telephonyAdapters.ts`).
+
+### Tests
+- `src/tests/telephonyProviderHonesty.test.ts` gains three cases (named sid → success; missing sid → refusal; whitespace sid → refusal). Negative-validated: reverting the fix failed exactly the two refusal cases (2 failed | 15 passed); restoring it returned 17/17. Full suite: 159 files / 2027 tests passed.
+
+---
+
 ## [Unreleased] - 2026-10-05 21:06 IST (2026-10-05 15:36 UTC) — window slot 15: `find_document` runs a real workspace search
 
 ### Fixed

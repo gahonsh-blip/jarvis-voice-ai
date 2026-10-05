@@ -3,6 +3,30 @@
 Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
+Last cycle: 2026-10-05 21:35 IST — **WORK SLOT 2** of the
+2026-10-05 → 2026-10-06 window, the 21:35 IST fire. **Item 13
+(`Zero-fake-success for all tools`) — the Twilio outbound-dial success branch.**
+The `TwilioTelephonyProvider.startOutboundCall` returned
+`{ success: true, providerCallId: data.sid }` whenever the carrier answered
+2xx. A 2xx body with no `sid`, or an empty/whitespace `sid`, therefore yielded
+`success: true` with `providerCallId: undefined` — a dial the route records as
+placed with no call id to prove a call resource exists (the fake-success shape
+item 13 removes). The adapter now requires a non-empty carrier-issued `sid`
+before reporting success and otherwise refuses with
+`TELEPHONY_DIAL_UNCONFIRMED_NO_SID` (`src/utils/telephonyAdapters.ts`). Guarded
+by three cases in `src/tests/telephonyProviderHonesty.test.ts` (named sid →
+success; missing sid → refusal; whitespace sid → refusal), **negative-validated**:
+reverting the fix failed exactly the two refusal cases (2 failed | 15 passed),
+restoring it returned 17/17. Full suite on the pushed tip `c277207`:
+`npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run` **159 files / 2027
+tests passed** (0 failed); `npm run build` exit 0, artifact `dist/server.cjs`
+**991.4 kb**. Item 13 remains `PARTIAL` — the Telnyx/Plivo adapters' fake
+`startOutboundCall` success and other `success: true` / `actionExecuted: true`
+sites in `server.ts` / `server_tools.ts` are still not individually audited
+(truthfulness `UNKNOWN`). E2E: NOT RUN — no handset and no display session.
+Deploy: `NOT_CONFIGURED`. Hardware-blocked items #1/#2/#50/#55 remain
+`NOT_AVAILABLE`.
+
 Last cycle: 2026-10-05 21:06 IST — **WORK SLOT 15** of the
 2026-10-04 → 2026-10-05 window, the 21:05 IST fire. **Item 13
 (`Zero-fake-success for all tools`) — the `find_document` intent.** The
