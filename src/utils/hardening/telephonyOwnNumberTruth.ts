@@ -30,4 +30,20 @@ export function hasRecordedOwnNumber(configured?: string | null): boolean {
   return recordedOwnNumber(configured) !== null;
 }
 
+/**
+ * A party's raw number, taken only from a value that was actually supplied.
+ *
+ * Both ends of a call were previously filled from a fabricated literal when the
+ * carrier payload carried no number: an inbound call arrived from the invented
+ * `'+91 9876543210'`, and a call session recorded the sample clinic line
+ * (`DEFAULT_CLINIC_CONFIG.phone`) as its own side. The number is persisted to the
+ * call record and shown in the history, so it was presented as fact. A missing
+ * number is left empty here; the display helpers then name it (`Unknown / Private`)
+ * instead of printing a number nobody dialled.
+ */
+export function resolveRawNumber(supplied?: string | null): string {
+  if (typeof supplied !== 'string') return '';
+  return supplied.trim();
+}
+
 export const OWN_NUMBER_NOT_RECORDED = 'not recorded';

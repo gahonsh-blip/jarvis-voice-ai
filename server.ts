@@ -33,6 +33,7 @@ import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatu
 import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
 import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
+import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
@@ -8702,8 +8703,8 @@ app.post('/api/telephony/incoming', async (req: Request, res: Response) => {
     return res.json({ success: false, error: 'EMERGENCY_STOP_ACTIVE', message: 'Autonomous call answering suspended.' });
   }
 
-  const rawFrom = req.body.From || req.body.callerNumber || '+91 9876543210';
-  const rawTo = req.body.To || req.body.recipientNumber || DEFAULT_CLINIC_CONFIG.phone;
+  const rawFrom = resolveRawNumber(req.body.From || req.body.callerNumber);
+  const rawTo = resolveRawNumber(req.body.To || req.body.recipientNumber);
   const isSimulated = Boolean(req.body.isSimulated || req.headers['x-telephony-simulation'] === 'true');
 
   const session = TelephonySessionManager.createInboundSession({
@@ -8904,6 +8905,7 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
       purpose: recorded.request?.purpose || 'Outbound consultation',
       language: recorded.request?.language || 'hi-IN',
       isSimulated: Boolean(req.body.isSimulated),
+      ownNumber: resolveRawNumber(telephonySettingsState.twilioPhoneNumber),
     });
 
     if (sessionRes.error || !sessionRes.session) {

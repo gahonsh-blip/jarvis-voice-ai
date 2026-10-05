@@ -19,6 +19,7 @@ import {
   telephonyEngineMode,
   telephonyEngineCanObserveCall,
 } from './telephonyGatewayTruth';
+import { resolveRawNumber } from './hardening/telephonyOwnNumberTruth';
 
 export class TelephonySessionManager {
   private static activeSessions: Map<string, TelephonySession> = new Map();
@@ -35,18 +36,20 @@ export class TelephonySessionManager {
     isSimulated?: boolean;
   }): TelephonySession {
     const callSessionId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const maskedCaller = maskPhoneNumber(params.rawCallerNumber);
-    const maskedRecipient = maskPhoneNumber(params.rawRecipientNumber || DEFAULT_CLINIC_CONFIG.phone);
+    const callerRaw = resolveRawNumber(params.rawCallerNumber);
+    const recipientRaw = resolveRawNumber(params.rawRecipientNumber);
+    const maskedCaller = maskPhoneNumber(callerRaw);
+    const maskedRecipient = maskPhoneNumber(recipientRaw);
     const permissions = loadPhonePermissions();
 
     const session: TelephonySession = {
       callSessionId,
       direction: 'inbound',
       callerIdentifier: maskedCaller,
-      callerRawNumber: params.rawCallerNumber,
+      callerRawNumber: callerRaw,
       callerVerified: false,
       recipientIdentifier: maskedRecipient,
-      recipientRawNumber: params.rawRecipientNumber || DEFAULT_CLINIC_CONFIG.phone,
+      recipientRawNumber: recipientRaw,
       language: 'hi-IN',
       state: 'RINGING',
       turns: [],
@@ -81,6 +84,7 @@ export class TelephonySessionManager {
     language?: string;
     isSimulated?: boolean;
     authorizedBy?: string;
+    ownNumber?: string;
   }): { session?: TelephonySession; error?: string } {
     const permissions = loadPhonePermissions();
     if (permissions.PHONE_OUTBOUND_CALL === 'DENIED') {
@@ -94,7 +98,7 @@ export class TelephonySessionManager {
       callSessionId,
       direction: 'outbound',
       callerIdentifier: 'HERMES JARVIS (Owner Voice Agent)',
-      callerRawNumber: DEFAULT_CLINIC_CONFIG.phone,
+      callerRawNumber: resolveRawNumber(params.ownNumber),
       callerVerified: true,
       recipientIdentifier: maskedDest,
       recipientRawNumber: params.destinationNumber,
