@@ -8339,7 +8339,9 @@ let telephonySettingsState: any = {
   provider: 'browser_webrtc_simulator',
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
-  twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '+1 (555) 728-4827',
+  // No placeholder number: an unconfigured carrier line is left empty so the
+  // status surface reports it as not recorded instead of an invented number.
+  twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
   autoAnswerInbound: true,
   autoAnswerDelaySeconds: 2,
   aiReceptionistGreeting: "Hello, thank you for calling. You have reached Alex's AI Executive Assistant, JARVIS. How may I assist you today?",
