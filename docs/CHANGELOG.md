@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 04:06 IST (2026-10-05 22:36 UTC) — window slot 11: a permission save is no longer reported with no durable store
+
+### Fixed
+- **`POST /api/telephony/permissions` (`server.ts`) answered `success: true, applied: true` and returned the caller's merged object as `permissions` even though nothing was stored.** `loadPhonePermissions` / `savePhonePermissions` (`src/utils/telephonyPermissions.ts`) short-circuit on `typeof window === 'undefined'`: on the server they return the compile-time defaults and write nothing. A granted Level-4 permission — outbound calling, call recording, private-data access — was announced as saved and silently forgotten on the next `GET`. New `src/utils/hardening/phonePermissionStoreTruth.ts` (`applyPhonePermissionUpdate`) reports `applied: true` only when a durable store accepted the write, and `applied: false` with `outcome: 'NO_STORE'` otherwise. The route resolves a store from `JARVIS_PHONE_PERMISSIONS_FILE` (absent in production; injected by the test), returns the store's authoritative view, and `GET` now reports `persisted`.
+
+### Tests
+- New `src/tests/phonePermissionStoreTruth.test.ts` (6 cases: 3 unit on `applyPhonePermissionUpdate`, 3 e2e against a real `server.ts` process). The e2e proves a granted `PHONE_RECORDING` survives the request that wrote it (read back over HTTP and from the file) and that empty/unknown-key bodies are still refused with `success: false`. Negative-validated — making the `NO_STORE` branch claim `applied: true` failed exactly 1 of 6 (`1 failed | 5 passed`); restored → 6/6. Lint (`tsc --noEmit`) exit 0. Targeted 2 files / 18 tests passed. Full suite **168 files / 2126 tests passed** (27.18 s, 0 failed). Build exit 0 (`dist/server.cjs` 1028844 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-06 03:05 IST (2026-10-05 21:35 UTC) — window slot 9: a YouTube metadata outline is no longer labelled a loaded transcript
 
 ### Fixed
