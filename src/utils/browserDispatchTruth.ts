@@ -136,6 +136,12 @@ export interface SearchDispatch {
   query: string;
   /** The URL the in-app Browser must load to run the search. */
   url: string;
+  /**
+   * True only when there is a query to run, so the Browser is actually pointed at
+   * a `/search?q=` URL. An empty query runs no search, so the caller must not
+   * credit the request as executed work.
+   */
+  dispatched: boolean;
   title: string;
   replyEn: string;
   replyHi: string;
@@ -151,13 +157,27 @@ export interface SearchDispatch {
  * had opened a page earlier) — in that case the query was dropped and no search
  * ran, while the reply still said it was searching Google. The URL is therefore
  * derived here and carried in `payload.target`, the only place the dispatcher reads.
+ *
+ * An empty query (a bare "search" / "google search" with nothing after it) has no
+ * search to run: the Browser can only open its default home, so `dispatched` is
+ * false and the reply says so instead of claiming a lookup.
  */
 export function searchDispatch(query: string): SearchDispatch {
   const effective = (query || '').trim();
-  const url = effective ? `https://www.google.com/search?q=${encodeURIComponent(effective)}` : GENERIC_HOME;
+  if (!effective) {
+    return {
+      query: '',
+      url: GENERIC_HOME,
+      dispatched: false,
+      title: 'In-App Browser: Default Home (no search query)',
+      replyEn: 'No search query was given, so no search was run. The in-app Browser opened at its default home.',
+      replyHi: 'कोई खोज क्वेरी नहीं दी गई, इसलिए कोई खोज नहीं चलाई गई। इन-ऐप ब्राउज़र अपने डिफ़ॉल्ट होम पर खुला।',
+    };
+  }
   return {
     query: effective,
-    url,
+    url: `https://www.google.com/search?q=${encodeURIComponent(effective)}`,
+    dispatched: true,
     title: `In-App Browser Search: ${effective} (external browser not launched)`,
     replyEn: `Searching Google for "${effective}" in the in-app Browser. No external browser was launched.`,
     replyHi: `इन-ऐप ब्राउज़र में Google पर "${effective}" खोजा जा रहा है। कोई बाहरी ब्राउज़र नहीं खोला गया।`,

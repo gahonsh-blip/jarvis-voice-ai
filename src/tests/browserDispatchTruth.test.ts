@@ -109,11 +109,18 @@ describe('a search request carries the URL the Browser must load', () => {
     expect(searchDispatch('  spaced  ').url).toContain('spaced');
   });
 
-  it('falls back to the default home for an empty query instead of a bare /search?q=', () => {
+  it('reports no dispatch for an empty query instead of a bare /search?q=', () => {
     const dispatch = searchDispatch('   ');
     expect(dispatch.query).toBe('');
     expect(dispatch.url).toBe('https://www.google.com');
     expect(dispatch.url).not.toContain('search?q=');
+    // No query means no search runs, so the caller must not credit execution.
+    expect(dispatch.dispatched).toBe(false);
+    expect(dispatch.replyEn).toContain('No search query was given');
+  });
+
+  it('marks a real query as dispatched work', () => {
+    expect(searchDispatch('cats').dispatched).toBe(true);
   });
 
   it('offers a Hindi reply that also names the query', () => {
@@ -130,6 +137,9 @@ describe('server + app wiring carry the destination through', () => {
     // The target rode at the top level before, where the app dispatcher never reads it.
     expect(serverFlat).toContain('payload: { query: dispatch.query, target: dispatch.url }');
     expect(serverFlat).not.toContain('target: `https://www.google.com/search?q=${encodeURIComponent(query)}`');
+    // An empty query runs no search, so the route must derive the flag from the
+    // verdict rather than always crediting the request as executed work.
+    expect(serverFlat).toContain('actionExecuted = dispatch.dispatched;');
   });
 
   it('the app hands the search URL to the view from payload.target', () => {

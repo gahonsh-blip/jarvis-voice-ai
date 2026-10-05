@@ -38,7 +38,6 @@ const AUDITED_OFFLINE_TRUE_INTENTS: Record<string, 'view' | 'memory'> = {
   security_audit: 'view',
   cloud_telemetry: 'view',
   schedule_morning_report: 'view',
-  google_search: 'view',
 };
 
 /**
@@ -93,5 +92,17 @@ describe('item 13 — the offline engine actionExecuted sweep is enumerated and 
     expect(branch).toContain('name: extractedName');
     expect(branch).toContain('actionExecuted: true');
     expect(appFlat).toContain('saveLocalMemory(localResult.updatedMemory)');
+  });
+
+  it('google_search derives its flag from the dispatch verdict, not a constant', () => {
+    // A bare "search" carries no query and runs no lookup, so the branch must not
+    // hard-code `actionExecuted: true`. It reads the verdict that also decides the
+    // reply and the destination URL.
+    const start = engineFlat.indexOf("if (lower.startsWith('search ')");
+    expect(start, 'offline google_search branch missing').toBeGreaterThan(-1);
+    const branch = engineFlat.slice(start, start + 2200);
+    expect(branch).toContain('const dispatch = searchDispatch(query);');
+    expect(branch).toContain('actionExecuted: dispatch.dispatched');
+    expect(branch).not.toContain('actionExecuted: true');
   });
 });

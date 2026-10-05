@@ -1783,20 +1783,27 @@ export function processOfflineCommand(
     // server path carries it (`searchDispatch`); without it here the offline
     // action card named a search that `BrowserModal` never loaded.
     const dispatch = searchDispatch(query);
-    const reply = isHindi
-      ? `इन-ऐप ब्राउज़र के लिए "${query}" क्वेरी तैयार है। ऑफ़लाइन मोड में कोई सर्च बैकएंड नहीं है, इसलिए कोई परिणाम नहीं लाया गया।`
+    const reply = dispatch.dispatched
+      ? isHindi
+        ? `इन-ऐप ब्राउज़र के लिए "${query}" क्वेरी तैयार है। ऑफ़लाइन मोड में कोई सर्च बैकएंड नहीं है, इसलिए कोई परिणाम नहीं लाया गया।`
+        : isHinglish
+        ? `In-app Browser ke liye "${query}" query taiyar hai. Offline mode me koi search backend nahi hai, isliye koi result nahi laaya gaya.`
+        : `Prepared the query "${query}" for the in-app Browser. This offline path has no search backend, so no results were retrieved.`
+      : isHindi
+      ? 'कोई खोज क्वेरी नहीं दी गई, इसलिए कोई खोज नहीं चलाई गई। इन-ऐप ब्राउज़र अपने डिफ़ॉल्ट होम पर खुला।'
       : isHinglish
-      ? `In-app Browser ke liye "${query}" query taiyar hai. Offline mode me koi search backend nahi hai, isliye koi result nahi laaya gaya.`
-      : `Prepared the query "${query}" for the in-app Browser. This offline path has no search backend, so no results were retrieved.`;
+      ? 'Koi search query nahi di gayi, isliye koi search nahi chalayi gayi. In-app Browser apne default home par khula.'
+      : 'No search query was given, so no search was run. The in-app Browser opened at its default home.';
     return {
       reply,
       spokenText: reply,
       intent: 'google_search',
-      actionExecuted: true,
+      // A bare "search" with no query runs no lookup, so it is not executed work.
+      actionExecuted: dispatch.dispatched,
       actionDetail: {
         type: 'google_search',
-        title: `In-App Browser Query: ${query} (no results retrieved offline)`,
-        payload: { query, target: dispatch.url },
+        title: dispatch.title,
+        payload: { query: dispatch.query, target: dispatch.url },
       },
       updatedMemory,
       offline: true,

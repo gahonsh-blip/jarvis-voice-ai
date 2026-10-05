@@ -9667,7 +9667,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         // the request was Hindi.
         const dispatch = searchDispatch(query);
         spokenResponse = language.startsWith('hi') ? dispatch.replyHi : dispatch.replyEn;
-        actionExecuted = true;
+        // A bare "search" with no query runs no lookup; the Browser can only open
+        // its default home. Crediting execution there was the fake-success shape.
+        actionExecuted = dispatch.dispatched;
         actionDetail = {
           type: 'google_search',
           title: dispatch.title,
