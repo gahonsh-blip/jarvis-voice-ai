@@ -94,7 +94,13 @@ describe('the permissions route only reports a change it actually applied', () =
   });
 
   it('saves only the classified keys, not the raw body', () => {
-    expect(body).toContain('{ ...current, ...verdict.applied }');
+    expect(body).toContain('applyPhonePermissionUpdate(store, current, verdict.applied)');
     expect(body).not.toContain('...req.body');
+  });
+
+  it('reports a change only when a durable store accepted it', () => {
+    expect(body).toContain('resolvePhonePermissionStore');
+    expect(body).toContain('success: result.applied');
+    expect(body).toContain('applied: result.applied');
   });
 });

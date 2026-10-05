@@ -32,6 +32,10 @@ import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hard
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
+import {
+  applyPhonePermissionUpdate,
+  type PhonePermissionStore,
+} from './src/utils/hardening/phonePermissionStoreTruth';
 import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
@@ -9009,35 +9013,68 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
 });
 
 // 6.8 Telephony Permissions Gateway (Section J)
+//
+// `loadPhonePermissions` / `savePhonePermissions` are browser helpers: both
+// short-circuit on `typeof window === 'undefined'`, so on this server they read
+// and write nothing. The POST route used to report `success: true, applied:
+// true` anyway, so a granted Level-4 permission was announced as saved and
+// silently forgotten on the next GET. `resolvePhonePermissionStore` returns a
+// durable store only when one exists (tests inject one through
+// `JARVIS_PHONE_PERMISSIONS_FILE`); otherwise the route reports the honest
+// refusal instead of claiming a change it cannot keep.
+function resolvePhonePermissionStore(): PhonePermissionStore | null {
+  const filePath = process.env.JARVIS_PHONE_PERMISSIONS_FILE;
+  if (!filePath) return null;
+  return {
+    load: () => {
+      try {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        return { ...DEFAULT_PHONE_PERMISSIONS, ...JSON.parse(raw) };
+      } catch {
+        return { ...DEFAULT_PHONE_PERMISSIONS };
+      }
+    },
+    save: (perms) => {
+      fs.writeFileSync(filePath, JSON.stringify(perms, null, 2), 'utf-8');
+    },
+  };
+}
+
 app.get('/api/telephony/permissions', (req: Request, res: Response) => {
-  const perms = loadPhonePermissions();
-  res.json({ success: true, permissions: perms });
+  const store = resolvePhonePermissionStore();
+  const perms = store ? store.load() : loadPhonePermissions();
+  res.json({
+    success: true,
+    persisted: Boolean(store),
+    permissions: perms,
+  });
 });
 
 app.post('/api/telephony/permissions', (req: Request, res: Response) => {
   try {
     const verdict = classifyPhonePermissionUpdate(req.body, PHONE_PERMISSION_DEFINITIONS);
+    const store = resolvePhonePermissionStore();
+    const current = store ? store.load() : loadPhonePermissions();
     if (!verdict.accepted) {
       return res.status(400).json({
         success: false,
         applied: false,
         reason: verdict.reason,
         rejected: verdict.rejected,
-        permissions: loadPhonePermissions(),
+        permissions: current,
         error: verdict.message,
       });
     }
 
-    const current = loadPhonePermissions();
-    const updated = { ...current, ...verdict.applied };
-    savePhonePermissions(updated);
+    const result = applyPhonePermissionUpdate(store, current, verdict.applied);
     res.json({
-      success: true,
-      applied: true,
-      appliedKeys: Object.keys(verdict.applied),
+      success: result.applied,
+      applied: result.applied,
+      outcome: result.outcome,
+      appliedKeys: result.applied ? Object.keys(verdict.applied) : [],
       rejected: verdict.rejected,
-      message: verdict.message,
-      permissions: updated,
+      message: result.applied ? verdict.message : result.message,
+      permissions: result.permissions,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, applied: false, error: err.message });
