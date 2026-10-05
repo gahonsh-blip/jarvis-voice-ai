@@ -34,6 +34,7 @@ import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummary
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
 import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
+import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
@@ -8289,20 +8290,32 @@ app.post('/api/mobile/bridge/simulate', (req: Request, res: Response) => {
 
 app.post('/api/memory', (req: Request, res: Response) => {
   try {
-    const { name, notes, customKeyValues, statUpdate } = req.body;
-    if (name !== undefined) memoryState.name = name;
-    if (notes !== undefined) memoryState.notes = notes;
-    if (customKeyValues !== undefined) {
-      memoryState.customKeyValues = { ...memoryState.customKeyValues, ...customKeyValues };
+    // Only apply the fields the classifier accepted. A body carrying no real
+    // field — an empty object, or only a caller-supplied counter request — is
+    // refused rather than answered `success: true` for a save that never
+    // happened, and a malformed value is never written into the stored memory.
+    const verdict = classifyMemoryUpdate(req.body, {
+      name: memoryState.name,
+      notes: memoryState.notes,
+      customKeyValues: memoryState.customKeyValues,
+    });
+
+    if (verdict.applied.name !== undefined) memoryState.name = verdict.applied.name;
+    if (verdict.applied.notes !== undefined) memoryState.notes = verdict.applied.notes as any;
+    if (verdict.applied.customKeyValues !== undefined) {
+      memoryState.customKeyValues = {
+        ...memoryState.customKeyValues,
+        ...verdict.applied.customKeyValues,
+      };
     }
+
     // The "Autonomous Actions Executed" figure is user-visible (MemoryModal) and
     // must only advance when the server itself observed work. A caller-supplied
-    // counter request used to bump it, so a POST with no command or action could
-    // raise the number. Record such requests as inert instead of crediting them.
-    const requestedStats = [];
-    if (statUpdate?.incrementCommand) requestedStats.push('incrementCommand');
-    if (statUpdate?.incrementAction) requestedStats.push('incrementAction');
-    if (requestedStats.length > 0) {
+    // counter request is recorded as inert instead of credited.
+    if (verdict.inertCounterRequest) {
+      const requestedStats: string[] = [];
+      if (req.body?.statUpdate?.incrementCommand) requestedStats.push('incrementCommand');
+      if (req.body?.statUpdate?.incrementAction) requestedStats.push('incrementAction');
       memoryState.notes = [
         ...memoryState.notes,
         {
@@ -8313,13 +8326,25 @@ app.post('/api/memory', (req: Request, res: Response) => {
         },
       ];
     }
-    if (name !== undefined || notes !== undefined || customKeyValues !== undefined || statUpdate) {
+
+    if (verdict.outcome === 'NOTHING_TO_APPLY' || verdict.outcome === 'INVALID_BODY') {
+      return res.status(400).json({
+        success: false,
+        stored: false,
+        outcome: verdict.outcome,
+        message: verdict.message,
+      });
+    }
+
+    if (verdict.outcome === 'APPLIED' || verdict.inertCounterRequest) {
       memoryState.stats.lastActive = new Date().toISOString();
     }
 
     persistMemory();
     res.json({
       success: true,
+      outcome: verdict.outcome,
+      message: verdict.message,
       memory: {
         name: memoryState.name,
         notes: memoryState.notes,
