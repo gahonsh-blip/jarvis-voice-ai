@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   TwilioTelephonyProvider,
   TelnyxTelephonyProvider,
@@ -6,6 +6,7 @@ import {
   SimulatedTestTelephonyProvider,
   TELEPHONY_WEBHOOK_BASE_URL_MISSING,
   TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED,
+  TELEPHONY_DIAL_UNCONFIRMED_NO_SID,
 } from '../utils/telephonyAdapters';
 
 // Zero-fake-success guard for the telephony providers.
@@ -55,6 +56,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const key of ENV_KEYS) {
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];
@@ -258,3 +260,65 @@ describe('Telephony webhook handlers never report fake success', () => {
     expect(captured.body.simulationMarker).toBe('SIMULATION_ONLY');
   });
 });
+
+// Zero-fake-success guard for the successful Twilio dial branch.
+//
+// The adapter used to return `{ success: true, providerCallId: data.sid }`
+// whenever the carrier answered 2xx. A response whose body carried no `sid`
+// (or an empty one) therefore produced `success: true, providerCallId:
+// undefined` — a dial reported as placed with no call id to prove it. Success
+// must require the carrier to name the call it created.
+describe('Twilio outbound dial success requires a carrier-issued call id', () => {
+  function twilioWithReachableCallback() {
+    process.env.TELEPHONY_WEBHOOK_BASE_URL = 'https://jarvis.example.test';
+    return new TwilioTelephonyProvider();
+  }
+
+  it('reports a placed call with the carrier sid when the carrier names it', async () => {
+    const provider = twilioWithReachableCallback();
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ sid: 'CA' + '1'.repeat(32) }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await provider.startOutboundCall({
+      callSessionId: 'sess_ok',
+      destinationNumber: '+15551119999',
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.providerCallId).toBe('CA' + '1'.repeat(32));
+    // The carrier was actually called, so this is not a simulation.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses success when the carrier answers 2xx without a sid', async () => {
+    const provider = twilioWithReachableCallback();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+
+    const res = await provider.startOutboundCall({
+      callSessionId: 'sess_no_sid',
+      destinationNumber: '+15551119998',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.providerCallId).toBeUndefined();
+    expect(res.error).toContain(TELEPHONY_DIAL_UNCONFIRMED_NO_SID);
+  });
+
+  it('refuses success when the carrier sid is an empty string', async () => {
+    const provider = twilioWithReachableCallback();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ sid: '   ' }) })));
+
+    const res = await provider.startOutboundCall({
+      callSessionId: 'sess_empty_sid',
+      destinationNumber: '+15551119997',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.providerCallId).toBeUndefined();
+    expect(res.error).toContain(TELEPHONY_DIAL_UNCONFIRMED_NO_SID);
+  });
+});
+

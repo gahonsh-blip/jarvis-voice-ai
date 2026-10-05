@@ -30,6 +30,16 @@ export const TELEPHONY_WEBHOOK_BASE_URL_MISSING =
   'TELEPHONY_WEBHOOK_BASE_URL_MISSING: no carrier-reachable webhook base URL is configured (set TELEPHONY_WEBHOOK_BASE_URL to a public https URL), so the call-answer callback cannot be given to the provider.';
 
 /**
+ * Returned by an outbound dial whose carrier response carried no call id. A 2xx
+ * HTTP response is not proof that a call resource was created: an empty or
+ * missing `sid` used to yield `{ success: true, providerCallId: undefined }`,
+ * which the route records as a placed call with no identifier. The dial is
+ * refused until the carrier actually names the call it created.
+ */
+export const TELEPHONY_DIAL_UNCONFIRMED_NO_SID =
+  'TELEPHONY_DIAL_UNCONFIRMED_NO_SID: the carrier answered without a call id, so this process cannot confirm the outbound call was created.';
+
+/**
  * Returned by every provider webhook handler. Like the document-only methods
  * above, the handler neither verifies the provider signature nor performs a
  * call action, so receiving a request is not evidence that anything was done.
@@ -203,7 +213,15 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       }
 
       const data = await response.json();
-      return { success: true, providerCallId: data.sid };
+      // Twilio answers a created call with an `sid` such as `CA...`. A 2xx with
+      // no id is not proof a call resource exists, and `providerCallId:
+      // undefined` would still read to the caller as a placed call. Require the
+      // carrier to name the call before reporting success.
+      const sid = typeof data?.sid === 'string' ? data.sid.trim() : '';
+      if (!sid) {
+        return { success: false, error: TELEPHONY_DIAL_UNCONFIRMED_NO_SID };
+      }
+      return { success: true, providerCallId: sid };
     } catch (err: any) {
       return { success: false, error: `Twilio Network Error: ${err.message}` };
     }
