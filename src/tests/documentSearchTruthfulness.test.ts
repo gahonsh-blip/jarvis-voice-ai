@@ -78,3 +78,42 @@ describe('the find_document route does not credit a search that found nothing', 
     expect(result.error).toBeTruthy();
   });
 });
+
+// The found-branch previously credited an executed action with no client route:
+// `handleExecuteAction` had no `find_document` case, so the counter advanced and
+// no panel opened. The fix routes the intent to the filesystem explorer and
+// seeds it with the same query, so the credited action has a matching surface.
+describe('a credited find_document opens a real search surface for the same query', () => {
+  const appFlat = fs
+    .readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8')
+    .replace(/\s+/g, ' ');
+  const modalFlat = fs
+    .readFileSync(path.resolve(process.cwd(), 'src/components/AutonomousToolsModal.tsx'), 'utf8')
+    .replace(/\s+/g, ' ');
+
+  it('carries the search query in the found-branch payload', () => {
+    const body = chatCaseBody('find_document');
+    expect(body).toContain('payload: { query, matches: search.matches }');
+    expect(body).toContain('actionExecuted = true;');
+  });
+
+  it('exposes a real recursive search endpoint backed by realFsSearch', () => {
+    expect(serverFlat).toContain("app.post('/api/tools/fs/search'");
+    const route = serverFlat.slice(serverFlat.indexOf("app.post('/api/tools/fs/search'"));
+    expect(route.slice(0, 260)).toContain('realFsSearch');
+  });
+
+  it('routes the intent to the autonomous tools view with the query', () => {
+    expect(appFlat).toContain("case 'find_document':");
+    const route = appFlat.slice(appFlat.indexOf("case 'find_document':"));
+    const body = route.slice(0, 320);
+    expect(body).toContain("setActiveApp('autonomous_tools')");
+    expect(body).toContain('setDocumentSearchQuery');
+  });
+
+  it('seeds and runs the search when the explorer opens with a query', () => {
+    expect(modalFlat).toContain('handleFsSearch(initialQuery)');
+    expect(modalFlat).toContain("setActiveTab('filesystem')");
+    expect(modalFlat).toContain("fetch('/api/tools/fs/search'");
+  });
+});

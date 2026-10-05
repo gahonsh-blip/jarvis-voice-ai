@@ -121,6 +121,7 @@ export default function App() {
   const [notepadInitialContent, setNotepadInitialContent] = useState<string>('');
   const [browserSearchQuery, setBrowserSearchQuery] = useState<string>('');
   const [browserInitialUrl, setBrowserInitialUrl] = useState<string>('');
+  const [documentSearchQuery, setDocumentSearchQuery] = useState<string>('');
   const [speechDiagnostics, setSpeechDiagnostics] = useState<SpeechDiagnostics | null>(null);
 
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -1014,6 +1015,12 @@ export default function App() {
         case 'pending_approvals':
           setActiveApp('permission_gateway');
           break;
+        case 'find_document':
+          // A search that really ran opens the filesystem explorer seeded with
+          // the same query, so the credited action has a matching surface.
+          setDocumentSearchQuery(payload?.query || '');
+          setActiveApp('autonomous_tools');
+          break;
         case 'open_notepad':
         case 'create_file':
           if (payload?.content) {
@@ -1866,7 +1873,8 @@ export default function App() {
 
       <AutonomousToolsModal
         isOpen={activeApp === 'autonomous_tools'}
-        onClose={() => setActiveApp(null)}
+        onClose={() => { setActiveApp(null); setDocumentSearchQuery(''); }}
+        initialQuery={documentSearchQuery}
       />
 
       <ComputerOperatorModal

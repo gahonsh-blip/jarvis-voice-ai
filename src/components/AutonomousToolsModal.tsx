@@ -52,11 +52,12 @@ import {
 interface AutonomousToolsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialQuery?: string;
 }
 
 type ActiveTab = 'approvals' | 'youtube' | 'git' | 'filesystem' | 'github' | 'web' | 'email' | 'integrations' | 'finance_guard';
 
-export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOpen, onClose }) => {
+export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOpen, onClose, initialQuery }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('approvals');
   const [loading, setLoading] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -81,6 +82,11 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   const [fileContent, setFileContent] = useState<string>('');
   const [newFileName, setNewFileName] = useState<string>('');
   const [newFileContent, setNewFileContent] = useState<string>('');
+  // Recursive filename search (the surface for the voice `find_document`
+  // intent). Null until a search has actually run, so "no search" never
+  // renders as "0 matches".
+  const [fsSearchQuery, setFsSearchQuery] = useState<string>('');
+  const [fsSearchResult, setFsSearchResult] = useState<{ query: string; matches: { path: string; sizeBytes: number }[] } | null>(null);
 
   // GitHub State
   const [githubStatus, setGithubStatus] = useState<any>(null);
@@ -126,8 +132,13 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       fetchEmailStatus();
       fetchIntegrationsAudit();
       fetchFinanceGuard();
+      if (initialQuery && initialQuery.trim()) {
+        // A routed `find_document` opens the filesystem explorer on its search.
+        setActiveTab('filesystem');
+        handleFsSearch(initialQuery);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialQuery]);
 
   const showFeedback = (text: string, type: 'success' | 'error' = 'success') => {
     setActionMessage({ type, text });
@@ -268,15 +279,33 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   };
 
-  const handleReadFile = async (fileNameWithIcon: string) => {
-    const cleanName = fileNameWithIcon.replace(/^[📁📄]\s*/, '').trim();
-    if (fileNameWithIcon.startsWith('📁')) {
-      const newSub = fsPath === '.' ? cleanName : `${fsPath}/${cleanName}`;
-      fetchFsList(newSub);
+  const handleFsSearch = async (rawQuery: string) => {
+    const query = (rawQuery || '').trim();
+    setFsSearchQuery(rawQuery);
+    if (!query) {
+      setFsSearchResult(null);
       return;
     }
+    try {
+      const res = await fetch('/api/tools/fs/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFsSearchResult({ query, matches: data.matches || [] });
+      } else {
+        setFsSearchResult(null);
+        showFeedback(data.error || 'Search failed', 'error');
+      }
+    } catch (err: any) {
+      setFsSearchResult(null);
+      showFeedback('Search error: ' + err.message, 'error');
+    }
+  };
 
-    const fullPath = fsPath === '.' ? cleanName : `${fsPath}/${cleanName}`;
+  const readFilePath = async (fullPath: string) => {
     setSelectedFile(fullPath);
     try {
       const res = await fetch('/api/tools/fs/read', {
@@ -293,6 +322,18 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     } catch (err: any) {
       showFeedback('Error reading file: ' + err.message, 'error');
     }
+  };
+
+  const handleReadFile = async (fileNameWithIcon: string) => {
+    const cleanName = fileNameWithIcon.replace(/^[📁📄]\s*/, '').trim();
+    if (fileNameWithIcon.startsWith('📁')) {
+      const newSub = fsPath === '.' ? cleanName : `${fsPath}/${cleanName}`;
+      fetchFsList(newSub);
+      return;
+    }
+
+    const fullPath = fsPath === '.' ? cleanName : `${fsPath}/${cleanName}`;
+    await readFilePath(fullPath);
   };
 
   const handleCreateOrSaveFile = async () => {
@@ -1116,6 +1157,57 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                     <span>Refresh</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Recursive filename search — the surface behind the voice
+                  `find_document` intent. Results are real workspace paths. */}
+              <div className="space-y-2">
+                <form
+                  onSubmit={(e) => { e.preventDefault(); handleFsSearch(fsSearchQuery); }}
+                  className="flex items-center gap-2"
+                >
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+                    <input
+                      value={fsSearchQuery}
+                      onChange={(e) => setFsSearchQuery(e.target.value)}
+                      placeholder="Search workspace filenames (e.g. package)"
+                      className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-900/60 hover:bg-emerald-800/60 text-xs font-mono text-emerald-200"
+                  >
+                    Search
+                  </button>
+                </form>
+                {fsSearchResult && (
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold">
+                        {fsSearchResult.matches.length} match(es) for "{fsSearchResult.query}"
+                      </span>
+                      <span className="text-[10px] text-slate-500">Recursive · real paths</span>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {fsSearchResult.matches.length === 0 ? (
+                        <div className="text-slate-500">No file matching "{fsSearchResult.query}" exists in the workspace.</div>
+                      ) : (
+                        fsSearchResult.matches.map((m, i) => (
+                          <button
+                            key={i}
+                            onClick={() => readFilePath(m.path)}
+                            className="w-full text-left px-2.5 py-1.5 rounded hover:bg-slate-800/80 text-slate-300 hover:text-white transition-colors flex items-center justify-between gap-3"
+                          >
+                            <span className="truncate">{m.path}</span>
+                            <span className="text-[10px] text-slate-500 shrink-0">{m.sizeBytes} bytes</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

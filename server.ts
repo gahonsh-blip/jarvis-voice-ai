@@ -6431,6 +6431,14 @@ app.post('/api/tools/fs/list', (req: Request, res: Response) => {
   res.json(realFsList(subPath));
 });
 
+// Recursive workspace filename search. The same `realFsSearch` the voice
+// `find_document` intent uses, so a routed search surfaces exactly what was
+// spoken — real relative paths and byte sizes, never invented matches.
+app.post('/api/tools/fs/search', (req: Request, res: Response) => {
+  const { query = '', maxResults } = req.body;
+  res.json(realFsSearch(String(query), typeof maxResults === 'number' ? maxResults : 10));
+});
+
 app.post('/api/tools/fs/read', (req: Request, res: Response) => {
   const { path: filePath } = req.body;
   if (!filePath) return res.status(400).json({ error: 'path is required' });
@@ -9301,7 +9309,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           const list = search.matches.map((m) => m.path).join(', ');
           spokenResponse = `Found ${search.matches.length} file(s) matching ${query}: ${list}.`;
           actionExecuted = true;
-          actionDetail = { type: 'find_document', title: `Found: ${query}`, payload: search.matches };
+          // Carry the query alongside the matches so the client can open the
+          // filesystem explorer on the same search instead of a bare directory.
+          actionDetail = { type: 'find_document', title: `Found: ${query}`, payload: { query, matches: search.matches } };
         } else if (search.success) {
           // A search that returned nothing retrieved no document: no work was
           // executed, and the "Not found" card must not be counted as an action.
