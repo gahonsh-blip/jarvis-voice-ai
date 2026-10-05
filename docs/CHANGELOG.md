@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 02:05 IST (2026-10-05 20:35 UTC) — window slot 6: the offline sync no longer overwrites the server name
+
+### Fixed
+- **`POST /api/memory/sync` wrote the client-supplied name into the authoritative memory even when the merge had flagged it as a conflict.** `mergeMemorySnapshots` detects a name that differs on both sides and records it with `resolution: 'flagged'` for a human to settle, but the route then ran `if (result.merged.name !== undefined) memoryState.name = result.merged.name` and returned it in `merged` — the offline copy silently overwrote the server, and the response read as a completed merge. The route now classifies the merge with `classifyMemorySync` (`src/utils/hardening/memorySyncTruth.ts`) and applies the name only when the verdict says it was applied. It returns `stored`, `nameApplied`, `outcome` (`APPLIED` / `NAME_CONFLICT` / `NOTHING_TO_APPLY`) and a `message`, so a sync that changed nothing is not read as a merge.
+
+### Tests
+- New `src/tests/memorySyncTruth.test.ts` (9 cases: 6 decision against the real `mergeMemorySnapshots`, 3 route-source). Negative-validated: restoring the pre-fix route line failed exactly the two route-source cases (2 failed | 7 passed); restored → 9/9. `memoryPersistence.e2e.test.ts` 1 file / 7 tests passed. Full suite: 165 files / 2102 tests passed.
+
+---
+
 ## [Unreleased] - 2026-10-06 01:05 IST (2026-10-05 19:35 UTC) — window slot 6: the memory route no longer fakes a save
 
 ### Fixed

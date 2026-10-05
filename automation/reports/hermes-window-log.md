@@ -11622,3 +11622,30 @@ answered `success: true` for every request. Three concrete fake-success paths:
 - Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display). Item 13 remains
   PARTIAL — the tail of unclassified `success: true` / `actionExecuted: true`
   sites is still not individually audited (truthfulness UNKNOWN).
+
+---
+
+## Slot 6 — 2026-10-06 02:05 IST (WORK)
+
+- Item: #13 Zero-fake-success for all tools — the offline memory sync route.
+- Bug: `POST /api/memory/sync` applied the client-supplied `name` even when
+  `mergeMemorySnapshots` had flagged it as a conflict, then returned it in
+  `merged` — a silent overwrite of the authoritative memory reported as a
+  completed merge.
+- Fix: `classifyMemorySync` (`src/utils/hardening/memorySyncTruth.ts`) decides
+  whether the name was applied; the route writes it only then and returns
+  `stored` / `nameApplied` / `outcome` (`APPLIED` / `NAME_CONFLICT` /
+  `NOTHING_TO_APPLY`) + `message`.
+- Evidence: `src/tests/memorySyncTruth.test.ts` — 1 file / 9 tests passed (6
+  decision against the real `mergeMemorySnapshots`, 3 route-source). Negative
+  validation: pre-fix route line restored → exactly 2 route-source cases failed
+  (2 failed | 7 passed); restored → 9/9. `memoryPersistence.e2e.test.ts` 1 file /
+  7 tests passed. Full suite 165 files / 2102 tests passed (25.75 s, 0 failed).
+  `npm run lint` exit 0. `npm run build` exit 0, `dist/server.cjs` 1025579 bytes.
+- Item 13 remains PARTIAL — the tail of unclassified `success: true` /
+  `actionExecuted: true` sites in `server.ts` / `server_tools.ts` is still not
+  individually audited (truthfulness UNKNOWN).
+- Commit `609a284` on `feature/hermes-full-completion`, pushed
+  (8bc278a..609a284). Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display).
+- Next: continue item #13 — audit the scheduled/autonomous trigger paths in
+  `server_tools.ts`.

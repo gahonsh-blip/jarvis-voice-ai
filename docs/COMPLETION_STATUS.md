@@ -3,6 +3,30 @@
 Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
+Last cycle: 2026-10-06 02:05 IST — **WORK SLOT 6** of the
+2026-10-05 → 2026-10-06 window, the 02:05 IST fire. **Item 13
+(`Zero-fake-success for all tools`) — the offline memory sync route.** `POST
+/api/memory/sync` reconciled an offline snapshot with the authoritative server
+copy. `mergeMemorySnapshots` correctly flags a name that differs on both sides
+as a conflict, but the route then wrote the client-supplied name into the server
+regardless and returned it in `merged` — a silent overwrite reported as a
+completed merge. The route now classifies the merge with `classifyMemorySync`
+(`src/utils/hardening/memorySyncTruth.ts`), applies the name only when the
+verdict says it was applied, and returns `stored` / `nameApplied` / `outcome`
+(`APPLIED` / `NAME_CONFLICT` / `NOTHING_TO_APPLY`) plus a `message`, so a no-op
+sync is no longer read as a merge. Guarded by
+`src/tests/memorySyncTruth.test.ts` (9 cases: 6 decision against the real
+`mergeMemorySnapshots`, 3 route-source). Negative-validated: restoring the
+pre-fix route line failed exactly the two route-source cases (2 failed | 7
+passed); restored → 9/9. Verified this fire: targeted **1 file / 9 tests
+passed**; `memoryPersistence.e2e.test.ts` **1 file / 7 tests passed**; full
+suite **165 files / 2102 tests passed** (25.75 s, 0 failed); `npm run lint`
+(`tsc --noEmit`) exit 0; `npm run build` exit 0, artifact `dist/server.cjs`
+**1025579 bytes**. Item 13 remains `PARTIAL` — the tail of unclassified
+`success: true` / `actionExecuted: true` sites in `server.ts` / `server_tools.ts`
+is still not individually audited (truthfulness `UNKNOWN`). E2E: NOT RUN — no
+handset and no display session. Deploy: `NOT_CONFIGURED`. Hardware-blocked items
+#1/#2/#50/#55 remain `NOT_AVAILABLE`.
 Last cycle: 2026-10-06 01:05 IST — **WORK SLOT 6** of the
 2026-10-05 → 2026-10-06 window, the 01:05 IST fire. **Item 13
 (`Zero-fake-success for all tools`) — the memory update route.** `POST
