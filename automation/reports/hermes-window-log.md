@@ -11649,3 +11649,35 @@ answered `success: true` for every request. Three concrete fake-success paths:
   (8bc278a..609a284). Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display).
 - Next: continue item #13 — audit the scheduled/autonomous trigger paths in
   `server_tools.ts`.
+
+---
+
+## Slot — 2026-10-06 02:35 IST (WORK)
+
+- Item: #13 Zero-fake-success for all tools — the queryless web search.
+- Bug: a bare `search` / `google search` with no query reached the `/api/chat`
+  search branch (`server.ts`) and the offline `google_search` branch
+  (`src/utils/localJarvisEngine.ts`); both set `actionExecuted = true`
+  unconditionally, so the user-visible executed-action counter advanced while the
+  in-app Browser opened only its default home and ran no lookup.
+- Fix: `searchDispatch` (`src/utils/browserDispatchTruth.ts`) returns
+  `dispatched: false` for an empty/whitespace query with an honest reply instead
+  of a `/search?q=` URL. Both branches derive `actionExecuted` and the action
+  card (`title`, `query`, `target`) from that one verdict; the offline branch
+  gained English/Hindi/Hinglish wording for the no-query case.
+- Evidence: `src/tests/browserDispatchTruth.test.ts` (empty-query no-dispatch +
+  server wiring), `src/tests/offlineActionExecutedSweep.test.ts` (pins
+  `actionExecuted: dispatch.dispatched`, forbids the literal),
+  `src/tests/actionExecutedSweepAudit.test.ts` (`google_search` removed from the
+  literal-true enumeration). Targeted 5 files / 100 tests passed. Negative
+  validation: restoring `actionExecuted = true` in both source files failed
+  exactly 4 of 33 (`4 failed | 29 passed`); restored → green. Full suite 165
+  files / 2104 tests passed (25.49 s, 0 failed). `npm run lint` exit 0.
+  `npm run build` exit 0, `dist/server.cjs` 1027164 bytes.
+- Item 13 remains PARTIAL — the tail of unclassified `success: true` /
+  `actionExecuted: true` sites in `server.ts` / `server_tools.ts` is still not
+  individually audited (truthfulness UNKNOWN).
+- Commit `f7be965` on `feature/hermes-full-completion`, pushed
+  (7d14c67..f7be965). Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display).
+- Next: continue item #13 — audit the remaining literal `success: true` /
+  `actionExecuted: true` sites in `server_tools.ts`.

@@ -3,6 +3,33 @@
 Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
+Last cycle: 2026-10-06 02:35 IST — **WORK SLOT** of the
+2026-10-05 → 2026-10-06 window, the 02:35 IST fire. **Item 13
+(`Zero-fake-success for all tools`) — the queryless web search.** A bare
+`search` / `google search` (no query) reached the `/api/chat` search branch in
+`server.ts` and the offline `google_search` branch in
+`src/utils/localJarvisEngine.ts`, and both set `actionExecuted = true`
+unconditionally, so the user-visible executed-action count advanced while the
+in-app Browser opened only its default home and ran no lookup. `searchDispatch`
+(`src/utils/browserDispatchTruth.ts`) now returns `dispatched: false` for an
+empty/whitespace query with an honest reply instead of a `/search?q=` URL; the
+server route and the offline engine both derive `actionExecuted` and the action
+card (`title`, `query`, `target`) from that one verdict, and the offline branch
+gained English/Hindi/Hinglish wording for the no-query case. Guarded by
+`src/tests/browserDispatchTruth.test.ts` (empty-query no-dispatch + server
+wiring), `src/tests/offlineActionExecutedSweep.test.ts` (offline branch pins
+`actionExecuted: dispatch.dispatched` and forbids the literal), and
+`src/tests/actionExecutedSweepAudit.test.ts` (`google_search` removed from the
+literal-true enumeration). Negative-validated: restoring `actionExecuted = true`
+in both files failed exactly 4 of 33 (`4 failed | 29 passed`) across the three
+suites; restored → green. Verified this fire: targeted **5 files / 100 tests
+passed**; full suite **165 files / 2104 tests passed** (25.49 s, 0 failed);
+`npm run lint` (`tsc --noEmit`) exit 0; `npm run build` exit 0, artifact
+`dist/server.cjs` **1027164 bytes**. Item 13 remains `PARTIAL` — the tail of
+unclassified `success: true` / `actionExecuted: true` sites in `server.ts` /
+`server_tools.ts` is still not individually audited (truthfulness `UNKNOWN`).
+E2E: NOT RUN — no handset and no display session. Deploy: `NOT_CONFIGURED`.
+Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`.
 Last cycle: 2026-10-06 02:05 IST — **WORK SLOT 6** of the
 2026-10-05 → 2026-10-06 window, the 02:05 IST fire. **Item 13
 (`Zero-fake-success for all tools`) — the offline memory sync route.** `POST
