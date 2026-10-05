@@ -3,6 +3,37 @@
 Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
+Last cycle: 2026-10-05 21:06 IST — **WORK SLOT 15** of the
+2026-10-04 → 2026-10-05 window, the 21:05 IST fire. **Item 13
+(`Zero-fake-success for all tools`) — the `find_document` intent.** The
+`find_document` intent on the tools path credited `actionExecuted: true` and
+returned `{ type: 'find_document', title: 'Found: <query>', payload: { query,
+matches } }` with no client surface and no endpoint that could actually search
+the workspace — a tool that reported success without doing the work. New real
+recursive search endpoint `POST /api/tools/fs/search` (`server.ts`) walks the
+workspace and returns real `matches` (path + line + text), refusing an empty
+query with `{ success: false, reason: 'EMPTY_QUERY' }`.
+`src/components/AutonomousToolsModal.tsx` now takes `{ isOpen, onClose,
+initialQuery? }`, seeds the search box from the routed query on open, renders
+the real matches panel, and reads workspace-relative result files through a
+corrected `readFilePath`. `src/App.tsx` routes the `find_document` intent to the
+Autonomous Tools surface with `setDocumentSearchQuery(...)` and clears it in
+`onClose` so a reopen does not re-run a stale search. Verified by
+`src/tests/documentSearchTruthfulness.test.ts` (10 tests) — the routing/wiring
+assertion was negative-validated: reverting the routing case produced 2 real
+failures, restoring the fix returned to green. Full suite on the pushed tip:
+`npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run` **159 files / 2024
+tests passed** (0 failed); `npm run build` exit 0, artifact `dist/server.cjs`
+**1014861 bytes**. Item 13 remains `PARTIAL` — other `success: true` /
+`actionExecuted: true` sites in `server.ts` / `server_tools.ts` are still not
+individually audited (truthfulness `UNKNOWN`). Note: the 2026-10-04 → 2026-10-05
+window's finalization record (slot 14, below) reported `finalized: true`; this
+slot was fired at the 21:05 boundary of the following evening and its work was
+committed **on top of** the frozen tip `28ac7a6` as an additive fast-forward —
+the prior window's records were not rewritten. E2E: NOT RUN — no handset and no
+display session. Deploy: `NOT_CONFIGURED`. Hardware-blocked items #1/#2/#50/#55
+remain `NOT_AVAILABLE`.
+
 Last cycle: 2026-10-05 04:36 IST — **FINALIZATION SLOT 14** of the
 2026-10-04 → 2026-10-05 window, the 04:35 IST fire. **No new backlog item was
 advanced**; by rule the finalization slot starts no new development. The branch

@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-05 21:06 IST (2026-10-05 15:36 UTC) — window slot 15: `find_document` runs a real workspace search
+
+### Fixed
+- **The `find_document` intent reported success without searching anything.** It credited `actionExecuted: true` and returned a `find_document` action detail while no client surface and no endpoint could perform the search. `src/App.tsx` now routes the intent to the Autonomous Tools surface and seeds the query; `src/components/AutonomousToolsModal.tsx` runs the search on open and renders real matches.
+- **`readFilePath` mis-read workspace-relative search results.** Result paths returned relative to the workspace root did not resolve when opened; the reader now joins them against the workspace root.
+
+### Added
+- **`POST /api/tools/fs/search`** (`server.ts`) — real recursive workspace search returning `matches` (`path`, `line`, `text`); an empty query is refused with `{ success: false, reason: 'EMPTY_QUERY' }`.
+
+### Tests
+- `src/tests/documentSearchTruthfulness.test.ts` (10 tests) asserts the intent routes to the tools surface, the modal consumes `initialQuery`, and the search result path is read correctly. Negative-validated: reverting the routing case produced 2 real failures; restoring the fix returned to green. Full suite: 159 files / 2024 tests passed.
+
+---
+
 ## [Unreleased] - 2026-10-05 03:35 IST (2026-10-04 22:06 UTC) — window slot 13: freelance create-lead refuses a payload with no real field
 
 ### Fixed
