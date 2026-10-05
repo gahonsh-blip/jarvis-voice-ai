@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 02:35 IST (2026-10-05 21:06 UTC) — window slot 7b (duplicate dispatch): the YouTube status question is no longer credited as executed work
+
+### Fixed
+- **The `/api/chat` `youtube_status_inquiry` case set `actionExecuted` from `toolActionExecuted({ success: ytTokenCheck.valid })`.** A status *question* therefore advanced the user-visible "Autonomous Actions Executed" counter whenever the stored token was valid, even though the intent runs no tool and opens no view — `App.tsx` `handleExecuteAction` has no `youtube_status_inquiry` case — and the offline engine twin (`src/utils/localJarvisEngine.ts`) already reports `actionExecuted: false`. The case now pins `actionExecuted = false;` and titles the action `YouTube Integration Status (informational, no action taken)`.
+
+### Tests
+- `src/tests/toolDispatchTruth.test.ts` — case *the YouTube status inquiry never credits a token check as executed work* (asserts `actionExecuted = false;`, forbids `actionExecuted = true;`, requires the informational title).
+- `src/tests/remainingFakeSuccess.test.ts` — case *youtube_status_inquiry reports the connection without crediting an action*.
+- Negative-validated: restoring the pre-fix line failed exactly those two cases (`2 failed | 66 passed`); restored → 68/68. Targeted 2 files / 68 tests passed. Full suite 165 files / 2105 tests passed.
+
+---
+
 ## [Unreleased] - 2026-10-06 02:05 IST (2026-10-05 20:35 UTC) — window slot 6: the offline sync no longer overwrites the server name
 
 ### Fixed
