@@ -1075,10 +1075,13 @@ export async function fetchYouTubeTranscriptData(
       fullTranscript = segments.map((s) => `[${s.timestamp}] ${s.text}`).join('\n');
       videoInfo.transcriptLength = segments.length;
     } else {
-      // If closed captions are disabled on the video, use the comprehensive description and metadata
+      // If closed captions are disabled on the video, use the comprehensive description and metadata.
+      // This is NOT a transcript: `transcriptLength` counts observed transcript
+      // segments, so it stays 0 here. Reporting `description.length` made a
+      // description-character count read as a transcript length.
       fullTranscript = `[Video Metadata & Outline]\nTitle: ${videoInfo.title}\nChannel: ${videoInfo.channel}\nDuration: ${videoInfo.durationFormatted}\n\nDescription & Chapters:\n${videoInfo.description}`;
       videoInfo.hasTranscript = false;
-      videoInfo.transcriptLength = videoInfo.description.length;
+      videoInfo.transcriptLength = 0;
     }
 
     return {

@@ -48,6 +48,10 @@ import {
   type FinanceGuardReport,
   type FinanceGuardProbeResult,
 } from '../utils/financeGuardTruth';
+import {
+  transcriptBadgeLabel,
+  transcriptTabLabel,
+} from '../utils/hardening/youtubeTranscriptLabelTruth';
 
 interface AutonomousToolsModalProps {
   isOpen: boolean;
@@ -908,7 +912,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                                 : 'bg-amber-950 border border-amber-500/40 text-amber-300'
                             }`}
                           >
-                            {ytResult.videoInfo.hasTranscript ? '🟢 Transcript Loaded' : '🟡 Metadata Outline'}
+                            {transcriptBadgeLabel(ytResult.videoInfo.hasTranscript, ytResult.segments)}
                           </span>
                           <span>•</span>
                           <span className="text-[10px] text-slate-500">
@@ -975,7 +979,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                       }`}
                     >
                       <BookOpen className="w-3.5 h-3.5" />
-                      <span>Timestamped Transcript ({ytResult.segments?.length || 0})</span>
+                      <span>{transcriptTabLabel(ytResult.segments)}</span>
                     </button>
                   </div>
 
