@@ -38,6 +38,7 @@ import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatr
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
+import { classifyTelephonyCallRecord } from './src/utils/hardening/telephonyCallRecordTruth';
 import { classifyOutboundAuthorization } from './src/utils/hardening/outboundAuthorizationTruth';
 import { classifyBridgeHeartbeat } from './src/utils/hardening/bridgeHeartbeatTruth';
 import { classifyBridgeEvent } from './src/utils/hardening/bridgeEventTruth';
@@ -8367,15 +8368,29 @@ app.get('/api/telephony/calls', (req: Request, res: Response) => {
 app.post('/api/telephony/calls', (req: Request, res: Response) => {
   try {
     const callData = req.body;
-    if (!callData || !callData.id) {
-      return res.status(400).json({ success: false, error: 'Call record ID is required' });
+    const existingIdx =
+      callData && typeof callData.id === 'string'
+        ? telephonyCalls.findIndex((c) => c.id === callData.id)
+        : -1;
+    const existing = existingIdx >= 0 ? telephonyCalls[existingIdx] : null;
+    // The old route answered success: true for any body carrying an id and
+    // spread unknown keys into the stored record. Classify the write against
+    // the real CallRecord fields and the stored record first, so a body that
+    // names no real field, or restates the record unchanged, is refused
+    // instead of being reported as a saved call.
+    const verdict = classifyTelephonyCallRecord(callData, existing);
+    if (!verdict.accepted) {
+      const status = verdict.reason === 'MISSING_ID' || verdict.reason === 'NOT_OBJECT' ? 400 : 422;
+      return res.status(status).json({ success: false, reason: verdict.reason, error: verdict.message });
     }
 
-    const existingIdx = telephonyCalls.findIndex((c) => c.id === callData.id);
+    const stored = existing
+      ? { ...existing, ...verdict.changes }
+      : { ...verdict.changes, id: verdict.id };
     if (existingIdx >= 0) {
-      telephonyCalls[existingIdx] = { ...telephonyCalls[existingIdx], ...callData };
+      telephonyCalls[existingIdx] = stored;
     } else {
-      telephonyCalls.unshift(callData);
+      telephonyCalls.unshift(stored);
     }
 
     // Keep up to 100 recent calls in memory
@@ -8383,7 +8398,13 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
       telephonyCalls = telephonyCalls.slice(0, 100);
     }
 
-    res.json({ success: true, call: callData });
+    res.json({
+      success: true,
+      action: verdict.action,
+      call: stored,
+      message: verdict.message,
+      ...(verdict.rejected.length > 0 ? { ignoredFields: verdict.rejected } : {}),
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
