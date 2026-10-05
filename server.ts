@@ -7783,18 +7783,29 @@ app.post('/api/mobile/bridge/pair', (req: Request, res: Response) => {
     }
 
     const issued = bridgeGateway.issueSession(deviceId, req.body?.clientLabel || 'Android Bridge');
-    bridgeGateway.recordAudit('PAIRING_ACCEPTED', `Pairing accepted for ${deviceId}`, 'VERIFIED', {
-      sessionId: issued.session.sessionId,
-      deviceId,
-    });
+    // Pairing only mints a session token; the device has not connected and no
+    // heartbeat has been seen, so the bridge is still MOBILE_NOT_CONNECTED.
+    // Recording this as VERIFIED would be a fake success: the device has done
+    // nothing yet.
+    bridgeGateway.recordAudit(
+      'PAIRING_ACCEPTED',
+      `Pairing accepted for ${deviceId}; awaiting device connect and heartbeat`,
+      'NOT_CONFIGURED',
+      {
+        sessionId: issued.session.sessionId,
+        deviceId,
+      }
+    );
 
     return res.json({
-      success: true,
-      outcome: 'VERIFIED',
+      success: false,
+      outcome: 'NOT_CONFIGURED',
+      verified: false,
+      status: bridgeGateway.getStatus(),
       sessionId: issued.session.sessionId,
       sessionToken: issued.token,
       expiresAt: issued.expiresAt,
-      note: 'Store this token on the device. Present it as X-Jarvis-Session-Token on every bridge call.',
+      note: 'Pairing stored. This only mints a session token — the device is not connected until it registers and sends a heartbeat. Store this token on the device and present it as X-Jarvis-Session-Token on every bridge call.',
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
