@@ -11579,3 +11579,46 @@ telephony dialer UI.
   confirmed at e903d9f via `git ls-remote`.
 - Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display). Item 13 remains PARTIAL.
 
+
+---
+
+## Slot 6 — 2026-10-06 01:05 IST (WORK SLOT) — window date 2026-10-06
+
+### Item 13 — Zero-fake-success for all tools (memory update route)
+
+`POST /api/memory` spread the raw request body over the stored memory and
+answered `success: true` for every request. Three concrete fake-success paths:
+
+- an empty body was reported as a completed save while nothing was stored;
+- a body carrying only the inert `statUpdate` counter request was reported as a
+  completed save;
+- a malformed value (a non-string `name`, a non-array `notes`) was written
+  straight into the memory the app reads back.
+
+- Fix: the route now classifies the body with `classifyMemoryUpdate`
+  (`src/utils/hardening/memoryUpdateTruth.ts`). It applies only the three real
+  fields (`name`, `notes`, `customKeyValues`), reports `stored` plus an
+  `outcome` (`APPLIED` / `UNCHANGED` / `COUNTER_REFUSED` / `NOTHING_TO_APPLY` /
+  `INVALID_BODY`), and refuses a body with nothing to apply with a `400`
+  instead of `success: true`. A counter-only body keeps its existing `200`
+  contract so the e2e suites stay valid, but is now explicitly
+  `stored: false, outcome: COUNTER_REFUSED`.
+- Tests: new `src/tests/memoryUpdateTruth.test.ts` (13 cases: 10 decision + 3
+  route-source). Negative validation: restoring the pre-fix route failed
+  exactly the three route-source cases (3 failed | 10 passed); restoring the
+  fix returned 13/13. Targeted run 1 file / 13 passed;
+  `memoryPersistence.e2e.test.ts` + `offlineOnline.e2e.test.ts` 2 files / 15
+  passed.
+- Gates: `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest run` 164 files /
+  2093 tests passed, 0 failed (25.22 s); `npm run build` exit 0,
+  `dist/server.cjs` 1023783 bytes.
+- Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status
+  --short` showed only the two docs files at commit time; diff vs `origin/main`
+  146 files changed, no literal token/key/password; `dist/` and `node_modules/`
+  untracked.
+- Commits: `2e22645` (fix), `07da0dd` (docs). Branch
+  `feature/hermes-full-completion` pushed. State branch `automation/hermes-state`
+  pushed at `00b59e4` (slots_completed 5).
+- Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display). Item 13 remains
+  PARTIAL — the tail of unclassified `success: true` / `actionExecuted: true`
+  sites is still not individually audited (truthfulness UNKNOWN).
