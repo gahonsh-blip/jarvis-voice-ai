@@ -35,6 +35,7 @@ import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermis
 import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
+import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
@@ -7267,20 +7268,29 @@ app.post('/api/memory/sync', (req: Request, res: Response) => {
 
     // Only merge what the resolver accepted. Conflicts are reported, never
     // silently applied over the authoritative server copy.
+    const verdict = classifyMemorySync(result, remote);
+
     memoryState.notes = result.merged.notes;
-    if (result.merged.name !== undefined) memoryState.name = result.merged.name;
+    // A name that differs on both sides is a flagged conflict, not a value to
+    // write. Applying it here overwrote the authoritative name while the
+    // response still reported it as merged — a silent overwrite read as success.
+    if (verdict.nameApplied) memoryState.name = result.merged.name as string;
     memoryState.customKeyValues = result.merged.customKeyValues;
     persistMemory();
 
     res.json({
       success: true,
+      stored: verdict.stored,
+      nameApplied: verdict.nameApplied,
+      outcome: verdict.outcome,
+      message: verdict.message,
       merged: {
         name: memoryState.name,
         notes: memoryState.notes,
         customKeyValues: memoryState.customKeyValues,
       },
       conflicts: result.conflicts,
-      requiresAttention: result.requiresAttention,
+      requiresAttention: verdict.requiresAttention,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Memory sync failed' });
