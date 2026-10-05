@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 00:05 IST (2026-10-05 18:35 UTC) — window slot 5: the dialer no longer invents a number
+
+### Fixed
+- **`TelephonyHubModal.handleLaunchOutbound` fabricated a dialled number when the dial field was blank.** It built `const finalNumber = dialNumber.trim() || '+1 (415) 890-2134'`, so pressing "Initiate Autonomous Voice Call" with an empty field started a call to an invented number and created a call record for a number nobody entered. This bypassed the App-level guard (`handleStartOutboundCall`), which already refuses a missing `recipientNumber`. The handler now refuses a blank dial (`const finalNumber = dialNumber.trim();` then `if (!finalNumber) { setDialNotice('NO DIAL NUMBER — enter or pick a number before starting the call.'); return; }`) and shows an amber notice naming the reason instead of substituting a number.
+
+### Tests
+- `src/tests/telephonyOwnNumberTruth.test.ts` gains three cases (the file now has 23 tests): the fabricated literal `'+1 (415) 890-2134'` is absent from the modal source, a blank dial is refused (`if (!finalNumber) { … return; }`), and the refusal states `NO DIAL NUMBER`. Negative-validated: restoring the pre-fix fallback failed exactly those two source assertions (2 failed | 21 passed); restoring it returned 23/23. Full suite: 162 files / 2067 tests passed.
+
+---
+
 ## [Unreleased] - 2026-10-05 23:35 IST (2026-10-05 18:05 UTC) — window slot 3: YouTube staging reports the real gate outcome
 
 ### Fixed

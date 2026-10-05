@@ -3,6 +3,30 @@
 Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
+Last cycle: 2026-10-06 00:05 IST — **WORK SLOT 5** of the
+2026-10-05 → 2026-10-06 window, the 00:05 IST fire. **Item 13
+(`Zero-fake-success for all tools`) — the fabricated dialled number in the
+telephony dialer UI.** `TelephonyHubModal.handleLaunchOutbound` built
+`const finalNumber = dialNumber.trim() || '+1 (415) 890-2134'`, so pressing
+"Initiate Autonomous Voice Call" with an empty dial field started a call to an
+invented number and created a call record for a number nobody entered. This
+bypassed the App-level guard (`handleStartOutboundCall`), which already refuses
+a missing `recipientNumber`. The handler now refuses a blank dial
+(`const finalNumber = dialNumber.trim();` then `if (!finalNumber) { … return; }`)
+and shows an amber notice naming the reason instead of fabricating a number.
+Guarded by three new cases in `src/tests/telephonyOwnNumberTruth.test.ts` (the
+file now has 23 tests): the fabricated literal is absent from the modal source,
+a blank dial is refused, and the refusal states `NO DIAL NUMBER`.
+Negative-validated: restoring the pre-fix fallback failed exactly those two
+source assertions (2 failed | 21 passed); restored → 23/23. Verified this fire:
+`src/tests/telephonyOwnNumberTruth.test.ts` **1 file / 23 tests passed**; full
+suite **162 files / 2067 tests passed** (25.30 s, 0 failed); `npm run lint`
+(`tsc --noEmit`) exit 0; `npm run build` exit 0, artifact `dist/server.cjs`
+**1016999 bytes**. Item 13 remains `PARTIAL` — the tail of unclassified
+`success: true` / `actionExecuted: true` sites in `server.ts` / `server_tools.ts`
+is still not individually audited (truthfulness `UNKNOWN`). E2E: NOT RUN — no
+handset and no display session. Deploy: `NOT_CONFIGURED`. Hardware-blocked items
+#1/#2/#50/#55 remain `NOT_AVAILABLE`.
 Last cycle: 2026-10-05 23:35 IST — **WORK SLOT 4** of the
 2026-10-05 → 2026-10-06 window, the 23:35 IST fire. **Item 13
 (`Zero-fake-success for all tools`) — the YouTube staging routes.** Both

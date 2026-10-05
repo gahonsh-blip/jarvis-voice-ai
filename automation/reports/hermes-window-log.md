@@ -11547,3 +11547,35 @@ Item #13 Zero-fake-success for all tools — the YouTube staging routes.
   build OK, `dist/server.cjs` 992.8 kb.
 - Commit 0db68a0. Branch `feature/hermes-full-completion` pushed (26ae3fb..0db68a0).
 - Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display). Item 13 remains PARTIAL.
+
+---
+
+## 2026-10-06 00:05 IST — WORK SLOT 5 (window 2026-10-05 → 2026-10-06)
+
+Item #13 Zero-fake-success for all tools — the fabricated dialled number in the
+telephony dialer UI.
+
+- Bug: `TelephonyHubModal.handleLaunchOutbound` (`src/components/TelephonyHubModal.tsx`)
+  built `const finalNumber = dialNumber.trim() || '+1 (415) 890-2134'`, so
+  pressing "Initiate Autonomous Voice Call" with an empty dial field started a
+  call to an invented number and created a call record for a number nobody
+  entered. This bypassed the App-level guard (`handleStartOutboundCall`), which
+  already refuses a missing `recipientNumber`.
+- Fix: the handler now refuses a blank dial — `const finalNumber = dialNumber.trim();`
+  then `if (!finalNumber) { setDialNotice('NO DIAL NUMBER — enter or pick a
+  number before starting the call.'); return; }` — and shows an amber notice
+  naming the reason instead of substituting a number.
+- Tests: `src/tests/telephonyOwnNumberTruth.test.ts` gains three cases (file now
+  23 tests): the fabricated literal is absent from the modal source, a blank dial
+  is refused, and the refusal states `NO DIAL NUMBER`. Negative validation:
+  restoring the pre-fix fallback failed exactly those two source assertions
+  (2 failed | 21 passed); restoring it returned 23/23.
+- Gates: `tsc --noEmit` exit 0; `npx vitest run` 162 files / 2067 tests passed,
+  0 failed (25.30 s); build exit 0, `dist/server.cjs` 1016999 bytes.
+- Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status --short`
+  clean; diff vs `origin/main` 142 files changed, no token/key patterns;
+  `dist/` and `node_modules/` untracked.
+- Commit e903d9f. Branch `feature/hermes-full-completion` pushed; remote tip
+  confirmed at e903d9f via `git ls-remote`.
+- Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset/display). Item 13 remains PARTIAL.
+
