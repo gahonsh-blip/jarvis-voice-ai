@@ -9305,10 +9305,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           },
           language.startsWith('hi')
         );
-        // The status reply is derived from the token check, so an invalid token
-        // means the inquiry could not read a connection and executed nothing.
-        actionExecuted = toolActionExecuted({ success: ytTokenCheck.valid });
-        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status', payload: { tokenValid: ytTokenCheck.valid, channelVerified: false, channel: ytConn?.channelTitle } };
+        // A status question runs no tool and opens no view: `handleExecuteAction`
+        // in App.tsx has no `youtube_status_inquiry` case. It previously credited
+        // the token check as executed work whenever the token was valid, advancing
+        // the "Autonomous Actions Executed" counter for a read-only look-up.
+        actionExecuted = false;
+        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status (informational, no action taken)', payload: { tokenValid: ytTokenCheck.valid, channelVerified: false, channel: ytConn?.channelTitle } };
         break;
       }
       case 'youtube_upload_request': {

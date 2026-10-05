@@ -411,6 +411,16 @@ describe('the /api/chat informational cases do not count a question as executed 
     expect(branch).not.toContain('actionExecuted: true');
     expect(branch).toContain('informational, no action taken');
   });
+
+  it('youtube_status_inquiry reports the connection without crediting an action', () => {
+    // The status question only reads the stored token/scope state; it runs no tool
+    // and opens no view, so it must not advance the executed-action counter. The
+    // offline engine already reports false for this intent.
+    const body = caseBody('youtube_status_inquiry');
+    expect(body).toContain('actionExecuted = false;');
+    expect(body).not.toContain('actionExecuted = true;');
+    expect(body).toContain('informational, no action taken');
+  });
 });
 
 describe('a blocked finance request is a refusal, not executed work', () => {
