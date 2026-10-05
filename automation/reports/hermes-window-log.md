@@ -11469,3 +11469,14 @@ Next Slot:
 - Notes / blockers: `find_document` credited `actionExecuted: true` with no client surface or endpoint. Added real `POST /api/tools/fs/search`, seeded/rendered the Autonomous Tools modal, fixed workspace-relative `readFilePath`. Negative-validated (reverting the routing case -> 2 failures). E2E NOT RUN (no handset/display). Deploy NOT_CONFIGURED. PR #5 open; NOT MERGED - awaiting human approval. State branch had `finalized: true` for the 2026-10-04 to 05 window; this slot work was an additive fast-forward on top of the frozen tip, prior records not rewritten.
 
 ---
+
+
+## 2026-10-06 21:35 IST — WORK SLOT 2
+
+- **Item #13 (Zero-fake-success for all tools) — Twilio outbound-dial success branch.**
+  `TwilioTelephonyProvider.startOutboundCall` returned `{ success: true, providerCallId: data.sid }` on any carrier 2xx; a 2xx body with no `sid` (or an empty/whitespace one) yielded `success: true` with `providerCallId: undefined`. The adapter now requires a non-empty carrier-issued `sid` and otherwise refuses with `TELEPHONY_DIAL_UNCONFIRMED_NO_SID` (`src/utils/telephonyAdapters.ts`).
+- Tests: `src/tests/telephonyProviderHonesty.test.ts` — 3 Twilio call-id cases (named sid -> success; missing sid -> refusal; whitespace sid -> refusal). Negative-validated: reverting the fix failed exactly the two refusal cases (2 failed | 15 passed); restoring returned 17/17.
+- Lint exit 0. Full suite 159 files / 2027 tests passed. Build exit 0, dist/server.cjs 991.4 kb.
+- Security: .env gitignored, tree clean, no secrets/dist/node_modules tracked.
+- Commits: c277207 (fix), 7c94ae1 (docs). Branch feature/hermes-full-completion pushed.
+- Deploy: NOT_CONFIGURED. E2E: NOT RUN. Item 13 remains PARTIAL.
