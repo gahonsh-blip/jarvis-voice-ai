@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 03:05 IST (2026-10-05 21:35 UTC) — window slot 9: a YouTube metadata outline is no longer labelled a loaded transcript
+
+### Fixed
+- **`fetchYouTubeTranscriptData` (`server_tools.ts`) set `videoInfo.transcriptLength = videoInfo.description.length` on the description/metadata fallback path.** When a video exposed no caption track the function still built an outline from the description and chapter metadata, but reported the description's character count under `transcriptLength` — a field named for a transcript length. `AutonomousToolsModal.tsx` badged any `hasTranscript` video `🟢 Transcript Loaded` and rendered the `[Video Metadata & Outline]` block under a `Timestamped Transcript ({segments?.length || 0})` tab, so an outline — or an absent result — read as a real transcript. `transcriptLength` is now `0` for the description-only path, and the modal derives its badge and tab label from the new `src/utils/hardening/youtubeTranscriptLabelTruth.ts` (`transcriptBadgeLabel` / `transcriptTabLabel` / `transcriptSegmentCount`). The helper returns `null` → `UNKNOWN` for an unmeasured count instead of a coerced `0`, and names a description-only video `Metadata Outline`.
+
+### Tests
+- New `src/tests/youtubeTranscriptLabelTruth.test.ts` (10 cases: 8 unit + 2 source guards). Negative-validated — restoring the pre-fix `transcriptLength = videoInfo.description.length` and both modal literals failed exactly the 2 source guards (`2 failed | 8 passed`); restored → 10/10. Targeted 1 file / 10 tests passed. Full suite **166 files / 2115 tests passed** (25.62 s, 0 failed). Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 1027124 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-06 02:35 IST (2026-10-05 21:06 UTC) — window slot 7b (duplicate dispatch): the YouTube status question is no longer credited as executed work
 
 ### Fixed
