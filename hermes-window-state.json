@@ -1,15 +1,15 @@
 {
-  "window_date": "2026-10-05",
-  "window_started_at": "2026-10-04T15:35:00Z",
-  "last_slot_at": "2026-10-04T23:10:00Z",
-  "slots_completed": 14,
+  "window_date": "2026-10-06",
+  "window_started_at": "2026-10-05T15:35:00Z",
+  "last_slot_at": "2026-10-05T15:36:00Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "28ac7a6",
+  "last_commit": "440171d",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "PASS: lint exit 0; vitest 159 files / 2020 tests passed; build exit 0, dist/server.cjs 1014650 bytes; PR #5 open non-draft mergeable_state clean; NOT MERGED - awaiting human approval; npm audit 3 moderate (transitive qs), 0 high/critical",
+  "finalized": false,
+  "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
