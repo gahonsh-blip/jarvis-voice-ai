@@ -212,6 +212,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
 
   // Dialer state
   const [dialNumber, setDialNumber] = useState('');
+  const [dialNotice, setDialNotice] = useState<string | null>(null);
   const [calleeName, setCalleeName] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState<string>('reschedule_doctor');
   const [customObjective, setCustomObjective] = useState('');
@@ -273,7 +274,15 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   };
 
   const handleLaunchOutbound = () => {
-    const finalNumber = dialNumber.trim() || '+1 (415) 890-2134';
+    // A call can only be placed to a number that was actually entered. A
+    // fabricated fallback number would create a record of a call that was never
+    // dialled, so the request is refused and the reason is shown.
+    const finalNumber = dialNumber.trim();
+    if (!finalNumber) {
+      setDialNotice('NO DIAL NUMBER — enter or pick a number before starting the call.');
+      return;
+    }
+    setDialNotice(null);
     const finalName = calleeName.trim() || 'Direct Contact';
     const currentPreset = CALL_SCENARIO_PRESETS.find((p) => p.id === selectedPresetId);
     const finalObjective = customObjective.trim() || currentPreset?.objective || 'General autonomous assistant coordination';
@@ -555,6 +564,12 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                   </div>
 
                   {/* Launch Call Button */}
+                  {dialNotice && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg bg-amber-950/60 border border-amber-700/60 px-3 py-2 text-[11px] text-amber-200">
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>{dialNotice}</span>
+                    </div>
+                  )}
                   <button
                     onClick={handleLaunchOutbound}
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-900/40 hover:from-cyan-500 hover:to-blue-500 active:scale-98 transition-all"

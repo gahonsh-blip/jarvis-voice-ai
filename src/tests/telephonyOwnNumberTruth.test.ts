@@ -27,6 +27,10 @@ import { DEFAULT_TELEPHONY_SETTINGS } from '../types/telephony';
 const appSource = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
 const telephonySource = fs.readFileSync(path.resolve(process.cwd(), 'src/types/telephony.ts'), 'utf8');
 const serverSource = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
+const telephonyModalSource = fs.readFileSync(
+  path.resolve(process.cwd(), 'src/components/TelephonyHubModal.tsx'),
+  'utf8'
+);
 
 describe('recordedOwnNumber reports only a recorded number', () => {
   it('returns a configured number, trimmed', () => {
@@ -159,5 +163,20 @@ describe('server telephony routes no longer fabricate a party number', () => {
   it('the inbound route derives both raw numbers through resolveRawNumber', () => {
     expect(serverSource).toContain('resolveRawNumber(req.body.From || req.body.callerNumber)');
     expect(serverSource).toContain('resolveRawNumber(req.body.To || req.body.recipientNumber)');
+  });
+});
+
+describe('the dialer UI never invents a number when the field is empty', () => {
+  it('no longer falls back to the fabricated +1 (415) 890-2134', () => {
+    expect(telephonyModalSource).not.toContain("'+1 (415) 890-2134'");
+  });
+
+  it('refuses to launch when the dial field is blank', () => {
+    expect(telephonyModalSource).toContain('const finalNumber = dialNumber.trim();');
+    expect(telephonyModalSource).toMatch(/if \(!finalNumber\) \{/);
+  });
+
+  it('tells the user why the call was not started', () => {
+    expect(telephonyModalSource).toContain('NO DIAL NUMBER');
   });
 });
