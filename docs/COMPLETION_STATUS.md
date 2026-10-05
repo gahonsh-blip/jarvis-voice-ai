@@ -3,6 +3,33 @@
 Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
+Last cycle: 2026-10-06 01:05 IST — **WORK SLOT 6** of the
+2026-10-05 → 2026-10-06 window, the 01:05 IST fire. **Item 13
+(`Zero-fake-success for all tools`) — the memory update route.** `POST
+/api/memory` spread the raw request body over the stored memory and answered
+`success: true` for every request. An empty body — or a body carrying only the
+inert `statUpdate` counter request — was reported as a completed save while
+nothing was stored, and a malformed value (a non-string `name`, a non-array
+`notes`) was written straight into the memory the app reads back. The route now
+classifies the body with `classifyMemoryUpdate`
+(`src/utils/hardening/memoryUpdateTruth.ts`): it applies only the three real
+fields (`name`, `notes`, `customKeyValues`), reports `stored` and `outcome`
+(`APPLIED` / `UNCHANGED` / `COUNTER_REFUSED` / `NOTHING_TO_APPLY` /
+`INVALID_BODY`), and refuses a body with nothing to apply with a `400` instead
+of `success: true`. A counter-only body keeps its existing `200` contract so
+the e2e suites stay valid, but is now explicitly `stored: false, outcome:
+COUNTER_REFUSED`. Guarded by `src/tests/memoryUpdateTruth.test.ts` (13 cases,
+10 decision + 3 route-source). Negative-validated: restoring the pre-fix route
+failed exactly the three route-source cases (3 failed | 10 passed); restored →
+13/13. Verified this fire: targeted **1 file / 13 tests passed**;
+`memoryPersistence.e2e.test.ts` + `offlineOnline.e2e.test.ts` **2 files / 15
+tests passed**; full suite **164 files / 2093 tests passed** (25.22 s, 0
+failed); `npm run lint` (`tsc --noEmit`) exit 0; `npm run build` exit 0,
+artifact `dist/server.cjs` **1023783 bytes**. Item 13 remains `PARTIAL` — the
+tail of unclassified `success: true` / `actionExecuted: true` sites in
+`server.ts` / `server_tools.ts` is still not individually audited (truthfulness
+`UNKNOWN`). E2E: NOT RUN — no handset and no display session. Deploy:
+`NOT_CONFIGURED`. Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`.
 Last cycle: 2026-10-06 00:05 IST — **WORK SLOT 5** of the
 2026-10-05 → 2026-10-06 window, the 00:05 IST fire. **Item 13
 (`Zero-fake-success for all tools`) — the fabricated dialled number in the

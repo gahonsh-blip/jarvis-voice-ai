@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 01:05 IST (2026-10-05 19:35 UTC) — window slot 6: the memory route no longer fakes a save
+
+### Fixed
+- **`POST /api/memory` spread the raw request body over the stored memory and answered `success: true` for every request.** An empty body — or a body carrying only the inert `statUpdate` counter request — was reported as a completed save while nothing was stored, and a malformed value (a non-string `name`, a non-array `notes`) was written straight into the memory the app reads back. The route now classifies the body with `classifyMemoryUpdate` (`src/utils/hardening/memoryUpdateTruth.ts`): it applies only the three real fields (`name`, `notes`, `customKeyValues`), reports `stored` and `outcome` (`APPLIED` / `UNCHANGED` / `COUNTER_REFUSED` / `NOTHING_TO_APPLY` / `INVALID_BODY`), and refuses a body with nothing to apply with a `400` instead of `success: true`. A counter-only body keeps its existing `200` contract so the e2e suites stay valid, but is now explicitly `stored: false, outcome: COUNTER_REFUSED`.
+
+### Tests
+- New `src/tests/memoryUpdateTruth.test.ts` (13 cases: 10 decision + 3 route-source). Negative-validated: restoring the pre-fix route failed exactly the three route-source cases (3 failed | 10 passed); restored → 13/13. `memoryPersistence.e2e.test.ts` + `offlineOnline.e2e.test.ts` 2 files / 15 tests passed. Full suite: 164 files / 2093 tests passed.
+
+---
+
 ## [Unreleased] - 2026-10-06 00:05 IST (2026-10-05 18:35 UTC) — window slot 5: the dialer no longer invents a number
 
 ### Fixed
