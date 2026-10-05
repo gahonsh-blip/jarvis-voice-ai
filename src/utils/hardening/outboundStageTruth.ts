@@ -76,3 +76,25 @@ export function classifyOutboundStage(result: OutboundStageInput): OutboundStage
     message: `Outbound call was not staged for approval (request status ${status ?? 'unknown'}).`,
   };
 }
+
+/**
+ * The same verdict for a social draft staged through the permission gateway
+ * (e.g. a YouTube upload). The gate result is identical, but the message names
+ * the artifact so the caller is told what was not staged.
+ */
+export function classifyStagedDraft(
+  result: OutboundStageInput,
+  noun = 'Action'
+): OutboundStageVerdict {
+  const verdict = classifyOutboundStage(result);
+  if (verdict.outcome === 'STAGED') {
+    return { ...verdict, message: `${noun} staged for human approval.` };
+  }
+  if (verdict.outcome === 'NOT_STAGED') {
+    return {
+      ...verdict,
+      message: `${noun} was not staged for approval (request status ${result.request?.status ?? 'unknown'}).`,
+    };
+  }
+  return verdict;
+}

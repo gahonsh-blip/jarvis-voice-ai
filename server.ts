@@ -143,7 +143,7 @@ import { maskAndroidCallerNumber } from './src/utils/androidBridgePrivacy';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
 import { classifyApprovalOutcome, formatUnconfirmedMobileApprovalReply } from './src/utils/hardening/approvalResolution';
 import { classifyApprovalCreate } from './src/utils/hardening/approvalCreateTruth';
-import { classifyOutboundStage } from './src/utils/hardening/outboundStageTruth';
+import { classifyOutboundStage, classifyStagedDraft } from './src/utils/hardening/outboundStageTruth';
 import { classifyApprovalDecision } from './src/utils/github/approvalQueue';
 import {
   observeInstanceFromHost,
@@ -4509,8 +4509,10 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
 
   memoryState.socialPosts.unshift(newPost);
 
-  // Register Level 4 Action in Permission Gateway
-  createPendingActionRequest({
+  // Register Level 4 Action in Permission Gateway. The gate can reject the
+  // action (finance guard) or refuse it (emergency stop); the reply must reflect
+  // that instead of reporting a staged upload that was never queued.
+  const uploadGate = createPendingActionRequest({
     exactAction: `YouTube Video Upload (${validPrivacy.toUpperCase()}) - "${validTitle}"`,
     target: `YouTube Channel: ${describeStagedChannel(memoryState.youTubeConnection?.channelTitle)}`,
     contentChanges: `Title: "${validTitle}" | Privacy: ${validPrivacy.toUpperCase()} | Tags: ${tagList.join(', ')} | File: ${newPost.videoFileName}`,
@@ -4519,14 +4521,15 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     platform: 'YouTube',
     actionPayload: { postId: newPost.id, privacyStatus: validPrivacy, videoFileName: newPost.videoFileName },
   });
+  const uploadVerdict = classifyStagedDraft(uploadGate, 'YouTube upload');
 
-  // Staged for Level-4 authorization — nothing was published, so the audit row
-  // must not read as an executed/verified upload.
+  // Nothing was published, so the audit row must not read as an executed or
+  // verified upload. A rejected/blocked staging is recorded as a refusal.
   const stagingAudit = stagedDraftAuditEntry({
     platform: 'YouTube',
     topic: `${validTitle} (${validPrivacy.toUpperCase()})`,
     level: 4,
-    gate: 'Level-4 authorization',
+    gate: uploadVerdict.success ? 'Level-4 authorization' : uploadVerdict.message,
   });
   pushAuditEntry({
     id: `log-${Date.now()}`,
@@ -4540,6 +4543,18 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
   });
 
   persistMemory();
+
+  if (!uploadVerdict.success) {
+    const code = uploadVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : uploadVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
+    return res.status(code).json({
+      success: false,
+      staged: false,
+      outcome: uploadVerdict.outcome,
+      message: uploadVerdict.message,
+      post: newPost,
+    });
+  }
+
   res.json({
     success: true,
     post: newPost,
@@ -4583,8 +4598,9 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
 
   memoryState.socialPosts.unshift(newPost);
 
-  // Register Level 4 Action in Permission Gateway
-  createPendingActionRequest({
+  // Register Level 4 Action in Permission Gateway. A finance or emergency block
+  // must not be reported as a staged test upload.
+  const testGate = createPendingActionRequest({
     exactAction: `YouTube Video Upload (Test Mode: ${validPrivacy.toUpperCase()})`,
     target: `YouTube Channel: ${describeStagedChannel(memoryState.youTubeConnection?.channelTitle)}`,
     contentChanges: `Title: "${title}" | Privacy: ${validPrivacy.toUpperCase()} | Tags: ${tags.join(', ')}`,
@@ -4593,14 +4609,16 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     platform: 'YouTube',
     actionPayload: { postId: newPost.id, privacyStatus: validPrivacy },
   });
+  const testVerdict = classifyStagedDraft(testGate, 'YouTube test upload');
 
   // Staged for Level-4 test authorization — no upload occurred, so the audit
-  // row must not read as an executed/verified upload.
+  // row must not read as an executed/verified upload. A blocked staging is
+  // recorded as a refusal.
   const stagingAudit = stagedDraftAuditEntry({
     platform: 'YouTube',
     topic: `${title} (test, ${validPrivacy.toUpperCase()})`,
     level: 4,
-    gate: 'Level-4 authorization',
+    gate: testVerdict.success ? 'Level-4 authorization' : testVerdict.message,
   });
   pushAuditEntry({
     id: `log-${Date.now()}`,
@@ -4614,6 +4632,18 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
   });
 
   persistMemory();
+
+  if (!testVerdict.success) {
+    const code = testVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : testVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
+    return res.status(code).json({
+      success: false,
+      staged: false,
+      outcome: testVerdict.outcome,
+      message: testVerdict.message,
+      post: newPost,
+    });
+  }
+
   res.json({ success: true, post: newPost, message: 'YouTube test video draft created with Level 4 approval gate.' });
 });
 
