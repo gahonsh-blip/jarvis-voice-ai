@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-06",
   "window_started_at": "2026-10-06T15:36:00Z",
-  "last_slot_at": "2026-10-06T22:26:00Z",
-  "slots_completed": 12,
+  "last_slot_at": "2026-10-06T22:27:00Z",
+  "slots_completed": 13,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "30c38a4",
+  "last_commit": "c5d6903",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "approval registry terminal-state truth; slot 11 fire (2d5ef8d) was concurrent; rebased this slot's report onto it"
+  "note": "slot 11 (this fire, 03:35 IST) fix-plan coverage truth (f7e6a7c) + docs (2d5ef8d) + report (c5d6903); remote state showed slots_completed=12 from a concurrent 03:05 fire, so this is recorded as 13. Finalization slot 04:35 IST pending."
 }
