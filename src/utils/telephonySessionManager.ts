@@ -684,6 +684,18 @@ export class TelephonySessionManager {
     const req = this.pendingOutboundRequests.get(id);
     if (!req) return { success: false, error: 'Request not found' };
 
+    // A decision is a one-time event. Re-deciding an already AUTHORIZED or
+    // REJECTED request previously reported success, so the route then dialed the
+    // carrier — placing a call a human had rejected, or duplicating an approved
+    // one. Refuse and leave the recorded decision untouched.
+    if (req.status !== 'PENDING_AUTHORIZATION') {
+      return {
+        success: false,
+        request: req,
+        error: `Request already decided (status ${req.status}); no new decision recorded.`,
+      };
+    }
+
     if (decision === 'APPROVE') {
       req.status = 'AUTHORIZED';
       req.authorizedAt = new Date().toISOString();
