@@ -486,6 +486,14 @@ interface MemoryData {
     lastMiddayRunDate?: string;
     lastEveningRunDate?: string;
     lastNightRunDate?: string;
+    /**
+     * Operator-registered recurring goals. Persisted so a restart does not
+     * silently drop them — the register route may report success only once the
+     * task is durable.
+     */
+    scheduledGoals?: ScheduledGoalSpec[];
+    /** Last date each goal ran, keyed by goal id. */
+    lastAutonomousGoalRuns?: Record<string, string>;
   };
   /** Recent conversation turns, kept server-side so context survives a client reset. */
   conversationHistory?: {
@@ -778,7 +786,8 @@ export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token
 }
 
 let lastPersistedTimestamp = new Date().toISOString();
-function persistMemory() {
+/** Write the in-memory state to disk. Returns whether the state is on disk. */
+function persistMemory(): boolean {
   try {
     // Keep max 200 processed updates to save space
     if (memoryState.processedTelegramUpdates.length > 200) {
@@ -818,7 +827,7 @@ function persistMemory() {
     try {
       if (fs.existsSync(MEMORY_FILE_PATH) && fs.readFileSync(MEMORY_FILE_PATH, 'utf-8') === serialized) {
         lastPersistedTimestamp = new Date().toISOString();
-        return;
+        return true;
       }
     } catch {
       // Fall through and write.
@@ -826,8 +835,10 @@ function persistMemory() {
 
     fs.writeFileSync(MEMORY_FILE_PATH, serialized, 'utf-8');
     lastPersistedTimestamp = new Date().toISOString();
+    return true;
   } catch (err: any) {
     console.warn('[Storage] Error writing to jarvis_memory.json:', err?.message);
+    return false;
   }
 }
 
@@ -7340,12 +7351,50 @@ export interface ScheduledGoalSpec {
 }
 
 /**
- * Recurring autonomous goals. Empty by default: nothing runs on a schedule
- * until the operator registers something, so the system never acts on its own
- * initiative without a deliberate choice.
+ * Recurring autonomous goals. Restored from the persisted memory file at
+ * startup: an operator-registered task must survive a restart, otherwise the
+ * register route would be reporting success for a task the process drops.
+ * Nothing runs on a schedule until the operator registers something.
  */
-const scheduledGoals: ScheduledGoalSpec[] = [];
+let scheduledGoals: ScheduledGoalSpec[] = [];
 const scheduledGoalRuns: ScheduledGoalRecord[] = [];
+
+/** Minimal shape check for a persisted goal, so a corrupt file cannot crash boot. */
+function isPersistedGoal(value: unknown): value is ScheduledGoalSpec {
+  if (!value || typeof value !== 'object') return false;
+  const g = value as Record<string, unknown>;
+  return (
+    typeof g.id === 'string' &&
+    typeof g.name === 'string' &&
+    typeof g.atMinuteOfDay === 'number' &&
+    Array.isArray(g.steps)
+  );
+}
+
+/**
+ * Reconcile the in-memory registry with what is on disk. Called after the
+ * memory file is loaded. Goals present in memory but absent on disk are pushed
+ * to disk, so a task registered before this feature existed is persisted too.
+ */
+function loadScheduledGoals(): void {
+  const persisted = memoryState.schedulerState?.scheduledGoals;
+  const restored = Array.isArray(persisted) ? persisted.filter(isPersistedGoal) : [];
+  const byId = new Map<string, ScheduledGoalSpec>();
+  for (const goal of restored) byId.set(goal.id, goal);
+  for (const goal of scheduledGoals) byId.set(goal.id, goal);
+  scheduledGoals = Array.from(byId.values());
+  memoryState.schedulerState.scheduledGoals = scheduledGoals;
+}
+
+/** Persist the current registry. Returns whether the state actually reached disk. */
+function persistScheduledGoals(): boolean {
+  memoryState.schedulerState.scheduledGoals = scheduledGoals;
+  return persistMemory();
+}
+
+// memoryState is already loaded by this point; restore the operator's schedule
+// so a restart does not silently drop registered tasks.
+loadScheduledGoals();
 
 /** Bounded in-memory audit trail of autonomous runs, newest first. */
 const goalRunHistory: Array<{
@@ -7522,8 +7571,23 @@ app.post('/api/autonomous/schedule', (req: Request, res: Response) => {
   };
 
   const existing = scheduledGoals.findIndex((g) => g.id === id);
+  const previous = existing >= 0 ? scheduledGoals[existing] : undefined;
   if (existing >= 0) scheduledGoals[existing] = spec;
   else scheduledGoals.push(spec);
+
+  // Success must mean the task is durable, not merely held in this process's
+  // memory. Report failure (and roll back) when the registry cannot be written.
+  const persisted = persistScheduledGoals();
+  if (!persisted) {
+    if (existing >= 0 && previous) scheduledGoals[existing] = previous;
+    else if (existing < 0) scheduledGoals.pop();
+    memoryState.schedulerState.scheduledGoals = scheduledGoals;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'Scheduled task could not be written to durable storage; it was not registered.',
+    });
+  }
 
   addAuditLog(
     `Scheduled autonomous task "${name}" (${id}) ${existing >= 0 ? 'updated' : 'registered'} to run daily at minute ${atMinuteOfDay}`,
@@ -7533,7 +7597,7 @@ app.post('/api/autonomous/schedule', (req: Request, res: Response) => {
   );
   persistMemory();
 
-  res.status(existing >= 0 ? 200 : 201).json({ success: true, goal: spec });
+  res.status(existing >= 0 ? 200 : 201).json({ success: true, persisted: true, goal: spec });
 });
 
 app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
@@ -7542,9 +7606,21 @@ app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
     return res.status(404).json({ success: false, error: 'No such scheduled task.' });
   }
   const [removed] = scheduledGoals.splice(index, 1);
+  // The removal is only real once it is durable. Restore the task and fail if
+  // the registry cannot be written.
+  const persisted = persistScheduledGoals();
+  if (!persisted) {
+    scheduledGoals.splice(index, 0, removed);
+    memoryState.schedulerState.scheduledGoals = scheduledGoals;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'Scheduled task could not be removed from durable storage; it is still registered.',
+    });
+  }
   addAuditLog(`Scheduled autonomous task "${removed.name}" (${removed.id}) removed`, 3, 'HUMAN_OPERATOR', 'VERIFIED');
   persistMemory();
-  res.json({ success: true, removed: removed.id });
+  res.json({ success: true, persisted: true, removed: removed.id });
 });
 
 // Mobile Personal Status & Morning Briefing Telemetry Endpoints

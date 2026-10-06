@@ -49,6 +49,10 @@ export function createBackup(
   const safe: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(memory)) {
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+    // JSON.stringify drops keys whose value is undefined, so counting them would
+    // make keyCount disagree with the serialized backup and reject a genuine
+    // restore. They carry no data anyway.
+    if (value === undefined) continue;
     safe[key] = redactObjectSecrets(value);
   }
 

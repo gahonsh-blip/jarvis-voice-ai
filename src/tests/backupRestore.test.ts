@@ -19,6 +19,16 @@ describe('createBackup', () => {
     const backup = createBackup(memory);
     expect(Object.keys(backup.data)).toEqual(['name']);
   });
+
+  it('ignores undefined-valued keys so keyCount matches the serialized backup', () => {
+    const backup = createBackup({ name: 'Gaurav', linkedInConnection: undefined });
+    expect(backup.keyCount).toBe(1);
+    // JSON.stringify drops undefined-valued keys, so a count that included them
+    // would disagree with the wire form and make restoreBackup reject a real backup.
+    const wire = JSON.parse(JSON.stringify(backup));
+    expect(Object.keys(wire.data).length).toBe(wire.keyCount);
+    expect(validateBackup(wire).ok).toBe(true);
+  });
 });
 
 describe('validateBackup', () => {
