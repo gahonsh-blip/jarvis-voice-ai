@@ -4,6 +4,7 @@ import path from 'path';
 import {
   observedAccountName,
   describeVerifiedAccount,
+  disconnectAccountLabel,
   ACCOUNT_NAME_NOT_RETURNED_LABEL,
 } from '../utils/hardening/socialAccountIdTruth';
 
@@ -78,5 +79,32 @@ describe('Item 13 — live social account name is never invented', () => {
     expect(src).not.toContain("item.snippet?.title || 'YouTube Channel'");
     expect(src).not.toContain("userData.name || userData.email || 'YouTube User'");
     expect(src).toContain("observedAccountName(item.snippet?.title)");
+  });
+});
+
+describe('Item 13 — an OAuth disconnect never names an account it did not read', () => {
+  it('treats the disconnect placeholders as not observed', () => {
+    expect(observedAccountName('LinkedIn User')).toBeNull();
+    expect(observedAccountName('YouTube Account')).toBeNull();
+  });
+
+  it('returns the recorded name when one exists, else states none was read', () => {
+    expect(disconnectAccountLabel('Ada Lovelace')).toBe('Ada Lovelace');
+    expect(disconnectAccountLabel('  Ada Lovelace  ')).toBe('Ada Lovelace');
+    // Blank, missing, or a historical placeholder must never become a name.
+    for (const raw of ['', '   ', undefined, null, 'LinkedIn User', 'YouTube Account', 'YouTube Channel']) {
+      const label = disconnectAccountLabel(raw);
+      expect(label).not.toBe('LinkedIn User');
+      expect(label).not.toBe('YouTube Account');
+      expect(label).toMatch(/not recorded/i);
+    }
+  });
+
+  it('server.ts no longer hardcodes a placeholder into the disconnect audit rows', () => {
+    const src = squeezed('server.ts');
+    expect(src).not.toContain("memoryState.linkedInConnection.name || 'LinkedIn User'");
+    expect(src).not.toContain("memoryState.youTubeConnection.channelTitle || 'YouTube Account'");
+    expect(src).toContain('disconnectAccountLabel(memoryState.linkedInConnection.name)');
+    expect(src).toContain('disconnectAccountLabel(memoryState.youTubeConnection.channelTitle)');
   });
 });

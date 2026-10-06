@@ -25,7 +25,7 @@ import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } f
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
 import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
-import { observedAccountName, describeVerifiedAccount } from './src/utils/hardening/socialAccountIdTruth';
+import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
@@ -5267,7 +5267,10 @@ app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  const prevMember = memoryState.linkedInConnection.name || 'LinkedIn User';
+  // The credential removal is real, so the row stays VERIFIED — but the NAME
+  // must be the one that was recorded, never the `'LinkedIn User'` placeholder
+  // the route used to print when memory held no name.
+  const prevMember = disconnectAccountLabel(memoryState.linkedInConnection.name);
   memoryState.linkedInConnection = undefined;
   persistMemory();
 
@@ -5719,7 +5722,10 @@ app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  const prevChannel = memoryState.youTubeConnection.channelTitle || 'YouTube Account';
+  // The credential removal is real, so the row stays VERIFIED — but the NAME
+  // must be the recorded channel title, never the `'YouTube Account'`
+  // placeholder the route used to print when the channel was unnamed.
+  const prevChannel = disconnectAccountLabel(memoryState.youTubeConnection.channelTitle);
   memoryState.youTubeConnection = undefined;
   persistMemory();
 

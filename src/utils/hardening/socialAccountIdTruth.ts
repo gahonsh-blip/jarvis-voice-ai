@@ -26,6 +26,10 @@ const INVENTED_ACCOUNT_NAMES = new Set([
   'Instagram Account',
   'YouTube Channel',
   'YouTube User',
+  // The disconnect routes (`server.ts`) fell back to these when the stored
+  // connection carried no name, then logged the removal with the placeholder.
+  'LinkedIn User',
+  'YouTube Account',
 ]);
 
 /**
@@ -76,4 +80,18 @@ export function describeVerifiedAccount(
     default:
       return ACCOUNT_NAME_NOT_RETURNED_LABEL;
   }
+}
+
+/**
+ * Label for an OAuth disconnect audit row. The disconnect routes used to name
+ * the removed account with a hardcoded fallback — `'LinkedIn User'` /
+ * `'YouTube Account'` — when the stored connection carried no name, and then
+ * logged the removal as `VERIFIED`. The credential removal is real; the NAME
+ * was invented. This returns the recorded name, or a plain statement that no
+ * name was recorded, so the audit row never presents a placeholder as the
+ * account that was disconnected.
+ */
+export function disconnectAccountLabel(raw: unknown): string {
+  const name = observedAccountName(raw);
+  return name ? name : 'account name not recorded — no name was read';
 }
