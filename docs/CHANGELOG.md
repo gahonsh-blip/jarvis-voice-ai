@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 23:06 IST (2026-10-06 17:36 UTC) — window slot 4: the YouTube panel no longer dresses an empty summariser result as a produced summary
+
+### Fixed
+- **`AutonomousToolsModal.tsx`'s `handleCopySummary` copied `ytResult.summary || ''` and the Key Takeaways tab claimed takeaways existed, even when the summariser produced nothing.** `buildYouTubeSummary` (`server_tools.ts`) returns `source: 'none'` with an **empty** `summary` when a video exposes no transcript and no description. The Telegram reply was taught to lead with the truth last window, but the in-app panel was not: "Copy Summary" placed an empty string on the clipboard while still toasting "Summary copied to clipboard!", and the empty takeaways tab read "Key takeaways are formatted inside the Executive Summary view above." New `src/utils/hardening/youtubePanelSummaryTruth.ts` (`hasRealYouTubeSummary` / `youtubeSummaryCopyText` / `youtubeTakeawaysEmptyLabel`) is now the panel's single source of truth — a summary is real only when non-empty and `source !== 'none'`; Copy Summary copies the explanatory notice (never an empty string) and its toast names the absence; the takeaways tab states plainly that no summary was produced.
+
+### Tests
+- New `src/tests/youtubePanelSummaryTruth.test.ts` (13 cases: 10 unit on the three helpers covering empty / whitespace / `source: 'none'`-with-stray-text / real extractive / real gemini results, plus 3 source guards that the modal passes `ytResult` — not a bare summary string — to `handleCopySummary`, routes through `youtubeSummaryCopyText`, and no longer emits the blanket takeaways claim). Negative-validated — reverting both modal wiring changes failed exactly the 2 wiring guards (`2 failed | 11 passed`); restored → 13/13. Targeted `youtubePanelSummaryTruth` 1 file / 13 passed. Lint (`tsc --noEmit`) exit 0. Full suite **170 files / 2152 tests passed** (27.13 s, 0 failed). Build exit 0 (`dist/server.cjs` 1030935 bytes — unchanged, as `server.ts` was not touched this slot).
+
+---
+
 ## [Unreleased] - 2026-10-06 22:36 IST (2026-10-06 17:06 UTC) — window slot 3: the routine-trigger route reports the Telegram delivery it actually observed
 
 ### Fixed
