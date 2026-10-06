@@ -3,6 +3,33 @@
 Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
+Last cycle: 2026-10-06 21:06 IST — **WORK SLOT 1** of the 2026-10-06 →
+2026-10-07 window, the 21:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the OAuth disconnect audit named an account it never read.** `POST
+/api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect`
+(`server.ts`) removed the stored credential (a real action) but fell back to a
+hardcoded account label — `'LinkedIn User'` / `'YouTube Account'` — when the
+stored connection carried no name, then logged the removal as `VERIFIED`. The
+audit row therefore rendered a green "confirmed" badge over a name that was
+invented. `src/utils/hardening/socialAccountIdTruth.ts` now exports
+`disconnectAccountLabel()`, which returns the recorded name or states plainly
+that no name was read; both placeholders were added to the invented-name set.
+Both routes use the helper, so the row stays `VERIFIED` (the credential removal
+is real) while the named account is the one actually recorded. Guarded by
+`src/tests/socialAccountIdTruth.test.ts` (new cases: `disconnectAccountLabel`
+returns the recorded label, never the placeholder, and `server.ts` no longer
+contains either hardcoded fallback). Negative-validated — restoring the two
+placeholder fallbacks in `server.ts` failed exactly 1 of 11 (`1 failed | 10
+passed`); restored → 11/11. Gates (observed this fire): lint (`tsc --noEmit`)
+exit 0; targeted `socialAccountIdTruth` + `oauthDisconnectTruth` 2 files / 15
+passed; full suite **168 files / 2129 tests passed** (27.54 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1029205 bytes). E2E: NOT RUN — no
+handset / emulator / display session. Deploy: `NOT_CONFIGURED`. Item 13 stays
+`PARTIAL` — the sweep is not exhausted (the tail of unclassified `success: true`
+sites in `server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`).
+Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`.
+
+
 Last cycle: 2026-10-06 04:36 IST — **FINALIZATION SLOT** of the 2026-10-05 →
 2026-10-06 window, the 04:35 IST fire. **No new backlog item was advanced.**
 Froze and re-verified the tip `3ab5e2d` on `feature/hermes-full-completion`:

@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 21:06 IST (2026-10-06 15:36 UTC) — window slot 1: an OAuth disconnect no longer names an account it never read
+
+### Fixed
+- **`POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect` (`server.ts`) logged a `VERIFIED` audit row naming a hardcoded account — `'LinkedIn User'` / `'YouTube Account'` — when the stored connection carried no name.** The credential removal is a real action, but the account *name* was invented and the audit row rendered it with a green "confirmed" badge. `src/utils/hardening/socialAccountIdTruth.ts` now exports `disconnectAccountLabel()`, which returns the recorded name or states plainly that no name was read; both placeholders were added to the invented-name set (`'YouTube Channel'` was already treated as an invented placeholder by `youtubeChannelTruth.ts`). Both routes call the helper, so the row stays `VERIFIED` for the real removal while the named account is the one actually recorded.
+
+### Tests
+- `src/tests/socialAccountIdTruth.test.ts` — new cases: `disconnectAccountLabel` returns the recorded label, never the placeholder; `server.ts` no longer contains either hardcoded fallback and does call `disconnectAccountLabel`. Negative-validated — restoring the two placeholder fallbacks failed exactly 1 of 11 (`1 failed | 10 passed`); restored → 11/11. Targeted `socialAccountIdTruth` + `oauthDisconnectTruth` 2 files / 15 passed. Full suite **168 files / 2129 tests passed** (27.54 s, 0 failed). Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 1029205 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-06 04:06 IST (2026-10-05 22:36 UTC) — window slot 11: a permission save is no longer reported with no durable store
 
 ### Fixed
