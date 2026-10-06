@@ -4,7 +4,38 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-06 23:06 IST — **WORK SLOT 4** of the 2026-10-06 →
+Last cycle: 2026-10-06 23:36 IST — **WORK SLOT 5** of the 2026-10-06 →
+2026-10-07 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the mobile bridge disconnect route reported a verified teardown it
+never measured.** `POST /api/mobile/bridge/disconnect` (`server.ts`) answered the
+hardcoded literal `{ success: true, outcome: 'VERIFIED', status:
+'MOBILE_NOT_CONNECTED' }` on every request that passed the session guard. The
+`status` literal was right in the common case, but the verdict was not observed:
+a repeated disconnect that tore down nothing still reported a `VERIFIED`
+teardown, and a caller could not tell a real disconnect from a no-op. New
+`src/utils/hardening/bridgeDisconnectTruth.ts` (`classifyBridgeDisconnect`)
+derives the verdict from the gateway's disconnect counter before/after
+`revoke()` and the bridge status read immediately afterwards — `VERIFIED` only
+when the counter advanced and the bridge is no longer connected; a session that
+owned the link but dropped nothing is `PARTIAL`; a session that owned no link is
+`FAILED`. Guarded by `src/tests/bridgeDisconnectTruth.test.ts` (6 cases: 4 unit
+verdicts plus a source guard that the old literal is gone and the helper is
+called, and an e2e block that spawns the real `server.ts` process and drives
+pair → connect → disconnect over HTTP, asserting `verified: true` with the
+observed `MOBILE_NOT_CONNECTED`). Negative-validated — restoring the old literal
+failed exactly the source guard and the e2e assertion (`2 failed | 4 passed`);
+restored → 6/6. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted `bridgeDisconnectTruth` 1 file / 6 passed; full suite **171 files /
+2158 tests passed** (27.90 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1032287 bytes). Deploy: `NOT_CONFIGURED`. Item 13 stays
+`PARTIAL` — the sweep is not exhausted (the tail of unclassified `success: true`
+sites in `server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`).
+Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`. **This
+slot's commit (`222e333`) is pushed to `feature/hermes-full-completion` but is
+not in any PR; a fresh PR must be opened at the finalization slot. Not merged —
+awaiting human approval.**
+
+Last cycle (previous): 2026-10-06 23:06 IST — **WORK SLOT 4** of the 2026-10-06 →
 2026-10-07 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the in-app YouTube panel dressed an empty summariser result as a
 produced summary.** The Telegram reply was taught to lead with the truth last

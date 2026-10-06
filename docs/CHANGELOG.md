@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 23:36 IST (2026-10-06 18:06 UTC) — window slot 5: the bridge disconnect route derives its verdict from the teardown it observed
+
+### Fixed
+- **`POST /api/mobile/bridge/disconnect` (`server.ts`) answered the hardcoded literal `{ success: true, outcome: 'VERIFIED', status: 'MOBILE_NOT_CONNECTED' }` on every request that passed the session guard.** The `status` literal was right in the common case, but the verdict was not measured: a repeated disconnect that tore down nothing still reported a `VERIFIED` teardown, and a caller could not distinguish a real disconnect from a no-op. New `src/utils/hardening/bridgeDisconnectTruth.ts` (`classifyBridgeDisconnect`) derives the verdict from `bridgeGateway.getDisconnectCount()` before and after `revoke()` plus the bridge status read immediately afterwards — `VERIFIED` only when the counter advanced and the bridge is no longer connected; a session that owned the link but dropped nothing is `PARTIAL`; a session that owned no link is `FAILED`.
+
+### Tests
+- New `src/tests/bridgeDisconnectTruth.test.ts` (6 cases: 4 unit verdicts — VERIFIED / no-op PARTIAL / still-connected PARTIAL / no-link FAILED — plus a source guard that the old literal is gone and `classifyBridgeDisconnect(` is called, and an e2e block that spawns the real `server.ts` process and drives pair → connect → disconnect over HTTP, asserting `verified: true` with the observed `MOBILE_NOT_CONNECTED`). Negative-validated — restoring the old literal failed exactly the source guard and the e2e assertion (`2 failed | 4 passed`); restored → 6/6. Targeted `bridgeDisconnectTruth` 1 file / 6 passed. Lint (`tsc --noEmit`) exit 0. Full suite **171 files / 2158 tests passed** (27.90 s, 0 failed). Build exit 0 (`dist/server.cjs` 1032287 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-06 23:06 IST (2026-10-06 17:36 UTC) — window slot 4: the YouTube panel no longer dresses an empty summariser result as a produced summary
 
 ### Fixed

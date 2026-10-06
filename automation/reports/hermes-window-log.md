@@ -12256,3 +12256,76 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - स्लॉट 4: YouTube पैनल अब खाली सारांश को "बना हुआ सारांश" नहीं दिखाता — Copy Summary और Key Takeaways दोनों सच बताते हैं; lint/build पास, 2152 टेस्ट पास।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:36
+Window date: 2026-10-06   Window slots completed so far: 5
+
+Completed:
+- #13 Zero-fake-success for all tools (slice: mobile bridge disconnect) — `POST
+  /api/mobile/bridge/disconnect` (`server.ts`) no longer answers the hardcoded
+  `{ success: true, outcome: 'VERIFIED', status: 'MOBILE_NOT_CONNECTED' }`.
+  New `src/utils/hardening/bridgeDisconnectTruth.ts` (`classifyBridgeDisconnect`)
+  derives the verdict from the gateway disconnect counter before/after `revoke()`
+  and the status read afterwards. Evidence: `src/tests/bridgeDisconnectTruth.test.ts`
+  — 6 cases (4 unit verdicts + source guard + real-server e2e pair->connect->disconnect),
+  observed `6 passed`. Negative-validated: restoring the old literal -> `2 failed | 4 passed`
+  (source guard + e2e assertion); restored -> 6/6.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the sweep is not exhausted. The tail of
+  unclassified `success: true` sites in `server.ts` / `server_tools.ts` remains
+  (candidates: social/generate hashtags, computer-operator/cancel `cancelled:false`
+  when idle, and others). Truthfulness still `UNKNOWN` for those.
+
+Remaining:
+- #1/#2/#50/#55 (hardware-blocked: real Android handset/emulator, screenshot,
+  voice wake-word mic, display session) remain `NOT_AVAILABLE`/`PARTIAL`.
+- Items after #13 in the mandated order (Computer Operator -> GitHub Automation ->
+  Social Automation -> Communication -> AI/Memory -> Autonomous Tasks -> Voice ->
+  Wake Word -> Production Hardening) are not yet individually advanced this window.
+
+Bugs Found:
+- The mobile bridge disconnect route reported a `VERIFIED` teardown without
+  measuring it; a repeated disconnect that tore down nothing read as verified.
+
+Bugs Fixed:
+- `server.ts` disconnect route now reports the observed outcome via
+  `classifyBridgeDisconnect`. Verified by the unit + e2e tests above and the
+  negative validation.
+
+Tests:    171 files / 2158 tests passed (27.90 s, 0 failed) — `npx vitest run`
+Lint:     exit 0 (`tsc --noEmit`)
+Build:    exit 0; `dist/server.cjs` 1032287 bytes
+E2E:      bridge disconnect e2e ran (spawns real `server.ts`, pair->connect->disconnect
+          over HTTP) — passed. No handset/emulator/display session; hardware E2E NOT RUN.
+Security: no `.env` staged, no token/key in diff, no node_modules/dist committed (checked).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  222e333
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE — no PR opened this slot (fresh PR must be opened at the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified artifact (`dist/server.cjs`) is the deployment unit.
+
+Blocked:
+- #1/#2/#50/#55 — require real Android hardware / emulator / microphone / display session.
+
+Human Approval Required:
+- Finalization slot must open the PR to `main`; a human must read the verification
+  report and approve the merge. No automated merge.
+
+Next Slot:
+- Continue item #13: audit the next `success: true` sites in `server.ts`
+  (social/generate hashtags; computer-operator/cancel `cancelled:false` when idle).
+  These are the next-highest unverified honesty gaps.
+
+हिंदी सारांश (एक पंक्ति):
+- मोबाइल ब्रिज डिसकनेक्ट रूट अब झूठी `VERIFIED` स्थिति नहीं लौटाता — असली टियरडाउन
+  मापकर ही `VERIFIED` कहता है; 2158 टेस्ट पास, lint और build हरे।
