@@ -12329,3 +12329,36 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - मोबाइल ब्रिज डिसकनेक्ट रूट अब झूठी `VERIFIED` स्थिति नहीं लौटाता — असली टियरडाउन
   मापकर ही `VERIFIED` कहता है; 2158 टेस्ट पास, lint और build हरे।
+
+---
+
+## Slot 2026-10-07 00:06 IST — WORK SLOT 6 (item #13, PARTIAL)
+
+Two real zero-fake-success bugs fixed on `feature/hermes-full-completion`.
+
+1. **Scheduled-task routes lied about durability.** `POST /api/autonomous/schedule`
+   and `DELETE /api/autonomous/schedule/:id` (`server.ts`) held the recurring-goal
+   registry in a process-local `const scheduledGoals: ScheduledGoalSpec[] = []` and
+   answered `{ success: true }` immediately — a task vanished on restart. The
+   registry now lives in the persisted memory file (`schedulerState.scheduledGoals`):
+   `loadScheduledGoals()` reconciles it on boot, `persistScheduledGoals()` writes it,
+   and both routes roll back and answer HTTP 500 with `persisted: false` when the
+   write fails (`persistMemory()` now returns a boolean).
+2. **A genuine backup was rejected by a miscounted key header.** `createBackup`
+   (`src/utils/hardening/backupRestore.ts`) counted own keys whose value is
+   `undefined` (`linkedInConnection`, `youTubeConnection`); `JSON.stringify` drops
+   them, so `keyCount`=12 vs 10 serialized keys and `validateBackup` rejected the
+   backup. The loop now skips `undefined` values.
+
+Evidence: new e2e `persists a registered task across a server restart`
+(`src/tests/autonomousGoals.e2e.test.ts`, spawns the real server, restarts, asserts
+the goal + `nextRunAt` survive); new unit `ignores undefined-valued keys so keyCount
+matches the serialized backup` (`src/tests/backupRestore.test.ts`). Negative-validated
+— deleting the `undefined` guard failed exactly the new unit test (`1 failed | 14
+passed`); restored → 15/15.
+
+Gates (observed): lint (`tsc --noEmit`) exit 0; full suite **171 files / 2160 tests
+passed** (29.03 s, 0 failed); build exit 0 (`dist/server.cjs` 1034108 bytes).
+Security: `.env` ignored, tree clean, no secret in diff.
+Deploy: `NOT_CONFIGURED`. Main merge: NOT MERGED — awaiting human approval.
+Commit `2190187` (code) / `29bd191` (docs), pushed. No PR yet.
