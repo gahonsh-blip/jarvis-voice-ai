@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 03:05 IST (2026-10-06 21:35 UTC) — window slot 10: a decided approval request is terminal in the shared registry
+
+### Fixed
+- **`updateActionRequestStatus` (`server_tools.ts`) accepted any status transition, so an approval request a human had already decided could be re-stamped by a duplicate tap.** Two callers then reported a change that had not happened: the Telegram `reject_perm_` branch replied "Understood, Sir. Action … cancelled safely." for a **null** result (a re-tap on an already-run or already-rejected request read as a fresh withdrawal), and the web approve-and-execute branch of `POST /api/approvals/resolve` (`server.ts`) had no re-entry guard — a second POST re-ran the execution branches (a duplicate GitHub issue, a re-attempted publish) and reported a fresh success for work that had already happened. New `canTransitionActionStatus(current, next)` (`server_tools.ts`) makes a decision terminal: a request may only move out of `PENDING_APPROVAL`, never out of `REJECTED` / `EXECUTED` / `FAILED` / `BLOCKED_EMERGENCY_STOP`. The registry returns `null` for a refused transition (the same "no such pending action" path every caller already handles); the Telegram reject reply now reports "was already processed or expired; nothing was changed", and the approve route answers HTTP 409 `outcome: ALREADY_DECIDED` before any execution branch runs.
+
+### Tests
+- New `src/tests/approvalRegistryTerminalTruth.test.ts` (9 cases: 2 unit on the predicate, 4 on the registry, 3 source guards). Negative-validated — making `canTransitionActionStatus` return `true` unconditionally failed exactly the 3 behavioural cases (`3 failed | 6 passed`); restored → 9/9. Targeted 4 files / 40 passed. Lint (`tsc --noEmit`) exit 0. Full suite **174 files / 2194 tests passed** (28.72 s, 0 failed). Build exit 0 (`dist/server.cjs` 1038244 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 02:05 IST (2026-10-06 20:35 UTC) — window slot 9: a decided outbound-call request can no longer be decided again
 
 ### Fixed
