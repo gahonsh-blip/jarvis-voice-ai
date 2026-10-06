@@ -4,6 +4,51 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-07 00:06 IST — **WORK SLOT 6** of the 2026-10-06 →
+2026-10-07 window, the 00:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the scheduled-task routes reported success for a task a restart would
+silently drop, and a genuine backup was rejected by a miscounted key header.**
+Two real bugs, both fixed.
+
+(1) `POST /api/autonomous/schedule` and `DELETE /api/autonomous/schedule/:id`
+(`server.ts`) held the recurring-goal registry in a process-local `const
+scheduledGoals: ScheduledGoalSpec[] = []` and answered `{ success: true }`
+immediately. A registered task vanished on restart, so the success was a lie
+about durability. The registry now lives in the persisted memory file
+(`schedulerState.scheduledGoals`): `loadScheduledGoals()` reconciles it on boot,
+`persistScheduledGoals()` writes it, and both routes return HTTP 500 with
+`persisted: false` and roll the registry back when the write fails —
+`persistMemory()` now returns a boolean instead of swallowing the error. The
+success responses carry `persisted: true`.
+
+(2) `createBackup` (`src/utils/hardening/backupRestore.ts`) counted every own key
+of `memoryState`, including two whose value is `undefined`
+(`linkedInConnection`, `youTubeConnection`). `JSON.stringify` drops
+undefined-valued keys, so `keyCount` said 12 while the serialized `data` held 10;
+`validateBackup` then rejected a genuine backup with "Backup key count mismatch:
+header says 12, data has 10." and `POST /api/restore` answered `success: false`.
+The loop now skips `undefined` values, so the header matches the wire form.
+
+Evidence: `server.ts` (`loadScheduledGoals`, `persistScheduledGoals`,
+`persistMemory` boolean, the two route rollbacks); `backupRestore.ts` (`if (value
+=== undefined) continue;`). Tests: new e2e `persists a registered task across a
+server restart` (`src/tests/autonomousGoals.e2e.test.ts`) — spawns the real
+`server.ts`, registers a goal, restarts the process, asserts the goal and its
+`nextRunAt` survive; new unit `ignores undefined-valued keys so keyCount matches
+the serialized backup` (`src/tests/backupRestore.test.ts`). Negative-validated —
+deleting the `undefined` guard failed exactly the new unit test (`1 failed | 14
+passed`); restored → 15/15. Gates (observed this fire): lint (`tsc --noEmit`)
+exit 0; targeted `backupRestore` 15 passed; `autonomousGoals.e2e` 25 passed; full
+suite **171 files / 2160 tests passed** (29.03 s, 0 failed); `npm run build` exit
+0 (`dist/server.cjs` 1034108 bytes). Deploy: `NOT_CONFIGURED`. Item 13 stays
+`PARTIAL` — the sweep is not exhausted (the tail of unclassified `success: true`
+sites in `server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`).
+Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`. **This
+slot's commit (`2190187`) is pushed to `feature/hermes-full-completion` but is
+not in any PR; a fresh PR must be opened at the finalization slot. Not merged —
+awaiting human approval.**
+
+
 Last cycle: 2026-10-06 23:36 IST — **WORK SLOT 5** of the 2026-10-06 →
 2026-10-07 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the mobile bridge disconnect route reported a verified teardown it

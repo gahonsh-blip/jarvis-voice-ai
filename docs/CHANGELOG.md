@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 00:06 IST (2026-10-06 18:36 UTC) — window slot 6: scheduled-task routes report success only when the task is durable, and a genuine backup is no longer rejected
+
+### Fixed
+- **`POST /api/autonomous/schedule` and `DELETE /api/autonomous/schedule/:id` (`server.ts`) held the recurring-goal registry in a process-local `const scheduledGoals: ScheduledGoalSpec[] = []` and answered `{ success: true }` immediately.** A registered task vanished on restart, so the success was a lie about durability. The registry now lives in the persisted memory file (`schedulerState.scheduledGoals`): `loadScheduledGoals()` reconciles it on boot, `persistScheduledGoals()` writes it, and both routes return HTTP 500 with `persisted: false` and roll the registry back when the write fails — `persistMemory()` now returns a boolean instead of swallowing the error. Success responses carry `persisted: true`.
+- **`createBackup` (`src/utils/hardening/backupRestore.ts`) counted every own key of `memoryState`, including two whose value is `undefined` (`linkedInConnection`, `youTubeConnection`).** `JSON.stringify` drops undefined-valued keys, so `keyCount` said 12 while the serialized `data` held 10; `validateBackup` rejected a genuine backup ("Backup key count mismatch: header says 12, data has 10.") and `POST /api/restore` answered `success: false`. The loop now skips `undefined` values so the header matches the wire form.
+
+### Tests
+- New e2e `persists a registered task across a server restart` (`src/tests/autonomousGoals.e2e.test.ts`) — spawns the real `server.ts` process, registers a goal, restarts it, and asserts the goal and its `nextRunAt` survive. New unit `ignores undefined-valued keys so keyCount matches the serialized backup` (`src/tests/backupRestore.test.ts`). Negative-validated — deleting the `undefined` guard failed exactly the new unit test (`1 failed | 14 passed`); restored → 15/15. Targeted `backupRestore` 15 passed; `autonomousGoals.e2e` 25 passed. Lint (`tsc --noEmit`) exit 0. Full suite **171 files / 2160 tests passed** (29.03 s, 0 failed). Build exit 0 (`dist/server.cjs` 1034108 bytes).
+
+---
+
+
 ## [Unreleased] - 2026-10-06 23:36 IST (2026-10-06 18:06 UTC) — window slot 5: the bridge disconnect route derives its verdict from the teardown it observed
 
 ### Fixed
