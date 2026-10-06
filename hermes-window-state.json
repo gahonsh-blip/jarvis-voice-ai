@@ -6,10 +6,15 @@
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "d9ee25a",
+  "last_commit": "26d44b0",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [1, 2, 50, 55],
+  "blocked_items": [
+    1,
+    2,
+    50,
+    55
+  ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
