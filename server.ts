@@ -66,6 +66,7 @@ import {
   getAllActionRequests,
   createPendingActionRequest,
   updateActionRequestStatus,
+  canTransitionActionStatus,
   realFsList,
   realFsRead,
   realFsSearch,
@@ -3557,7 +3558,12 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('reject_perm_')) {
     const permId = data.replace('reject_perm_', '');
     const updated = updateActionRequestStatus(permId, 'REJECTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
-    const cancelText = `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated?.exactAction || permId}\` cancelled safely.`;
+    // A request that was already decided is not re-rejectable. Saying "cancelled
+    // safely" for a null result told the operator a re-tap had withdrawn an
+    // action that had in fact already run (or been rejected earlier).
+    const cancelText = updated
+      ? `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated.exactAction || permId}\` cancelled safely.`
+      : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired; nothing was changed.`;
     const botMsg = {
       id: `tg-${Date.now()}`,
       sender: 'jarvis_bot' as const,
@@ -6484,6 +6490,19 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
   const targetReq = allReqs.find((r) => r.id === id);
   if (!targetReq) {
     return res.status(404).json({ error: 'Action request not found' });
+  }
+
+  // A request that already carries a terminal decision must not be dispatched
+  // again. Re-running the execution branches for an already-approved request
+  // could create a duplicate GitHub issue or re-attempt a publish, and the
+  // response would report a fresh success for work that had already happened.
+  if (!canTransitionActionStatus(targetReq.status, 'EXECUTED')) {
+    return res.status(409).json({
+      success: false,
+      outcome: 'ALREADY_DECIDED',
+      request: targetReq,
+      error: `Action request ${id} was already decided (${targetReq.status}); it was not executed again.`,
+    });
   }
 
   // Finance check

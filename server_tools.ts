@@ -144,6 +144,33 @@ export function getAllActionRequests(): PermissionActionRequest[] {
   return [...pendingActionRequests];
 }
 
+/**
+ * Statuses a request can no longer move out of. A decision is a fact: once a
+ * request is REJECTED, EXECUTED, FAILED or blocked by the emergency stop, a
+ * later call must not rewrite it. Before this guard the shared helper accepted
+ * any transition, so re-approving an already-decided request re-stamped it and
+ * callers (e.g. the Telegram `approve_perm_` branch) reported a fresh approval
+ * for a decision the human had already made.
+ */
+const TERMINAL_ACTION_STATUSES: ReadonlySet<PermissionActionRequest['status']> = new Set([
+  'REJECTED',
+  'EXECUTED',
+  'FAILED',
+  'BLOCKED_EMERGENCY_STOP',
+]);
+
+/**
+ * Whether a request may move from `current` to `next`. Only a live
+ * PENDING_APPROVAL request can be decided, and only once: every decision is
+ * terminal, so no further transition is allowed out of a terminal status.
+ */
+export function canTransitionActionStatus(
+  current: PermissionActionRequest['status'],
+  _next: PermissionActionRequest['status']
+): boolean {
+  return !TERMINAL_ACTION_STATUSES.has(current);
+}
+
 export function createPendingActionRequest(params: {
   exactAction: string;
   target: string;
@@ -256,6 +283,10 @@ export function updateActionRequestStatus(
 ): PermissionActionRequest | null {
   const req = pendingActionRequests.find((a) => a.id === id);
   if (!req) return null;
+  // A request that already carries a terminal decision is not re-decidable.
+  // Returning null lets every caller apply the same "no such pending action"
+  // handling, instead of re-stamping the request and reporting a fresh success.
+  if (!canTransitionActionStatus(req.status, status)) return null;
   req.status = status;
   req.resolvedAt = new Date().toISOString();
   if (details?.resultUrn) req.resultUrn = details.resultUrn;
