@@ -12389,9 +12389,11 @@ the route echoes it (keeping `levels`/`auditLogs` from live state) with
 the snapshot echo failed exactly the new assertion (`1 failed | 22 passed`);
 restored → 23/23.
 
-**Gates (observed this fire).** lint (`tsc --noEmit`) exit 0; targeted
-`securityMatrixUpdateTruth` 23 passed; full suite **171 files / 2165 tests
-passed** (28.38 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1034966
-bytes). Security: `.env` ignored, no secret in the diff. Deploy:
+**Gates (observed this fire, on code commit `e9205d0`).** lint (`tsc --noEmit`)
+exit 0; targeted `securityMatrixUpdateTruth` 23 passed; full suite **171 files /
+2165 tests passed** (28.38 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1034966 bytes). The follow-up docs commit `d00bfb8` touches
+only `docs/*`, the window log and `jarvis_memory.json` (data), so the gates were
+NOT re-run after it — recorded as `NOT_RUN` for that commit, not assumed green. Security: `.env` ignored, no secret in the diff. Deploy:
 `NOT_CONFIGURED`. Main merge: NOT MERGED — awaiting human approval. No PR opened
 this slot; a fresh PR must be opened at the finalization slot.
