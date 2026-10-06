@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 01:36 IST (2026-10-06 20:06 UTC) — window slot 8: the blueprint deliverable toggle reports a saved tick only when it is durable
+
+### Fixed
+- **`POST /api/blueprint/toggle-item` (`server.ts`) flipped a deliverable's `done` flag on the module-level `BLUEPRINT_PHASES` constant and answered `{ success: true, phase }` unconditionally.** The tick was never persisted — a restart silently restored the archived checklist while the response had reported it saved — and a malformed body (a `phaseId` no phase has, or an `itemIndex` outside the deliverable list) either did nothing or indexed `undefined` yet still answered `success: true`. New `src/utils/hardening/blueprintToggleTruth.ts` (`applyBlueprintToggle` / `cloneBlueprintPhases` / `overlayPersistedPhases`) classifies the request; the live `blueprintPhases` is the design constant overlaid with any persisted operator tick state at boot; the route refuses a malformed toggle with `success: false` + HTTP 400, persists through `persistBlueprintPhases()` and rolls the tick back + answers HTTP 500 `persisted: false` when the write fails, answering `{ success: true, applied: true, persisted: true }` only for a durable change. `GET /api/blueprint` and the blueprint report now read the live list.
+
+### Tests
+- New `src/tests/blueprintToggleTruth.test.ts` (16 cases: 7 unit on `applyBlueprintToggle`, 5 on the persisted-state overlay, 4 source guards on the route). Negative-validated — the pre-fix route (`git show 87c489a:server.ts`) contains `BLUEPRINT_PHASES.find` and the unconditional success literal the guards forbid. Targeted 1 file / 16 passed. Lint (`tsc --noEmit`) exit 0. Full suite **172 files / 2181 tests passed** (28.51 s, 0 failed). Build exit 0 (`dist/server.cjs` 1037308 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 00:36 IST (2026-10-06 19:06 UTC) — window slot 7: the security-matrix route echoes the state it applied, not a pre-apply snapshot
 
 ### Fixed
