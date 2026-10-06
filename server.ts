@@ -42,6 +42,12 @@ import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth'
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
 import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
 import { classifySecurityMatrixUpdate, applySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
+import {
+  applyBlueprintToggle,
+  cloneBlueprintPhases,
+  overlayPersistedPhases,
+  type BlueprintPhase,
+} from './src/utils/hardening/blueprintToggleTruth';
 import { resolveRoutineTrigger, routineTriggerDelivery } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
@@ -495,6 +501,12 @@ interface MemoryData {
     /** Last date each goal ran, keyed by goal id. */
     lastAutonomousGoalRuns?: Record<string, string>;
   };
+  /**
+   * Operator-ticked blueprint deliverables. Persisted so the Master Blueprint
+   * modal's readiness checklist survives a restart instead of silently
+   * reverting to the archived design state.
+   */
+  blueprintPhases?: unknown[];
   /** Recent conversation turns, kept server-side so context survives a client reset. */
   conversationHistory?: {
     role: 'user' | 'jarvis';
@@ -1472,7 +1484,22 @@ const BLUEPRINT_PHASES = [
     ],
     commandSample: 'JARVIS, कल सुबह 9 बजे मुझे report देना',
   },
-];
+] as BlueprintPhase[];
+
+// The live phase list is the design constant overlaid with any operator tick
+// state persisted on disk (memoryState is already loaded at this point).
+// Without this, a tick made through the modal was in-memory only and a restart
+// restored the archived checklist.
+let blueprintPhases: BlueprintPhase[] = overlayPersistedPhases(
+  BLUEPRINT_PHASES,
+  memoryState.blueprintPhases
+);
+
+/** Persist the operator's blueprint tick state. Returns whether it reached disk. */
+function persistBlueprintPhases(): boolean {
+  memoryState.blueprintPhases = blueprintPhases;
+  return persistMemory();
+}
 
 let oracleCloudState = {
   provider: 'Oracle Cloud Always Free' as const,
@@ -4037,34 +4064,53 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
 
 // Master Blueprint APIs
 app.get('/api/blueprint', (req: Request, res: Response) => {
-  const completedDeliverables = BLUEPRINT_PHASES.reduce(
+  const completedDeliverables = blueprintPhases.reduce(
     (acc, p) => acc + p.deliverables.filter((d) => d.done).length,
     0
   );
-  const totalDeliverables = BLUEPRINT_PHASES.reduce((acc, p) => acc + p.deliverables.length, 0);
+  const totalDeliverables = blueprintPhases.reduce((acc, p) => acc + p.deliverables.length, 0);
   const completionPercentage = Math.round((completedDeliverables / totalDeliverables) * 100);
 
   res.json({
-    phases: BLUEPRINT_PHASES,
+    phases: blueprintPhases,
     stats: {
-      totalPhases: BLUEPRINT_PHASES.length,
-      completedPhases: BLUEPRINT_PHASES.filter((p) => p.status === 'completed').length,
-      inProgressPhases: BLUEPRINT_PHASES.filter((p) => p.status === 'in_progress').length,
+      totalPhases: blueprintPhases.length,
+      completedPhases: blueprintPhases.filter((p) => p.status === 'completed').length,
+      inProgressPhases: blueprintPhases.filter((p) => p.status === 'in_progress').length,
       completionPercentage,
     },
   });
 });
 
 app.post('/api/blueprint/toggle-item', (req: Request, res: Response) => {
-  const { phaseId, itemIndex } = req.body;
-  const phase = BLUEPRINT_PHASES.find((p) => p.id === phaseId);
-  if (phase && phase.deliverables[itemIndex]) {
-    phase.deliverables[itemIndex].done = !phase.deliverables[itemIndex].done;
-    const allDone = phase.deliverables.every((d) => d.done);
-    phase.status = allDone ? 'completed' : 'in_progress';
-    return res.json({ success: true, phase });
+  const { phaseId, itemIndex } = req.body ?? {};
+  const verdict = applyBlueprintToggle(blueprintPhases, phaseId, itemIndex);
+  if (!verdict.applied) {
+    // A malformed request used to answer `success: true` for a toggle that
+    // touched nothing. Refuse it and name the reason instead.
+    return res.status(400).json({ success: false, applied: false, error: verdict.message });
   }
-  res.status(400).json({ error: 'Invalid phase or deliverable index' });
+
+  // The toggle is only real once it is durable: the phases list is persisted
+  // with the rest of the memory state, so a restart keeps the operator's tick.
+  if (!persistBlueprintPhases()) {
+    // Roll the tick back rather than report a save that did not reach disk.
+    applyBlueprintToggle(blueprintPhases, phaseId, itemIndex);
+    return res.status(500).json({
+      success: false,
+      applied: false,
+      persisted: false,
+      error: 'Blueprint change could not be written to durable storage; it was not saved.',
+    });
+  }
+
+  res.json({
+    success: true,
+    applied: true,
+    persisted: true,
+    phase: verdict.phase,
+    done: verdict.done,
+  });
 });
 
 app.get('/api/blueprint/report', (req: Request, res: Response) => {
@@ -4117,7 +4163,7 @@ app.get('/api/blueprint/report', (req: Request, res: Response) => {
 
 ## 🗺️ 2. Comprehensive 10-Phase Roadmap (चरणबद्ध योजना)
 
-${BLUEPRINT_PHASES.map((p) => `### 📌 ${p.code}: ${p.titleEn}
+${blueprintPhases.map((p) => `### 📌 ${p.code}: ${p.titleEn}
 **हिन्दी**: ${p.titleHi}  
 **Status**: ${p.status.toUpperCase()} | **Cost**: ${p.cost}  
 **Overview**: ${p.description}  
