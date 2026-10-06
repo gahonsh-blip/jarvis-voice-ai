@@ -48,6 +48,7 @@ import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCa
 import { classifyTelephonyCallRecord } from './src/utils/hardening/telephonyCallRecordTruth';
 import { classifyOutboundAuthorization } from './src/utils/hardening/outboundAuthorizationTruth';
 import { classifyBridgeHeartbeat } from './src/utils/hardening/bridgeHeartbeatTruth';
+import { classifyBridgeDisconnect } from './src/utils/hardening/bridgeDisconnectTruth';
 import { classifyBridgeEvent } from './src/utils/hardening/bridgeEventTruth';
 import {
   getEmergencyState,
@@ -8298,8 +8299,22 @@ app.post('/api/mobile/bridge/disconnect', (req: Request, res: Response) => {
     return res.status(409).json({ success: false, outcome: 'FAILED', error: 'This session does not own the device link.' });
   }
 
+  const disconnectsBefore = bridgeGateway.getDisconnectCount();
   bridgeGateway.revoke(auth.sessionId, req.body?.reason || 'Device requested disconnect');
-  return res.json({ success: true, outcome: 'VERIFIED', status: 'MOBILE_NOT_CONNECTED' });
+  const verdict = classifyBridgeDisconnect({
+    deviceWasLinked: true,
+    disconnectsBefore,
+    disconnectsAfter: bridgeGateway.getDisconnectCount(),
+    bridgeStatus: bridgeGateway.getStatus(),
+    reason: req.body?.reason || 'Device requested disconnect',
+  });
+  return res.json({
+    success: verdict.success,
+    verified: verdict.verified,
+    outcome: verdict.outcome,
+    status: verdict.status,
+    message: verdict.message,
+  });
 });
 
 // ---- 9. Diagnostics --------------------------------------------------------
