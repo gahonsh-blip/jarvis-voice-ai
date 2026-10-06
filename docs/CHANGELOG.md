@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 21:35 IST (2026-10-06 16:05 UTC) — window slot 2: the telephony test-suite route no longer reports a failing run as success
+
+### Fixed
+- **`GET /api/telephony/test-suite` (`server.ts`) answered `{ success: true, summary }` for every run that returned a summary.** A request that completed is not a suite that passed, so a run with failing cases was reported to the caller as `success: true` — a UI reading only that field would render a green telephony suite over red cases. The route now derives its verdict from the run via `classifyTelephonySuiteRun(summary)` (`src/utils/hardening/telephonySuiteTruth.ts`) → `PASSED` / `FAILED` / `EMPTY`. `success` is true only for a positive case count with zero failures; a missing, malformed, or empty summary is `EMPTY` and never a pass. The response also carries `outcome` and a naming `message`.
+
+### Tests
+- New `src/tests/telephonySuiteTruth.test.ts` (6 cases: 4 unit on the helper — a green run, a failing run, an empty run, and a malformed summary — plus 2 source guards that the route delegates to the helper and no longer emits the unconditional `res.json({ success: true, summary })` literal). Negative-validated — restoring the pre-fix route failed exactly 2 of 6 (`2 failed | 4 passed`); restored → 6/6. Targeted `telephonySuiteTruth` + `telephonyTestRunnerHonesty` 2 files / 7 passed. Lint (`tsc --noEmit`) exit 0. Full suite **169 files / 2135 tests passed** (27.19 s, 0 failed). Build exit 0 (`dist/server.cjs` 1030122 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-06 21:06 IST (2026-10-06 15:36 UTC) — window slot 1: an OAuth disconnect no longer names an account it never read
 
 ### Fixed
