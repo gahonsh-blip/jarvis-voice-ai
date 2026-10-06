@@ -11998,3 +11998,72 @@ Next Slot:
 - यह अंतिम (finalization) स्लॉट था; किसी नए बैकलॉग आइटम पर काम नहीं हुआ, टिप 3ab5e2d
   को दोबारा सत्यापित किया — lint exit 0, 168 फ़ाइलें / 2126 टेस्ट पास, build exit 0;
   PR #5 खुला और mergeable है, मर्ज मानव-अनुमोदन की प्रतीक्षा में है।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:06
+Window date: 2026-10-06   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — advanced (still PARTIAL). Fixed the OAuth
+  disconnect audit naming an account it never read.
+  Evidence: src/utils/hardening/socialAccountIdTruth.ts (new `disconnectAccountLabel()`,
+  placeholders 'LinkedIn User'/'YouTube Account' added to the invented-name set);
+  server.ts POST /api/auth/linkedin/disconnect and POST /api/auth/youtube/disconnect
+  now call the helper; src/tests/socialAccountIdTruth.test.ts new cases.
+  Observed: targeted 2 files / 15 passed; full suite 168 files / 2129 passed.
+
+In Progress:
+- #13 — sweep not exhausted; the tail of unclassified `success: true` sites in
+  server.ts / server_tools.ts remains (truthfulness UNKNOWN).
+
+Remaining:
+- #13 sweep continues; then the mandated order resumes. Hardware-blocked #1/#2/#50/#55
+  remain NOT_AVAILABLE/PARTIAL.
+
+Bugs Found:
+- server.ts: the two OAuth disconnect routes fell back to hardcoded account names
+  ('LinkedIn User' / 'YouTube Account') when the stored connection carried no name,
+  then logged the removal as VERIFIED. The removal is real, but the NAME was invented
+  and the audit row rendered it with a green "confirmed" badge. Found by auditing
+  external-action audit rows for item 13.
+
+Bugs Fixed:
+- Both disconnect routes now resolve the account label through disconnectAccountLabel(),
+  which returns the recorded name or states plainly that no name was read. The row stays
+  VERIFIED for the real credential removal.
+  Verification: negative-validated — restoring the two placeholder fallbacks in server.ts
+  failed exactly 1 of 11 (1 failed | 10 passed); restored → 11/11.
+
+Tests:    2129 passed / 168 files (npx vitest run, 27.54s, 0 failed). Targeted: 15 passed / 2 files.
+Lint:     PASS (npm run lint / tsc --noEmit, exit 0)
+Build:    PASS (npm run build, exit 0, dist/server.cjs 1029205 bytes)
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox.
+Security: NOT RUN this slot (no security-scan command invoked; .env untouched, no secrets printed/committed).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  0397866 (docs) atop 877b620 (fix)
+Push:    succeeded → origin/feature/hermes-full-completion (6d658f6..0397866)
+
+PR:         #5 (existing, open) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/5
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present in this
+            environment; the verified artifact dist/server.cjs is the deployment unit.
+
+Blocked:
+- #1/#2 Real Android E2E / screenshot — requires a physical Android handset or emulator.
+- #50/#55 — hardware/credential dependent.
+
+Human Approval Required:
+- Merge of PR #5 to main (human-only, by project rule).
+
+Next Slot:
+- #13 continues: audit the next unclassified `success: true` site in server.ts /
+  server_tools.ts (rotate the sweep), or the next non-VERIFIED item in mandated order.
+
+हिंदी सारांश (एक पंक्ति):
+- स्लॉट 1: OAuth डिस्कनेक्ट ऑडिट अब वह खाता नहीं लिखता जिसे उसने पढ़ा ही नहीं — असली
+  रिकॉर्ड किया नाम या स्पष्ट "नाम नहीं पढ़ा" लिखता है; lint/build पास, 2129 टेस्ट पास।
