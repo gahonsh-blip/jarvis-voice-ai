@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-07 03:05 IST — **WORK SLOT 10** of the 2026-10-06 →
+Last cycle: 2026-10-07 03:35 IST — **WORK SLOT 11** of the 2026-10-06 →
+2026-10-07 window, the 03:35 IST fire (second-to-last slot). **Item 13
+(`Zero-fake-success for all tools`) — `/api/github/fix-plan` reported an
+all-clear the scan never established.**
+
+`buildFixPlan` (`src/utils/github/fixPlanner.ts`) derives `nothingToDo` from the
+steps it could build. A scan that returned **no repositories**, or returned every
+repository **unreachable**, produces zero steps and therefore `nothingToDo:
+true` — an "all clear" the plan never established. The same held when only local
+health was supplied: a workspace where every check passed says nothing about the
+remote account that was never scanned. New `src/utils/hardening/fixPlanCoverage.ts`
+keeps the derived plan honest. `assessFixPlanCoverage` treats a scan as covered
+only when it listed at least one repository, reached all of them, and every local
+check actually ran (`exitCode !== null`) and passed. When coverage is not
+established, `reconcileFixPlanWithCoverage` forces `nothingToDo: false` and adds
+a `MANUAL_REVIEW` step (`coverage::unscanned`) naming exactly what was not
+covered; a genuinely clean, fully covered plan is returned unchanged. Wired into
+`POST /api/github/fix-plan` (`server.ts`), whose response now also carries a
+`coverage` field. Guarded by `src/tests/fixPlanCoverageTruth.test.ts` (10 cases:
+6 unit on the predicate, 4 on the reconciliation, incl. a case pinning the raw
+planner's false all-clear). Negative-validated — reverting the forced
+`nothingToDo: false` failed exactly 1 case (`1 failed | 9 passed`); restored →
+10/10. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file /
+10 passed; full suite **175 files / 2204 tests passed** (29.76 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1041085 bytes). E2E: NOT RUN. Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted
+(unclassified `success: true` sites remain in `server.ts`).
+
+Last cycle (previous): 2026-10-07 03:05 IST — **WORK SLOT 10** of the 2026-10-06 →
 2026-10-07 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the shared approval registry let a decided request be decided again,
 and two approval surfaces then reported a change that had not happened.**

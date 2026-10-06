@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 03:35 IST (2026-10-06 22:05 UTC) — window slot 11: a fix-plan all-clear now requires the scan to have actually covered its scope
+
+### Fixed
+- **`POST /api/github/fix-plan` (`server.ts`) reported `nothingToDo: true` whenever `buildFixPlan` derived no steps — including when the scan returned no repositories, or returned every repository unreachable.** `buildFixPlan` (`src/utils/github/fixPlanner.ts`) sets `nothingToDo` from the steps it could build, so an empty account listing, an all-unreachable listing, or a local-health-only run all yielded zero steps and read as an "all clear" the plan never established. New `src/utils/hardening/fixPlanCoverage.ts` reconciles the flag with the real coverage of the inputs: `assessFixPlanCoverage` marks a scan covered only when it listed at least one repository, reached all of them, and every local check actually ran (`exitCode !== null`) and passed; `reconcileFixPlanWithCoverage` forces `nothingToDo: false` and appends a `MANUAL_REVIEW` step (`coverage::unscanned`) naming what was not covered, while returning a genuinely clean, fully covered plan unchanged. The route's response now also carries a `coverage` field.
+
+### Tests
+- New `src/tests/fixPlanCoverageTruth.test.ts` (10 cases: 6 unit on the predicate, 4 on the reconciliation — including a case that pins the raw planner's false all-clear on an empty scan, and a case proving a covered clean plan is returned by identity). Negative-validated — reverting the forced `nothingToDo: false` failed exactly 1 case (`1 failed | 9 passed`); restored → 10/10. Lint (`tsc --noEmit`) exit 0. Full suite **175 files / 2204 tests passed** (29.76 s, 0 failed). Build exit 0 (`dist/server.cjs` 1041085 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 03:05 IST (2026-10-06 21:35 UTC) — window slot 10: a decided approval request is terminal in the shared registry
 
 ### Fixed
