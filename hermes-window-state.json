@@ -1,15 +1,15 @@
 {
   "window_date": "2026-10-06",
-  "window_started_at": "2026-10-05T15:35:00Z",
-  "last_slot_at": "2026-10-05T23:09:43Z",
-  "slots_completed": 12,
+  "window_started_at": "2026-10-06T15:36:00Z",
+  "last_slot_at": "2026-10-06T15:52:51Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "6d658f68ac79267c32f6e465f89fb690fafdbc20",
+  "last_commit": "03978669d2a122ef6fdf197e27cbfb1fba76ceb8",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "Window 2026-10-05 -> 2026-10-06 closed. No new backlog item advanced (finalization slot). Verified tip 3ab5e2d: lint exit 0; vitest 168 files / 2126 tests passed (26.61s, 0 failed); build exit 0, dist/server.cjs 1028844 bytes. Security clean (.env ignored, clean tree, no credential patterns in 155-file diff). PR #5 open, non-draft, mergeable_state=clean. NOT MERGED - awaiting human approval. Deploy: NOT_CONFIGURED. Item 13 remains PARTIAL.",
+  "finalized": false,
+  "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
