@@ -244,6 +244,7 @@ import {
 } from './src/utils/github/repoScanner';
 import { runHealthChecks, type CheckKind } from './src/utils/github/localHealth';
 import { buildFixPlan } from './src/utils/github/fixPlanner';
+import { assessFixPlanCoverage, reconcileFixPlanWithCoverage } from './src/utils/hardening/fixPlanCoverage';
 import {
   runNightlyCheck,
   nightlyHistory,
@@ -7052,7 +7053,15 @@ app.post('/api/github/fix-plan', async (req: Request, res: Response) => {
       ? await runHealthChecks({ workspace: process.cwd(), checks: ['lint', 'test'] })
       : undefined;
 
-    const plan = buildFixPlan({ multiRepoScan, localHealth });
+    // `nothingToDo` from the planner only knows about the steps it could build.
+    // A scan that returned no repositories — or returned every repository
+    // unreachable — produces zero steps and would be reported as an all-clear
+    // the plan never established. Reconcile the flag with the real coverage.
+    const coverage = assessFixPlanCoverage({ multiRepoScan, localHealth });
+    const { plan } = reconcileFixPlanWithCoverage(
+      buildFixPlan({ multiRepoScan, localHealth }),
+      coverage
+    );
 
     res.json({
       success: true,
@@ -7061,6 +7070,7 @@ app.post('/api/github/fix-plan', async (req: Request, res: Response) => {
       highestRisk: plan.highestRisk,
       requiresCodeChange: plan.requiresCodeChange,
       steps: plan.steps,
+      coverage,
       receipt: plan.receipt,
     });
   } catch (err: any) {
