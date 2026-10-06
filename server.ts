@@ -42,7 +42,7 @@ import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth'
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
 import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
 import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
-import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
+import { resolveRoutineTrigger, routineTriggerDelivery } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
 import { classifyTelephonyCallRecord } from './src/utils/hardening/telephonyCallRecordTruth';
@@ -5760,7 +5760,7 @@ app.get('/api/routines', (req: Request, res: Response) => {
   res.json({ routines: proactiveReports });
 });
 
-app.post('/api/routines/trigger', (req: Request, res: Response) => {
+app.post('/api/routines/trigger', async (req: Request, res: Response) => {
   const { timeSlot } = req.body || {};
   // The store is rebuilt on read so a trigger matches the current reports. An
   // unknown slot used to fall back to the first report in the store, and an
@@ -5779,7 +5779,24 @@ app.post('/api/routines/trigger', (req: Request, res: Response) => {
       triggered: false,
     });
   }
-  res.json({ success: true, triggered: true, routine });
+  // Compose and actually push the briefing, then report what Telegram observed.
+  // The route used to answer `triggered: true` for a briefing that was only
+  // built in memory, so a server with no configured chat still read as a
+  // delivered routine.
+  const delivery = await routineTriggerDelivery(
+    activeTelegramChatId,
+    routine.titleEn,
+    routine.contentEn,
+    deliverTelegramMessage
+  );
+  res.json({
+    success: delivery.delivered,
+    triggered: delivery.triggered,
+    delivered: delivery.delivered,
+    outcome: delivery.outcome,
+    message: delivery.message,
+    routine,
+  });
 });
 
 // ==============================================================================
