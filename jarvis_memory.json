@@ -475,7 +475,8 @@
     }
   ],
   "schedulerState": {
-    "lastNightRunDate": "2026-09-02"
+    "lastNightRunDate": "2026-09-02",
+    "scheduledGoals": []
   },
   "youTubeConnection": {
     "connected": true,

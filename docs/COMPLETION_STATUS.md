@@ -4,7 +4,43 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-07 00:06 IST — **WORK SLOT 6** of the 2026-10-06 →
+Last cycle: 2026-10-07 00:36 IST — **WORK SLOT 7** of the 2026-10-06 →
+2026-10-07 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — `/api/security/update` echoed a stale matrix, so a successful save
+reported the value it had *not* applied.**
+
+The route classified the request body correctly (the slot-3 classifier
+`classifySecurityMatrixUpdate` rejected empty bodies, out-of-range levels, and
+unknown fields) but captured `const securityStateSnapshot = { ...securityMatrixState }`
+*before* assigning `verdict.applied` onto `securityMatrixState`, then answered
+`{ success: true, securityState: securityStateSnapshot }`. A caller that trusts
+the response instead of refetching — `SecurityMatrixModal.handleUpdateLevel`
+does exactly that — read back the pre-apply gate value: it showed a toggle that
+had not taken effect and reported a change that was never made. The status was
+`success` for an update the response itself contradicted.
+
+Fix: new `applySecurityMatrixUpdate(state, applied)` in
+`src/utils/hardening/securityMatrixUpdateTruth.ts` returns the state with the
+classified fields applied, and the route now echoes *that* (keeping
+`levels`/`auditLogs` from live state) alongside `applied: true`. The no-op path
+(`success: false, applied: false`) is unchanged.
+
+Evidence: `src/utils/hardening/securityMatrixUpdateTruth.ts`
+(`applySecurityMatrixUpdate`); `server.ts` route `/api/security/update`. Tests:
+new `applySecurityMatrixUpdate reports the value that was really stored` in
+`src/tests/securityMatrixUpdateTruth.test.ts`. Negative-validated — reverting the
+response to `securityStateSnapshot` failed exactly the new assertion (`1 failed |
+22 passed`); restored → 23/23. Gates (observed this fire): lint (`tsc --noEmit`)
+exit 0; targeted `securityMatrixUpdateTruth` 23 passed; full suite **171 files /
+2165 tests passed** (28.38 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs`
+1034966 bytes). Deploy: `NOT_CONFIGURED`. Item 13 stays `PARTIAL` — the sweep is
+not exhausted (unclassified `success: true` sites remain in `server.ts` /
+`server_tools.ts`, truthfulness `UNKNOWN`). Hardware-blocked items
+#1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`. **This slot's commit (`e9205d0`)
+is pushed to `feature/hermes-full-completion` but is not in any PR; a fresh PR
+must be opened at the finalization slot. Not merged — awaiting human approval.**
+
+Last cycle (previous): 2026-10-07 00:06 IST — **WORK SLOT 6** of the 2026-10-06 →
 2026-10-07 window, the 00:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the scheduled-task routes reported success for a task a restart would
 silently drop, and a genuine backup was rejected by a miscounted key header.**

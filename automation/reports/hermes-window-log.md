@@ -12362,3 +12362,36 @@ passed** (29.03 s, 0 failed); build exit 0 (`dist/server.cjs` 1034108 bytes).
 Security: `.env` ignored, tree clean, no secret in diff.
 Deploy: `NOT_CONFIGURED`. Main merge: NOT MERGED — awaiting human approval.
 Commit `2190187` (code) / `29bd191` (docs), pushed. No PR yet.
+
+---
+
+## Slot 7 — 2026-10-07 00:35 IST fire (WORK SLOT) — window 2026-10-06 → 2026-10-07
+
+Item 13 (`Zero-fake-success for all tools`) — `PARTIAL`, one coherent slice
+advanced.
+
+**Bug found and fixed.** `POST /api/security/update` (`server.ts`) captured
+`const securityStateSnapshot = { ...securityMatrixState }` *before* assigning
+`verdict.applied` onto `securityMatrixState`, then answered
+`{ success: true, securityState: securityStateSnapshot }`. The classifier from
+slot 3 was correct, but the response echoed the pre-apply state: a successful
+toggle of `humanApprovalForExternal` / `maskSensitiveData` returned the old gate
+value. `SecurityMatrixModal.handleUpdateLevel` trusts that response (it does not
+refetch), so it rendered a gate that had not taken effect while the status line
+read as saved. New `applySecurityMatrixUpdate()` returns the applied state and
+the route echoes it (keeping `levels`/`auditLogs` from live state) with
+`applied: true`.
+
+**Evidence.** `src/utils/hardening/securityMatrixUpdateTruth.ts`
+(`applySecurityMatrixUpdate`); `server.ts` route `/api/security/update`; new test
+`applySecurityMatrixUpdate reports the value that was really stored`
+(`src/tests/securityMatrixUpdateTruth.test.ts`). Negative-validated — restoring
+the snapshot echo failed exactly the new assertion (`1 failed | 22 passed`);
+restored → 23/23.
+
+**Gates (observed this fire).** lint (`tsc --noEmit`) exit 0; targeted
+`securityMatrixUpdateTruth` 23 passed; full suite **171 files / 2165 tests
+passed** (28.38 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1034966
+bytes). Security: `.env` ignored, no secret in the diff. Deploy:
+`NOT_CONFIGURED`. Main merge: NOT MERGED — awaiting human approval. No PR opened
+this slot; a fresh PR must be opened at the finalization slot.

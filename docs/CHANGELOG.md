@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 00:36 IST (2026-10-06 19:06 UTC) — window slot 7: the security-matrix route echoes the state it applied, not a pre-apply snapshot
+
+### Fixed
+- **`POST /api/security/update` (`server.ts`) captured `securityStateSnapshot` before assigning `verdict.applied` onto `securityMatrixState`, then answered `{ success: true, securityState: securityStateSnapshot }`.** A client that trusts the response instead of refetching — `SecurityMatrixModal.handleUpdateLevel` does exactly that — read back the pre-apply gate value, displaying a toggle that had not taken effect. New `applySecurityMatrixUpdate(state, applied)` (`src/utils/hardening/securityMatrixUpdateTruth.ts`) returns the state with the classified fields applied, and the route now echoes that (keeping `levels`/`auditLogs` from live state) with `applied: true`. The no-op path (`success: false, applied: false`) is unchanged.
+
+### Tests
+- New `applySecurityMatrixUpdate reports the value that was really stored` (`src/tests/securityMatrixUpdateTruth.test.ts`). Negative-validated — reverting the response to `securityStateSnapshot` failed exactly the new assertion (`1 failed | 22 passed`); restored → 23/23. Targeted `securityMatrixUpdateTruth` 23 passed. Lint (`tsc --noEmit`) exit 0. Full suite **171 files / 2165 tests passed** (28.38 s, 0 failed). Build exit 0 (`dist/server.cjs` 1034966 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 00:06 IST (2026-10-06 18:36 UTC) — window slot 6: scheduled-task routes report success only when the task is durable, and a genuine backup is no longer rejected
 
 ### Fixed

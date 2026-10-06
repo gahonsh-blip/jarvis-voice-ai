@@ -472,3 +472,19 @@ Tools Hub emergency badge (`src/utils/emergencyTruth.ts`): a security-relevant
 state that has not been observed is `UNKNOWN`, and `UNKNOWN` never enables an
 action. Guarded by `src/tests/telegramGatewayTruth.test.ts` (12 tests, including
 source guards that pin the absence of the hardcoded claims).
+
+**Update 2026-10-07 00:36 IST — the security-matrix save echoed a state it had not applied.**
+`POST /api/security/update` (`server.ts`) classified the body correctly — the slot-3
+`classifySecurityMatrixUpdate()` already rejects empty bodies, out-of-range levels and
+unknown fields — but captured `securityStateSnapshot` *before* assigning `verdict.applied`
+onto `securityMatrixState`, then answered `{ success: true, securityState: securityStateSnapshot }`.
+`SecurityMatrixModal.handleUpdateLevel` trusts that response instead of refetching, so a
+successful toggle of `humanApprovalForExternal` or `maskSensitiveData` rendered the
+pre-apply value: the operator saw the gate in a state it had not reached, while the status
+line said the change was saved. The matrix gates external actions and credential masking,
+so a response that contradicts the state it reports is a trust failure in its own right.
+`applySecurityMatrixUpdate()` (`src/utils/hardening/securityMatrixUpdateTruth.ts`) now
+returns the state with the classified fields applied and the route echoes that (keeping
+`levels`/`auditLogs` from live state) with `applied: true`. Guarded by
+`src/tests/securityMatrixUpdateTruth.test.ts` (23 tests); negative-validated
+(`1 failed | 22 passed` with the snapshot echo restored).
