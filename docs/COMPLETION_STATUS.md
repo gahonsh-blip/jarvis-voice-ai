@@ -28,6 +28,12 @@ handset / emulator / display session. Deploy: `NOT_CONFIGURED`. Item 13 stays
 `PARTIAL` — the sweep is not exhausted (the tail of unclassified `success: true`
 sites in `server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`).
 Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`.
+**Correction (this fire, verified via the GitHub API):** the prior finalization
+recorded "PR #5 is open … `mergeable_state: clean`". That is stale — the owner
+merged PR #5 at `2026-10-06T07:26:11Z` (merge commit `88b7836`; current `main`
+tip `8c13099`). There are now **0 open PRs**; this slot's commits (`877b620`,
+`0397866`, `21add03`) are not yet in any PR. A fresh PR must be opened at the
+finalization slot. This slot's work is **not merged — awaiting human approval**.
 
 
 Last cycle: 2026-10-06 04:36 IST — **FINALIZATION SLOT** of the 2026-10-05 →
