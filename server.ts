@@ -37,6 +37,7 @@ import {
   type PhonePermissionStore,
 } from './src/utils/hardening/phonePermissionStoreTruth';
 import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
+import { classifyTelephonySuiteRun } from './src/utils/hardening/telephonySuiteTruth';
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
 import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
@@ -9091,7 +9092,16 @@ app.post('/api/telephony/permissions', (req: Request, res: Response) => {
 app.get('/api/telephony/test-suite', async (req: Request, res: Response) => {
   try {
     const summary = await runTelephonyTestSuite();
-    res.json({ success: true, summary });
+    // The route used to answer `success: true` for every run, so a suite with
+    // failing cases was reported to the caller as a passing suite. The verdict
+    // is derived from the run: a completed request is not a suite that passed.
+    const verdict = classifyTelephonySuiteRun(summary);
+    res.json({
+      success: verdict.success,
+      outcome: verdict.outcome,
+      message: verdict.message,
+      summary,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
