@@ -41,7 +41,7 @@ import { classifyTelephonySuiteRun } from './src/utils/hardening/telephonySuiteT
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
 import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
-import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
+import { classifySecurityMatrixUpdate, applySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
 import { resolveRoutineTrigger, routineTriggerDelivery } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
@@ -6034,12 +6034,32 @@ app.post('/api/security/update', (req: Request, res: Response) => {
   if (verdict.applied.humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = verdict.applied.humanApprovalForExternal;
   if (verdict.applied.maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = verdict.applied.maskSensitiveData;
   persistMemory();
+
+  // Echo the state *after* the classified fields are applied. The previous
+  // snapshot was captured before the assignments above, so a successful toggle
+  // handed the client the value it had just replaced — success:true next to a
+  // stale gate. A UI that trusts the response (rather than refetching) rendered
+  // the un-applied value and reported a change that had not taken effect.
+  const appliedState = applySecurityMatrixUpdate(
+    {
+      currentLevel: securityMatrixState.currentLevel,
+      humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
+      maskSensitiveData: securityMatrixState.maskSensitiveData,
+      credentialLeakProtection: securityMatrixState.credentialLeakProtection,
+    },
+    verdict.applied
+  );
+
   res.json({
     success: true,
     applied: true,
     rejected: verdict.rejected,
     message: verdict.message,
-    securityState: securityStateSnapshot,
+    securityState: {
+      ...appliedState,
+      levels: securityMatrixState.levels,
+      auditLogs: memoryState.auditLogs,
+    },
   });
 });
 
