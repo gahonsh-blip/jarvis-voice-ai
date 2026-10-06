@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 02:05 IST (2026-10-06 20:35 UTC) — window slot 9: a decided outbound-call request can no longer be decided again
+
+### Fixed
+- **`TelephonySessionManager.authorizeOutboundRequest` (`src/utils/telephonySessionManager.ts`) looked the request up by id but never checked its current status, and the route `POST /api/telephony/outbound/authorize` (`server.ts`) treated any `{ success: true }` from the manager as a fresh authorization.** A request a human had already `REJECTED` could be sent back with `decision: 'APPROVE'`; the manager flipped it to `AUTHORIZED` and reported success, `classifyOutboundAuthorization` returned `APPROVED`, and the route reached the carrier-dispatch branch — placing a call that had been explicitly rejected. An already-`AUTHORIZED` request could likewise be authorized again, a duplicate dial, and any recorded decision could be silently overwritten. The manager now refuses any request whose status is not `PENDING_AUTHORIZATION`, returning `{ success: false, request, error: 'Request already decided (status …)' }` and leaving the recorded decision untouched. The route's existing `if (!verdict.success)` guard already answers HTTP 404 and never reaches the carrier, so no route change was needed.
+
+### Tests
+- New `src/tests/outboundReauthorizationTruth.test.ts` (4 cases: re-approve refused, re-approve-after-reject refused with the record left `REJECTED`, first decision still recorded, route guard still present). Negative-validated — the new test failed `3 failed | 1 passed` against the pre-fix manager, restored → 4/4. Related suites re-run green: `outboundAuthorizationTruth` (9) and `actionExecutedRemainingSites` (6) → 3 files / 19 passed. Lint (`tsc --noEmit`) exit 0. Full suite **173 files / 2185 tests passed** (28.77 s, 0 failed). Build exit 0 (`dist/server.cjs` 1037525 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 01:36 IST (2026-10-06 20:06 UTC) — window slot 8: the blueprint deliverable toggle reports a saved tick only when it is durable
 
 ### Fixed

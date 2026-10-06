@@ -12483,3 +12483,88 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - ब्लूप्रिंट टॉगल अब केवल तभी "सफल" कहता है जब टिक सचमुच डिस्क पर सेव हो और इनपुट वैध हो; गलत बॉडी अब मना कर दी जाती है।
+
+---
+
+## Slot 9 — WORK SLOT — 2026-10-07 02:05 IST
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:05
+Window date: 2026-10-07   Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (one more site hardened).
+  `TelephonySessionManager.authorizeOutboundRequest`
+  (`src/utils/telephonySessionManager.ts`) never checked a request's current
+  status, and the route `POST /api/telephony/outbound/authorize` (`server.ts`)
+  treated any `{ success: true }` from the manager as a fresh authorization. A
+  request a human had already REJECTED could be re-sent with decision APPROVE:
+  the manager flipped it to AUTHORIZED and reported success,
+  `classifyOutboundAuthorization` returned APPROVED, and the route reached the
+  carrier-dispatch branch — dialing a call that had been explicitly rejected.
+  An already-AUTHORIZED request could also be authorized again (duplicate dial).
+  Fix: the manager now refuses any request whose status is not
+  PENDING_AUTHORIZATION, returning `{ success: false, request, error: 'Request
+  already decided (status …)' }` and leaving the recorded decision untouched.
+  The route's existing `if (!verdict.success)` guard already answers HTTP 404
+  and never reaches the carrier, so no route change was needed.
+  Evidence: `src/tests/outboundReauthorizationTruth.test.ts` (4 cases) —
+  negative-validated against the pre-fix manager: `3 failed | 1 passed`,
+  restored → 4/4. Related suites re-run green: `outboundAuthorizationTruth` (9),
+  `actionExecutedRemainingSites` (6) → 3 files / 19 passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the sweep is not exhausted;
+  unclassified `success: true` sites remain in `server.ts` / `server_tools.ts`.
+
+Remaining:
+- #1/#2 Android bridge + E2E (hardware-blocked), #50 Real Screenshot
+  (display-blocked), #55 Real Computer Operator input (input-device-blocked),
+  then the remaining unclassified success sites under item 13.
+
+Bugs Found:
+- Re-deciding an already-decided outbound-call request was accepted and dialed
+  the carrier (rejected-call placement / duplicate dial). Found by auditing
+  `authorizeOutboundRequest` for the missing status guard while sweeping
+  item-13 success sites.
+
+Bugs Fixed:
+- `authorizeOutboundRequest` now refuses a non-PENDING_AUTHORIZATION request.
+  Proven by `src/tests/outboundReauthorizationTruth.test.ts`: the new test
+  failed 3 of 4 against the pre-fix manager and passes 4/4 after the fix.
+
+Tests:    173 files / 2185 tests passed (28.77 s, 0 failed) — full npx vitest run
+Lint:     PASS — npm run lint (tsc --noEmit) exit 0
+Build:    PASS — npm run build exit 0; dist/server.cjs 1037525 bytes
+E2E:      NOT RUN — no handset / carrier in this environment
+Security: .env git-ignored; no token/key staged; no node_modules/dist tracked.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row),
+               docs/CHANGELOG.md (slot 9 entry)
+Branch:  feature/hermes-full-completion
+Commit:  413b6b7 (fix + test); docs commit follows
+Push:    succeeded — origin/feature/hermes-full-completion 75494c9..413b6b7
+
+PR:         NONE open (PR #5 was merged by the owner at 2026-10-06T07:26:11Z).
+            A fresh PR must be opened at the finalization slot.
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified artifact dist/server.cjs
+            is the deployment unit available.
+
+Blocked:
+- #1 Real Android Mobile Bridge connection — requires a paired physical handset.
+- #2 Android <-> JARVIS Server E2E test — requires a device.
+- #50 Real Screenshot — requires a display session.
+- #55 Real Computer Operator input — requires a real mouse/keyboard target.
+
+Human Approval Required:
+- Opening the PR to main at the finalization slot, and the human merge of that
+  PR. No automated merge is performed.
+
+Next Slot:
+- Continue item 13: audit the next unclassified success: true route in server.ts
+  and pin its verdict with a targeted test + negative validation.
+
+हिंदी सारांश (एक पंक्ति):
+- पहले से तय (अस्वीकृत/स्वीकृत) कॉल अनुरोध को दोबारा approve करके कॉल लगाया जा सकता था; अब दोबारा निर्णय मना कर दिया जाता है और रिकॉर्ड सुरक्षित रहता है।
