@@ -15,6 +15,11 @@ import {
   checkHumanHandoffIntent,
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
+import {
+  telephonyEngineMode,
+  telephonyEngineCanObserveCall,
+} from './telephonyGatewayTruth';
+import { resolveRawNumber } from './hardening/telephonyOwnNumberTruth';
 
 export class TelephonySessionManager {
   private static activeSessions: Map<string, TelephonySession> = new Map();
@@ -31,18 +36,20 @@ export class TelephonySessionManager {
     isSimulated?: boolean;
   }): TelephonySession {
     const callSessionId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const maskedCaller = maskPhoneNumber(params.rawCallerNumber);
-    const maskedRecipient = maskPhoneNumber(params.rawRecipientNumber || DEFAULT_CLINIC_CONFIG.phone);
+    const callerRaw = resolveRawNumber(params.rawCallerNumber);
+    const recipientRaw = resolveRawNumber(params.rawRecipientNumber);
+    const maskedCaller = maskPhoneNumber(callerRaw);
+    const maskedRecipient = maskPhoneNumber(recipientRaw);
     const permissions = loadPhonePermissions();
 
     const session: TelephonySession = {
       callSessionId,
       direction: 'inbound',
       callerIdentifier: maskedCaller,
-      callerRawNumber: params.rawCallerNumber,
+      callerRawNumber: callerRaw,
       callerVerified: false,
       recipientIdentifier: maskedRecipient,
-      recipientRawNumber: params.rawRecipientNumber || DEFAULT_CLINIC_CONFIG.phone,
+      recipientRawNumber: recipientRaw,
       language: 'hi-IN',
       state: 'RINGING',
       turns: [],
@@ -77,6 +84,7 @@ export class TelephonySessionManager {
     language?: string;
     isSimulated?: boolean;
     authorizedBy?: string;
+    ownNumber?: string;
   }): { session?: TelephonySession; error?: string } {
     const permissions = loadPhonePermissions();
     if (permissions.PHONE_OUTBOUND_CALL === 'DENIED') {
@@ -90,7 +98,7 @@ export class TelephonySessionManager {
       callSessionId,
       direction: 'outbound',
       callerIdentifier: 'HERMES JARVIS (Owner Voice Agent)',
-      callerRawNumber: DEFAULT_CLINIC_CONFIG.phone,
+      callerRawNumber: resolveRawNumber(params.ownNumber),
       callerVerified: true,
       recipientIdentifier: maskedDest,
       recipientRawNumber: params.destinationNumber,
@@ -176,6 +184,12 @@ export class TelephonySessionManager {
   }> {
     const session = this.activeSessions.get(params.callSessionId);
     const clinic = params.clinicData || DEFAULT_CLINIC_CONFIG;
+    // Clinic facts (hours, doctor availability, booking process) may only be
+    // recited as fact when a deployment has supplied verified values. The
+    // shipped DEFAULT_CLINIC_CONFIG is sample data (configured: false), so an
+    // unconfigured clinic is answered with a "not verified" reply instead of a
+    // confident recital of a real business's details.
+    const clinicVerified = clinic.configured === true;
     const utterance = (params.utterance || '').trim();
     const lower = utterance.toLowerCase();
 
@@ -285,8 +299,17 @@ export class TelephonySessionManager {
         };
       }
 
-      // If simulated or provider configured, attempt transfer
-      if (provider.isConfigured() || session?.isSimulated) {
+      // A transfer may only be CONFIRMED when a real carrier gateway can
+      // observe it. The simulator's transferCall() is hardcoded
+      // `providerConfirmed: true`, and a transfer request with no provider
+      // configured cannot be observed at all, so neither may advance the
+      // handoff to CONFIRMED.
+      const activeEngine = TelephonyProviderRegistry.getProvider();
+      const engineCanObserve = telephonyEngineCanObserveCall(
+        telephonyEngineMode(activeEngine.id, activeEngine.isConfigured()),
+      );
+
+      if (engineCanObserve && (provider.isConfigured() || session?.isSimulated)) {
         const transferRes = await provider.transferCall({
           callSessionId: params.callSessionId,
           targetNumber: clinic.phone,
@@ -317,10 +340,11 @@ export class TelephonySessionManager {
         }
       }
 
-      // If transfer unavailable or provider unconfirmed, truthfully take message
+      // Transfer could not be confirmed against a live carrier. Say so plainly
+      // rather than asserting a busy line that was never observed.
       const unavailableReply = isHindi
-        ? 'माफ़ कीजिए, वर्तमान में क्लिनिक स्टाफ उपलब्ध नहीं है या लाइन व्यस्त है। क्या आप कोई संदेश छोड़ना चाहेंगे?'
-        : 'I apologize, all staff members are currently occupied on another line. Would you like to leave a message?';
+        ? 'माफ़ कीजिए, कॉल ट्रांसफर की पुष्टि नहीं हो सकी (लाइव कैरियर उपलब्ध नहीं)। क्या आप कोई संदेश छोड़ना चाहेंगे?'
+        : 'I apologize, the call transfer could not be confirmed (no live carrier available). Would you like to leave a message?';
       if (session) {
         session.state = 'WAITING_FOR_CALLER';
         session.handoffStatus = 'FAILED';
@@ -345,7 +369,11 @@ export class TelephonySessionManager {
     const hoursKeywords = ['खुलेगा', 'खोलेगा', 'समय', 'कितने बजे', 'hours', 'timing', 'open', 'close', 'schedule', 'opening time'];
     if (hoursKeywords.some((k) => lower.includes(k))) {
       let hoursText = '';
-      if (isHindi) {
+      if (!clinicVerified) {
+        hoursText = isHindi
+          ? 'इस क्लिनिक के खुलने का समय इस कॉल में सत्यापित नहीं है। कृपया क्लिनिक स्टाफ से पुष्टि करें, मैं आपके लिए संदेश ले सकता हूँ।'
+          : 'The clinic opening hours are not verified for this call. Please confirm with clinic staff; I can take a message for them.';
+      } else if (isHindi) {
         hoursText = `क्लिनिक सोमवार से शुक्रवार सुबह 9:00 बजे से शाम 6:00 बजे तक और शनिवार को सुबह 9:00 बजे से दोपहर 2:00 बजे तक खुला रहता है। रविवार को नियमित ओपीडी बंद रहती है।`;
       } else {
         hoursText = `Our clinic is open Monday to Friday from 9:00 AM to 6:00 PM, and on Saturday from 9:00 AM to 2:00 PM. We are closed on Sunday for routine consultations.`;
@@ -374,7 +402,11 @@ export class TelephonySessionManager {
     // 5. Appointment Process / Booking Intent
     const appointmentKeywords = ['अपॉइंटमेंट', 'appointment', 'booking', 'बुक', 'मिलना है', 'स्लॉट', 'slot', 'मिलेंगे'];
     if (appointmentKeywords.some((k) => lower.includes(k))) {
-      const apptText = isHindi ? clinic.appointmentProcess.hi : clinic.appointmentProcess.en;
+      const apptText = !clinicVerified
+        ? (isHindi
+          ? 'इस क्लिनिक की अपॉइंटमेंट प्रक्रिया इस कॉल में सत्यापित नहीं है। कृपया क्लिनिक स्टाफ से पुष्टि करें, मैं आपके लिए संदेश ले सकता हूँ।'
+          : 'The clinic appointment process is not verified for this call. Please confirm with clinic staff; I can take a message for them.')
+        : (isHindi ? clinic.appointmentProcess.hi : clinic.appointmentProcess.en);
       if (session) {
         session.state = 'WAITING_FOR_CALLER';
         session.currentIntent = 'appointment_process';
@@ -398,18 +430,22 @@ export class TelephonySessionManager {
     // 6. Weather Telemetry Intent (Section C & Q)
     const weatherKeywords = ['मौसम', 'weather', 'बारिश', 'तापमान', 'rain', 'forecast', 'खराब है', 'धूप'];
     if (weatherKeywords.some((k) => lower.includes(k))) {
+      // No connected weather source means no reading. The previous default
+      // spoke an invented temperature band ("25 to 28 degrees Celsius") as if
+      // it were current conditions on a live call. Report the gap instead.
+      const weatherTemp = params.weatherData?.temp;
+      const hasWeatherTemp = weatherTemp !== undefined && weatherTemp !== null && weatherTemp !== '';
       let weatherReply = '';
-      if (params.weatherData) {
-        const temp = params.weatherData.temp || '26°C';
-        const cond = params.weatherData.condition || 'Clear';
-        const city = params.weatherData.city || 'Gurugram / SFO';
+      if (hasWeatherTemp) {
+        const cond = params.weatherData.condition || 'Unknown';
+        const city = params.weatherData.city || 'Unknown location';
         weatherReply = isHindi
-          ? `वर्तमान मौसम डेटा के अनुसार ${city} में तापमान ${temp} है और मौसम ${cond} है। कोई गंभीर मौसम चेतावनी नहीं है।`
-          : `According to current meteorological telemetry for ${city}, it is currently ${temp} with ${cond} conditions.`;
+          ? `वर्तमान मौसम डेटा के अनुसार ${city} में तापमान ${weatherTemp} है और मौसम ${cond} है। कोई गंभीर मौसम चेतावनी नहीं है।`
+          : `According to current meteorological telemetry for ${city}, it is currently ${weatherTemp} with ${cond} conditions.`;
       } else {
         weatherReply = isHindi
-          ? 'वर्तमान मौसम साफ और सामान्य है, तापमान लगभग 25 से 28 डिग्री सेल्सियस के आसपास है।'
-          : 'Current weather conditions are normal and clear with temperatures around 25 to 28 degrees Celsius.';
+          ? 'इस कॉल में कोई मौसम स्रोत कनेक्टेड नहीं है, इसलिए वर्तमान तापमान या मौसम की जानकारी उपलब्ध नहीं है।'
+          : 'No weather source is connected to this call, so no current temperature or conditions are available.';
       }
 
       if (session) {
@@ -441,9 +477,13 @@ export class TelephonySessionManager {
     // 7. Doctor Availability Intent
     const doctorAvailKeywords = ['उपलब्ध', 'available', 'बैठे हैं', 'डॉक्टर हैं', 'in clinic', 'doctor present'];
     if (doctorAvailKeywords.some((k) => lower.includes(k))) {
-      const availReply = isHindi
-        ? `${clinic.doctorName} निर्धारित समय अनुसार क्लिनिक में परामर्श के लिए उपस्थित हैं। क्या आप उनके साथ अपॉइंटमेंट बुक करना चाहते हैं?`
-        : `${clinic.doctorName} is available for scheduled consultations during operating hours. Would you like to book an appointment slot?`;
+      const availReply = !clinicVerified
+        ? (isHindi
+          ? 'डॉक्टर की उपलब्धता इस कॉल में सत्यापित नहीं है। कृपया क्लिनिक स्टाफ से पुष्टि करें, मैं आपके लिए संदेश ले सकता हूँ।'
+          : 'The doctor\u2019s availability is not verified for this call. Please confirm with clinic staff; I can take a message for them.')
+        : (isHindi
+          ? `${clinic.doctorName} निर्धारित समय अनुसार क्लिनिक में परामर्श के लिए उपस्थित हैं। क्या आप उनके साथ अपॉइंटमेंट बुक करना चाहते हैं?`
+          : `${clinic.doctorName} is available for scheduled consultations during operating hours. Would you like to book an appointment slot?`);
       if (session) {
         session.state = 'WAITING_FOR_CALLER';
         session.currentIntent = 'doctor_availability';
@@ -560,6 +600,13 @@ export class TelephonySessionManager {
     replyText: string;
     shouldEndCall: boolean;
     silenceCount: number;
+    /**
+     * Whether a live session was found. A missing id cannot be distinguished
+     * from a live first timeout by `silenceCount` alone (both read 1), so the
+     * route reported `success: true` for a stale id. This field states the
+     * fact directly.
+     */
+    applied: boolean;
   } {
     const session = this.activeSessions.get(callSessionId);
     const count = (session?.silenceCount || 0) + 1;
@@ -572,6 +619,7 @@ export class TelephonySessionManager {
         replyText: isHindi ? 'क्या आप मेरी आवाज़ सुन पा रहे हैं?' : 'Hello, are you still there? Can you hear me?',
         shouldEndCall: false,
         silenceCount: count,
+        applied: Boolean(session),
       };
     } else if (count === 2) {
       return {
@@ -580,6 +628,7 @@ export class TelephonySessionManager {
           : 'I am not receiving any audio on the line. If you are speaking, please repeat.',
         shouldEndCall: false,
         silenceCount: count,
+        applied: Boolean(session),
       };
     } else {
       if (session) session.state = 'ENDING';
@@ -589,6 +638,7 @@ export class TelephonySessionManager {
           : 'Ending call due to lack of audio on the line. Please feel free to call back. Goodbye.',
         shouldEndCall: true,
         silenceCount: count,
+        applied: Boolean(session),
       };
     }
   }

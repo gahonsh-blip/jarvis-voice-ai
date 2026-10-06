@@ -20,6 +20,8 @@ import {
   formatLocalTurnFollowUp,
   formatLocalTurnReply,
 } from './hardening/callSummaryTruth';
+import { normalizeLiveTurn } from './hardening/liveTurnTruth';
+import { DURATION_NOT_RECORDED, recordedCallDurationSeconds } from './hardening/callDurationTruth';
 
 const STORAGE_KEY_CALLS = 'hermes_jarvis_telephony_calls_v1';
 const STORAGE_KEY_SETTINGS = 'hermes_jarvis_telephony_settings_v1';
@@ -172,19 +174,30 @@ export async function processTelephonyTurn(params: {
     const res = await fetch('/api/telephony/handle-turn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
+      // The server destructures `userUtterance`, `conversationHistory`,
+      // `callerPersona`, `callObjective`, `aiPersona` and `isOutbound`. Sending
+      // the engine's own field names (`latestInput`, `dialogueHistory`, ...)
+      // left every one of them at its default, so the route answered a generic
+      // line and still reported `success: true`.
+      body: JSON.stringify({
+        userUtterance: params.latestInput,
+        conversationHistory: params.dialogueHistory,
+        callerPersona: {
+          name: params.direction === 'outbound' ? params.recipientName : params.callerName,
+        },
+        callObjective: params.objective,
+        aiPersona: params.aiPersona,
+        isOutbound: params.direction === 'outbound',
+      }),
     });
 
     if (res.ok) {
       const data = await res.json();
-      return {
-        replyText: data.replyText,
-        whisperTip: data.whisperTip,
-        sentiment: data.sentiment || 'neutral',
-        intent: data.intent || 'conversation',
-        shouldEndCall: !!data.shouldEndCall,
-        followUpActions: data.followUpActions || [],
-      };
+      // The server answers `{ success, turn: { replyText, whisperTip, ... },
+      // source }`. Reading `replyText` off the top level returned `undefined`
+      // against the live server, so the transcript gained an empty spoken turn
+      // and the whisper tip was dropped. Lift the turn out of the envelope.
+      return normalizeLiveTurn(data);
     }
   } catch (err) {
     console.warn('[Telephony Engine] Server handle-turn offline, using local fallback:', err);
@@ -512,7 +525,8 @@ export function generateCallHistoryCsv(history: CallRecord[]): string {
     call.recipientNumber || '',
     call.startTime || '',
     call.endTime || '',
-    call.durationSeconds ?? 0,
+    // Never export an invented 0 for an unmeasured call; name the gap instead.
+    recordedCallDurationSeconds(call) ?? DURATION_NOT_RECORDED,
     call.status || '',
     call.mode || '',
     call.sentiment || '',

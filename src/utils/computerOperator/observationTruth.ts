@@ -192,3 +192,20 @@ export function observationAmbiguityNotice(
   }
   return null;
 }
+
+/**
+ * Whether a screen observation actually inspected the host desktop.
+ *
+ * True only when the observation came from a host-backed source and is not
+ * ambiguous. `POST /api/computer-operator/observe` answered `success: true` for
+ * the built-in illustrative view and for an unreachable host alike, so a caller
+ * reading the flag believed the screen had been inspected when nothing was read.
+ * This mirrors `screenInspectionExecuted` in `operatorReplyTruth.ts`, the same
+ * predicate the `/api/chat` `inspect_screen` reply already uses.
+ */
+export function observationPerformed(
+  observation: ScreenObservation | null | undefined,
+  isHostBacked: boolean
+): boolean {
+  return screenSyncState(observation ?? null, !isHostBacked) === 'OBSERVED';
+}

@@ -41,6 +41,8 @@ import {
   FileVideo,
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
+import { describeStagedChannel } from '../utils/hardening/youtubeChannelTruth';
+import { oauthConnectionNotice } from '../utils/hardening/oauthAccountNoticeTruth';
 import {
   classifyProviderTestResponse,
   verifiedAccountName,
@@ -151,10 +153,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       if (event.data?.type === 'LINKEDIN_OAUTH_SUCCESS') {
         setIsConnectingOAuth(false);
         setOauthError(null);
-        setOauthNotice(`✅ Successfully authorized Personal Profile for ${event.data.member?.name || 'LinkedIn Member'}!`);
+        const linkedinNotice = oauthConnectionNotice('linkedin', event.data.member?.name);
+        setOauthNotice(linkedinNotice.notice);
         fetchPlatforms();
         fetchPosts();
-        onSpeak(`LinkedIn personal profile connected successfully for ${event.data.member?.name || 'Member'}, Sir.`);
+        onSpeak(linkedinNotice.spoken);
       } else if (event.data?.type === 'LINKEDIN_OAUTH_ERROR') {
         setIsConnectingOAuth(false);
         setOauthError(`LinkedIn OAuth error: ${event.data.error || 'Authorization cancelled'}`);
@@ -164,10 +167,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         setIsConnectingOAuth(false);
         setOauthError(null);
         setIsGoogleTestingModeBlocked(false);
-        setOauthNotice(`✅ Successfully connected YouTube Channel "${event.data.channel?.channelTitle || 'Channel'}"!`);
+        const youtubeNotice = oauthConnectionNotice('youtube', event.data.channel?.channelTitle);
+        setOauthNotice(youtubeNotice.notice);
         fetchPlatforms();
         fetchPosts();
-        onSpeak(`YouTube channel connected successfully for ${event.data.channel?.channelTitle || 'Channel'}, Sir.`);
+        onSpeak(youtubeNotice.spoken);
       } else if (event.data?.type === 'YOUTUBE_OAUTH_ERROR') {
         setIsConnectingOAuth(false);
         const errMsg = event.data.error || 'Authorization cancelled';
@@ -303,16 +307,24 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         }),
       });
       const data = await res.json();
-      if (data.success && data.draft) {
-        if (data.draft.videoTitle) setYtVideoTitle(data.draft.videoTitle.slice(0, 100));
-        if (data.draft.videoDescription || data.draft.content) {
-          setYtVideoDesc(data.draft.videoDescription || data.draft.content);
+      // The route returns the draft as `post`; reading `data.draft` meant the
+      // AI title/description/hashtags were never applied. Read `post` and report
+      // whether the provider wrote it or a local template stood in.
+      const draft = data.post ?? data.draft;
+      if (data.success && draft) {
+        if (draft.videoTitle) setYtVideoTitle(draft.videoTitle.slice(0, 100));
+        if (draft.videoDescription || draft.content) {
+          setYtVideoDesc(draft.videoDescription || draft.content);
         }
-        if (Array.isArray(data.draft.hashtags) && data.draft.hashtags.length > 0) {
-          const newTags = data.draft.hashtags.map((h: string) => h.replace(/^#/, '').trim()).filter(Boolean);
+        if (Array.isArray(draft.hashtags) && draft.hashtags.length > 0) {
+          const newTags = draft.hashtags.map((h: string) => h.replace(/^#/, '').trim()).filter(Boolean);
           setYtVideoTags(Array.from(new Set([...ytVideoTags, ...newTags])));
         }
-        onSpeak('AI-generated YouTube title, description, and hashtags staged, Sir.');
+        if (draft.generationSource === 'local_template') {
+          onSpeak('No AI provider was available, so a local template was staged for the YouTube title, description, and hashtags, Sir. It is not AI-generated.');
+        } else {
+          onSpeak('AI-generated YouTube title, description, and hashtags staged, Sir.');
+        }
       }
     } catch (err) {
       console.warn('AI generation for YouTube failed:', err);
@@ -491,6 +503,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         setOauthNotice('LinkedIn personal profile disconnected.');
         fetchPlatforms();
         onSpeak('LinkedIn personal profile disconnected, Sir.');
+      } else {
+        // Nothing was linked, so nothing was disconnected — say so instead of
+        // rendering the success notice the server used to always return.
+        setOauthNotice(data.message || 'No LinkedIn account is connected.');
+        fetchPlatforms();
       }
     } catch (err) {
       console.warn('Disconnect error:', err);
@@ -543,6 +560,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         setOauthNotice('YouTube channel disconnected.');
         fetchPlatforms();
         onSpeak('YouTube channel disconnected, Sir.');
+      } else {
+        setOauthNotice(data.message || 'No YouTube channel is connected.');
+        fetchPlatforms();
       }
     } catch (err) {
       console.warn('Disconnect error:', err);
@@ -688,7 +708,12 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       if (data.success && data.post) {
         setSelectedPost(data.post);
         setPosts((prev) => prev.map((p) => (p.id === data.post.id ? data.post : p)));
-        onSpeak('YouTube video parameters updated.');
+        onSpeak(data.message || 'YouTube video parameters updated.');
+      } else {
+        // The route only claims success when a field actually changed. A repeat
+        // submission or a blank form is a no-op, and the operator is told so
+        // rather than hearing that an update happened.
+        onSpeak(data.message || 'No YouTube draft change was applied.');
       }
     } catch (err) {
       console.warn('Update draft error:', err);
@@ -983,7 +1008,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                         </div>
                         <p className="text-[11px] text-slate-400 font-mono">
                           {isYouTubeConnected
-                            ? (ytOauth?.channelTitle || 'Connected YouTube Channel')
+                            ? describeStagedChannel(ytOauth?.channelTitle)
                             : 'OAuth Disconnected — Connect via Platform Hub'}
                         </p>
                       </div>
@@ -1112,6 +1137,13 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                   <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs leading-relaxed whitespace-pre-wrap font-sans shadow-inner">
                     {selectedPost.content}
                   </div>
+
+                  {selectedPost.generationSource === 'local_template' && (
+                    <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800 text-[11px] leading-relaxed text-amber-200 font-mono">
+                      {selectedPost.generationNotice ||
+                        'No AI provider produced this draft; a fixed local template was used. This is not AI-generated text.'}
+                    </div>
+                  )}
                 </div>
 
                 {/* Creative Visual Asset Prompt */}
@@ -1630,7 +1662,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col gap-2 font-mono text-xs">
                       <div className="flex justify-between">
                         <span className="text-slate-400">Target Channel:</span>
-                        <span className="text-slate-200 font-bold">{ytStagedPost.targetChannel || 'Connected YouTube Channel'}</span>
+                        <span className="text-slate-200 font-bold">{describeStagedChannel(ytStagedPost.targetChannel)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Video Title:</span>
@@ -1949,7 +1981,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           )}
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-100 text-xs">{ytOauth.channelTitle || 'YouTube Channel'}</span>
+                              <span className="font-bold text-slate-100 text-xs">{describeStagedChannel(ytOauth.channelTitle)}</span>
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
                                 {ytOauth.authType || 'OAuth 2.0'} Active
                               </span>

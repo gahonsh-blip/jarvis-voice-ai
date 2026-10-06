@@ -26,6 +26,7 @@ import {
 } from '../utils/mobileNotificationPrivacy';
 import {
   getBridgeConnectionState,
+  bridgeStatusTone,
   loadBridgeRegistration,
   getPendingQueue,
   clearPendingQueue,
@@ -119,7 +120,9 @@ export const MobileBridgeModal: React.FC<Props> = ({
     if (isOpen) refresh();
   }, [isOpen]);
 
-  const bridgeConnected = bridgeState === 'CONNECTED' || bridgeState === 'PERMISSION_REQUIRED' || bridgeState === 'LIMITED_CAPABILITY';
+  // Only a genuinely CONNECTED device renders green; PARTIALLY_CONNECTED,
+  // LIMITED_CAPABILITY and PERMISSION_REQUIRED are degraded (amber), not "live".
+  const bridgeTone = bridgeStatusTone(bridgeState);
 
   const grantNotificationAccess = () => {
     if (typeof window === 'undefined') return;
@@ -411,8 +414,8 @@ export const MobileBridgeModal: React.FC<Props> = ({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className={`text-[9px] px-2 py-1 rounded font-mono font-bold ${bridgeConnected ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/40' : 'bg-slate-900 text-slate-400 border border-slate-700'}`}>
-              {bridgeConnected ? <Wifi className="w-3 h-3 inline mr-1" /> : <WifiOff className="w-3 h-3 inline mr-1" />}
+            <span className={`text-[9px] px-2 py-1 rounded font-mono font-bold ${bridgeTone === 'live' ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/40' : bridgeTone === 'degraded' ? 'bg-amber-900/60 text-amber-300 border border-amber-700/40' : 'bg-slate-900 text-slate-400 border border-slate-700'}`}>
+              {bridgeTone === 'live' ? <Wifi className="w-3 h-3 inline mr-1" /> : <WifiOff className="w-3 h-3 inline mr-1" />}
               {bridgeState}
             </span>
             <button onClick={handleClose} className="p-2 rounded-lg hover:bg-slate-800 text-slate-400" aria-label="Close">

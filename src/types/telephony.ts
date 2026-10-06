@@ -113,7 +113,9 @@ export const DEFAULT_TELEPHONY_SETTINGS: TelephonySettings = {
   provider: 'browser_webrtc_simulator',
   twilioAccountSid: '',
   twilioAuthToken: '',
-  twilioPhoneNumber: '+1 (555) 728-4827', // JARVIS simulated carrier number
+  // No placeholder number: an unconfigured app line is left empty and the UI
+  // states that no number was recorded, rather than displaying an invented one.
+  twilioPhoneNumber: '',
   autoAnswerInbound: true,
   autoAnswerDelaySeconds: 2,
   aiReceptionistGreeting:

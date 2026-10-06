@@ -61,6 +61,37 @@ describe('engine mode says only what was observed', () => {
   });
 });
 
+describe('getActiveStatus never reports a simulator as usable telephony', () => {
+  it('reports the active simulator as NOT_CONFIGURED despite its unconditional isConfigured()', () => {
+    const original = TelephonyProviderRegistry.getProvider().id;
+    try {
+      TelephonyProviderRegistry.setActiveProvider(SIMULATION_PROVIDER_ID);
+      // The simulator's isConfigured() is unconditionally true, but there is no
+      // PSTN carrier behind it, so READY would be a fake success.
+      expect(TelephonyProviderRegistry.getActiveStatus()).toBe('NOT_CONFIGURED');
+    } finally {
+      TelephonyProviderRegistry.setActiveProvider(original);
+    }
+  });
+
+  it('still reports a real configured carrier as READY', () => {
+    const original = TelephonyProviderRegistry.getProvider().id;
+    try {
+      TelephonyProviderRegistry.setActiveProvider('twilio');
+      const twilio = TelephonyProviderRegistry.getProvider();
+      // Only meaningful when twilio credentials are present; otherwise the
+      // honest answer is NOT_CONFIGURED and this assertion is skipped.
+      if (twilio.isConfigured()) {
+        expect(TelephonyProviderRegistry.getActiveStatus()).toBe('READY');
+      } else {
+        expect(TelephonyProviderRegistry.getActiveStatus()).toBe('NOT_CONFIGURED');
+      }
+    } finally {
+      TelephonyProviderRegistry.setActiveProvider(original);
+    }
+  });
+});
+
 describe('selection applied is a measured comparison', () => {
   it('is true only when the saved engine is the serving provider', () => {
     expect(telephonySelectionApplied('twilio', 'twilio')).toBe(true);

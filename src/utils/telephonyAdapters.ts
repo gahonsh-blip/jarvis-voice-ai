@@ -4,10 +4,91 @@ import {
   TelephonyStatus,
 } from '../types/telephonyProvider';
 import { TELEPHONY_TWIML_TURN_PATH } from './telephonyEndpointTruth';
+import { SIMULATION_PROVIDER_ID } from './telephonyGatewayTruth';
 
 /**
  * Base abstract or utility functions for Telephony Adapters
  */
+
+/**
+ * Returned by the adapter methods that only build a provider document. None of
+ * them issues a carrier API call, and the document is handed back to a caller
+ * that discards it rather than returned to the provider in a live response, so
+ * the action cannot be reported as done. `raw` still carries the document for a
+ * live webhook response to use.
+ */
+export const TELEPHONY_DOCUMENT_NOT_DELIVERED =
+  'TELEPHONY_DOCUMENT_NOT_DELIVERED: this adapter built the provider document but did not deliver it to the carrier in a live response, so the action is unconfirmed.';
+
+/**
+ * Returned by an outbound dial that cannot name a carrier-reachable callback
+ * URL. The carrier is given this URL to reach back on for every call turn; a
+ * fabricated or private host makes the provider accept a call it can never
+ * complete, so the dial is refused rather than reported as placed.
+ */
+export const TELEPHONY_WEBHOOK_BASE_URL_MISSING =
+  'TELEPHONY_WEBHOOK_BASE_URL_MISSING: no carrier-reachable webhook base URL is configured (set TELEPHONY_WEBHOOK_BASE_URL to a public https URL), so the call-answer callback cannot be given to the provider.';
+
+/**
+ * Returned by an outbound dial whose carrier response carried no call id. A 2xx
+ * HTTP response is not proof that a call resource was created: an empty or
+ * missing `sid` used to yield `{ success: true, providerCallId: undefined }`,
+ * which the route records as a placed call with no identifier. The dial is
+ * refused until the carrier actually names the call it created.
+ */
+export const TELEPHONY_DIAL_UNCONFIRMED_NO_SID =
+  'TELEPHONY_DIAL_UNCONFIRMED_NO_SID: the carrier answered without a call id, so this process cannot confirm the outbound call was created.';
+
+/**
+ * Returned by every provider webhook handler. Like the document-only methods
+ * above, the handler neither verifies the provider signature nor performs a
+ * call action, so receiving a request is not evidence that anything was done.
+ * It used to answer `success: true` unconditionally — the same fake success
+ * item 13 removes elsewhere. `success` therefore stays false, while `received`
+ * records the only thing this handler can honestly attest to.
+ */
+export const TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED =
+  'TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED: the webhook was received but this handler verifies no provider signature and performs no call action, so it cannot report a verified success.';
+
+/** The only honest payload a signature-less, action-less webhook handler can return. */
+export function telephonyWebhookAcknowledgement(
+  provider: string,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    success: false,
+    received: true,
+    provider,
+    error: TELEPHONY_WEBHOOK_RECEIVED_UNVERIFIED,
+    ...extra,
+  };
+}
+
+/**
+ * Whether a webhook base URL is one a PSTN carrier could actually reach back
+ * on: an absolute `https` URL whose host is not loopback, a `.local` name, or a
+ * private (RFC 1918) address. `http`, `localhost`, `127.0.0.1`, `0.0.0.0`,
+ * `10/8`, `192.168/16` and `172.16/12` are all unreachable from the public
+ * internet and must not be handed to a carrier as a callback.
+ */
+export function isCarrierReachableWebhookBaseUrl(raw: string | undefined | null): boolean {
+  const value = (raw || '').trim();
+  if (!value) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') return false;
+  if (host.endsWith('.local')) return false;
+  if (/^10\./.test(host)) return false;
+  if (/^192\.168\./.test(host)) return false;
+  if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)) return false;
+  return true;
+}
 
 /**
  * 1. Twilio Telephony Provider Adapter
@@ -48,7 +129,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       return { success: false, error: 'TELEPHONY_NOT_CONFIGURED: Twilio credentials missing' };
     }
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         action: 'TwiML_ANSWER',
         callSessionId: params.callSessionId,
@@ -62,7 +144,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
     }
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         action: 'TwiML_REJECT',
         reason: params.reason || 'busy',
@@ -76,7 +159,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
     }
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         action: 'TwiML_HANGUP',
         callSessionId: params.callSessionId,
@@ -95,9 +179,17 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       return { success: false, error: 'TELEPHONY_NOT_CONFIGURED: Cannot place outbound PSTN call without valid credentials.' };
     }
 
+    // The carrier is handed this URL and calls back on it for every turn. A
+    // fabricated default or a private host cannot be reached, so the call would
+    // be accepted by the provider but never complete — refuse instead of
+    // reporting a placed call that could never connect.
+    if (!isCarrierReachableWebhookBaseUrl(this.webhookBaseUrl)) {
+      return { success: false, error: TELEPHONY_WEBHOOK_BASE_URL_MISSING };
+    }
+
     try {
       const from = params.fromNumber || this.phoneNumber;
-      const callbackUrl = `${this.webhookBaseUrl || 'https://hermes-jarvis.local'}${TELEPHONY_TWIML_TURN_PATH}`;
+      const callbackUrl = `${this.webhookBaseUrl}${TELEPHONY_TWIML_TURN_PATH}`;
       
       const auth = Buffer.from(`${this.accountSid}:${this.authToken}`).toString('base64');
       const body = new URLSearchParams({
@@ -121,7 +213,15 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
       }
 
       const data = await response.json();
-      return { success: true, providerCallId: data.sid };
+      // Twilio answers a created call with an `sid` such as `CA...`. A 2xx with
+      // no id is not proof a call resource exists, and `providerCallId:
+      // undefined` would still read to the caller as a placed call. Require the
+      // carrier to name the call before reporting success.
+      const sid = typeof data?.sid === 'string' ? data.sid.trim() : '';
+      if (!sid) {
+        return { success: false, error: TELEPHONY_DIAL_UNCONFIRMED_NO_SID };
+      }
+      return { success: true, providerCallId: sid };
     } catch (err: any) {
       return { success: false, error: `Twilio Network Error: ${err.message}` };
     }
@@ -132,7 +232,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
     const voice = isHindi ? 'Polly.Aditi' : 'Polly.Matthew';
     const lang = isHindi ? 'hi-IN' : 'en-IN';
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         twiml: `<Response><Say voice="${voice}" language="${lang}">${params.audioUrlOrText}</Say></Response>`,
       },
@@ -141,7 +242,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
 
   async streamAudio(params: { callSessionId: string; streamUrl: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         twiml: `<Response><Connect><Stream url="${params.streamUrl}" /></Connect></Response>`,
       },
@@ -152,7 +254,8 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
     const lang = params.language || 'hi-IN';
     const timeoutSec = Math.round((params.timeoutMs || 5000) / 1000);
     return {
-      success: true,
+      success: false,
+      error: TELEPHONY_DOCUMENT_NOT_DELIVERED,
       raw: {
         twiml: `<Response>${params.promptText ? `<Say language="${lang}">${params.promptText}</Say>` : ''}<Gather input="speech" language="${lang}" timeout="${timeoutSec}" action="/api/telephony/twiml/turn"/></Response>`,
       },
@@ -194,7 +297,7 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
   }
 
   async handleWebhook(req: any, res: any): Promise<any> {
-    return res.json({ success: true, provider: 'twilio' });
+    return res.json(telephonyWebhookAcknowledgement('twilio'));
   }
 }
 
@@ -220,17 +323,17 @@ export class TelnyxTelephonyProvider implements TelephonyProvider {
 
   async answerIncomingCall(params: { callSessionId: string; greeting?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { command: 'answer', callSessionId: params.callSessionId } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'answer', callSessionId: params.callSessionId } };
   }
 
   async rejectIncomingCall(params: { callSessionId: string; reason?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { command: 'reject', callSessionId: params.callSessionId } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'reject', callSessionId: params.callSessionId } };
   }
 
   async endCall(params: { callSessionId: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { command: 'hangup', callSessionId: params.callSessionId } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'hangup', callSessionId: params.callSessionId } };
   }
 
   async startOutboundCall(params: {
@@ -248,15 +351,15 @@ export class TelnyxTelephonyProvider implements TelephonyProvider {
   }
 
   async playAudio(params: { callSessionId: string; audioUrlOrText: string; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { command: 'speak', text: params.audioUrlOrText } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'speak', text: params.audioUrlOrText } };
   }
 
   async streamAudio(params: { callSessionId: string; streamUrl: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { command: 'streaming_start', url: params.streamUrl } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'streaming_start', url: params.streamUrl } };
   }
 
   async collectSpeech(params: { callSessionId: string; promptText?: string; timeoutMs?: number; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { command: 'gather_using_speak', language: params.language || 'hi-IN' } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { command: 'gather_using_speak', language: params.language || 'hi-IN' } };
   }
 
   async transferCall(params: { callSessionId: string; targetNumber: string }): Promise<{ success: boolean; providerConfirmed: boolean; message?: string; raw?: any; error?: string }> {
@@ -279,7 +382,7 @@ export class TelnyxTelephonyProvider implements TelephonyProvider {
   }
 
   async handleWebhook(req: any, res: any): Promise<any> {
-    return res.json({ success: true, provider: 'telnyx' });
+    return res.json(telephonyWebhookAcknowledgement('telnyx'));
   }
 }
 
@@ -305,17 +408,17 @@ export class PlivoTelephonyProvider implements TelephonyProvider {
 
   async answerIncomingCall(params: { callSessionId: string; greeting?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { plivoXml: `<Response><Speak>${params.greeting || 'Hello'}</Speak></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Speak>${params.greeting || 'Hello'}</Speak></Response>` } };
   }
 
   async rejectIncomingCall(params: { callSessionId: string; reason?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { plivoXml: `<Response><Hangup reason="busy"/></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Hangup reason="busy"/></Response>` } };
   }
 
   async endCall(params: { callSessionId: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
     if (!this.isConfigured()) return { success: false, error: 'TELEPHONY_NOT_CONFIGURED' };
-    return { success: true, raw: { plivoXml: `<Response><Hangup/></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Hangup/></Response>` } };
   }
 
   async startOutboundCall(params: {
@@ -331,15 +434,15 @@ export class PlivoTelephonyProvider implements TelephonyProvider {
   }
 
   async playAudio(params: { callSessionId: string; audioUrlOrText: string; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { plivoXml: `<Response><Speak>${params.audioUrlOrText}</Speak></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Speak>${params.audioUrlOrText}</Speak></Response>` } };
   }
 
   async streamAudio(params: { callSessionId: string; streamUrl: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { plivoXml: `<Response><Stream>${params.streamUrl}</Stream></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><Stream>${params.streamUrl}</Stream></Response>` } };
   }
 
   async collectSpeech(params: { callSessionId: string; promptText?: string; timeoutMs?: number; language?: string }): Promise<{ success: boolean; raw?: any; error?: string }> {
-    return { success: true, raw: { plivoXml: `<Response><GetDigits action="/api/telephony/plivo/digits"/></Response>` } };
+    return { success: false, error: TELEPHONY_DOCUMENT_NOT_DELIVERED, raw: { plivoXml: `<Response><GetDigits action="/api/telephony/plivo/digits"/></Response>` } };
   }
 
   async transferCall(params: { callSessionId: string; targetNumber: string }): Promise<{ success: boolean; providerConfirmed: boolean; message?: string; raw?: any; error?: string }> {
@@ -359,7 +462,7 @@ export class PlivoTelephonyProvider implements TelephonyProvider {
   }
 
   async handleWebhook(req: any, res: any): Promise<any> {
-    return res.json({ success: true, provider: 'plivo' });
+    return res.json(telephonyWebhookAcknowledgement('plivo'));
   }
 }
 
@@ -470,7 +573,7 @@ export class SimulatedTestTelephonyProvider implements TelephonyProvider {
   }
 
   async handleWebhook(req: any, res: any): Promise<any> {
-    return res.json({ success: true, simulationMarker: 'SIMULATION_ONLY' });
+    return res.json(telephonyWebhookAcknowledgement('simulation_test_provider', { simulationMarker: 'SIMULATION_ONLY' }));
   }
 }
 
@@ -527,6 +630,13 @@ export class TelephonyProviderRegistry {
 
   static getActiveStatus(): TelephonyStatus {
     const active = this.getProvider();
+    // A simulation adapter has no PSTN carrier, so it is never a usable
+    // telephony status no matter what its isConfigured() claims ("always ready
+    // for tests"). Reporting READY here is what let the offline engine dial
+    // through the simulator believing a carrier was configured.
+    if (active.id === SIMULATION_PROVIDER_ID) {
+      return 'NOT_CONFIGURED';
+    }
     if (!active.isConfigured()) {
       return 'NOT_CONFIGURED';
     }

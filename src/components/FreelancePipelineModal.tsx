@@ -14,6 +14,7 @@ import {
   Check,
 } from 'lucide-react';
 import { FreelanceLead } from '../types';
+import { formatLeadBudget } from '../utils/freelanceLeadTruth';
 
 interface Props {
   isOpen: boolean;
@@ -29,6 +30,13 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
   const [rawRequirement, setRawRequirement] = useState<string>('');
   const [budgetAmount, setBudgetAmount] = useState<number>(65000);
   const [copied, setCopied] = useState<boolean>(false);
+  // The server reports an update that changed nothing (an unknown status or a
+  // repeat of the stored one) as success:false; the operator is told rather
+  // than shown a silent no-op.
+  const [statusNotice, setStatusNotice] = useState<string>('');
+  // A create-lead submission the server refused (no real field supplied) must
+  // keep the form open and say so, not close as though a client was entered.
+  const [createNotice, setCreateNotice] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
@@ -53,6 +61,7 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
 
   const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateNotice('');
     try {
       const res = await fetch('/api/freelance/create-lead', {
         method: 'POST',
@@ -71,13 +80,17 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
         setShowNewLeadModal(false);
         setClientName('');
         setRawRequirement('');
+      } else {
+        // The server stored nothing; keep the form open and show its reason.
+        setCreateNotice(data.message || 'The lead was not stored.');
       }
     } catch (err) {
       console.warn('Create lead failed:', err);
+      setCreateNotice('The lead was not stored — the server could not be reached.');
     }
   };
 
-  const handleUpdateStatus = async (leadId: string, status: any) => {
+  const handleUpdateStatus = async (leadId: string, status: string) => {
     try {
       const res = await fetch('/api/freelance/update-status', {
         method: 'POST',
@@ -86,13 +99,17 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
       });
       const data = await res.json();
       if (data.success) {
+        setStatusNotice('');
         fetchLeads();
         if (selectedLead?.id === leadId) {
           setSelectedLead(data.lead);
         }
+      } else {
+        setStatusNotice(data.message || 'Status was not changed.');
       }
     } catch (err) {
       console.warn('Update lead status failed:', err);
+      setStatusNotice('Status update request failed.');
     }
   };
 
@@ -178,7 +195,7 @@ ${selectedLead.quotation.milestones.map((m, i) => `${i + 1}. ${m.title} - ₹${m
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-100 truncate">{lead.clientName}</span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300">
-                      ₹{lead.budgetEstimate.amount.toLocaleString()}
+                      {formatLeadBudget(lead.budgetEstimate.amount)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-slate-400">
@@ -284,6 +301,12 @@ ${selectedLead.quotation.milestones.map((m, i) => `${i + 1}. ${m.title} - ₹${m
                   Delivered & Closed
                 </button>
               </div>
+              {statusNotice && (
+                <div className="flex items-center gap-1.5 text-xs font-mono text-amber-300">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{statusNotice}</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="w-full md:w-7/12 p-8 flex items-center justify-center text-slate-500 text-xs font-mono">
@@ -361,6 +384,12 @@ ${selectedLead.quotation.milestones.map((m, i) => `${i + 1}. ${m.title} - ₹${m
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
+                {createNotice && (
+                  <div className="flex items-center gap-1.5 mr-auto text-xs font-mono text-amber-300">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{createNotice}</span>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowNewLeadModal(false)}

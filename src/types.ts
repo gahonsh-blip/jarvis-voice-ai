@@ -50,6 +50,7 @@ export type IntentCategory =
   | 'answer_call'
   | 'hangup_call'
   | 'reject_call'
+  | 'reject_message'
   | 'telephony_hub'
   | 'call_history'
   | 'caller_inquiry'
@@ -448,7 +449,7 @@ export interface FreelanceLead {
   source: 'Website Form' | 'WhatsApp Inquiry' | 'Telegram AI Bot' | 'Direct Email' | string;
   projectType: 'Full-Stack Web App' | 'AI Integration' | 'Mobile App' | 'Automation Bot' | 'E-commerce' | string;
   rawRequirement: string;
-  budgetEstimate: { currency: 'INR' | 'USD'; amount: number };
+  budgetEstimate: { currency: 'INR' | 'USD'; amount: number | null };
   status: 'New Inquiry' | 'AI Requirements Extracted' | 'Quotation Sent' | 'In Progress' | 'Delivered' | 'Delivered & Closed' | 'Followed Up' | string;
   createdAt: string;
   quotation?: {
@@ -549,6 +550,10 @@ export interface SocialMediaPostDraft {
   topic: string;
   topicHi?: string;
   content: string;
+  /** Origin of `content`: model output vs a fixed local fallback template. */
+  generationSource?: 'ai' | 'local_template';
+  aiGenerated?: boolean;
+  generationNotice?: string;
   hashtags: string[];
   creativePrompt: string;
   status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'not_published' | 'failed' | string;
@@ -621,7 +626,7 @@ export interface IntegrationAuditItem {
   id: string;
   name: string;
   service: string;
-  status: 'REAL_WORKING' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
+  status: 'CREDENTIALS_PRESENT' | 'NOT_CONNECTED' | 'NOT_AVAILABLE';
   reason?: string;
   requiredEnvVars: { key: string; label: string; configured: boolean; isSecret: boolean; placeholder: string }[];
   scopesOrPermissions: string[];

@@ -7,8 +7,9 @@ import { exec, execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { detectLanguageSwitchCommand } from './src/utils/languages';
+import { isTelephonyHubRequest, isCallHistoryRequest, isAnswerCallRequest, isHangupCallRequest, isRejectCallRequest, isTelephonyControlRequest } from './src/utils/telephonyIntentRouting';
 import { judgeSetNameIntent } from './src/utils/identityTruth';
-import { freelanceLeadsReply } from './src/utils/freelanceLeadTruth';
+import { freelanceLeadsReply, buildNewLeadRecord, classifyNewLeadIntake } from './src/utils/freelanceLeadTruth';
 import { renderPrivacyPolicyHtml, renderTermsOfServiceHtml } from './src/utils/server_legal';
 import {
   AUDIT_LOG_SOURCE_RECORDED,
@@ -18,11 +19,35 @@ import {
   deriveAuditVerificationStatus,
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
+import { resolveSocialGeneration } from './src/utils/hardening/socialGenerationTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
+import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
+import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
+import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
+import { observedAccountName, describeVerifiedAccount } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
+import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
+import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
+import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
+import {
+  applyPhonePermissionUpdate,
+  type PhonePermissionStore,
+} from './src/utils/hardening/phonePermissionStoreTruth';
+import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
+import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
+import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
+import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
+import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
+import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
+import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
+import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
+import { classifyTelephonyCallRecord } from './src/utils/hardening/telephonyCallRecordTruth';
+import { classifyOutboundAuthorization } from './src/utils/hardening/outboundAuthorizationTruth';
+import { classifyBridgeHeartbeat } from './src/utils/hardening/bridgeHeartbeatTruth';
+import { classifyBridgeEvent } from './src/utils/hardening/bridgeEventTruth';
 import {
   getEmergencyState,
   toggleEmergencyStop,
@@ -58,6 +83,7 @@ import {
 import {
   TelephonySessionManager,
 } from './src/utils/telephonySessionManager';
+import { bargeInApplied, silenceTimeoutApplied } from './src/utils/telephonyEndpointTruth';
 import {
   TelephonyProviderRegistry,
 } from './src/utils/telephonyAdapters';
@@ -66,6 +92,8 @@ import {
   telephonyEngineMode,
   telephonyEngineLabel,
   telephonySelectionApplied,
+  telephonyEngineCanDial,
+  telephonyDialRefusal,
   SIMULATION_PROVIDER_ID,
 } from './src/utils/telephonyGatewayTruth';
 import {
@@ -77,13 +105,17 @@ import {
   TelephonyDispatchPhase,
 } from './src/utils/telephonyDispatchTruth';
 import {
+  extractDialTarget,
+  offlineCallMissingNumberVerdict,
+} from './src/utils/computerOperator/offlineCallTruth';
+import {
   launchVerdict,
   launchReply,
 } from './src/utils/computerOperator/launchDispatchTruth';
 import { screenshotVerdict, screenshotReply } from './src/utils/computerOperator/screenshotDispatchTruth';
 import { volumeVerdict, volumeReply } from './src/utils/computerOperator/audioDispatchTruth';
 import { powerVerdict, powerReply } from './src/utils/computerOperator/powerDispatchTruth';
-import { browserOpenVerdict } from './src/utils/browserDispatchTruth';
+import { browserOpenVerdict, browserOpenActionDetail, searchDispatch } from './src/utils/browserDispatchTruth';
 import {
   fixProjectErrorReply,
   operatorTaskExecuted,
@@ -91,6 +123,7 @@ import {
   screenInspectionReply,
   cancelComputerTaskVerdict,
 } from './src/utils/computerOperator/operatorReplyTruth';
+import { observationPerformed } from './src/utils/computerOperator/observationTruth';
 import { emergencyToggleVerdict } from './src/utils/computerOperator/offlineEmergencyTruth';
 import {
   toolActionExecuted,
@@ -105,6 +138,7 @@ import {
   evaluateClinicSafety,
   checkHumanHandoffIntent,
   DEFAULT_PHONE_PERMISSIONS,
+  PHONE_PERMISSION_DEFINITIONS,
 } from './src/utils/telephonyPermissions';
 import {
   ComputerOperatorEngine,
@@ -116,6 +150,9 @@ import { AndroidBridgeGateway, type DeviceTelemetryInput } from './src/utils/and
 import { maskAndroidCallerNumber } from './src/utils/androidBridgePrivacy';
 import { EXECUTION_OUTCOMES, type ExecutionOutcome } from './src/utils/executionTruth';
 import { classifyApprovalOutcome, formatUnconfirmedMobileApprovalReply } from './src/utils/hardening/approvalResolution';
+import { classifyApprovalCreate } from './src/utils/hardening/approvalCreateTruth';
+import { classifyOutboundStage, classifyStagedDraft } from './src/utils/hardening/outboundStageTruth';
+import { classifyApprovalDecision } from './src/utils/github/approvalQueue';
 import {
   observeInstanceFromHost,
   describeRunState,
@@ -350,6 +387,10 @@ export interface ServerSocialPost {
   topic: string;
   topicHi?: string;
   content: string;
+  /** Origin of `content`: model output vs a fixed local fallback template. */
+  generationSource?: 'ai' | 'local_template';
+  aiGenerated?: boolean;
+  generationNotice?: string;
   hashtags: string[];
   creativePrompt: string;
   status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'not_published' | 'failed' | string;
@@ -379,7 +420,7 @@ export interface ServerFreelanceLead {
   source: string;
   projectType: string;
   rawRequirement: string;
-  budgetEstimate: { currency: string; amount: number };
+  budgetEstimate: { currency: string; amount: number | null };
   status: string;
   createdAt: string;
   quotation?: {
@@ -854,18 +895,25 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
   }
 
   // Telephony & Voice Calling Commands ("call Dr. Wayne", "answer call", "hang up", "open dialer", etc.)
+  // Console/history phrases also begin with "call " and must not be read as an
+  // outbound dial to a literal target ("call hub" -> call "hub"). They are
+  // classified below.
   if (
-    lower.startsWith('call ') ||
-    lower.startsWith('dial ') ||
-    lower.includes('make a call') ||
-    lower.includes('phone call') ||
-    lower.includes('place a call') ||
-    lower.includes('कॉल करो') ||
-    lower.includes('फोन करो') ||
-    lower.includes('call lagao')
+    ((lower.startsWith('call ') || lower.startsWith('dial ')) &&
+      !isTelephonyControlRequest(lower)) ||
+    ((lower.includes('phone call') ||
+      lower.includes('make a call') ||
+      lower.includes('place a call') ||
+      lower.includes('कॉल करो') ||
+      lower.includes('फोन करो') ||
+      lower.includes('call lagao')) &&
+      !isTelephonyControlRequest(lower))
   ) {
     const targetMatch = text.match(/(?:call|dial|फोन करो|कॉल करो|call lagao)\s+(.+)/i);
-    const target = targetMatch ? targetMatch[1].trim() : 'Contact';
+    // Only a target that carries real digits is a number. "make a call" /
+    // "place a call" capture nothing, and a name is not dialable — neither may
+    // become a fabricated "Contact" that the handler then reports as called.
+    const target = extractDialTarget(targetMatch ? targetMatch[1] : '');
     return {
       intent: 'make_call',
       confidence: 0.96,
@@ -873,59 +921,23 @@ function classifyIntentLocally(text: string): { intent: string; confidence: numb
     };
   }
 
-  if (
-    lower.includes('answer call') ||
-    lower.includes('pick up the phone') ||
-    lower.includes('pick up the call') ||
-    lower.includes('answer the phone') ||
-    lower.includes('कॉल उठाओ') ||
-    lower.includes('फोन उठाओ') ||
-    lower.includes('phone uthao')
-  ) {
+  if (isAnswerCallRequest(lower)) {
     return { intent: 'answer_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('hang up') ||
-    lower.includes('end call') ||
-    lower.includes('cut the call') ||
-    lower.includes('disconnect call') ||
-    lower.includes('कॉल काटो') ||
-    lower.includes('फोन काटो') ||
-    lower.includes('call kato')
-  ) {
+  if (isHangupCallRequest(lower)) {
     return { intent: 'hangup_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('reject call') ||
-    lower.includes('decline call') ||
-    lower.includes('कॉल रिजेक्ट करो')
-  ) {
+  if (isRejectCallRequest(lower)) {
     return { intent: 'reject_call', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('call hub') ||
-    lower.includes('open dialer') ||
-    lower.includes('open phone') ||
-    lower.includes('phone dialer') ||
-    lower.includes('telephony hub') ||
-    lower.includes('telephony system') ||
-    lower.includes('कॉल हब') ||
-    lower.includes('फोन डायलर')
-  ) {
+  if (isTelephonyHubRequest(lower)) {
     return { intent: 'telephony_hub', confidence: 0.95 };
   }
 
-  if (
-    lower.includes('call history') ||
-    lower.includes('call logs') ||
-    lower.includes('recent calls') ||
-    lower.includes('who called') ||
-    lower.includes('कॉल हिस्ट्री') ||
-    lower.includes('किसका कॉल आया')
-  ) {
+  if (isCallHistoryRequest(lower)) {
     return { intent: 'call_history', confidence: 0.95 };
   }
 
@@ -2235,7 +2247,9 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
   }
 
   // 3. Verify Channel Status
-  let channelTitle = memoryState.youTubeConnection?.channelTitle || 'YouTube Channel';
+  // Honest empty default: use the recorded title if any, else no name (never the
+  // invented 'YouTube Channel'). Downstream passes it through recordedChannelTitle.
+  let channelTitle = memoryState.youTubeConnection?.channelTitle || '';
   let channelId = memoryState.youTubeConnection?.channelId || '';
 
   try {
@@ -2364,12 +2378,19 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
       const videoId = uploadData.id;
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       const finalPrivacy = uploadData.status?.privacyStatus || privacyStatus;
-      const uploadedChannel = uploadData.snippet?.channelTitle || channelTitle;
+      // Prefer the channel the provider echoed; otherwise the one read earlier in
+      // this route. If neither is a real title, the upload still succeeded — do
+      // not invent a channel name for it.
+      const uploadedChannel =
+        recordedChannelTitle(uploadData.snippet?.channelTitle) ?? recordedChannelTitle(channelTitle);
+      const channelLabel = uploadedChannel
+        ? `"${uploadedChannel}"`
+        : 'the connected channel (channel title not read)';
 
       post.providerUrn = videoId;
       post.videoUrl = videoUrl;
       post.privacyStatus = finalPrivacy;
-      post.targetChannel = uploadedChannel;
+      post.targetChannel = uploadedChannel ?? undefined;
 
       // A 2xx with an id proves the upload was accepted, but not that the video
       // is publicly watchable: a PRIVATE or UNLISTED upload is not visible to
@@ -2383,8 +2404,8 @@ async function verifyAndPublishToYouTube(post: ServerSocialPost): Promise<{
         finalTruthState: 'VERIFIED',
         providerUrn: videoId,
         userMessage: isPubliclyVisible
-          ? `✅ VERIFIED & PUBLIC: Live on YouTube Channel "${uploadedChannel}"!\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}\n• Privacy Mode: ${finalPrivacy.toUpperCase()} — publicly watchable`
-          : `✅ VERIFIED UPLOAD: Accepted by YouTube Data API on channel "${uploadedChannel}" as ${finalPrivacy.toUpperCase()} — ${finalPrivacy === 'private' ? 'visible only to the channel owner' : 'visible only with the direct link, not publicly listed'}.\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}`,
+          ? `✅ VERIFIED & PUBLIC: Live on YouTube Channel ${channelLabel}!\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}\n• Privacy Mode: ${finalPrivacy.toUpperCase()} — publicly watchable`
+          : `✅ VERIFIED UPLOAD: Accepted by YouTube Data API on channel ${channelLabel} as ${finalPrivacy.toUpperCase()} — ${finalPrivacy === 'private' ? 'visible only to the channel owner' : 'visible only with the direct link, not publicly listed'}.\n• Video ID: ${videoId}\n• Video URL: ${videoUrl}`,
       };
     } else {
       const errDetail = uploadData?.error?.message || `HTTP ${uploadRes.status}: ${uploadRes.statusText}`;
@@ -2509,10 +2530,13 @@ async function testPlatformConnection(platformKey: string): Promise<{
       });
       if (res.ok) {
         const data: any = await res.json().catch(() => null);
-        const memberName = data?.name || `${data?.given_name || ''} ${data?.family_name || ''}`.trim() || 'LinkedIn Member';
+        // The token authenticated, but LinkedIn may not return a name. Never
+        // fall back to the invented 'LinkedIn Member' — name the identity from
+        // the real URN when the provider omitted the name.
+        const memberName = observedAccountName(data?.name) ?? observedAccountName(`${data?.given_name || ''} ${data?.family_name || ''}`.trim());
         const memberUrn = data?.sub ? `urn:li:person:${data.sub}` : conn?.authorUrn;
         if (conn && conn.connected) {
-          conn.name = memberName;
+          if (memberName) conn.name = memberName;
           if (data?.picture) conn.picture = data.picture;
           if (data?.email) conn.email = data.email;
           if (memberUrn) conn.authorUrn = memberUrn;
@@ -2521,9 +2545,11 @@ async function testPlatformConnection(platformKey: string): Promise<{
         return {
           success: true,
           status: 'VERIFIED',
-          accountName: memberName,
+          accountName: memberName ?? undefined,
           accountIdentifier: memberUrn,
-          message: `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`,
+          message: memberName
+            ? `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`
+            : `Live Verified: Connected to Personal Member Profile (${memberUrn}). The provider did not return an account name.`,
         };
       } else {
         if (conn) {
@@ -2556,12 +2582,15 @@ async function testPlatformConnection(platformKey: string): Promise<{
       const res = await fetch(`https://graph.facebook.com/v20.0/${pageId}?fields=id,name,category,link&access_token=${token}`);
       const data: any = await res.json();
       if (res.ok && data?.id) {
+        const pageName = observedAccountName(data.name);
         return {
           success: true,
           status: 'VERIFIED',
-          accountName: data.name || 'Facebook Page',
+          accountName: pageName ?? undefined,
           accountIdentifier: data.id,
-          message: `Connected & Verified to Page "${data.name}" (${data.category || 'Business'}).`,
+          message: pageName
+            ? `Connected & Verified to Page "${pageName}" (${data.category || 'Business'}).`
+            : `Connected & Verified to Page ID ${data.id}. The provider did not return a page name.`,
         };
       } else {
         return {
@@ -2589,12 +2618,16 @@ async function testPlatformConnection(platformKey: string): Promise<{
       const res = await fetch(`https://graph.facebook.com/v20.0/${igUserId}?fields=id,username,name&access_token=${token}`);
       const data: any = await res.json();
       if (res.ok && data?.id) {
+        // Prefer the real @handle, then the returned name, then the id. Never
+        // invent an 'Instagram Account' name when the provider returned none.
+        const igUsername = observedAccountName(data.username);
+        const igIdentity = igUsername ? `@${igUsername}` : (observedAccountName(data.name) ?? data.id);
         return {
           success: true,
           status: 'VERIFIED',
-          accountName: data.username ? `@${data.username}` : (data.name || 'Instagram Account'),
+          accountName: igIdentity,
           accountIdentifier: data.id,
-          message: `Connected & Verified to Instagram account ${data.username ? `@${data.username}` : data.id}.`,
+          message: `Connected & Verified to Instagram account ${igIdentity}.`,
         };
       } else {
         return {
@@ -2630,13 +2663,15 @@ async function testPlatformConnection(platformKey: string): Promise<{
         const data: any = await res.json().catch(() => null);
         if (res.ok && data?.items?.length > 0) {
           const item = data.items[0];
-          const title = item.snippet?.title || 'YouTube Channel';
+          // Never fall back to the invented 'YouTube Channel' name. When the
+          // provider returned no title, name the channel from its real id.
+          const title = observedAccountName(item.snippet?.title);
           const chId = item.id || '';
           const avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url;
 
           // Update memoryState with verified channel data
           if (memoryState.youTubeConnection) {
-            memoryState.youTubeConnection.channelTitle = title;
+            if (title) memoryState.youTubeConnection.channelTitle = title;
             memoryState.youTubeConnection.channelId = chId;
             if (avatarUrl) memoryState.youTubeConnection.avatarUrl = avatarUrl;
             persistMemory();
@@ -2645,9 +2680,11 @@ async function testPlatformConnection(platformKey: string): Promise<{
           return {
             success: true,
             status: 'VERIFIED',
-            accountName: title,
+            accountName: title ?? chId ?? undefined,
             accountIdentifier: chId,
-            message: `Connected & Verified to YouTube Channel "${title}" (${chId}) via OAuth 2.0.`,
+            message: title
+              ? `Connected & Verified to YouTube Channel "${title}" (${chId}) via OAuth 2.0.`
+              : `Connected & Verified to YouTube Channel ${chId} via OAuth 2.0. The provider did not return a channel name.`,
           };
         } else {
           const errMsg = data?.error?.message || `HTTP ${res.status}`;
@@ -3204,12 +3241,23 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       const summaryResult = await summarizeYouTubeVideoCore({ url: rawUrl, videoId: vidId || undefined });
       if (summaryResult.success && summaryResult.videoInfo) {
         const info = summaryResult.videoInfo;
-        const takeaways = summaryResult.keyTakeaways && summaryResult.keyTakeaways.length > 0
-          ? `\n\n💡 *Key Takeaways*:\n${summaryResult.keyTakeaways.slice(0, 5).join('\n')}`
-          : '';
-        const notice = summaryResult.notice ? `\n\n⚠️ _${summaryResult.notice}_` : '';
-        botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})${notice}\n\n${summaryResult.summary}${takeaways}`;
-        actionData = { type: 'youtube_summary', videoInfo: info, source: summaryResult.source };
+        // A summariser result can carry `success: true` and a video with an EMPTY
+        // summary (`source: 'none'` — no transcript and no description). The old
+        // reply rendered the "YOUTUBE VIDEO SUMMARY" heading with a blank body in
+        // that case, reading as a summary that was never produced. Lead with the
+        // truth instead.
+        const noSummaryNotice = formatYouTubeSummaryNotice(summaryResult);
+        if (noSummaryNotice) {
+          botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})\n\n⚠️ _${noSummaryNotice}_`;
+          actionData = { type: 'youtube_summary_unavailable', videoInfo: info, source: summaryResult.source };
+        } else {
+          const takeaways = summaryResult.keyTakeaways && summaryResult.keyTakeaways.length > 0
+            ? `\n\n💡 *Key Takeaways*:\n${summaryResult.keyTakeaways.slice(0, 5).join('\n')}`
+            : '';
+          const notice = summaryResult.notice ? `\n\n⚠️ _${summaryResult.notice}_` : '';
+          botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})${notice}\n\n${summaryResult.summary}${takeaways}`;
+          actionData = { type: 'youtube_summary', videoInfo: info, source: summaryResult.source };
+        }
       } else {
         botReplyText = `❌ *YouTube Summarizer Notice*:\n${summaryResult.success ? 'Failed to extract video content. Ensure the video is public and accessible.' : summaryResult.error}`;
       }
@@ -3627,6 +3675,22 @@ function getISTCurrentHourMinute(): { hour: number; minute: number } {
 
 let schedulerRunLog: string[] = [];
 
+/**
+ * Record one routine tick. The per-day marker is stamped by the caller, before
+ * the push is attempted, so a slow or failing push can never re-trigger the
+ * tick every 30 seconds for the rest of the window. The log line, in contrast,
+ * is only written once the push outcome is known — and it never claims a
+ * delivery that did not happen (item 13).
+ */
+async function recordSchedulerOutcome(
+  name: string,
+  push: SchedulerPushOutcome,
+): Promise<void> {
+  const logEntry = schedulerRunLogLine(name, push);
+  schedulerRunLog.unshift(logEntry);
+  console.log('[Scheduler]', logEntry);
+}
+
 async function checkAndRunSchedulerJobs() {
   const todayIST = getISTDateString();
   const { hour, minute } = getISTCurrentHourMinute();
@@ -3635,16 +3699,16 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 9 && minute >= 0 && minute <= 15) {
     if (memoryState.schedulerState.lastMorningRunDate !== todayIST) {
       memoryState.schedulerState.lastMorningRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Morning Briefing (09:00 AM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
 
+      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
       if (activeTelegramChatId && getCleanTelegramToken()) {
         const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
         const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
         const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
-        sendRealTelegramMessage(activeTelegramChatId, morningText).catch(() => {});
+        const delivery = await deliverTelegramMessage(activeTelegramChatId, morningText);
+        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
       }
+      await recordSchedulerOutcome('Morning Briefing (09:00 AM IST)', push);
       persistMemory();
     }
   }
@@ -3653,9 +3717,8 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 14 && minute >= 0 && minute <= 15) {
     if (memoryState.schedulerState.lastMiddayRunDate !== todayIST) {
       memoryState.schedulerState.lastMiddayRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Midday Health Audit (02:00 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
+      // No Telegram push and no audit work: this tick only advances the marker.
+      await recordSchedulerOutcome('Midday Health Audit (02:00 PM IST)', { attempted: false, delivered: false });
       persistMemory();
     }
   }
@@ -3664,9 +3727,7 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 18 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastEveningRunDate !== todayIST) {
       memoryState.schedulerState.lastEveningRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Evening Social Pulse (06:30 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
+      await recordSchedulerOutcome('Evening Social Pulse (06:30 PM IST)', { attempted: false, delivered: false });
       persistMemory();
     }
   }
@@ -3675,14 +3736,14 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 22 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastNightRunDate !== todayIST) {
       memoryState.schedulerState.lastNightRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Executed Nightly Work Summary (10:30 PM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
 
+      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
       if (activeTelegramChatId && getCleanTelegramToken()) {
         const nightText = `🌙 *HERMES NIGHTLY WORK REPORT (10:30 PM)*\n\nSir, today's work summary has been recorded.\n• *Commands Executed*: ${memoryState.stats.totalCommands}\n• *Memory Persistence*: Synchronized\n• *Daemon Status*: Standby & Active`;
-        sendRealTelegramMessage(activeTelegramChatId, nightText).catch(() => {});
+        const delivery = await deliverTelegramMessage(activeTelegramChatId, nightText);
+        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
       }
+      await recordSchedulerOutcome('Nightly Work Summary (10:30 PM IST)', push);
       persistMemory();
     }
   }
@@ -4224,9 +4285,11 @@ app.post('/api/telegram/broadcast', async (req: Request, res: Response) => {
     return res.json({
       // Only a verified delivery is a success. Anything else is reported with
       // its true outcome so the UI cannot claim the briefing went out.
+      // `executed` tracks the same proof: the send was attempted but the
+      // message did not reach the target, so executing is not delivering.
       success: interpretation.delivered,
       outcome: interpretation.outcome,
-      executed: true,
+      executed: interpretation.delivered,
       verified: receipt.verified,
       liveSent: interpretation.delivered,
       messageId: interpretation.messageId,
@@ -4255,40 +4318,58 @@ app.get('/api/freelance/leads', (req: Request, res: Response) => {
 
 app.post('/api/freelance/create-lead', (req: Request, res: Response) => {
   const { clientName, source, projectType, rawRequirement, budgetAmount } = req.body;
-  const newLead: ServerFreelanceLead = {
+
+  // A submission that carried no real lead field used to be stored as a record
+  // of "not recorded" placeholders and still reported as a created lead. Refuse
+  // it instead of announcing a client that was never supplied.
+  const intake = classifyNewLeadIntake({ clientName, projectType, rawRequirement, budget: budgetAmount });
+  if (!intake.accepted) {
+    return res.json({
+      success: false,
+      stored: false,
+      outcome: intake.reason,
+      message: intake.message,
+    });
+  }
+
+  // Store only what the operator actually supplied. A missing budget stays
+  // unrecorded (no ₹50,000 default) and no quotation is fabricated from it.
+  const newLead = buildNewLeadRecord({
     id: `lead-${Date.now()}`,
-    clientName: clientName || 'New Client Inquiry',
-    source: source || 'Telegram AI Bot',
-    projectType: projectType || 'Full-Stack Web App',
-    rawRequirement: rawRequirement || 'Custom web application requirement.',
-    budgetEstimate: { currency: 'INR', amount: Number(budgetAmount) || 50000 },
-    status: 'AI Requirements Extracted',
+    clientName,
+    source,
+    projectType,
+    rawRequirement,
+    budget: budgetAmount,
     createdAt: new Date().toISOString(),
-    quotation: {
-      scopeSummary: `Complete turnkey implementation for ${projectType || 'Web App'}`,
-      timelineDays: 12,
-      totalPrice: Number(budgetAmount) || 50000,
-      milestones: [
-        { title: 'Phase 1: Architecture & UI Prototype', price: Math.round((Number(budgetAmount) || 50000) * 0.35), days: 4 },
-        { title: 'Phase 2: Core Engineering & Backend APIs', price: Math.round((Number(budgetAmount) || 50000) * 0.45), days: 5 },
-        { title: 'Phase 3: QA Testing, Deployment & Handover', price: Math.round((Number(budgetAmount) || 50000) * 0.20), days: 3 },
-      ],
-    },
-  };
+  }) as ServerFreelanceLead;
   memoryState.freelanceLeads.unshift(newLead);
   persistMemory();
-  res.json({ success: true, lead: newLead });
+  res.json({ success: true, stored: true, clientIdentified: intake.hasClientIdentity, lead: newLead, message: intake.message });
 });
 
 app.post('/api/freelance/update-status', (req: Request, res: Response) => {
   const { leadId, status } = req.body;
   const lead = memoryState.freelanceLeads.find((l) => l.id === leadId);
-  if (lead) {
-    lead.status = status;
-    persistMemory();
-    return res.json({ success: true, lead });
+  if (!lead) {
+    return res.status(404).json({ success: false, outcome: 'LEAD_NOT_FOUND', error: 'Lead not found' });
   }
-  res.status(404).json({ error: 'Lead not found' });
+  // The route used to write any string the caller supplied and report every
+  // request as a saved change. Only a recognised status that differs from the
+  // stored one is applied and reported as applied.
+  const verdict = classifyLeadStatusUpdate(status, lead.status);
+  if (!verdict.success) {
+    return res.json({
+      success: false,
+      outcome: verdict.outcome,
+      applied: false,
+      message: verdict.message,
+      lead,
+    });
+  }
+  lead.status = verdict.status as string;
+  persistMemory();
+  res.json({ success: true, outcome: verdict.outcome, applied: true, message: verdict.message, lead });
 });
 
 // Social Media Engine APIs
@@ -4324,15 +4405,18 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
     }
   }
 
-  if (!generatedContent) {
-    generatedContent = `💡 Perspective on ${topic || 'Autonomous AI Workflows'}:\n\n1. Building with autonomous tools saves 10+ hours per week.\n2. Zero-cost infrastructure allows rapid prototyping.\n3. Human-in-the-loop verification guarantees precision.\n\nWhat are you automating next?\n\n#ArtificialIntelligence #Engineering #DevOps #Innovation #BuildInPublic`;
-  }
+  // Resolve the draft content and its true origin. An empty model output is a
+  // fixed local template, disclosed as such rather than presented as AI copy.
+  const generation = resolveSocialGeneration({ generatedContent, topic });
 
   const newPost: ServerSocialPost = {
     id: `post-${Date.now()}`,
     platform: platform as any,
     topic: topic || 'Autonomous AI Architecture',
-    content: generatedContent,
+    content: generation.content,
+    generationSource: generation.source,
+    aiGenerated: generation.aiGenerated,
+    generationNotice: generation.notice,
     hashtags,
     creativePrompt: `Modern aesthetic graphic visualizing ${topic}, sleek cyber-tech gradient.`,
     status: 'pending_approval',
@@ -4418,7 +4502,9 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     creativePrompt: 'High-tech JARVIS HUD telemetry showing secure cloud authorization and automated upload.',
     status: 'pending_approval',
     privacyStatus: validPrivacy,
-    targetChannel: memoryState.youTubeConnection?.channelTitle || 'YouTube Channel',
+    // Stage the channel actually recorded in memory; if none was read, leave it
+    // unset so the UI says so instead of displaying an invented channel name.
+    targetChannel: recordedChannelTitle(memoryState.youTubeConnection?.channelTitle) ?? undefined,
     isTestUpload: !videoPayloadBase64 || Boolean(isTestUpload),
     videoFileName: videoFileName || (videoPayloadBase64 ? 'uploaded_video.mp4' : 'synthetic_test.mp4'),
     videoPayloadBase64: videoPayloadBase64 || undefined,
@@ -4431,24 +4517,27 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
 
   memoryState.socialPosts.unshift(newPost);
 
-  // Register Level 4 Action in Permission Gateway
-  createPendingActionRequest({
+  // Register Level 4 Action in Permission Gateway. The gate can reject the
+  // action (finance guard) or refuse it (emergency stop); the reply must reflect
+  // that instead of reporting a staged upload that was never queued.
+  const uploadGate = createPendingActionRequest({
     exactAction: `YouTube Video Upload (${validPrivacy.toUpperCase()}) - "${validTitle}"`,
-    target: `YouTube Channel: ${memoryState.youTubeConnection?.channelTitle || 'Connected Channel'}`,
+    target: `YouTube Channel: ${describeStagedChannel(memoryState.youTubeConnection?.channelTitle)}`,
     contentChanges: `Title: "${validTitle}" | Privacy: ${validPrivacy.toUpperCase()} | Tags: ${tagList.join(', ')} | File: ${newPost.videoFileName}`,
     level: 4,
     source: 'social_hub_youtube_upload',
     platform: 'YouTube',
     actionPayload: { postId: newPost.id, privacyStatus: validPrivacy, videoFileName: newPost.videoFileName },
   });
+  const uploadVerdict = classifyStagedDraft(uploadGate, 'YouTube upload');
 
-  // Staged for Level-4 authorization — nothing was published, so the audit row
-  // must not read as an executed/verified upload.
+  // Nothing was published, so the audit row must not read as an executed or
+  // verified upload. A rejected/blocked staging is recorded as a refusal.
   const stagingAudit = stagedDraftAuditEntry({
     platform: 'YouTube',
     topic: `${validTitle} (${validPrivacy.toUpperCase()})`,
     level: 4,
-    gate: 'Level-4 authorization',
+    gate: uploadVerdict.success ? 'Level-4 authorization' : uploadVerdict.message,
   });
   pushAuditEntry({
     id: `log-${Date.now()}`,
@@ -4462,6 +4551,18 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
   });
 
   persistMemory();
+
+  if (!uploadVerdict.success) {
+    const code = uploadVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : uploadVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
+    return res.status(code).json({
+      success: false,
+      staged: false,
+      outcome: uploadVerdict.outcome,
+      message: uploadVerdict.message,
+      post: newPost,
+    });
+  }
+
   res.json({
     success: true,
     post: newPost,
@@ -4492,7 +4593,9 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     creativePrompt: 'High-tech JARVIS HUD telemetry showing secure cloud authorization and automated upload.',
     status: 'pending_approval',
     privacyStatus: validPrivacy,
-    targetChannel: memoryState.youTubeConnection?.channelTitle || 'YouTube Channel',
+    // Stage the channel actually recorded in memory; if none was read, leave it
+    // unset so the UI says so instead of displaying an invented channel name.
+    targetChannel: recordedChannelTitle(memoryState.youTubeConnection?.channelTitle) ?? undefined,
     isTestUpload: true,
     scheduledTime: 'Instant upon Level 4 Authorization',
     likesSimulated: 0,
@@ -4503,24 +4606,27 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
 
   memoryState.socialPosts.unshift(newPost);
 
-  // Register Level 4 Action in Permission Gateway
-  createPendingActionRequest({
+  // Register Level 4 Action in Permission Gateway. A finance or emergency block
+  // must not be reported as a staged test upload.
+  const testGate = createPendingActionRequest({
     exactAction: `YouTube Video Upload (Test Mode: ${validPrivacy.toUpperCase()})`,
-    target: `YouTube Channel: ${memoryState.youTubeConnection?.channelTitle || 'Connected Channel'}`,
+    target: `YouTube Channel: ${describeStagedChannel(memoryState.youTubeConnection?.channelTitle)}`,
     contentChanges: `Title: "${title}" | Privacy: ${validPrivacy.toUpperCase()} | Tags: ${tags.join(', ')}`,
     level: 4,
     source: 'social_hub_youtube_test',
     platform: 'YouTube',
     actionPayload: { postId: newPost.id, privacyStatus: validPrivacy },
   });
+  const testVerdict = classifyStagedDraft(testGate, 'YouTube test upload');
 
   // Staged for Level-4 test authorization — no upload occurred, so the audit
-  // row must not read as an executed/verified upload.
+  // row must not read as an executed/verified upload. A blocked staging is
+  // recorded as a refusal.
   const stagingAudit = stagedDraftAuditEntry({
     platform: 'YouTube',
     topic: `${title} (test, ${validPrivacy.toUpperCase()})`,
     level: 4,
-    gate: 'Level-4 authorization',
+    gate: testVerdict.success ? 'Level-4 authorization' : testVerdict.message,
   });
   pushAuditEntry({
     id: `log-${Date.now()}`,
@@ -4534,6 +4640,18 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
   });
 
   persistMemory();
+
+  if (!testVerdict.success) {
+    const code = testVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : testVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
+    return res.status(code).json({
+      success: false,
+      staged: false,
+      outcome: testVerdict.outcome,
+      message: testVerdict.message,
+      post: newPost,
+    });
+  }
+
   res.json({ success: true, post: newPost, message: 'YouTube test video draft created with Level 4 approval gate.' });
 });
 
@@ -4543,25 +4661,49 @@ app.post('/api/social/youtube/update-draft', (req: Request, res: Response) => {
   if (!postId) return res.status(400).json({ error: 'postId is required' });
 
   const post = memoryState.socialPosts.find((p) => p.id === postId);
-  if (!post) return res.status(404).json({ error: 'Post not found' });
+  if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
 
-  if (title) {
-    post.videoTitle = title.trim();
-    post.topic = title.trim();
+  // The route used to answer success for every matching post, including a
+  // request that changed nothing. Only a real difference is applied and
+  // reported as applied; a repeat submission reads as a no-op.
+  const verdict = classifyYouTubeDraftUpdate(
+    { title, description, privacyStatus, tags },
+    {
+      videoTitle: post.videoTitle,
+      videoDescription: post.videoDescription,
+      privacyStatus: post.privacyStatus,
+      hashtags: post.hashtags,
+    }
+  );
+
+  if (!verdict.success) {
+    return res.json({
+      success: false,
+      outcome: verdict.outcome,
+      applied: false,
+      message: verdict.message,
+      post,
+    });
   }
-  if (description !== undefined) {
-    post.videoDescription = description;
-    post.content = description;
+
+  const { changes } = verdict;
+  if (changes.videoTitle !== undefined) {
+    post.videoTitle = changes.videoTitle;
+    post.topic = changes.videoTitle;
   }
-  if (privacyStatus) {
-    post.privacyStatus = (privacyStatus === 'unlisted' || privacyStatus === 'public') ? privacyStatus : 'private';
+  if (changes.videoDescription !== undefined) {
+    post.videoDescription = changes.videoDescription;
+    post.content = changes.videoDescription;
   }
-  if (tags && Array.isArray(tags)) {
-    post.hashtags = tags;
+  if (changes.privacyStatus !== undefined) {
+    post.privacyStatus = changes.privacyStatus;
+  }
+  if (changes.hashtags !== undefined) {
+    post.hashtags = changes.hashtags;
   }
 
   persistMemory();
-  res.json({ success: true, post });
+  res.json({ success: true, outcome: verdict.outcome, applied: true, message: verdict.message, post });
 });
 
 /**
@@ -4945,7 +5087,9 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       },
     });
 
-    let memberName = 'LinkedIn Member';
+    // The authenticated name, or null when LinkedIn did not return one. Never
+    // fall back to the invented 'LinkedIn Member'.
+    let memberName: string | null = null;
     let memberSub = '';
     let authorUrn = 'urn:li:person:self';
     let memberEmail = '';
@@ -4955,12 +5099,14 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       const uData: any = await userinfoRes.json().catch(() => null);
       if (uData) {
         memberSub = uData.sub || '';
-        memberName = uData.name || `${uData.given_name || ''} ${uData.family_name || ''}`.trim() || 'LinkedIn Member';
+        memberName = observedAccountName(uData.name) ?? observedAccountName(`${uData.given_name || ''} ${uData.family_name || ''}`.trim());
         authorUrn = memberSub ? `urn:li:person:${memberSub}` : 'urn:li:person:self';
         memberEmail = uData.email || '';
         memberPicture = uData.picture || '';
       }
     }
+
+    const memberDisplay = describeVerifiedAccount('linkedin', memberName, authorUrn);
 
     // Persist securely in server state
     memoryState.linkedInConnection = {
@@ -4968,7 +5114,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       authType: 'OAUTH_2_0',
       memberSub,
       authorUrn,
-      name: memberName,
+      name: memberName ?? undefined,
       email: memberEmail,
       picture: memberPicture,
       connectedAt: new Date().toISOString(),
@@ -4980,7 +5126,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
 
     // Log security audit entry
     addAuditLog(
-      `LinkedIn Personal Profile Connected via OAuth 2.0 (${memberName} - ${authorUrn})`,
+      `LinkedIn Personal Profile Connected via OAuth 2.0 (${memberDisplay} - ${authorUrn})`,
       1,
       'HUMAN_CONFIRMATION',
       'VERIFIED'
@@ -4998,7 +5144,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       ✓
     </div>
     <h2 style="color: #4ade80; margin: 0 0 8px 0; font-size: 20px; font-weight: 700;">LinkedIn Connected!</h2>
-    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Authenticated as <strong>${memberName}</strong></p>
+    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Authenticated as <strong>${memberDisplay}</strong></p>
     <p style="color: #86efac; font-size: 12px; font-family: monospace; margin: 0 0 20px 0;">${authorUrn}</p>
     <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
       Target: Personal Member Profile (Real UGC Posts API Ready)
@@ -5076,15 +5222,24 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
     });
   }
 
+  // A static env token has not been probed against LinkedIn, so it is
+  // configured — never a live connection. The canonical `/api/social/platforms`
+  // card already labels it CONFIGURED; this endpoint answering connected: true
+  // was the fabricated success this project forbids, and it contradicted the one
+  // endpoint the UI trusts. Only `/api/social/platforms/test` can confirm it.
   if (staticToken) {
     return res.json({
-      connected: true,
+      connected: false,
+      status: 'CONFIGURED',
+      configured: true,
       authType: 'STATIC_ENV_TOKEN',
       name: 'Configured Personal Member (Env Token)',
       authorUrn: staticUrn || 'urn:li:person:self',
       hasClientId: Boolean(clientId),
       hasClientSecret: Boolean(clientSecret),
       redirectUri,
+      message:
+        'A static LINKEDIN_ACCESS_TOKEN is present but has not been verified against LinkedIn. Run "Test connection" to confirm the account before publishing.',
     });
   }
 
@@ -5101,7 +5256,18 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
  * 4. Disconnect LinkedIn OAuth Account
  */
 app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
-  const prevMember = memoryState.linkedInConnection?.name || 'LinkedIn User';
+  // A disconnect can only succeed if something was connected. The route used to
+  // answer success:true unconditionally, so the UI announced a disconnection
+  // that removed no credential.
+  if (!memoryState.linkedInConnection) {
+    return res.json({
+      success: false,
+      outcome: 'NOT_CONNECTED',
+      message: 'No LinkedIn account is connected; nothing was disconnected.',
+    });
+  }
+
+  const prevMember = memoryState.linkedInConnection.name || 'LinkedIn User';
   memoryState.linkedInConnection = undefined;
   persistMemory();
 
@@ -5256,9 +5422,10 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     const expiresIn = tokenData.expires_in || 3600;
     const grantedScopes = grantedScopesFromTokenResponse(tokenData) ?? [];
 
-    // Query Channel Info from YouTube Data API v3
+    // The authenticated channel title, or null when the API did not return one.
+    // Never fall back to the invented 'YouTube Channel'.
     let channelId = '';
-    let channelTitle = 'YouTube Channel';
+    let channelTitle: string | null = null;
     let customUrl = '';
     let avatarUrl = '';
 
@@ -5270,7 +5437,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       if (ytResp.ok && ytData?.items?.length > 0) {
         const item = ytData.items[0];
         channelId = item.id || '';
-        channelTitle = item.snippet?.title || 'YouTube Channel';
+        channelTitle = observedAccountName(item.snippet?.title);
         customUrl = item.snippet?.customUrl || '';
         avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '';
       }
@@ -5279,14 +5446,14 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     }
 
     // Fallback if channel snippet not returned
-    if (!channelId || channelTitle === 'YouTube Channel') {
+    if (!channelId || !channelTitle) {
       try {
         const userResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         const userData: any = await userResp.json().catch(() => null);
         if (userResp.ok && userData) {
-          if (!channelTitle || channelTitle === 'YouTube Channel') channelTitle = userData.name || userData.email || 'YouTube User';
+          if (!channelTitle) channelTitle = observedAccountName(userData.name) ?? observedAccountName(userData.email);
           if (!avatarUrl) avatarUrl = userData.picture || '';
         }
       } catch (uErr) {
@@ -5294,12 +5461,14 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       }
     }
 
+    const channelDisplay = describeVerifiedAccount('youtube', channelTitle, channelId);
+
     // Persist securely in memory and encrypted disk
     memoryState.youTubeConnection = {
       connected: true,
       authType: 'OAUTH_2_0',
       channelId,
-      channelTitle,
+      channelTitle: channelTitle ?? undefined,
       customUrl,
       avatarUrl,
       connectedAt: new Date().toISOString(),
@@ -5311,7 +5480,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     persistMemory();
 
     addAuditLog(
-      `YouTube Channel Connected via OAuth 2.0 (${channelTitle} - ${channelId || 'Authenticated'})`,
+      `YouTube Channel Connected via OAuth 2.0 (${channelDisplay} - ${channelId || 'Authenticated'})`,
       1,
       'HUMAN_CONFIRMATION',
       'VERIFIED'
@@ -5329,7 +5498,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       ▶
     </div>
     <h2 style="color: #4ade80; margin: 0 0 8px 0; font-size: 20px; font-weight: 700;">YouTube Connected!</h2>
-    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Channel: <strong>${channelTitle}</strong></p>
+    <p style="color: #bbf7d0; font-size: 14px; margin: 0 0 6px 0;">Channel: <strong>${channelDisplay}</strong></p>
     <p style="color: #86efac; font-size: 12px; font-family: monospace; margin: 0 0 20px 0;">${channelId ? 'ID: ' + channelId : 'OAuth 2.0 Token Active'}</p>
     <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
       Google Cloud & YouTube Data API v3 Ready
@@ -5341,7 +5510,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       window.opener.postMessage({
         type: 'YOUTUBE_OAUTH_SUCCESS',
         channel: {
-          channelTitle: ${JSON.stringify(channelTitle)},
+          channelTitle: ${JSON.stringify(channelTitle ?? channelDisplay)},
           channelId: ${JSON.stringify(channelId)},
           avatarUrl: ${JSON.stringify(avatarUrl)}
         }
@@ -5399,13 +5568,15 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
 
       if (probeRes.ok && probeData?.items?.length > 0) {
         const item = probeData.items[0];
-        const title = item.snippet?.title || 'YouTube Channel';
+        // Never invent 'YouTube Channel' when the API omitted the title; fall
+        // back to the real channel id, mirroring the connect callback.
+        const title = observedAccountName(item.snippet?.title);
         const chId = item.id || '';
         const customUrl = item.snippet?.customUrl || '';
         const avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '';
 
         if (memoryState.youTubeConnection) {
-          memoryState.youTubeConnection.channelTitle = title;
+          if (title) memoryState.youTubeConnection.channelTitle = title;
           memoryState.youTubeConnection.channelId = chId;
           memoryState.youTubeConnection.customUrl = customUrl;
           if (avatarUrl) memoryState.youTubeConnection.avatarUrl = avatarUrl;
@@ -5422,7 +5593,7 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
           status: 'API_VERIFIED',
           canPublish: uploadScopeGranted,
           authType: 'OAUTH_2_0',
-          channelTitle: title,
+          channelTitle: title ?? chId ?? undefined,
           channelId: chId,
           customUrl,
           avatarUrl,
@@ -5538,7 +5709,17 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
  * 4. Disconnect YouTube OAuth Account
  */
 app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
-  const prevChannel = memoryState.youTubeConnection?.channelTitle || 'YouTube Account';
+  // Same guard as LinkedIn: report a real disconnection only when a channel was
+  // actually linked and its stored credentials were removed.
+  if (!memoryState.youTubeConnection) {
+    return res.json({
+      success: false,
+      outcome: 'NOT_CONNECTED',
+      message: 'No YouTube channel is connected; nothing was disconnected.',
+    });
+  }
+
+  const prevChannel = memoryState.youTubeConnection.channelTitle || 'YouTube Account';
   memoryState.youTubeConnection = undefined;
   persistMemory();
 
@@ -5573,9 +5754,25 @@ app.get('/api/routines', (req: Request, res: Response) => {
 });
 
 app.post('/api/routines/trigger', (req: Request, res: Response) => {
-  const { timeSlot } = req.body;
-  const routine = proactiveReports.find((r) => r.timeSlot === timeSlot) || proactiveReports[0];
-  res.json({ success: true, routine });
+  const { timeSlot } = req.body || {};
+  // The store is rebuilt on read so a trigger matches the current reports. An
+  // unknown slot used to fall back to the first report in the store, and an
+  // empty store returned `undefined` — both still reported as a triggered
+  // briefing.
+  proactiveReports = buildProactiveReports();
+  const request = resolveRoutineTrigger(timeSlot);
+  if (!request.ok) {
+    return res.status(400).json({ success: false, error: request.reason, triggered: false });
+  }
+  const routine = proactiveReports.find((r) => r.timeSlot === request.slot);
+  if (!routine) {
+    return res.status(404).json({
+      success: false,
+      error: `No routine is stored for slot "${request.slot}".`,
+      triggered: false,
+    });
+  }
+  res.json({ success: true, triggered: true, routine });
 });
 
 // ==============================================================================
@@ -5771,21 +5968,42 @@ app.get('/api/security', (req: Request, res: Response) => {
 });
 
 app.post('/api/security/update', (req: Request, res: Response) => {
-  const { currentLevel, humanApprovalForExternal, maskSensitiveData } = req.body;
-  if (currentLevel !== undefined) securityMatrixState.currentLevel = currentLevel;
-  if (humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = humanApprovalForExternal;
-  if (maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = maskSensitiveData;
+  // Only fields that exist in the matrix and carry a valid value are applied.
+  // An empty body, an out-of-range level, or an unknown field is answered as a
+  // no-op rather than a successful save of the matrix that gates external
+  // actions and credential masking.
+  const verdict = classifySecurityMatrixUpdate(req.body);
+
+  const securityStateSnapshot = {
+    currentLevel: securityMatrixState.currentLevel,
+    humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
+    maskSensitiveData: securityMatrixState.maskSensitiveData,
+    credentialLeakProtection: securityMatrixState.credentialLeakProtection,
+    levels: securityMatrixState.levels,
+    auditLogs: memoryState.auditLogs,
+  };
+
+  if (!verdict.accepted) {
+    return res.status(400).json({
+      success: false,
+      applied: false,
+      reason: verdict.reason,
+      rejected: verdict.rejected,
+      message: verdict.message,
+      securityState: securityStateSnapshot,
+    });
+  }
+
+  if (verdict.applied.currentLevel !== undefined) securityMatrixState.currentLevel = verdict.applied.currentLevel;
+  if (verdict.applied.humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = verdict.applied.humanApprovalForExternal;
+  if (verdict.applied.maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = verdict.applied.maskSensitiveData;
   persistMemory();
   res.json({
     success: true,
-    securityState: {
-      currentLevel: securityMatrixState.currentLevel,
-      humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
-      maskSensitiveData: securityMatrixState.maskSensitiveData,
-      credentialLeakProtection: securityMatrixState.credentialLeakProtection,
-      levels: securityMatrixState.levels,
-      auditLogs: memoryState.auditLogs,
-    },
+    applied: true,
+    rejected: verdict.rejected,
+    message: verdict.message,
+    securityState: securityStateSnapshot,
   });
 });
 
@@ -5882,14 +6100,41 @@ app.get('/api/emergency/status', (req: Request, res: Response) => {
 });
 
 app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
-  const { requestedBy = 'HUMAN_OPERATOR', reason } = req.body;
-  const updated = toggleEmergencyStop(requestedBy, reason);
+  const { requestedBy = 'HUMAN_OPERATOR', reason, action } = req.body;
+  const pre = getEmergencyState();
 
-  // Add audit log
+  // `toggleEmergencyStop` flips the flag, so a repeated stop would RELEASE the
+  // freeze and a resume while nothing was paused would ENGAGE it — each read as
+  // success. The action is derived from the pre-transition state; when the
+  // pre-state does not support the requested transition the request is a no-op
+  // and nothing is logged, notified, or reported as executed.
+  const resolvedAction: 'stop' | 'resume' =
+    action === 'stop' || action === 'resume' ? action : pre.emergencyPaused ? 'resume' : 'stop';
+  const gate = emergencyTogglePreAction(resolvedAction, pre);
+  const verdict = emergencyToggleVerdict(resolvedAction, { ...pre });
+
+  if (!verdict.actionExecuted) {
+    persistMemory();
+    return res.json({
+      success: false,
+      actionExecuted: false,
+      action: resolvedAction,
+      title: verdict.title,
+      message: verdict.replyEn,
+      emergencyState: getEmergencyState(),
+    });
+  }
+
+  if (gate.flip) {
+    toggleEmergencyStop(requestedBy, reason);
+  }
+  const updated = getEmergencyState();
+  const engaged = updated.emergencyPaused === true;
+
   pushAuditEntry({
     id: `log-emerg-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    action: updated.emergencyPaused
+    action: engaged
       ? `🚨 EMERGENCY STOP ACTIVATED by ${requestedBy}: All autonomous external actions and modifications PAUSED.`
       : `🟢 EMERGENCY STOP DEACTIVATED by ${requestedBy}: Autonomous subsystem operations RESUMED.`,
     levelRequired: 4,
@@ -5901,22 +6146,28 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
 
   // Notify Telegram Admin if connected
   if (activeTelegramChatId && getCleanTelegramToken()) {
-    const alertMsg = updated.emergencyPaused
+    const alertMsg = engaged
       ? `🚨 *HERMES JARVIS: EMERGENCY STOP ACTIVATED*\n\nAll autonomous external actions, drafts, code modifications, and background tasks are now **HARD PAUSED** by ${requestedBy}.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: SYSTEM FROZEN`
       : `🟢 *HERMES JARVIS: SYSTEM RESUMED*\n\nEmergency stop released by ${requestedBy}. Normal permission-gated operations are now active.\n\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: STANDBY`;
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
   persistMemory();
-  res.json({ success: true, ...updated });
+  res.json({ success: true, actionExecuted: true, action: resolvedAction, title: verdict.title, ...updated });
 });
 
 // Global Kill Switch API (HUD & System Level)
 app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
   const { requestedBy = 'HUD_GLOBAL_KILL_SWITCH', reason = 'Global Kill Switch Triggered by Operator' } = req.body;
 
+  // The transition verdict is derived from the state observed *before* the
+  // activation, so a kill switch that was already engaged is reported as a
+  // no-op rather than a fresh termination of the queue.
+  const preKillState = getEmergencyState();
+
   // 1. Activate hard emergency stop & clear pending queue
   const killResult = activateEmergencyKillSwitch(requestedBy, reason);
+  const killVerdict = killSwitchVerdict(preKillState, killResult.clearedTasksCount);
 
   // 2. Terminate active Telegram long-polling loop & background routines
   const wasTelegramPolling = telegramPollingActive;
@@ -5924,30 +6175,37 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
   telegramConfig.mode = 'simulator';
   telegramConfig.webhookStatus = 'waiting_token';
 
-  // 3. Log immutable Level 4 Audit Event
-  pushAuditEntry({
-    id: `log-killswitch-${Date.now()}`,
-    timestamp: new Date().toISOString(),
-    action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killResult.clearedTasksCount} pending PermissionGateway item(s).`,
-    levelRequired: 4,
-    approvedBy: requestedBy,
-    status: 'EXECUTED',
-    verificationStatus: 'VERIFIED',
-    finalTruthState: 'VERIFIED',
-  });
+  // 3. Log the Level 4 audit event only when the engagement actually did the
+  // work it claims; an already-engaged (or unobserved) kill switch must not
+  // write a "terminated all background tasks" row.
+  if (killVerdict.actionExecuted) {
+    pushAuditEntry({
+      id: `log-killswitch-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killVerdict.clearedTasksCount} pending PermissionGateway item(s).`,
+      levelRequired: 4,
+      approvedBy: requestedBy,
+      status: 'EXECUTED',
+      verificationStatus: 'VERIFIED',
+      finalTruthState: 'VERIFIED',
+    });
+  }
 
-  // 4. Send Emergency Telegram Notice
-  if (activeTelegramChatId && getCleanTelegramToken()) {
-    const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killResult.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
+  // 4. Send Emergency Telegram Notice only for a real engagement.
+  if (killVerdict.actionExecuted && activeTelegramChatId && getCleanTelegramToken()) {
+    const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killVerdict.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
   persistMemory();
 
-  res.json({
-    success: true,
-    message: 'Global Kill Switch engaged. All background processes terminated and queue cleared.',
-    clearedTasksCount: killResult.clearedTasksCount,
+  res.status(killVerdict.outcome === 'UNKNOWN' ? 503 : 200).json({
+    success: killVerdict.actionExecuted,
+    outcome: killVerdict.outcome,
+    actionExecuted: killVerdict.actionExecuted,
+    headline: killVerdict.headline,
+    message: killVerdict.message,
+    clearedTasksCount: killVerdict.clearedTasksCount,
     wasTelegramPolling,
     emergencyState: killResult.emergencyState,
   });
@@ -5955,6 +6213,23 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
 
 app.post('/api/system/resume', async (req: Request, res: Response) => {
   const { requestedBy = 'HUD_OPERATOR' } = req.body;
+
+  // A resume is real only when a freeze was actually in force. The verdict is
+  // read from the pre-transition state so a resume while nothing was paused —
+  // or while a latched hard kill switch still holds autonomy frozen — cannot be
+  // reported or audited as a release.
+  const verdict = emergencyResumeVerdict(getEmergencyState());
+
+  if (!verdict.actionExecuted) {
+    persistMemory();
+    return res.json({
+      success: false,
+      released: false,
+      outcome: verdict.outcome,
+      message: verdict.message,
+      emergencyState: getEmergencyState(),
+    });
+  }
 
   const resumedState = resumeSystemOperation(requestedBy);
 
@@ -5980,7 +6255,9 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    message: 'System operations resumed successfully.',
+    released: true,
+    outcome: verdict.outcome,
+    message: verdict.message,
     emergencyState: resumedState,
   });
 });
@@ -6011,10 +6288,16 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     actionPayload,
   });
 
+  // Success is derived from whether the request actually reached
+  // PENDING_APPROVAL — not from the route merely producing a request object.
+  // A finance or emergency block, or any other terminal status, is a no-op.
+  const verdict = classifyApprovalCreate(result);
+
   if (result.blockedByFinance) {
     return res.status(403).json({
       success: false,
       blocked: true,
+      outcome: verdict.outcome,
       reason: result.financeReason,
       request: result.request,
     });
@@ -6024,7 +6307,20 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     return res.status(423).json({
       success: false,
       blocked: true,
+      outcome: verdict.outcome,
       reason: 'Emergency Stop is active. Action creation paused.',
+      request: result.request,
+    });
+  }
+
+  if (!verdict.staged) {
+    // Defensive: a request that did not reach PENDING_APPROVAL must never be
+    // reported as a successful staging, and no Telegram card is sent for it.
+    return res.status(409).json({
+      success: false,
+      staged: false,
+      outcome: verdict.outcome,
+      reason: verdict.message,
       request: result.request,
     });
   }
@@ -6043,7 +6339,7 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     sendRealTelegramMessage(activeTelegramChatId, cardText, keyboard).catch(() => {});
   }
 
-  res.json({ success: true, request: result.request });
+  res.json({ success: true, staged: true, outcome: verdict.outcome, request: result.request });
 });
 
 app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
@@ -6062,6 +6358,11 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
 
   if (decision === 'REJECT') {
     const updated = updateActionRequestStatus(id, 'REJECTED', { resolvedBy: approver });
+    if (!updated) {
+      // No such pending action — there is nothing to reject, so do not log an
+      // audit entry or answer success for a resolution that never happened.
+      return res.status(404).json({ success: false, error: `No pending action request with id ${id}.` });
+    }
     pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
@@ -6166,6 +6467,14 @@ app.get('/api/tools/integrations/audit', (req: Request, res: Response) => {
 app.post('/api/tools/fs/list', (req: Request, res: Response) => {
   const { path: subPath = '.' } = req.body;
   res.json(realFsList(subPath));
+});
+
+// Recursive workspace filename search. The same `realFsSearch` the voice
+// `find_document` intent uses, so a routed search surfaces exactly what was
+// spoken — real relative paths and byte sizes, never invented matches.
+app.post('/api/tools/fs/search', (req: Request, res: Response) => {
+  const { query = '', maxResults } = req.body;
+  res.json(realFsSearch(String(query), typeof maxResults === 'number' ? maxResults : 10));
 });
 
 app.post('/api/tools/fs/read', (req: Request, res: Response) => {
@@ -6274,7 +6583,14 @@ app.post('/api/computer-operator/execute', async (req: Request, res: Response) =
     }
     const curEmergencyState = getEmergencyState();
     const task = await ComputerOperatorEngine.executeTask(objective, mode, curEmergencyState.emergencyPaused);
-    res.json({ success: true, task });
+    // The engine returns terminal states other than COMPLETED — FAILED, BLOCKED,
+    // NEEDS_APPROVAL, CANCELLED, or a run that never reached a terminal state.
+    // A flat `success: true` here read every one of them as performed host work.
+    res.json({
+      success: operatorTaskExecuted(task),
+      outcome: task.status,
+      task,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -6285,7 +6601,13 @@ app.post('/api/computer-operator/observe', async (req: Request, res: Response) =
     const { preferredApp, includeScreenshot = true } = req.body;
     const observation = await ScreenObserver.observeScreen({ preferredApp, includeScreenshot });
     const interpretation = ScreenInterpreter.interpret(observation, preferredApp);
-    res.json({ success: true, observation, interpretation });
+    // An illustrative view or an unreachable host still returns an observation,
+    // so a flat `success: true` claimed the screen had been inspected when
+    // nothing was read. The flag follows the same host-backed, non-ambiguous
+    // predicate the `inspect_screen` chat reply uses, and `observed` names the
+    // honest outcome.
+    const observed = observationPerformed(observation, ScreenObserver.isHostBacked());
+    res.json({ success: observed, observed, observation, interpretation });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -6295,7 +6617,9 @@ app.post('/api/computer-operator/cancel', (req: Request, res: Response) => {
   try {
     const { reason = 'User requested stop' } = req.body;
     const result = TaskTracker.cancelActiveTask(reason);
-    res.json({ success: true, ...result });
+    // A cancel only succeeded if a task was actually running; an idle tracker
+    // returns cancelled:false and must not be reported as a successful stop.
+    res.json({ success: result.cancelled, ...result });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -6644,19 +6968,33 @@ app.post('/api/github/approvals/:id/decision', (req: Request, res: Response) => 
     });
   }
 
+  const before = githubApprovalQueue.get(req.params.id);
   const updated = githubApprovalQueue.decide(req.params.id, approved, decidedBy.trim(), reason);
-  if (!updated) {
-    return res.status(404).json({ success: false, error: 'No such approval request.' });
+  // `decide` returns the record unchanged for an id that is already settled or
+  // expired, so a duplicate or late click previously re-reported success and
+  // logged a decision it did not make. Classify from the state transition.
+  const verdict = classifyApprovalDecision(before?.state ?? null, updated?.state ?? null);
+  if (verdict.outcome === 'NOT_FOUND') {
+    return res.status(404).json({ success: false, error: verdict.message });
+  }
+  if (!verdict.recorded) {
+    return res.json({
+      success: false,
+      recorded: false,
+      outcome: verdict.outcome,
+      approval: updated,
+      error: verdict.message,
+    });
   }
 
   addAuditLog(
-    `${approved ? 'APPROVED' : 'REJECTED'} GitHub automation action "${updated.summary}" (${updated.id}) by ${decidedBy}`,
+    `${approved ? 'APPROVED' : 'REJECTED'} GitHub automation action "${updated!.summary}" (${updated!.id}) by ${decidedBy}`,
     4,
     decidedBy.trim(),
     approved ? 'VERIFIED' : 'BLOCKED'
   );
 
-  res.json({ success: true, approval: updated });
+  res.json({ success: true, recorded: true, outcome: verdict.outcome, approval: updated });
 });
 
 // Reports the nightly schedule and recent runs.
@@ -6934,20 +7272,29 @@ app.post('/api/memory/sync', (req: Request, res: Response) => {
 
     // Only merge what the resolver accepted. Conflicts are reported, never
     // silently applied over the authoritative server copy.
+    const verdict = classifyMemorySync(result, remote);
+
     memoryState.notes = result.merged.notes;
-    if (result.merged.name !== undefined) memoryState.name = result.merged.name;
+    // A name that differs on both sides is a flagged conflict, not a value to
+    // write. Applying it here overwrote the authoritative name while the
+    // response still reported it as merged — a silent overwrite read as success.
+    if (verdict.nameApplied) memoryState.name = result.merged.name as string;
     memoryState.customKeyValues = result.merged.customKeyValues;
     persistMemory();
 
     res.json({
       success: true,
+      stored: verdict.stored,
+      nameApplied: verdict.nameApplied,
+      outcome: verdict.outcome,
+      message: verdict.message,
       merged: {
         name: memoryState.name,
         notes: memoryState.notes,
         customKeyValues: memoryState.customKeyValues,
       },
       conflicts: result.conflicts,
-      requiresAttention: result.requiresAttention,
+      requiresAttention: verdict.requiresAttention,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Memory sync failed' });
@@ -7440,18 +7787,29 @@ app.post('/api/mobile/bridge/pair', (req: Request, res: Response) => {
     }
 
     const issued = bridgeGateway.issueSession(deviceId, req.body?.clientLabel || 'Android Bridge');
-    bridgeGateway.recordAudit('PAIRING_ACCEPTED', `Pairing accepted for ${deviceId}`, 'VERIFIED', {
-      sessionId: issued.session.sessionId,
-      deviceId,
-    });
+    // Pairing only mints a session token; the device has not connected and no
+    // heartbeat has been seen, so the bridge is still MOBILE_NOT_CONNECTED.
+    // Recording this as VERIFIED would be a fake success: the device has done
+    // nothing yet.
+    bridgeGateway.recordAudit(
+      'PAIRING_ACCEPTED',
+      `Pairing accepted for ${deviceId}; awaiting device connect and heartbeat`,
+      'NOT_CONFIGURED',
+      {
+        sessionId: issued.session.sessionId,
+        deviceId,
+      }
+    );
 
     return res.json({
-      success: true,
-      outcome: 'VERIFIED',
+      success: false,
+      outcome: 'NOT_CONFIGURED',
+      verified: false,
+      status: bridgeGateway.getStatus(),
       sessionId: issued.session.sessionId,
       sessionToken: issued.token,
       expiresAt: issued.expiresAt,
-      note: 'Store this token on the device. Present it as X-Jarvis-Session-Token on every bridge call.',
+      note: 'Pairing stored. This only mints a session token — the device is not connected until it registers and sends a heartbeat. Store this token on the device and present it as X-Jarvis-Session-Token on every bridge call.',
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
@@ -7487,10 +7845,29 @@ app.post('/api/mobile/bridge/connect', (req: Request, res: Response) => {
       permissions,
     });
 
+    // The handshake only *negotiated* capabilities; it did not prove the device
+    // can do the work. A device that landed in PERMISSION_REQUIRED or
+    // LIMITED_CAPABILITY, or one that is still SIMULATION_ONLY, must not be
+    // reported as a verified connection — only a live, fully-permitted CONNECTED
+    // handshake is VERIFIED. This matches the engine and the client adapter,
+    // which already derive success from the same status.
+    const bridgeStatus = bridgeGateway.getStatus();
+    const outcome: ExecutionOutcome =
+      bridgeStatus === 'CONNECTED'
+        ? 'VERIFIED'
+        : bridgeStatus === 'PERMISSION_REQUIRED'
+        ? 'PERMISSION_REQUIRED'
+        : bridgeStatus === 'LIMITED_CAPABILITY' || bridgeStatus === 'PARTIALLY_CONNECTED'
+        ? 'NOT_AVAILABLE'
+        : bridgeStatus === 'MOBILE_NOT_CONNECTED'
+        ? 'NOT_CONFIGURED'
+        : 'UNVERIFIED';
+
     return res.json({
-      success: true,
-      outcome: 'VERIFIED',
-      status: bridgeGateway.getStatus(),
+      success: bridgeStatus === 'CONNECTED',
+      outcome,
+      verified: outcome === 'VERIFIED',
+      status: bridgeStatus,
       device: {
         deviceId: registered.deviceId,
         deviceName: registered.deviceName,
@@ -7529,10 +7906,24 @@ app.post('/api/mobile/bridge/heartbeat', (req: Request, res: Response) => {
     });
   }
 
+  // A heartbeat is recorded against the device, but a simulated device, or one
+  // whose session has lapsed, is not a verified live bridge. Report what the
+  // heartbeat actually established instead of a blanket VERIFIED.
+  const device = bridgeGateway.getDevice();
+  const bridgeStatus = bridgeGateway.getStatus();
+  const verdict = classifyBridgeHeartbeat({
+    accepted: result.accepted,
+    isSimulation: Boolean(device?.capabilities.isSimulation),
+    bridgeStatus,
+    deviceLive: bridgeGateway.isDeviceLive(),
+  });
+
   return res.json({
-    success: true,
-    outcome: 'VERIFIED',
-    status: bridgeGateway.getStatus(),
+    success: verdict.success,
+    outcome: verdict.outcome,
+    verified: verdict.verified,
+    message: verdict.message,
+    status: bridgeStatus,
     lastHeartbeatAt: result.lastHeartbeatAt,
     reconnectCount: bridgeGateway.reconnectCount(),
     telemetryAccepted: {
@@ -7665,30 +8056,46 @@ app.post('/api/mobile/bridge/event', (req: Request, res: Response) => {
   // unchanged) and leaked four subscriber digits when it did match.
   const maskedNumber = maskAndroidCallerNumber(payload.callerNumber);
 
+  // A device event is only as real as the device that sent it. An event from a
+  // simulated device, or one whose session has lapsed, is not a verified live
+  // event — report what the event actually established instead of a blanket
+  // VERIFIED, and stamp the audit row with the same verdict so the trail cannot
+  // disagree with the reply.
+  const eventDevice = bridgeGateway.getDevice();
+  const eventVerdict = classifyBridgeEvent({
+    accepted: true,
+    isSimulation: Boolean(eventDevice?.capabilities.isSimulation),
+    bridgeStatus: bridgeGateway.getStatus(),
+    deviceLive: bridgeGateway.isDeviceLive(),
+    eventType,
+  });
+
   if (eventType === 'INCOMING_CALL') {
     bridgeGateway.recordAudit(
       'CALL_RECEIVED',
       `Incoming call from ${payload.callerName || maskedNumber || 'unknown'} (awaiting approval)`,
-      'VERIFIED',
+      eventVerdict.outcome,
       { sessionId: auth.sessionId, deviceId: session.deviceId }
     );
   } else if (eventType === 'INCOMING_NOTIFICATION') {
     bridgeGateway.recordAudit(
       'NOTIFICATION_RECEIVED',
       `Notification from ${payload.appName || payload.packageName || 'unknown app'}`,
-      'VERIFIED',
+      eventVerdict.outcome,
       { sessionId: auth.sessionId, deviceId: session.deviceId }
     );
   } else {
-    bridgeGateway.recordAudit('EVENT_RECEIVED', `Device event ${eventType}`, 'VERIFIED', {
+    bridgeGateway.recordAudit('EVENT_RECEIVED', `Device event ${eventType}`, eventVerdict.outcome, {
       sessionId: auth.sessionId,
       deviceId: session.deviceId,
     });
   }
 
   return res.json({
-    success: true,
-    outcome: 'VERIFIED',
+    success: eventVerdict.success,
+    outcome: eventVerdict.outcome,
+    verified: eventVerdict.verified,
+    message: eventVerdict.message,
     accepted: true,
     eventType,
     sequence: session.lastSequence,
@@ -7908,21 +8315,61 @@ app.post('/api/mobile/bridge/simulate', (req: Request, res: Response) => {
 
 app.post('/api/memory', (req: Request, res: Response) => {
   try {
-    const { name, notes, customKeyValues, statUpdate } = req.body;
-    if (name !== undefined) memoryState.name = name;
-    if (notes !== undefined) memoryState.notes = notes;
-    if (customKeyValues !== undefined) {
-      memoryState.customKeyValues = { ...memoryState.customKeyValues, ...customKeyValues };
+    // Only apply the fields the classifier accepted. A body carrying no real
+    // field — an empty object, or only a caller-supplied counter request — is
+    // refused rather than answered `success: true` for a save that never
+    // happened, and a malformed value is never written into the stored memory.
+    const verdict = classifyMemoryUpdate(req.body, {
+      name: memoryState.name,
+      notes: memoryState.notes,
+      customKeyValues: memoryState.customKeyValues,
+    });
+
+    if (verdict.applied.name !== undefined) memoryState.name = verdict.applied.name;
+    if (verdict.applied.notes !== undefined) memoryState.notes = verdict.applied.notes as any;
+    if (verdict.applied.customKeyValues !== undefined) {
+      memoryState.customKeyValues = {
+        ...memoryState.customKeyValues,
+        ...verdict.applied.customKeyValues,
+      };
     }
-    if (statUpdate) {
-      if (statUpdate.incrementCommand) memoryState.stats.totalCommands += 1;
-      if (statUpdate.incrementAction) memoryState.stats.actionsExecuted += 1;
+
+    // The "Autonomous Actions Executed" figure is user-visible (MemoryModal) and
+    // must only advance when the server itself observed work. A caller-supplied
+    // counter request is recorded as inert instead of credited.
+    if (verdict.inertCounterRequest) {
+      const requestedStats: string[] = [];
+      if (req.body?.statUpdate?.incrementCommand) requestedStats.push('incrementCommand');
+      if (req.body?.statUpdate?.incrementAction) requestedStats.push('incrementAction');
+      memoryState.notes = [
+        ...memoryState.notes,
+        {
+          id: `stat-assert-${Date.now()}`,
+          title: 'Counter request not applied',
+          content: `A caller asked to increment ${requestedStats.join(', ')} via POST /api/memory. The server did not observe that work, so no counter was advanced.`,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
+
+    if (verdict.outcome === 'NOTHING_TO_APPLY' || verdict.outcome === 'INVALID_BODY') {
+      return res.status(400).json({
+        success: false,
+        stored: false,
+        outcome: verdict.outcome,
+        message: verdict.message,
+      });
+    }
+
+    if (verdict.outcome === 'APPLIED' || verdict.inertCounterRequest) {
       memoryState.stats.lastActive = new Date().toISOString();
     }
 
     persistMemory();
     res.json({
       success: true,
+      outcome: verdict.outcome,
+      message: verdict.message,
       memory: {
         name: memoryState.name,
         notes: memoryState.notes,
@@ -7944,7 +8391,9 @@ let telephonySettingsState: any = {
   provider: 'browser_webrtc_simulator',
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
-  twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '+1 (555) 728-4827',
+  // No placeholder number: an unconfigured carrier line is left empty so the
+  // status surface reports it as not recorded instead of an invented number.
+  twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
   autoAnswerInbound: true,
   autoAnswerDelaySeconds: 2,
   aiReceptionistGreeting: "Hello, thank you for calling. You have reached Alex's AI Executive Assistant, JARVIS. How may I assist you today?",
@@ -7969,15 +8418,29 @@ app.get('/api/telephony/calls', (req: Request, res: Response) => {
 app.post('/api/telephony/calls', (req: Request, res: Response) => {
   try {
     const callData = req.body;
-    if (!callData || !callData.id) {
-      return res.status(400).json({ success: false, error: 'Call record ID is required' });
+    const existingIdx =
+      callData && typeof callData.id === 'string'
+        ? telephonyCalls.findIndex((c) => c.id === callData.id)
+        : -1;
+    const existing = existingIdx >= 0 ? telephonyCalls[existingIdx] : null;
+    // The old route answered success: true for any body carrying an id and
+    // spread unknown keys into the stored record. Classify the write against
+    // the real CallRecord fields and the stored record first, so a body that
+    // names no real field, or restates the record unchanged, is refused
+    // instead of being reported as a saved call.
+    const verdict = classifyTelephonyCallRecord(callData, existing);
+    if (!verdict.accepted) {
+      const status = verdict.reason === 'MISSING_ID' || verdict.reason === 'NOT_OBJECT' ? 400 : 422;
+      return res.status(status).json({ success: false, reason: verdict.reason, error: verdict.message });
     }
 
-    const existingIdx = telephonyCalls.findIndex((c) => c.id === callData.id);
+    const stored = existing
+      ? { ...existing, ...verdict.changes }
+      : { ...verdict.changes, id: verdict.id };
     if (existingIdx >= 0) {
-      telephonyCalls[existingIdx] = { ...telephonyCalls[existingIdx], ...callData };
+      telephonyCalls[existingIdx] = stored;
     } else {
-      telephonyCalls.unshift(callData);
+      telephonyCalls.unshift(stored);
     }
 
     // Keep up to 100 recent calls in memory
@@ -7985,7 +8448,13 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
       telephonyCalls = telephonyCalls.slice(0, 100);
     }
 
-    res.json({ success: true, call: callData });
+    res.json({
+      success: true,
+      action: verdict.action,
+      call: stored,
+      message: verdict.message,
+      ...(verdict.rejected.length > 0 ? { ignoredFields: verdict.rejected } : {}),
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -7993,14 +8462,22 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
 
 // 3. Delete / Clear Telephony Calls
 app.delete('/api/telephony/calls', (req: Request, res: Response) => {
+  const before = telephonyCalls.length;
   telephonyCalls = [];
-  res.json({ success: true, message: 'Telephony call history cleared' });
+  // Clearing an already-empty history removes nothing; report the real count
+  // rather than asserting a deletion that never happened.
+  const verdict = classifyTelephonyCallDeletion(before);
+  res.json({ ...verdict });
 });
 
 app.delete('/api/telephony/calls/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  const before = telephonyCalls.length;
   telephonyCalls = telephonyCalls.filter((c) => c.id !== id);
-  res.json({ success: true, message: `Call ${id} deleted` });
+  // Deleting an id that was never recorded removes nothing; the old route
+  // still answered success: true and named the call as deleted.
+  const verdict = classifyTelephonyCallDeletion(before - telephonyCalls.length, id);
+  res.json({ ...verdict });
 });
 
 // 4. Telephony Settings
@@ -8016,10 +8493,29 @@ app.get('/api/telephony/settings', (req: Request, res: Response) => {
 
 app.post('/api/telephony/settings', (req: Request, res: Response) => {
   try {
-    const updates = req.body;
+    // The route used to spread any caller-supplied object over the live
+    // settings and answer `success: true` unconditionally: an unknown or
+    // misspelled key was "stored", a malformed value corrupted state, and a
+    // body carrying no real setting still reported a save. Classify against
+    // the real keys and report what was actually stored.
+    const verdict = classifyTelephonySettingsUpdate(req.body, telephonySettingsState);
+    if (!verdict.accepted) {
+      return res.json({
+        success: false,
+        outcome: verdict.reason,
+        applied: false,
+        rejected: verdict.rejected,
+        message: verdict.message,
+        settings: {
+          ...telephonySettingsState,
+          twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',
+        },
+      });
+    }
+
     telephonySettingsState = {
       ...telephonySettingsState,
-      ...updates,
+      ...verdict.applied,
     };
 
     // Apply the selected engine to the live registry. Without this the
@@ -8027,13 +8523,13 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
     // TELEPHONY_PROVIDER had set at boot. The result is reported honestly so
     // the UI never claims a selection took effect when it did not.
     let engineApplied: boolean | null = null;
-    if (typeof updates?.provider === 'string') {
-      const providerId = telephonyEngineProviderId(updates.provider);
+    if (typeof verdict.applied.provider === 'string') {
+      const providerId = telephonyEngineProviderId(verdict.applied.provider);
       engineApplied = providerId !== null
         && TelephonyProviderRegistry.setActiveProvider(providerId);
       if (!engineApplied) {
         telephonySettingsState.engineApplyError =
-          `ENGINE_NOT_APPLIED: ${updates.provider}`;
+          `ENGINE_NOT_APPLIED: ${verdict.applied.provider}`;
       } else {
         delete telephonySettingsState.engineApplyError;
       }
@@ -8041,6 +8537,11 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      outcome: verdict.changed ? 'APPLIED' : 'UNCHANGED',
+      applied: verdict.changed,
+      changed: verdict.changed,
+      rejected: verdict.rejected,
+      message: verdict.message,
       settings: {
         ...telephonySettingsState,
         twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',
@@ -8273,8 +8774,8 @@ app.post('/api/telephony/incoming', async (req: Request, res: Response) => {
     return res.json({ success: false, error: 'EMERGENCY_STOP_ACTIVE', message: 'Autonomous call answering suspended.' });
   }
 
-  const rawFrom = req.body.From || req.body.callerNumber || '+91 9876543210';
-  const rawTo = req.body.To || req.body.recipientNumber || DEFAULT_CLINIC_CONFIG.phone;
+  const rawFrom = resolveRawNumber(req.body.From || req.body.callerNumber);
+  const rawTo = resolveRawNumber(req.body.To || req.body.recipientNumber);
   const isSimulated = Boolean(req.body.isSimulated || req.headers['x-telephony-simulation'] === 'true');
 
   const session = TelephonySessionManager.createInboundSession({
@@ -8346,14 +8847,17 @@ app.post('/api/telephony/twiml/turn', async (req: Request, res: Response) => {
 app.post('/api/telephony/interruption', (req: Request, res: Response) => {
   const { callSessionId } = req.body;
   const result = TelephonySessionManager.handleBargeIn(callSessionId);
-  res.json({ success: true, ...result });
+  // A barge-in only counts when it reached a live session; an unknown id
+  // returns state IDLE, so success must follow the handler's real outcome.
+  res.json({ success: bargeInApplied(result), ...result });
 });
 
 // 6.5 Silence Timeout Endpoint (Section O)
 app.post('/api/telephony/silence-timeout', (req: Request, res: Response) => {
   const { callSessionId } = req.body;
   const result = TelephonySessionManager.handleSilenceTimeout(callSessionId);
-  res.json({ success: true, ...result });
+  // success mirrors whether a live session advanced; a stale id is not accepted.
+  res.json({ success: silenceTimeoutApplied(result), ...result });
 });
 
 // 6.6 Stage Outbound Call for Level-4 Authorization (Section H)
@@ -8364,20 +8868,35 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Destination phone number is required' });
     }
 
+    // Run the safety gate before staging anything. The masked target is what
+    // would be dialled and what the finance guard must inspect; staging the
+    // pending request first left a blocked dial sitting in the pending queue.
+    const destinationMasked = maskPhoneNumber(destinationNumber);
+    const actionReq = createPendingActionRequest({
+      exactAction: `Outbound PSTN Call to ${destinationMasked}`,
+      target: destinationMasked,
+      contentChanges: `Purpose: ${purpose || 'Autonomous phone call by JARVIS'}`,
+      level: 4,
+      source: 'Telephony Gateway',
+    });
+    const verdict = classifyOutboundStage(actionReq);
+    if (!verdict.success) {
+      return res.status(409).json({
+        success: false,
+        staged: false,
+        outcome: verdict.outcome,
+        actionId: null,
+        message: verdict.message,
+      });
+    }
+
+    // Only a genuinely pending action is staged as an outbound request, so a
+    // blocked dial can never be authorized later through /outbound/authorize.
     const request = TelephonySessionManager.stageOutboundRequest({
       destinationNumber,
       purpose: purpose || 'Autonomous phone call by JARVIS',
       recipientName,
       language: language || 'hi-IN',
-    });
-
-    // Create a Level-4 Pending Action in safety system
-    const actionReq = createPendingActionRequest({
-      exactAction: `Outbound PSTN Call to ${request.destinationMasked}`,
-      target: request.destinationMasked,
-      contentChanges: `Purpose: ${request.purpose}`,
-      level: 4,
-      source: 'Telephony Gateway',
     });
 
     const promptText = (language || 'hi-IN').startsWith('hi')
@@ -8386,6 +8905,8 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      staged: true,
+      outcome: verdict.outcome,
       request,
       actionId: actionReq.request.id,
       promptText,
@@ -8400,31 +8921,62 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
   try {
     const { requestId, actionId, decision, approverName = 'HUMAN_OPERATOR' } = req.body;
 
-    if (decision !== 'APPROVE') {
-      TelephonySessionManager.authorizeOutboundRequest(requestId, 'REJECT', approverName);
-      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', approverName);
-      return res.json({ success: true, authorized: false, message: 'Outbound call cancelled.' });
-    }
+    const requestedDecision: 'APPROVE' | 'REJECT' = decision === 'APPROVE' ? 'APPROVE' : 'REJECT';
+    const recorded = TelephonySessionManager.authorizeOutboundRequest(
+      requestId,
+      requestedDecision,
+      approverName
+    );
+    const verdict = classifyOutboundAuthorization(requestedDecision, recorded);
 
-    const authRes = TelephonySessionManager.authorizeOutboundRequest(requestId, 'APPROVE', approverName);
-    if (actionId) updateActionRequestStatus(actionId, 'APPROVED', approverName);
-
-    // Verify provider configuration before connecting (Section V)
-    const provider = TelephonyProviderRegistry.getProvider();
-    if (!provider.isConfigured() && req.body.isSimulated !== true) {
-      return res.status(400).json({
+    // A requestId that was never staged cannot be cancelled or authorized.
+    // Reporting success here told the operator an outbound call had been
+    // withdrawn (or approved) when no request existed.
+    if (!verdict.success) {
+      return res.status(404).json({
         success: false,
-        status: 'TELEPHONY_NOT_CONFIGURED',
-        error: 'Cannot place outbound telephone call because carrier provider credentials are missing (TELEPHONY_NOT_CONFIGURED).',
+        authorized: false,
+        outcome: verdict.outcome,
+        message: verdict.message,
       });
     }
 
-    const dest = authRes.request?.destinationNumber || req.body.destinationNumber;
+    if (requestedDecision === 'REJECT') {
+      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', approverName);
+      return res.json({
+        success: true,
+        authorized: false,
+        outcome: verdict.outcome,
+        message: verdict.message,
+      });
+    }
+
+    if (actionId) updateActionRequestStatus(actionId, 'APPROVED', approverName);
+
+    // Verify the active engine can actually place a PSTN call before
+    // connecting (Section V). The raw `isConfigured()` boolean is not enough:
+    // the simulator's is unconditionally true and its startOutboundCall()
+    // returns a fabricated providerCallId, so gating on the boolean alone let
+    // a simulated engine through and the route reported a "placed" call that
+    // no carrier saw. Derive the honest mode from the active provider id.
+    const provider = TelephonyProviderRegistry.getProvider();
+    const dialEngineMode = telephonyEngineMode(provider.id, provider.isConfigured());
+    if (!telephonyEngineCanDial(dialEngineMode)) {
+      return res.status(400).json({
+        success: false,
+        authorized: true,
+        status: dialEngineMode,
+        error: telephonyDialRefusal(dialEngineMode),
+      });
+    }
+
+    const dest = recorded.request?.destinationNumber || req.body.destinationNumber;
     const sessionRes = TelephonySessionManager.createOutboundSession({
       destinationNumber: dest,
-      purpose: authRes.request?.purpose || 'Outbound consultation',
-      language: authRes.request?.language || 'hi-IN',
+      purpose: recorded.request?.purpose || 'Outbound consultation',
+      language: recorded.request?.language || 'hi-IN',
       isSimulated: Boolean(req.body.isSimulated),
+      ownNumber: resolveRawNumber(telephonySettingsState.twilioPhoneNumber),
     });
 
     if (sessionRes.error || !sessionRes.session) {
@@ -8461,20 +9013,71 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
 });
 
 // 6.8 Telephony Permissions Gateway (Section J)
+//
+// `loadPhonePermissions` / `savePhonePermissions` are browser helpers: both
+// short-circuit on `typeof window === 'undefined'`, so on this server they read
+// and write nothing. The POST route used to report `success: true, applied:
+// true` anyway, so a granted Level-4 permission was announced as saved and
+// silently forgotten on the next GET. `resolvePhonePermissionStore` returns a
+// durable store only when one exists (tests inject one through
+// `JARVIS_PHONE_PERMISSIONS_FILE`); otherwise the route reports the honest
+// refusal instead of claiming a change it cannot keep.
+function resolvePhonePermissionStore(): PhonePermissionStore | null {
+  const filePath = process.env.JARVIS_PHONE_PERMISSIONS_FILE;
+  if (!filePath) return null;
+  return {
+    load: () => {
+      try {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        return { ...DEFAULT_PHONE_PERMISSIONS, ...JSON.parse(raw) };
+      } catch {
+        return { ...DEFAULT_PHONE_PERMISSIONS };
+      }
+    },
+    save: (perms) => {
+      fs.writeFileSync(filePath, JSON.stringify(perms, null, 2), 'utf-8');
+    },
+  };
+}
+
 app.get('/api/telephony/permissions', (req: Request, res: Response) => {
-  const perms = loadPhonePermissions();
-  res.json({ success: true, permissions: perms });
+  const store = resolvePhonePermissionStore();
+  const perms = store ? store.load() : loadPhonePermissions();
+  res.json({
+    success: true,
+    persisted: Boolean(store),
+    permissions: perms,
+  });
 });
 
 app.post('/api/telephony/permissions', (req: Request, res: Response) => {
   try {
-    const updates = req.body;
-    const current = loadPhonePermissions();
-    const updated = { ...current, ...updates };
-    savePhonePermissions(updated);
-    res.json({ success: true, permissions: updated });
+    const verdict = classifyPhonePermissionUpdate(req.body, PHONE_PERMISSION_DEFINITIONS);
+    const store = resolvePhonePermissionStore();
+    const current = store ? store.load() : loadPhonePermissions();
+    if (!verdict.accepted) {
+      return res.status(400).json({
+        success: false,
+        applied: false,
+        reason: verdict.reason,
+        rejected: verdict.rejected,
+        permissions: current,
+        error: verdict.message,
+      });
+    }
+
+    const result = applyPhonePermissionUpdate(store, current, verdict.applied);
+    res.json({
+      success: result.applied,
+      applied: result.applied,
+      outcome: result.outcome,
+      appliedKeys: result.applied ? Object.keys(verdict.applied) : [],
+      rejected: verdict.rejected,
+      message: result.applied ? verdict.message : result.message,
+      permissions: result.permissions,
+    });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, applied: false, error: err.message });
   }
 });
 
@@ -8622,21 +9225,21 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const verdict = await evaluateLaunchDispatch('Visual Studio Code', 'code');
         spokenResponse = launchReply('Visual Studio Code', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_vscode', title: verdict.title, target: 'VS Code', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_vscode', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_browser': {
         const verdict = await evaluateLaunchDispatch('Chrome browser', 'google-chrome');
         spokenResponse = launchReply('Chrome browser', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_browser', title: verdict.title, target: 'Chrome', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_browser', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'operate_terminal': {
         const verdict = await evaluateLaunchDispatch('Terminal', 'x-terminal-emulator');
         spokenResponse = launchReply('Terminal', verdict, language);
         actionExecuted = verdict.actionExecuted;
-        actionDetail = { type: 'operate_terminal', title: verdict.title, target: 'Terminal', payload: { outcome: verdict.outcome } };
+        actionDetail = { type: 'operate_terminal', title: verdict.title, payload: { outcome: verdict.outcome } };
         break;
       }
       case 'open_computer_operator': {
@@ -8750,10 +9353,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           },
           language.startsWith('hi')
         );
-        // The status reply is derived from the token check, so an invalid token
-        // means the inquiry could not read a connection and executed nothing.
-        actionExecuted = toolActionExecuted({ success: ytTokenCheck.valid });
-        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status', payload: { tokenValid: ytTokenCheck.valid, channelVerified: false, channel: ytConn?.channelTitle } };
+        // A status question runs no tool and opens no view: `handleExecuteAction`
+        // in App.tsx has no `youtube_status_inquiry` case. It previously credited
+        // the token check as executed work whenever the token was valid, advancing
+        // the "Autonomous Actions Executed" counter for a read-only look-up.
+        actionExecuted = false;
+        actionDetail = { type: 'youtube_status', title: 'YouTube Integration Status (informational, no action taken)', payload: { tokenValid: ytTokenCheck.valid, channelVerified: false, channel: ytConn?.channelTitle } };
         break;
       }
       case 'youtube_upload_request': {
@@ -8773,7 +9378,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       case 'tools_audit': {
         const audit = getIntegrationsAuditReport();
-        spokenResponse = `Integrations audit: ${audit.summary.connected} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
+        spokenResponse = `Integrations audit: ${audit.summary.credentialsPresent} integration(s) have their credentials present in this environment, ${audit.summary.notConfigured} await configuration, and ${audit.summary.notAvailable} cannot be configured here. Presence of a credential is not a live connection test.`;
         actionExecuted = true;
         actionDetail = { type: 'tools_audit', title: 'Integrations Matrix', payload: audit };
         break;
@@ -8844,7 +9449,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           const list = search.matches.map((m) => m.path).join(', ');
           spokenResponse = `Found ${search.matches.length} file(s) matching ${query}: ${list}.`;
           actionExecuted = true;
-          actionDetail = { type: 'find_document', title: `Found: ${query}`, payload: search.matches };
+          // Carry the query alongside the matches so the client can open the
+          // filesystem explorer on the same search instead of a bare directory.
+          actionDetail = { type: 'find_document', title: `Found: ${query}`, payload: { query, matches: search.matches } };
         } else if (search.success) {
           // A search that returned nothing retrieved no document: no work was
           // executed, and the "Not found" card must not be counted as an action.
@@ -8960,7 +9567,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         break;
       }
       case 'make_call': {
-        const target = intentData.actionPayload?.target || 'Contact';
+        const target = extractDialTarget(intentData.actionPayload?.target);
+        if (!target) {
+          const verdict = offlineCallMissingNumberVerdict('dial');
+          spokenResponse = language.startsWith('hi') ? verdict.replyHi : verdict.replyEn;
+          actionExecuted = verdict.actionExecuted;
+          actionDetail = {
+            type: 'make_call',
+            title: verdict.title,
+            payload: { target: null, outcome: 'NO_NUMBER' },
+          };
+          break;
+        }
         const verdict = evaluateTelephonyDispatch('dial');
         const base = telephonyDispatchReply(verdict.outcome, language);
         spokenResponse = language.startsWith('hi') ? `${target}: ${base}` : `Call to ${target}: ${base}`;
@@ -9080,24 +9698,32 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         // the destination URL; the reply, the card and that URL all come from
         // one verdict so a named site is never claimed without being loaded.
         const verdict = browserOpenVerdict(intentData.intent);
-        spokenResponse = language === 'hi' ? verdict.replyHi : verdict.replyEn;
+        // The client sends a locale (`hi-IN`, `hinglish`), never a bare `hi`, so
+        // this must use the same `startsWith('hi')` test as every other case or
+        // the Hindi reply is unreachable and Hindi users are answered in English.
+        spokenResponse = language.startsWith('hi') ? verdict.replyHi : verdict.replyEn;
         actionExecuted = true;
-        actionDetail = {
-          type: intentData.intent,
-          title: verdict.title,
-          target: verdict.url,
-        };
+        // The URL must ride inside `payload.target`: the app dispatcher reads the
+        // destination only from `actionDetail.payload`, so a top-level `target`
+        // would never reach the view.
+        actionDetail = browserOpenActionDetail(verdict);
         break;
       }
       case 'google_search': {
         const query = intentData.actionPayload?.query || message.replace(/^search\s+/i, '').trim();
-        spokenResponse = `Searching Google for "${query}" in the in-app Browser. No external browser was launched.`;
-        actionExecuted = true;
+        // "Searching Google for X" asserts a lookup is under way. The in-app Browser
+        // only runs it when the view is handed the search URL in `payload.target`,
+        // so the reply and the target come from one verdict and defer to Hindi when
+        // the request was Hindi.
+        const dispatch = searchDispatch(query);
+        spokenResponse = language.startsWith('hi') ? dispatch.replyHi : dispatch.replyEn;
+        // A bare "search" with no query runs no lookup; the Browser can only open
+        // its default home. Crediting execution there was the fake-success shape.
+        actionExecuted = dispatch.dispatched;
         actionDetail = {
           type: 'google_search',
-          title: `In-App Browser Search: ${query} (external browser not launched)`,
-          target: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-          payload: { query },
+          title: dispatch.title,
+          payload: { query: dispatch.query, target: dispatch.url },
         };
         break;
       }

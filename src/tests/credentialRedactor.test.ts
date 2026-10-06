@@ -156,4 +156,164 @@ describe('credential redaction', () => {
     );
     expect(redactSecrets('please read this and that page')).toBe('please read this and that page');
   });
+
+  // Regression: a third live probe (2026-10-01 00:35 IST slot) found eight more
+  // providers whose keys passed through redaction byte-for-byte. These are the
+  // services this project actually integrates with (Twilio telephony, Groq/
+  // Perplexity model calls, Notion, Shopify, Linear, Slack webhooks, Azure
+  // storage, Oracle Cloud). Each value is used *bare* — the form a key takes in
+  // a screenshot or terminal stream, which is the path this function protects.
+  // A labelled `NAME=` form would be caught by the generic keyword rule and
+  // would not prove the token-family pattern itself works.
+  it('redacts a Groq API key (gsk_)', () => {
+    const key = 'gsk_' + 'aBcDeFgHiJkLmNoPqRsTuVwX'.repeat(2); // 48 chars
+    expect(redactSecrets(key)).not.toContain(key);
+  });
+
+  it('redacts a Perplexity API key (pplx-)', () => {
+    const key = 'pplx-' + 'aBcDeFgHiJkLmNoPqRsTuVwX';
+    expect(redactSecrets(key)).not.toContain(key);
+  });
+
+  it('redacts a Notion integration token (ntn_)', () => {
+    const token = 'ntn_' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgH';
+    expect(redactSecrets(`notion ${token} pasted`)).not.toContain(token);
+  });
+
+  it('redacts a legacy Notion internal integration token (secret_)', () => {
+    const token = 'secret_' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgH';
+    expect(redactSecrets(token)).not.toContain(token);
+  });
+
+  it('redacts a Shopify access token (shpat_)', () => {
+    const token = 'shpat_' + '0123456789abcdef'.repeat(2);
+    expect(redactSecrets(token)).not.toContain(token);
+  });
+
+  it('redacts a Shopify shared secret (shpss_)', () => {
+    const token = 'shpss_' + '0123456789abcdef'.repeat(2);
+    expect(redactSecrets(token)).not.toContain(token);
+  });
+
+  it('redacts a Linear API key (lin_api_)', () => {
+    const token = 'lin_api_' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgH';
+    expect(redactSecrets(token)).not.toContain(token);
+  });
+
+  it('redacts a Slack incoming-webhook URL but leaves an ordinary Slack URL alone', () => {
+    const secretPart = 'aBcDeFgHiJkLmNoPqRsTuVwX';
+    const hook = `https://hooks.slack.com/services/T00000000/B00000000/${secretPart}`;
+    expect(redactSecrets(hook)).not.toContain(secretPart);
+    // An ordinary Slack URL carries no embedded secret and must survive.
+    expect(redactSecrets('https://app.slack.com/client/T00000000/C00000000')).toBe(
+      'https://app.slack.com/client/T00000000/C00000000',
+    );
+  });
+
+  it('redacts an Azure Storage AccountKey', () => {
+    const key = 'AccountKey=' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJkLmNoPqRsTuVwX==';
+    expect(redactSecrets(key)).not.toContain('aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJkLmNoPqRsTuVwX');
+    expect(redactSecrets(key)).toContain('[REDACTED_AZURE_ACCOUNT_KEY]');
+  });
+
+  it('redacts a Firebase API key (the second segment of a Google key)', () => {
+    // Firebase keys are `AIza` + 33 chars, i.e. an AIzaSy-adjacent form; the
+    // leading AIza marker alone is what distinguishes them from arbitrary text.
+    const key = 'AIza' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJ';
+    expect(redactSecrets(key)).not.toContain(key);
+  });
+
+  it('redacts a Resend API key (re_) but not the ordinary English prefix "re"', () => {
+    const token = 're_' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeF';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets('re_ this is a reply note')).toBe('re_ this is a reply note');
+  });
+
+  it('redacts a Meta / Facebook Graph access token (EAA)', () => {
+    const token = 'EAA' + 'aBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJkLmNoPqRsTuVwXaBcDeF';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets(token)).toContain('[REDACTED_META_TOKEN]');
+  });
+
+  it('redacts a Google OAuth refresh token (1//) but not a bare fraction', () => {
+    const token = '1//' + '04Zx9kQ2mN7pL3rT5vW8yA1bC6dE0fG4hJ2kM9nP7qR5sT';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets(token)).toContain('[REDACTED_GOOGLE_OAUTH_REFRESH_TOKEN]');
+    // A short "1//" prefix that is not a token must survive.
+    expect(redactSecrets('step 1// see below')).toBe('step 1// see below');
+  });
+
+  it('redacts a Google OAuth authorization code (4/0A)', () => {
+    const token = '4/0A' + 'eanS0bZx9kQ2mN7pL3rT5vW8yA1bC6dE0fG4hJ2kM9n';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets(token)).toContain('[REDACTED_GOOGLE_OAUTH_CODE]');
+  });
+
+  it('redacts a Google OAuth access token (ya29.)', () => {
+    const token = 'ya29.' + 'a0AfBcDeFgHiJkLmNoPqRsTuVwXaBcDeFgHiJkLmNoPqRsTuVwX';
+    expect(redactSecrets(token)).not.toContain(token);
+    expect(redactSecrets(token)).toContain('[REDACTED_GOOGLE_OAUTH_ACCESS_TOKEN]');
+  });
+
+  // Regression: a fourth live probe (2026-10-01 02:05 IST slot) found three
+  // more credential families this project actually handles leaking through
+  // redaction. Telnyx is a telephony provider (`TELNYX_API_KEY`), LinkedIn is
+  // an OAuth integration (`LINKEDIN_ACCESS_TOKEN`), and Google app passwords
+  // authenticate the Gmail conduit (`GMAIL_APP_PASSWORD`).
+  it('redacts a Telnyx API key (KEY + 32 hex) but not the word "KEY" in prose', () => {
+    const key = 'KEY0123456789ABCDEF0123456789ABCDEF';
+    expect(redactSecrets(`TELNYX_API_KEY=${key}`)).not.toContain(key);
+    expect(redactSecrets(`raw ${key} pasted`)).not.toContain(key);
+    expect(redactSecrets(`raw ${key} pasted`)).toContain('[REDACTED_TELNYX_KEY]');
+    // A "KEY" that is not followed by a hex body must survive.
+    expect(redactSecrets('press the KEY button to continue')).toBe('press the KEY button to continue');
+  });
+
+  it('redacts a LinkedIn OAuth access token (AQV) but not an AQV opcode', () => {
+    const token = 'AQVt3n0k9Jm2XyZabcDEF1234567890abcdefg';
+    expect(redactSecrets(`LINKEDIN_ACCESS_TOKEN=${token}`)).not.toContain(token);
+    expect(redactSecrets(`raw ${token} pasted`)).not.toContain(token);
+    expect(redactSecrets(`raw ${token} pasted`)).toContain('[REDACTED_LINKEDIN_TOKEN]');
+    // A short "AQV" mnemonic in an assembly listing is not a token.
+    expect(redactSecrets('AQV is a mnemonic')).toBe('AQV is a mnemonic');
+  });
+
+  it('redacts the whole Gmail app password, not just its first group', () => {
+    // Google app passwords are "abcd efgh ijkl mnop". The generic keyword rule
+    // stops at the first space; without the dedicated rule the final three
+    // groups leaked verbatim.
+    const out = redactSecrets('GMAIL_APP_PASSWORD=abcd efgh ijkl mnop');
+    expect(out).not.toContain('efgh');
+    expect(out).not.toContain('ijkl');
+    expect(out).not.toContain('mnop');
+    expect(out).not.toContain('abcd efgh');
+  });
+
+  // Regression: a fifth live probe (2026-10-01 02:35 IST slot) found three more
+  // provider secrets passing through redaction byte-for-byte. Each is a
+  // first-class credential in this project or a common provider format, and
+  // each test uses the token *bare* for the same reason as the earlier probes.
+  it('redacts a Slack app-level token (xapp-)', () => {
+    const token = ['xapp', '1', 'A0123456789', '1234567890123', 'a'.repeat(64)].join('-');
+    expect(redactSecrets(`raw ${token} pasted`)).not.toContain(token);
+    expect(redactSecrets(`raw ${token} pasted`)).toContain('[REDACTED_SLACK_APP_TOKEN]');
+  });
+
+  it('redacts a Stripe webhook signing secret (whsec_)', () => {
+    const secret = 'whsec_' + 'aBcDeFgHiJkLmNoPqRsTuVwXyZ012345';
+    expect(redactSecrets(`raw ${secret} pasted`)).not.toContain(secret);
+    expect(redactSecrets(`raw ${secret} pasted`)).toContain('[REDACTED_STRIPE_WEBHOOK_SECRET]');
+  });
+
+  it('redacts a Mailgun API key (key- + 32 hex) but not the English "key-" prefix', () => {
+    // Built by concatenation: a literal here trips GitHub push protection's
+    // Mailgun scanner even though it is synthetic (same reason the Slack and
+    // Stripe fixtures above are assembled rather than written out).
+    const key = 'key-' + 'deadbeef'.repeat(4);
+    expect(redactSecrets(`MAILGUN_API_KEY=${key}`)).not.toContain(key);
+    expect(redactSecrets(`raw ${key} pasted`)).not.toContain(key);
+    expect(redactSecrets(`raw ${key} pasted`)).toContain('[REDACTED_MAILGUN_KEY]');
+    // "key-" followed by non-hex text is prose, not a token.
+    expect(redactSecrets('the key-value store')).toBe('the key-value store');
+  });
 });

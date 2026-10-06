@@ -58,6 +58,7 @@ import {
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
 import { ACOUSTIC_FILTER_STATUS, ACOUSTIC_FILTER_SPEC } from '../utils/hardening/acousticFilterTruth';
 import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
+import { formatDurationWords } from '../utils/hardening/callDurationTruth';
 import {
   downloadCallHistoryCsv,
   filterCallRecords,
@@ -121,6 +122,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     provider?: { id: string; name: string; isSimulationOnly?: boolean };
   } | null>(null);
   const [settingsSaveResult, setSettingsSaveResult] = useState<string | null>(null);
+  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
   const [geminiConfigured, setGeminiConfigured] = useState<boolean | undefined>(undefined);
 
   const loadProviderStatus = React.useCallback(() => {
@@ -174,27 +176,43 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
     }
   };
 
-  const handleTogglePermission = (key: string) => {
-    const updated = {
-      ...phonePermissions,
-      [key]: !phonePermissions[key],
-    };
-    setPhonePermissions(updated);
-    fetch('/api/telephony/permissions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        [key]: {
-          key,
-          state: updated[key] ? 'GRANTED' : 'DENIED',
-          lastUpdated: new Date().toISOString(),
-        },
-      }),
-    }).catch(() => {});
+  const handleTogglePermission = async (key: string) => {
+    const nextGranted = !phonePermissions[key];
+    setPhonePermissions((prev) => ({ ...prev, [key]: nextGranted }));
+    try {
+      const res = await fetch('/api/telephony/permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [key]: {
+            key,
+            state: nextGranted ? 'GRANTED' : 'DENIED',
+            lastUpdated: new Date().toISOString(),
+          },
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.success !== true) {
+        // The server refused the change — do not leave the toggle showing a
+        // permission that was never persisted.
+        setPhonePermissions((prev) => ({ ...prev, [key]: !nextGranted }));
+        setPermissionNotice(data?.error || 'PERMISSION CHANGE REJECTED — the server did not apply it');
+        return;
+      }
+      setPermissionNotice(
+        data.rejected && data.rejected.length > 0
+          ? `PARTIAL — applied ${(data.appliedKeys || []).length} key(s); server ignored: ${data.rejected.join(', ')}`
+          : null,
+      );
+    } catch {
+      setPhonePermissions((prev) => ({ ...prev, [key]: !nextGranted }));
+      setPermissionNotice('PERMISSION CHANGE FAILED — could not reach the server');
+    }
   };
 
   // Dialer state
   const [dialNumber, setDialNumber] = useState('');
+  const [dialNotice, setDialNotice] = useState<string | null>(null);
   const [calleeName, setCalleeName] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState<string>('reschedule_doctor');
   const [customObjective, setCustomObjective] = useState('');
@@ -256,7 +274,15 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   };
 
   const handleLaunchOutbound = () => {
-    const finalNumber = dialNumber.trim() || '+1 (415) 890-2134';
+    // A call can only be placed to a number that was actually entered. A
+    // fabricated fallback number would create a record of a call that was never
+    // dialled, so the request is refused and the reason is shown.
+    const finalNumber = dialNumber.trim();
+    if (!finalNumber) {
+      setDialNotice('NO DIAL NUMBER — enter or pick a number before starting the call.');
+      return;
+    }
+    setDialNotice(null);
     const finalName = calleeName.trim() || 'Direct Contact';
     const currentPreset = CALL_SCENARIO_PRESETS.find((p) => p.id === selectedPresetId);
     const finalObjective = customObjective.trim() || currentPreset?.objective || 'General autonomous assistant coordination';
@@ -283,11 +309,17 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.success !== true) {
-        setSettingsSaveResult('SAVE FAILED — server rejected the settings');
+        setSettingsSaveResult(
+          data?.message ? `NOT SAVED — ${data.message}` : 'SAVE FAILED — server rejected the settings'
+        );
+      } else if (data.changed === false) {
+        setSettingsSaveResult('NO CHANGE — the submitted values matched what was already stored');
       } else if (data.engineApplied === false) {
         setSettingsSaveResult('SAVED BUT ENGINE NOT APPLIED — this engine is not routable in this build');
-      } else {
+      } else if (data.engineApplied === true) {
         setSettingsSaveResult('SAVED — engine applied to live gateway');
+      } else {
+        setSettingsSaveResult('SAVED — settings stored (no engine selection was submitted)');
       }
     } catch {
       setSettingsSaveResult('SAVE FAILED — could not reach the server');
@@ -532,6 +564,12 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                   </div>
 
                   {/* Launch Call Button */}
+                  {dialNotice && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg bg-amber-950/60 border border-amber-700/60 px-3 py-2 text-[11px] text-amber-200">
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>{dialNotice}</span>
+                    </div>
+                  )}
                   <button
                     onClick={handleLaunchOutbound}
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-900/40 hover:from-cyan-500 hover:to-blue-500 active:scale-98 transition-all"
@@ -1105,7 +1143,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                               )}
                             </div>
                             <span className="text-[10px] font-mono text-slate-400">
-                              {Math.floor(log.durationSeconds / 60)}m {log.durationSeconds % 60}s
+                              {formatDurationWords(log.durationSeconds ?? null)}
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-300 mt-1 line-clamp-1">{log.summary}</p>
@@ -1454,6 +1492,12 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     </p>
                   </div>
                 </div>
+
+                {permissionNotice && (
+                  <div className="mt-3 rounded-xl bg-amber-950/40 border border-amber-500/40 p-3 text-xs font-mono text-amber-200">
+                    {permissionNotice}
+                  </div>
+                )}
 
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {PHONE_PERMISSION_DEFINITIONS.map((def) => {

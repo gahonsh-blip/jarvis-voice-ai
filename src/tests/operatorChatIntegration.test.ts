@@ -16,6 +16,10 @@ import {
   describeOperatorRun,
   formatOperatorTaskMessage,
   redactSecrets,
+  killSwitchLiveness,
+  killSwitchBlocks,
+  operatorKillSwitchRefusal,
+  fetchKillSwitchState,
 } from '../utils/operatorChatIntegration';
 import { redactSecrets as engineRedact } from '../utils/computerOperatorEngine';
 
@@ -111,6 +115,73 @@ describe('operator kill-switch gating', () => {
     if (!result.ok) {
       expect(result.task.status).toBe('FAILED');
       expect(result.task.error).toMatch(/SCREEN_READ_PERMISSION_REQUIRED|ACTION_FAILED|VERIFICATION_FAILED|DESKTOP_CONTROL_NOT_CONFIGURED/i);
+    }
+  });
+});
+
+describe('operator kill-switch tri-state liveness', () => {
+  it('reads a confirmed released switch as RELEASED', () => {
+    expect(killSwitchLiveness({ emergencyPaused: false })).toBe('RELEASED');
+    expect(killSwitchLiveness({ emergencyPaused: false, hardKillSwitchTriggered: false })).toBe('RELEASED');
+  });
+
+  it('reads either engaged flag as ENGAGED', () => {
+    expect(killSwitchLiveness({ emergencyPaused: true })).toBe('ENGAGED');
+    expect(killSwitchLiveness({ emergencyPaused: false, hardKillSwitchTriggered: true })).toBe('ENGAGED');
+    expect(killSwitchLiveness({ emergencyPaused: false, killSwitchActive: true })).toBe('ENGAGED');
+  });
+
+  it('never reads an unobserved or malformed status as RELEASED', () => {
+    expect(killSwitchLiveness(null)).toBe('UNKNOWN');
+    expect(killSwitchLiveness(undefined)).toBe('UNKNOWN');
+    expect(killSwitchLiveness({})).toBe('UNKNOWN');
+    expect(killSwitchLiveness({ emergencyPaused: 'false' })).toBe('UNKNOWN');
+    expect(killSwitchLiveness('error')).toBe('UNKNOWN');
+  });
+
+  it('blocks host actions for both ENGAGED and UNKNOWN, releasing only on RELEASED', () => {
+    expect(killSwitchBlocks('RELEASED')).toBe(false);
+    expect(killSwitchBlocks('ENGAGED')).toBe(true);
+    expect(killSwitchBlocks('UNKNOWN')).toBe(true);
+  });
+
+  it('distinguishes the engaged and unknown refusal messages', () => {
+    expect(operatorKillSwitchRefusal('ENGAGED')).toMatch(/KILL SWITCH ACTIVE/i);
+    expect(operatorKillSwitchRefusal('UNKNOWN')).toMatch(/UNKNOWN/i);
+  });
+
+  it('fetchKillSwitchState resolves UNKNOWN when the status endpoint fails', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => ({ ok: false, json: async () => ({}) })) as unknown as typeof fetch;
+    try {
+      expect(await fetchKillSwitchState()).toBe('UNKNOWN');
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('fetchKillSwitchState resolves UNKNOWN on a network error', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error('network down');
+    }) as unknown as typeof fetch;
+    try {
+      expect(await fetchKillSwitchState()).toBe('UNKNOWN');
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('fetchKillSwitchState resolves RELEASED only for a real released boolean', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({ emergencyPaused: false }),
+    })) as unknown as typeof fetch;
+    try {
+      expect(await fetchKillSwitchState()).toBe('RELEASED');
+    } finally {
+      globalThis.fetch = original;
     }
   });
 });

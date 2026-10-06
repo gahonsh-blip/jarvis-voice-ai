@@ -29,6 +29,9 @@ import {
   planOperatorRun,
   executePlannedOperatorRun,
   fetchKillSwitchState,
+  killSwitchBlocks,
+  operatorKillSwitchRefusal,
+  type KillSwitchLiveness,
   describeOperatorRun,
   formatOperatorTaskMessage,
   type PlannedOperatorRun,
@@ -92,6 +95,8 @@ import {
 import { isSpeechInterruptionCommand } from './utils/languages';
 import { syncLiveness, syncStatusLabel, reconnectStatusText } from './utils/syncTruth';
 import { micInputLevel } from './utils/hardening/micInputTruth';
+import { elapsedSecondsSince } from './utils/hardening/callDurationTruth';
+import { recordedOwnNumber } from './utils/hardening/telephonyOwnNumberTruth';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
 import { androidBridgeEngine } from './utils/androidBridgeEngine';
@@ -118,6 +123,7 @@ export default function App() {
   const [notepadInitialContent, setNotepadInitialContent] = useState<string>('');
   const [browserSearchQuery, setBrowserSearchQuery] = useState<string>('');
   const [browserInitialUrl, setBrowserInitialUrl] = useState<string>('');
+  const [documentSearchQuery, setDocumentSearchQuery] = useState<string>('');
   const [speechDiagnostics, setSpeechDiagnostics] = useState<SpeechDiagnostics | null>(null);
 
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -143,6 +149,12 @@ export default function App() {
 
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+
+  // Kill-switch liveness mirrored from the server, so the Computer Operator HUD
+  // shows the real switch position instead of the modal's default. Starts UNKNOWN
+  // and is only ever set to a confirmed ENGAGED/RELEASED by a server answer; an
+  // unanswered probe stays UNKNOWN and the operator view refuses to run.
+  const [killSwitchLiveness, setKillSwitchLiveness] = useState<KillSwitchLiveness>('UNKNOWN');
 
   // Autonomous Voice AI Telephony State
   const [activeCall, setActiveCall] = useState<CallRecord | null>(null);
@@ -245,6 +257,22 @@ export default function App() {
   useEffect(() => {
     saveLocalVoiceSettings(voiceSettings);
   }, [voiceSettings]);
+
+  // Mirror the server kill-switch position so the Computer Operator HUD can show
+  // the real switch state and refuse to run while it is ENGAGED or UNKNOWN.
+  // Re-probed whenever the operator view is opened; a failed probe stays UNKNOWN.
+  useEffect(() => {
+    let cancelled = false;
+    const refreshKillSwitch = async () => {
+      const liveness = await fetchKillSwitchState();
+      if (!cancelled) setKillSwitchLiveness(liveness);
+    };
+    refreshKillSwitch();
+    if (activeApp === 'computer_operator') refreshKillSwitch();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeApp]);
 
   // Online / Offline Detection & Sync Queue Processor
   const flushPendingSyncQueue = useCallback(async () => {
@@ -594,15 +622,22 @@ export default function App() {
     telephonyAudio.stopAll();
     telephonyAudio.playDisconnectTone();
 
+    // Measure the call from its real start and end timestamps. The record's
+    // stored counter is never advanced (the live counter lives in the HUD), so
+    // trusting it produced a constant 14-second floor on every persisted call.
+    const endedAt = new Date().toISOString();
+    const measuredDuration = elapsedSecondsSince(activeCall.startTime, endedAt) ?? 0;
+
     const finalizedSummary = generateCallSummary(activeCall);
 
     const endedCall: CallRecord = {
       ...activeCall,
       status: 'ended',
+      endTime: endedAt,
       summary: finalizedSummary.summary,
       followUpActions: finalizedSummary.followUpActions,
       sentiment: finalizedSummary.sentiment,
-      durationSeconds: Math.max(activeCall.durationSeconds || 14, 14),
+      durationSeconds: measuredDuration,
     };
 
     setActiveCall(endedCall);
@@ -621,11 +656,13 @@ export default function App() {
     telephonyAudio.stopAll();
     telephonyAudio.playBusyTone();
 
+    const declinedAt = new Date().toISOString();
     const declinedCall: CallRecord = {
       ...activeCall,
       status: 'declined',
+      endTime: declinedAt,
       summary: 'Call declined by user or spam filter.',
-      durationSeconds: 0,
+      durationSeconds: elapsedSecondsSince(activeCall.startTime, declinedAt) ?? 0,
     };
 
     setActiveCall(null);
@@ -724,11 +761,18 @@ export default function App() {
       objective,
       aiPersona,
     }: {
-      recipientNumber: string;
+      recipientNumber?: string;
       recipientName: string;
       objective: string;
       aiPersona?: string;
     }) => {
+      // A call can only be placed to a number that was actually supplied. A
+      // fabricated fallback number would produce a record of a call that was
+      // never dialled, so the request is refused instead.
+      if (!recipientNumber || !recipientNumber.trim()) {
+        speakText('सर, कॉल करने के लिए कोई नंबर नहीं मिला। कृपया नंबर बताएं।');
+        return;
+      }
       telephonyAudio.init();
       if (telephonySettings.acousticFilterEnabled) {
         telephonyAudio.enableTelephoneBandpass(true);
@@ -740,9 +784,11 @@ export default function App() {
         id: callId,
         direction: 'outbound',
         callerName: memory.name || 'Alex (Executive)',
-        callerNumber: telephonySettings.twilioPhoneNumber || '+1 (555) 728-4827',
+        // The app's own line is only recorded when a number was configured;
+        // an invented placeholder must not appear as the call's origin.
+        callerNumber: recordedOwnNumber(telephonySettings.twilioPhoneNumber) ?? '',
         recipientName: recipientName || 'Direct Contact',
-        recipientNumber: recipientNumber || '+1 (415) 890-2134',
+        recipientNumber,
         status: 'dialing',
         mode: 'ai_autonomous',
         startTime: new Date().toISOString(),
@@ -864,7 +910,9 @@ export default function App() {
         callerName: persona.callerName,
         callerNumber: persona.callerNumber,
         recipientName: memory.name || 'Alex (Executive)',
-        recipientNumber: telephonySettings.twilioPhoneNumber || '+1 (555) 728-4827',
+        // The line this inbound call arrived on is only recorded when a number
+        // was configured; an invented placeholder must not appear as the line.
+        recipientNumber: recordedOwnNumber(telephonySettings.twilioPhoneNumber) ?? '',
         status: 'ringing',
         mode: 'ai_autonomous',
         startTime: new Date().toISOString(),
@@ -932,7 +980,7 @@ export default function App() {
         case 'make_call':
           handleStartOutboundCall({
             recipientName: payload?.target || 'Direct Contact',
-            recipientNumber: payload?.number || '+1 (555) 728-4827',
+            recipientNumber: payload?.number,
             objective: payload?.objective || 'Autonomous phone call coordination',
           });
           break;
@@ -989,6 +1037,12 @@ export default function App() {
         case 'pending_approvals':
           setActiveApp('permission_gateway');
           break;
+        case 'find_document':
+          // A search that really ran opens the filesystem explorer seeded with
+          // the same query, so the credited action has a matching surface.
+          setDocumentSearchQuery(payload?.query || '');
+          setActiveApp('autonomous_tools');
+          break;
         case 'open_notepad':
         case 'create_file':
           if (payload?.content) {
@@ -1017,9 +1071,12 @@ export default function App() {
           setBrowserInitialUrl(payload?.target || '');
           setActiveApp('browser');
           break;
+        // The server hands the search URL in `payload.target`; BrowserModal only
+        // runs the search when the view loads that URL, so it must not be left on
+        // a stale address (its effect ignores `initialQuery` when a URL is set).
         case 'google_search':
           setBrowserSearchQuery(payload?.query || '');
-          setBrowserInitialUrl('');
+          setBrowserInitialUrl(payload?.target || '');
           setActiveApp('browser');
           break;
         case 'take_screenshot':
@@ -1104,11 +1161,18 @@ export default function App() {
           pendingOperatorApprovalRef.current = null;
           operatorRunCancelledRef.current = false;
           const killSwitch = await fetchKillSwitchState();
+          // Fail closed: an UNKNOWN emergency-stop state blocks the run rather
+          // than being mistaken for a released switch.
+          if (killSwitchBlocks(killSwitch)) {
+            pushJarvisMessage(operatorKillSwitchRefusal(killSwitch), undefined, false, undefined);
+            setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
+            return;
+          }
           setStatusText('COMPUTER OPERATOR • AUTHORIZED — EXECUTING');
           operatorRunActiveRef.current = true;
           const result = await executePlannedOperatorRun(pending.goal, pending.run, {
             taskId: pending.taskId,
-            killSwitchActive: killSwitch,
+            killSwitchActive: false,
             cancelCheck: () => operatorRunCancelledRef.current,
             onProgress: (t: OperatorTask) => {
               setStatusText(`COMPUTER OPERATOR • ${t.status}${t.actionIndex > 0 ? ` • step ${t.actionIndex + 1}/${t.actions.length}` : ''}`);
@@ -1154,8 +1218,10 @@ export default function App() {
         const run = await planOperatorRun(text);
         const killSwitch = await fetchKillSwitchState();
         setStatusText('COMPUTER OPERATOR • PLAN READY');
-        if (killSwitch) {
-          pushJarvisMessage('COMPUTER OPERATOR • GLOBAL KILL SWITCH ACTIVE — external actions blocked.', undefined, false, undefined);
+        // Fail closed: ENGAGED and UNKNOWN both block; only a confirmed RELEASED
+        // switch lets the run continue.
+        if (killSwitchBlocks(killSwitch)) {
+          pushJarvisMessage(operatorKillSwitchRefusal(killSwitch), undefined, false, undefined);
           setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
           return;
         }
@@ -1186,7 +1252,7 @@ export default function App() {
         operatorRunActiveRef.current = true;
         const result = await executePlannedOperatorRun(text, run, {
           taskId,
-          killSwitchActive: killSwitch,
+          killSwitchActive: false,
           cancelCheck: () => operatorRunCancelledRef.current,
           onProgress: (t: OperatorTask) => {
             setStatusText(`COMPUTER OPERATOR • ${t.status}${t.actionIndex > 0 ? ` • step ${t.actionIndex + 1}/${t.actions.length}` : ''}`);
@@ -1829,7 +1895,16 @@ export default function App() {
 
       <AutonomousToolsModal
         isOpen={activeApp === 'autonomous_tools'}
+        onClose={() => { setActiveApp(null); setDocumentSearchQuery(''); }}
+        initialQuery={documentSearchQuery}
+      />
+
+      <ComputerOperatorModal
+        isOpen={activeApp === 'computer_operator'}
         onClose={() => setActiveApp(null)}
+        onSendToChat={handleSendCommand}
+        activeLanguage={voiceSettings.language || 'en-US'}
+        isEmergencyStopped={killSwitchBlocks(killSwitchLiveness)}
       />
 
       <PermissionGateway

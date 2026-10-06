@@ -32,8 +32,9 @@ import {
 import { telephonyAudio } from '../utils/telephonyAudio';
 import { resolveDisplayNumber, shouldMaskParty } from '../utils/telephonyPrivacyDisplay';
 import { callWaveformBars, callWaveformBarHeight } from '../utils/hardening/callWaveform';
-import { ACOUSTIC_FILTER_LABEL } from '../utils/hardening/acousticFilterTruth';
+import { ACOUSTIC_FILTER_LABEL, acousticFilterToggleLabel } from '../utils/hardening/acousticFilterTruth';
 import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
+import { formatDurationWords } from '../utils/hardening/callDurationTruth';
 
 interface ActiveCallHUDProps {
   activeCall: CallRecord | null;
@@ -239,7 +240,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
             <div>
               <h3 className="text-sm font-bold text-white">Call Terminated • Executive Summary</h3>
               <p className="text-xs text-slate-400 font-mono">
-                Duration: {formatTime(activeCall.durationSeconds || duration)} •{' '}
+                Duration: {formatDurationWords(activeCall.durationSeconds ?? null)} •{' '}
                 {activeCall.direction === 'outbound' ? activeCall.recipientName : effectiveInboundCallerName}
               </p>
             </div>
@@ -466,7 +467,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
             title={`Toggle acoustic bandpass profile. ${ACOUSTIC_FILTER_LABEL}`}
           >
             <Radio className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{audioFilterActive ? 'Bandpass profile' : 'Full band'}</span>
+            <span className="hidden sm:inline">{acousticFilterToggleLabel(audioFilterActive)}</span>
           </button>
         </div>
 

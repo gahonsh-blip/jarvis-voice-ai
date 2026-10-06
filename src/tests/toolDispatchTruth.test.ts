@@ -102,9 +102,11 @@ describe('the /api/chat tool intents credit work only when the tool succeeded', 
     expect(body).toContain('actionExecuted = hasSummary;');
   });
 
-  it('an invalid YouTube token makes the status inquiry a non-action', () => {
+  it('the YouTube status inquiry never credits a token check as executed work', () => {
     const body = caseBody('youtube_status_inquiry');
-    expect(body).toContain('toolActionExecuted({ success: ytTokenCheck.valid })');
+    expect(body).toContain('actionExecuted = false;');
+    expect(body).not.toContain('actionExecuted = true;');
+    expect(body).toContain('informational, no action taken');
   });
 
   it('an unperformed Level-4 YouTube upload is not counted as executed', () => {

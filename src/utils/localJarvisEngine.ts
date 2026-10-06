@@ -8,6 +8,7 @@ import {
 } from './telephonyPermissions';
 import { TelephonyProviderRegistry } from './telephonyAdapters';
 import { judgeSetNameIntent } from './identityTruth';
+import { isTelephonyHubRequest, isCallHistoryRequest, isAnswerCallRequest, isHangupCallRequest, isRejectCallRequest, isTelephonyControlRequest } from './telephonyIntentRouting';
 import { androidBridgeEngine } from './androidBridgeEngine';
 import {
   youtubeOfflineStatusReply,
@@ -23,10 +24,15 @@ import {
   offlineCallVerdict,
   offlineHumanHandoffReply,
   offlineAndroidRejectVerdict,
+  offlineAndroidMessageRejectVerdict,
   offlineOutboundCancelVerdict,
+  offlineCallMissingNumberVerdict,
+  extractDialTarget,
 } from './computerOperator/offlineCallTruth';
 import { offlineEmergencyVerdict, offlineEmergencyReply } from './computerOperator/offlineEmergencyTruth';
 import { telephonyEngineMode, type TelephonyEngineMode } from './telephonyGatewayTruth';
+import { blueprintRoadmapReply } from './blueprintTruth';
+import { searchDispatch } from './browserDispatchTruth';
 
 let stagedOutboundCall: { destination: string; masked: string; isScheduled?: boolean } | null = null;
 
@@ -191,6 +197,10 @@ export function processOfflineCommand(
   const langSwitch = detectLanguageSwitchCommand(clean);
   if (langSwitch?.requested && langSwitch.newLang) {
     const ack = langSwitch.acknowledgment || (langSwitch.newLang.startsWith('hi') ? 'हिंदी मोड सक्रिय है।' : 'Language mode updated.');
+    // The switch is a real client-side state change, so it counts as executed
+    // work like every other true verdict; without this the reported verdict
+    // and the "actions executed" counter disagreed.
+    countAction(updatedMemory, true);
     return {
       reply: ack,
       spokenText: ack,
@@ -348,16 +358,27 @@ export function processOfflineCommand(
           offline: true,
         };
       } else if (evaluation.targetType === 'MESSAGE') {
+        const rejectVerdict = offlineAndroidMessageRejectVerdict(
+          androidBridgeEngine.getCapabilities() !== null,
+        );
         androidBridgeEngine.clearPendingEvent();
         const reply = isHindi
-          ? 'सर, संदेश का उत्तर रद्द कर दिया गया है।'
-          : 'Sir, message reply cancelled.';
+          ? rejectVerdict.replyHi
+          : isHinglish
+          ? rejectVerdict.replyHinglish
+          : rejectVerdict.replyEn;
+        countAction(updatedMemory, rejectVerdict.actionExecuted);
 
         return {
           reply,
           spokenText: reply,
-          actionExecuted: true,
-          actionDetail: { type: 'open_notepad', title: 'Message Dismissed' },
+          intent: 'reject_message',
+          actionExecuted: rejectVerdict.actionExecuted,
+          actionDetail: {
+            type: 'reject_message',
+            title: rejectVerdict.title,
+            payload: { localMirrorCleared: true },
+          },
           updatedMemory,
           offline: true,
         };
@@ -719,7 +740,7 @@ export function processOfflineCommand(
   ) {
     const verdict = offlineOperatorVerdict('open_computer_operator');
     const reply = offlineOperatorReply('open_computer_operator', operatorLang);
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
 
     return {
       reply,
@@ -752,9 +773,12 @@ export function processOfflineCommand(
       intent: 'operate_browser',
       actionExecuted: offlineOperatorCountsAsHostWork('operate_browser'),
       actionDetail: {
+        // The dispatcher is called as `handleExecuteAction(intent, payload)` and
+        // its `operate_browser` case reads `payload?.target`; a top-level `target`
+        // is dropped, so the in-app Browser view opens on its default home. The
+        // verdict's own `title` is the honest label and carries no destination.
         type: 'operate_browser',
         title: verdict.title,
-        target: 'Chrome',
         payload: { offlineHostWork: false },
       },
       updatedMemory,
@@ -920,7 +944,10 @@ export function processOfflineCommand(
     const humidity = weatherData.humidity;
     const location = weatherData.location || 'unknown location';
 
-    countAction(updatedMemory, true);
+    // Reading a connected weather source and speaking it is a status answer,
+    // not executed work; `handleExecuteAction` only switches to the status view
+    // for this intent. Same class as the fixed `time_inquiry` branch — the
+    // counter must not advance for an informational answer.
     const reply = isHindi
       ? `आज का मौसम ${condition === 'Clear Sky' ? 'साफ (Clear Sky)' : condition} है। वर्तमान तापमान लगभग ${tempC}°C (${location}) और आर्द्रता ${humidity}% है।`
       : isHinglish
@@ -931,7 +958,7 @@ export function processOfflineCommand(
       reply,
       spokenText: reply,
       intent: 'weather_inquiry',
-      actionExecuted: true,
+      actionExecuted: false,
       actionDetail: { type: 'weather_inquiry', title: `Weather: ${tempC}°C, ${condition}`, payload: { temperatureC: tempC, condition, location, humidity } },
       updatedMemory,
       offline: true,
@@ -952,7 +979,6 @@ export function processOfflineCommand(
     lower === '/briefing' ||
     lower === '/morning'
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
     const now = new Date();
     const hours = now.getHours();
     const mins = now.getMinutes();
@@ -1081,11 +1107,20 @@ export function processOfflineCommand(
       ? `${greetingHinglish} ${batteryAvailable ? `Battery ${batteryLvl}% hai.` : ''} ${weatherAvailable ? `Weather ${condition} hai.` : ''} ${notifsAvailable ? `${notifCount} new notifications hain.` : ''}`
       : `${greetingEn} ${batteryAvailable ? `Battery is at ${batteryLvl}%.` : ''} ${weatherAvailable ? `Weather is ${condition} at ${tempC} degrees.` : ''} ${notifsAvailable ? `You have ${notifCount} priority notifications.` : ''}`;
 
+    // With no device attached every section above is unavailable, so the
+    // briefing only spoke "no source connected" refusals and read no telemetry.
+    // Crediting that as executed work inflated the user-visible counter for a
+    // run that performed none; only a briefing that actually read telemetry may
+    // count as executed work.
+    const readAnyTelemetry =
+      batteryAvailable || weatherAvailable || notifsAvailable || calAvailable || mailAvailable;
+    countAction(updatedMemory, readAnyTelemetry);
+
     return {
       reply,
       spokenText,
       intent: 'mobile_personal_status',
-      actionExecuted: true,
+      actionExecuted: readAnyTelemetry,
       actionDetail: {
         type: 'mobile_personal_status',
         title: isHindi ? 'सुप्रभात दैनिक ब्रीफिंग' : isHinglish ? 'Morning Briefing' : 'Morning Briefing',
@@ -1113,7 +1148,7 @@ export function processOfflineCommand(
     lower.includes('कहाँ हूँ') ||
     lower.includes('लोकेशन बताओ')
   ) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     // Opening the map is a real in-app navigation, but this offline path reads
     // no geolocation, so it must not speak as though a GPS fix was acquired.
     // Real coordinates come from the browser Geolocation API in
@@ -1163,7 +1198,7 @@ export function processOfflineCommand(
       if (/^[0-9+\-*/().\s]+$/.test(sanitized)) {
         const val = new Function(`'use strict'; return (${sanitized})`)();
         if (typeof val === 'number' && Number.isFinite(val)) {
-          updatedMemory.stats.actionsExecuted += 1;
+          countAction(updatedMemory, true);
           const resStr = String(Math.round(val * 1000000) / 1000000);
           const reply = isHindi ? `${expr} का मान ${resStr} होता है, सर।` : isHinglish ? `Result: ${expr} = ${resStr}` : `${expr} is ${resStr}.`;
           return {
@@ -1183,7 +1218,7 @@ export function processOfflineCommand(
   }
 
   if (lower.includes('calculator') || lower.includes('कैलकुलेटर') || lower.includes('open math')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'इन-ऐप कैलकुलेटर दृश्य खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक डेस्कटॉप कैलकुलेटर ऐप नहीं खुलता।'
       : isHinglish
@@ -1202,7 +1237,7 @@ export function processOfflineCommand(
 
   // 7. Notepad & Workspace
   if (lower.includes('notepad') || lower.includes('create file') || lower.includes('नोटपैड') || lower.includes('फाइल बनाओ') || lower.includes('write note')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'इन-ऐप नोट्स वर्कस्पेस खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक नोटपैड ऐप नहीं खुलता।'
       : isHinglish
@@ -1227,7 +1262,23 @@ export function processOfflineCommand(
     lower.includes('schedule call tomorrow')
   ) {
     const targetMatch = clean.match(/(?:नंबर पर फोन|कल फोन करना|schedule call tomorrow)\s*(.*)/i);
-    const target = targetMatch && targetMatch[1].trim() ? targetMatch[1].trim() : '+91 9876543210';
+    const target = extractDialTarget(targetMatch ? targetMatch[1] : '');
+    // No number was given: never stage a call to a fabricated placeholder. The
+    // literal placeholder fallback that used to live here is not a
+    // number the user named, so it is refused rather than recorded.
+    if (!target) {
+      const verdict = offlineCallMissingNumberVerdict('schedule');
+      const reply = isHindi ? verdict.replyHi : isHinglish ? verdict.replyHinglish : verdict.replyEn;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'outbound_call_authorization',
+        actionExecuted: verdict.actionExecuted,
+        actionDetail: { type: 'outbound_call_authorization', title: verdict.title, payload: { target: null, scheduled: true } },
+        updatedMemory,
+        offline: true,
+      };
+    }
     const masked = maskPhoneNumber(target);
     stagedOutboundCall = { destination: target, masked, isScheduled: true };
     const verdict = offlineCallVerdict('schedule', activeTelephonyEngineMode());
@@ -1322,18 +1373,42 @@ export function processOfflineCommand(
   }
 
   // Outbound call command - Requires Level-4 Human Authorization (Section H)
+  // The console/history phrases also begin with "call " (and "call history"
+  // contains it), so they must be excluded here or "call hub" is staged as an
+  // outbound dial to the literal target "hub". Their own branches follow below.
   if (
-    lower.startsWith('call ') ||
-    lower.startsWith('dial ') ||
-    lower.includes('phone call') ||
-    lower.includes('make a call') ||
-    lower.includes('कॉल करो') ||
-    lower.includes('फोन करो') ||
-    lower.includes('call lagao') ||
-    lower.includes('इस नंबर पर फोन करो')
+    ((lower.startsWith('call ') || lower.startsWith('dial ')) &&
+      !isTelephonyControlRequest(lower)) ||
+    ((lower.includes('phone call') ||
+      lower.includes('make a call') ||
+      lower.includes('कॉल करो') ||
+      lower.includes('फोन करो') ||
+      lower.includes('call lagao') ||
+      lower.includes('इस नंबर पर फोन करो')) &&
+      !isTelephonyControlRequest(lower))
   ) {
     const targetMatch = clean.match(/(?:call|dial|फोन करो|कॉल करो|call lagao|इस नंबर पर फोन करो)\s+(.+)/i);
-    const target = targetMatch ? targetMatch[1].trim() : '+91 9876543210';
+    const target = extractDialTarget(targetMatch ? targetMatch[1] : '');
+    // No number was given ("make a call", "call now"): never stage a call to a
+    // fabricated placeholder. The literal fallback that used to live here
+    // (a hardcoded placeholder) is not a number the user named.
+    if (!target) {
+      const verdict = offlineCallMissingNumberVerdict('dial');
+      const reply = isHindi ? verdict.replyHi : isHinglish ? verdict.replyHinglish : verdict.replyEn;
+      return {
+        reply,
+        spokenText: reply,
+        intent: 'outbound_call_authorization',
+        actionExecuted: verdict.actionExecuted,
+        actionDetail: {
+          type: 'outbound_call_authorization',
+          title: verdict.title,
+          payload: { target: null, requiresApproval: false },
+        },
+        updatedMemory,
+        offline: true,
+      };
+    }
     const masked = maskPhoneNumber(target);
 
     // Stage for Level-4 Authorization
@@ -1427,14 +1502,7 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('answer call') ||
-    lower.includes('pick up the phone') ||
-    lower.includes('pick up the call') ||
-    lower.includes('कॉल उठाओ') ||
-    lower.includes('फोन उठाओ') ||
-    lower.includes('phone uthao')
-  ) {
+  if (isAnswerCallRequest(lower)) {
     const verdict = offlineCallVerdict('answer', activeTelephonyEngineMode());
     countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
@@ -1449,15 +1517,7 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('hang up') ||
-    lower.includes('end call') ||
-    lower.includes('cut the call') ||
-    lower.includes('disconnect call') ||
-    lower.includes('कॉल काटो') ||
-    lower.includes('फोन काटो') ||
-    lower.includes('call kato')
-  ) {
+  if (isHangupCallRequest(lower)) {
     const verdict = offlineCallVerdict('hangup', activeTelephonyEngineMode());
     countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
@@ -1472,11 +1532,7 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('reject call') ||
-    lower.includes('decline call') ||
-    lower.includes('कॉल रिजेक्ट करो')
-  ) {
+  if (isRejectCallRequest(lower)) {
     const verdict = offlineCallVerdict('reject', activeTelephonyEngineMode());
     countAction(updatedMemory, verdict.actionExecuted);
     const reply = isHindi ? verdict.replyHi : verdict.replyEn;
@@ -1491,16 +1547,8 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('call hub') ||
-    lower.includes('open dialer') ||
-    lower.includes('open phone') ||
-    lower.includes('phone dialer') ||
-    lower.includes('telephony') ||
-    lower.includes('कॉल हब') ||
-    lower.includes('फोन डायलर')
-  ) {
-    updatedMemory.stats.actionsExecuted += 1;
+  if (isTelephonyHubRequest(lower)) {
+    countAction(updatedMemory, true);
     const reply = isHindi ? 'टेलीफोनी हब खोला जा रहा है।' : isHinglish ? 'Telephony Hub open ho raha hai.' : 'Opening the in-app Voice AI Telephony Hub. No external phone dialer is opened.';
     return {
       reply,
@@ -1513,14 +1561,8 @@ export function processOfflineCommand(
     };
   }
 
-  if (
-    lower.includes('call history') ||
-    lower.includes('call logs') ||
-    lower.includes('recent calls') ||
-    lower.includes('who called') ||
-    lower.includes('कॉल हिस्ट्री')
-  ) {
-    updatedMemory.stats.actionsExecuted += 1;
+  if (isCallHistoryRequest(lower)) {
+    countAction(updatedMemory, true);
     const reply = isHindi ? 'इस ऐप में दर्ज कॉल हिस्ट्री दिखाई जा रही है।' : 'Showing the call logs and transcripts recorded in this app.';
     return {
       reply,
@@ -1535,7 +1577,7 @@ export function processOfflineCommand(
 
   // 8. Paint & Canvas
   if (lower.includes('paint') || lower.includes('drawing') || lower.includes('पेंट')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'इन-ऐप पेंट कैनवास खोला जा रहा है। ऑफ़लाइन मोड में कोई वास्तविक पेंट ऐप नहीं खुलता।'
       : isHinglish
@@ -1576,12 +1618,8 @@ export function processOfflineCommand(
 
   // 9. Master Blueprint / Project Roadmap
   if (lower.includes('project') || lower.includes('blueprint') || lower.includes('प्रोजेक्ट') || lower.includes('ब्लूप्रिंट') || lower.includes('roadmap') || lower.includes('git audit')) {
-    updatedMemory.stats.actionsExecuted += 1;
-    const reply = isHindi
-      ? 'मास्टर ब्लूप्रिंट खोला जा रहा है। फेज 0 से 9 सक्रिय हैं।'
-      : isHinglish
-      ? 'Master Blueprint open ho raha hai. All phases active hain.'
-      : 'Displaying Master Blueprint Phase 0 to 9.';
+    countAction(updatedMemory, true);
+    const reply = blueprintRoadmapReply(isHindi ? 'hindi' : isHinglish ? 'hinglish' : 'english');
     return {
       reply,
       spokenText: reply,
@@ -1595,7 +1633,7 @@ export function processOfflineCommand(
 
   // 9.1 Freelance Quotation Generator
   if (lower.includes('quotation') || lower.includes('कोटेशन') || lower.includes('freelance') || lower.includes('proposal') || lower.includes('client lead')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'फ्रीलांस पाइपलाइन खोली जा रही है। ऑफ़लाइन मोड में कोई नया कोटेशन नहीं बनाया गया।'
       : isHinglish
@@ -1614,7 +1652,7 @@ export function processOfflineCommand(
 
   // 10. Social Media & Content
   if (lower.includes('social') || lower.includes('linkedin') || lower.includes('twitter') || lower.includes('पोस्ट') || lower.includes('सोशल') || lower.includes('draft post')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'सोशल मीडिया कंसोल खोला जा रहा है। ऑफ़लाइन मोड में कोई पोस्ट नहीं बनाई या प्रकाशित की गई।'
       : isHinglish
@@ -1633,7 +1671,7 @@ export function processOfflineCommand(
 
   // 11. Security Matrix & Audit Logs
   if (lower.includes('security') || lower.includes('safety') || lower.includes('सुरक्षा') || lower.includes('permission') || lower.includes('audit log')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? '4-लेवल सुरक्षा मैट्रिक्स और ऑडिट लॉग्स खोले जा रहे हैं।'
       : isHinglish
@@ -1652,7 +1690,7 @@ export function processOfflineCommand(
 
   // 11.1 Cloud Telemetry (Oracle VM)
   if (lower.includes('oracle') || lower.includes('cloud') || lower.includes('vm status') || lower.includes('telemetry') || lower.includes('server status')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     // No VM telemetry source is reachable offline, so no metrics exist. The
     // earlier "telemetry load ho rahi hai" presented a live read as in flight.
     const reply = isHindi
@@ -1673,7 +1711,7 @@ export function processOfflineCommand(
 
   // 11.2 Daily Routine & Schedule
   if (lower.includes('routine') || lower.includes('schedule') || lower.includes('रूटीन') || lower.includes('शेड्यूल')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const reply = isHindi
       ? 'दैनिक शेड्यूल और ब्रीफिंग शेड्यूलर खोला जा रहा है।'
       : isHinglish
@@ -1730,7 +1768,7 @@ export function processOfflineCommand(
 
   // 11.4 Google Search Extraction
   if (lower.startsWith('search ') || lower.includes('google search') || lower.includes('सर्च करो') || lower.includes('खोजो')) {
-    updatedMemory.stats.actionsExecuted += 1;
+    countAction(updatedMemory, true);
     const query = clean
       .replace(/^search\s+(?:for\s+)?/i, '')
       .replace(/google search\s+(?:for\s+)?/i, '')
@@ -1739,21 +1777,33 @@ export function processOfflineCommand(
 
     // Offline there is no search backend, so no results exist. Saying only
     // "Searching Google..." presented a request as a completed lookup; the
-    // query is handed to the in-app Browser instead.
-    const reply = isHindi
-      ? `इन-ऐप ब्राउज़र के लिए "${query}" क्वेरी तैयार है। ऑफ़लाइन मोड में कोई सर्च बैकएंड नहीं है, इसलिए कोई परिणाम नहीं लाया गया।`
+    // query is handed to the in-app Browser instead. The reply names the query
+    // but the Browser only runs the search when the view is handed the search
+    // URL, and `handleExecuteAction` reads that URL from `payload.target`. The
+    // server path carries it (`searchDispatch`); without it here the offline
+    // action card named a search that `BrowserModal` never loaded.
+    const dispatch = searchDispatch(query);
+    const reply = dispatch.dispatched
+      ? isHindi
+        ? `इन-ऐप ब्राउज़र के लिए "${query}" क्वेरी तैयार है। ऑफ़लाइन मोड में कोई सर्च बैकएंड नहीं है, इसलिए कोई परिणाम नहीं लाया गया।`
+        : isHinglish
+        ? `In-app Browser ke liye "${query}" query taiyar hai. Offline mode me koi search backend nahi hai, isliye koi result nahi laaya gaya.`
+        : `Prepared the query "${query}" for the in-app Browser. This offline path has no search backend, so no results were retrieved.`
+      : isHindi
+      ? 'कोई खोज क्वेरी नहीं दी गई, इसलिए कोई खोज नहीं चलाई गई। इन-ऐप ब्राउज़र अपने डिफ़ॉल्ट होम पर खुला।'
       : isHinglish
-      ? `In-app Browser ke liye "${query}" query taiyar hai. Offline mode me koi search backend nahi hai, isliye koi result nahi laaya gaya.`
-      : `Prepared the query "${query}" for the in-app Browser. This offline path has no search backend, so no results were retrieved.`;
+      ? 'Koi search query nahi di gayi, isliye koi search nahi chalayi gayi. In-app Browser apne default home par khula.'
+      : 'No search query was given, so no search was run. The in-app Browser opened at its default home.';
     return {
       reply,
       spokenText: reply,
       intent: 'google_search',
-      actionExecuted: true,
+      // A bare "search" with no query runs no lookup, so it is not executed work.
+      actionExecuted: dispatch.dispatched,
       actionDetail: {
         type: 'google_search',
-        title: `In-App Browser Query: ${query} (no results retrieved offline)`,
-        payload: { query },
+        title: dispatch.title,
+        payload: { query: dispatch.query, target: dispatch.url },
       },
       updatedMemory,
       offline: true,

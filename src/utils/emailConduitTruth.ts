@@ -3,7 +3,7 @@
  *
  * The Autonomous Tools HUD rendered an emerald badge reading `READY` whenever
  * `GMAIL_USER` and `GMAIL_APP_PASSWORD` were present, and the Integrations
- * Matrix counted that same credential presence as `REAL_WORKING` with the
+ * Matrix counted that same credential presence as a working integration with the
  * reason "SMTP Conduit verified for client notifications and quotations".
  * No SMTP client, transport, or send route exists anywhere in this codebase —
  * there is no nodemailer dependency, no socket opened to port 465/587, and no

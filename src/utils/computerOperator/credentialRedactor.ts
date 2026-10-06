@@ -58,6 +58,16 @@ const REDACTION_PATTERNS: {
     regex: /Bearer\s+[a-zA-Z0-9_\-\.]{20,}/gi,
     placeholder: 'Bearer [REDACTED_AUTH_TOKEN]',
   },
+  // 6b. Gmail / Google app passwords. Google issues these as exactly 16
+  // lowercase letters in four space-separated groups. The generic Password
+  // Assignment rule below stops at the first space and redacts only the first
+  // group, leaving 12 of the 16 characters (three of four groups) in the clear.
+  // This rule must precede that one so the whole value is consumed.
+  {
+    category: 'Gmail App Password',
+    regex: /\b(gmail_app_password|app_password)\s*[:=]\s*["']?[a-z]{4}(?:\s+[a-z]{4}){3}["']?/gi,
+    placeholder: '$1: [REDACTED_SECRET]',
+  },
   // 7. Passwords in URLs or Configs
   {
     category: 'Password Assignment',
@@ -162,6 +172,146 @@ const REDACTION_PATTERNS: {
     regex: /\b([a-z][a-z0-9+.-]*:\/\/[^:@\s/]+):([^@\s/]+)@/gi,
     placeholder: '$1:[REDACTED_SECRET]@',
     replacer: (match, schemeUser, password) => `${schemeUser}:[REDACTED_SECRET]@`,
+  },
+  // 23. Groq API keys (`gsk_` + long body)
+  {
+    category: 'Groq Key',
+    regex: /\bgsk_[A-Za-z0-9]{40,}\b/g,
+    placeholder: '[REDACTED_GROQ_KEY]',
+  },
+  // 24. Perplexity API keys (`pplx-` + body)
+  {
+    category: 'Perplexity Key',
+    regex: /\bpplx-[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_PERPLEXITY_KEY]',
+  },
+  // 25. Notion integration tokens. Current `ntn_` tokens and the legacy
+  // `secret_` internal-integration tokens are both provider-issued secrets.
+  {
+    category: 'Notion Token',
+    regex: /\bntn_[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_NOTION_TOKEN]',
+  },
+  {
+    category: 'Notion Legacy Token',
+    regex: /\bsecret_[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_NOTION_TOKEN]',
+  },
+  // 26. Shopify access / shared-secret / private-app tokens
+  {
+    category: 'Shopify Token',
+    regex: /\bshp(?:at|ss|ca|pa)_[A-Za-z0-9]{16,}\b/g,
+    placeholder: '[REDACTED_SHOPIFY_TOKEN]',
+  },
+  // 27. Linear API keys (`lin_api_` + body)
+  {
+    category: 'Linear API Key',
+    regex: /\blin_api_[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_LINEAR_KEY]',
+  },
+  // 28. Slack incoming-webhook URLs. The whole `/services/...` path is the
+  // secret; redacting it also removes the T/B channel ids, which is correct —
+  // the URL alone is enough to post to the workspace.
+  {
+    category: 'Slack Webhook URL',
+    regex: /https?:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/_-]{20,}/g,
+    placeholder: '[REDACTED_SLACK_WEBHOOK_URL]',
+  },
+  // 29. Azure Storage / Cosmos connection-string account keys
+  {
+    category: 'Azure Account Key',
+    regex: /AccountKey=[A-Za-z0-9+/=]{40,}/g,
+    placeholder: '[REDACTED_AZURE_ACCOUNT_KEY]',
+  },
+  // 30. Firebase / Google browser API keys. The specific `AIzaSy` pattern above
+  // only covers server keys; a Firebase web config key uses the same `AIza`
+  // marker but not the `Sy` infix, so it needs its own branch.
+  {
+    category: 'Firebase API Key',
+    regex: /\bAIza[A-Za-z0-9_\-]{30,}\b/g,
+    placeholder: '[REDACTED_FIREBASE_KEY]',
+  },
+  // 31. Resend API keys (`re_` + body). The body length floor keeps the ordinary
+  // English "re" prefix and short identifiers from matching.
+  {
+    category: 'Resend Key',
+    regex: /\bre_[A-Za-z0-9]{20,}\b/g,
+    placeholder: '[REDACTED_RESEND_KEY]',
+  },
+  // 32. Meta / Facebook Graph API access tokens (`EAA` + long body). These are
+  // what `FACEBOOK_PAGE_ACCESS_TOKEN` and `INSTAGRAM_ACCESS_TOKEN` carry; the
+  // `EAA` marker is stable across app and page tokens and does not occur in
+  // ordinary prose.
+  {
+    category: 'Meta Access Token',
+    regex: /\bEAA[A-Za-z0-9]{40,}\b/g,
+    placeholder: '[REDACTED_META_TOKEN]',
+  },
+  // 33. Google OAuth refresh tokens (`1//` + body). `YOUTUBE_REFRESH_TOKEN` and
+  // the Gmail/Calendar refresh tokens use this form. The `1//` marker is not a
+  // word boundary, so a lookbehind guards against matching inside a longer run.
+  {
+    category: 'Google OAuth Refresh Token',
+    regex: /(?<![A-Za-z0-9])1\/\/[0-9A-Za-z_-]{20,}/g,
+    placeholder: '[REDACTED_GOOGLE_OAUTH_REFRESH_TOKEN]',
+  },
+  // 34. Google OAuth authorization codes (`4/0A` + body). These are short-lived
+  // but exchangeable for refresh tokens, so they are treated as secrets.
+  {
+    category: 'Google OAuth Authorization Code',
+    regex: /(?<![A-Za-z0-9])4\/0A[A-Za-z0-9_-]{20,}/g,
+    placeholder: '[REDACTED_GOOGLE_OAUTH_CODE]',
+  },
+  // 35. Google OAuth access tokens (`ya29.` + body), issued in the auth-code
+  // exchange flow.
+  {
+    category: 'Google OAuth Access Token',
+    regex: /\bya29\.[A-Za-z0-9_-]{20,}\b/g,
+    placeholder: '[REDACTED_GOOGLE_OAUTH_ACCESS_TOKEN]',
+  },
+  // 36. Telnyx API keys (`KEY` + 32 hex). `TELNYX_API_KEY` is a first-class
+  // credential in this project (the Telnyx telephony adapter reads it), and a
+  // live probe showed the bare key passing through redaction unchanged. The
+  // lowercase `key` alternative is anchored on `KEY` followed immediately by
+  // hex, so ordinary prose like "press the KEY button" does not match.
+  {
+    category: 'Telnyx API Key',
+    regex: /(?<![A-Za-z0-9])(?:KEY|key)[0-9A-Fa-f]{32}\b/g,
+    placeholder: '[REDACTED_TELNYX_KEY]',
+  },
+  // 37. LinkedIn OAuth access tokens (`AQV` + body). LinkedIn issues the
+  // member-token family used by `LINKEDIN_ACCESS_TOKEN`; a live probe showed it
+  // surviving redaction byte-for-byte. Requires a long body so the ordinary
+  // "AQV" opcode rendered in a disassembler listing is not redacted.
+  {
+    category: 'LinkedIn Access Token',
+    regex: /\bAQV[A-Za-z0-9_-]{20,}\b/g,
+    placeholder: '[REDACTED_LINKEDIN_TOKEN]',
+  },
+  // 38. Slack app-level tokens (`xapp-`). These are not covered by pattern 13,
+  // whose class is only `xox[baprs]-`. A bare `xapp-...` value in a screenshot
+  // or command stream is a provider-issued secret (it can mint `xoxp` tokens).
+  {
+    category: 'Slack App Token',
+    regex: /\bxapp-[A-Za-z0-9-]{10,}\b/g,
+    placeholder: '[REDACTED_SLACK_APP_TOKEN]',
+  },
+  // 39. Stripe webhook signing secrets (`whsec_` + body). Pattern 12 covers only
+  // the `sk_`/`rk_` API keys; a `whsec_...` value was observed surviving
+  // redaction byte-for-byte. It is a first-class Stripe secret (it signs and
+  // validates webhook payloads).
+  {
+    category: 'Stripe Webhook Secret',
+    regex: /\bwhsec_[A-Za-z0-9]{16,}\b/g,
+    placeholder: '[REDACTED_STRIPE_WEBHOOK_SECRET]',
+  },
+  // 40. Mailgun API keys (`key-` + 32 hex). Mailgun has no other stable marker;
+  // the trailing hex body keeps the ordinary English "key-" prefix from
+  // matching.
+  {
+    category: 'Mailgun Key',
+    regex: /\bkey-[a-f0-9]{32}\b/g,
+    placeholder: '[REDACTED_MAILGUN_KEY]',
   },
 ];
 

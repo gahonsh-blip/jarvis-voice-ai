@@ -11,7 +11,7 @@ import {
 // `/api/tools/email/status` reported `configured: true` from the mere presence
 // of GMAIL_USER + GMAIL_APP_PASSWORD, and both the Autonomous Tools HUD and the
 // Integrations Matrix turned that into an emerald `READY` badge and a
-// `REAL_WORKING` row ("SMTP Conduit verified for client notifications and
+// working-integration row ("SMTP Conduit verified for client notifications and
 // quotations"). No SMTP client, socket, or send route exists in this build, so
 // the credential check was being presented as a working delivery path.
 
@@ -64,9 +64,9 @@ describe('email conduit status never implies a working sender', () => {
     expect(status.message).not.toMatch(/\bverified\b/i);
   });
 
-  it('the email integration is never REAL_WORKING, credentials or not', () => {
+  it('the email integration is never CREDENTIALS_PRESENT, credentials or not', () => {
     const withoutCreds = getIntegrationsAuditReport();
-    expect(withoutCreds.items.find((i) => i.id === 'email')?.status).not.toBe('REAL_WORKING');
+    expect(withoutCreds.items.find((i) => i.id === 'email')?.status).not.toBe('CREDENTIALS_PRESENT');
 
     process.env.GMAIL_USER = 'client.enterprise@techcorp.io';
     process.env.GMAIL_APP_PASSWORD = 'app-password-placeholder';
