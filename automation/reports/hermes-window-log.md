@@ -12568,3 +12568,69 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - पहले से तय (अस्वीकृत/स्वीकृत) कॉल अनुरोध को दोबारा approve करके कॉल लगाया जा सकता था; अब दोबारा निर्णय मना कर दिया जाता है और रिकॉर्ड सुरक्षित रहता है।
+
+---
+
+## 2026-10-07 03:05 IST — WORK SLOT 10 (2026-10-06 → 2026-10-07 window)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:05
+Window date: 2026-10-07   Window slots completed so far: 10
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL) — the shared approval registry
+  let a decided request be decided again, and two approval surfaces then
+  reported a change that had not happened. Evidence: `server_tools.ts`
+  (`canTransitionActionStatus` + terminal guard in `updateActionRequestStatus`),
+  `server.ts` (Telegram `reject_perm_` honest reply; `/api/approvals/resolve`
+  HTTP 409 `ALREADY_DECIDED` guard), test
+  `src/tests/approvalRegistryTerminalTruth.test.ts` (9 passed).
+
+In Progress:
+- #13 Zero-fake-success for all tools — the sweep is not exhausted; further
+  unclassified `success: true` sites remain to audit.
+
+Remaining:
+- #13 continues; items 1, 2, 50, 55 remain BLOCKED on hardware/credentials.
+
+Bugs Found:
+- `updateActionRequestStatus` (server_tools.ts) accepted any status transition,
+  so a duplicate Telegram reject tap answered "cancelled safely" for a null
+  result, and a second POST to /api/approvals/resolve re-ran the execution
+  branches (duplicate GitHub issue / re-attempted publish) reporting a fresh
+  success. Found by tracing the shared registry helper through its callers.
+
+Bugs Fixed:
+- Added `canTransitionActionStatus` and a terminal-state guard in
+  `updateActionRequestStatus`; guarded the web approve branch (HTTP 409) and the
+  Telegram reject reply. Verified by the new 9-case test, negative-validated:
+  an always-true predicate failed exactly 3 behavioural cases (3 failed | 6
+  passed); restored → 9/9.
+
+Tests:    174 files / 2194 tests passed (28.72 s, 0 failed) — full `npx vitest run`
+Lint:     `tsc --noEmit` exit 0
+Build:    exit 0 — dist/server.cjs 1038244 bytes
+E2E:      NOT RUN (no handset / no display session)
+Security: approval gateway unchanged in strength; no bypass added. No .env staged.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  b2d8aac (code a54b15b)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         NONE this slot (work slot; finalization opens/refreshes it)
+Main merge: NOT MERGED — awaiting human approval
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- #1, #2, #50, #55 — require hardware/credentials not present in the sandbox.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- Continue item 13: audit the next unclassified `success: true` route in
+  server.ts and pin its verdict with a targeted test + negative validation.
+
+हिंदी सारांश (एक पंक्ति):
+- पहले से तय (स्वीकृत/अस्वीकृत) अनुमोदन अनुरोध को दोबारा तय किया जा सकता था; अब यह टर्मिनल है, दोबारा निर्णय मना है, और अनुमोदन सतहें झूठी सफलता नहीं दिखातीं।
