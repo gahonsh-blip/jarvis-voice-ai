@@ -2,15 +2,15 @@
   "window_date": "2026-10-06",
   "window_started_at": "2026-10-06T15:36:00Z",
   "last_slot_at": "2026-10-06T22:26:00Z",
-  "slots_completed": 11,
+  "slots_completed": 12,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "2d5ef8d",
+  "last_commit": "30c38a4",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "state branch was stale at slot 9; code-branch log showed slot 10 committed, so this fire recorded as slot 11"
+  "note": "approval registry terminal-state truth; slot 11 fire (2d5ef8d) was concurrent; rebased this slot's report onto it"
 }
