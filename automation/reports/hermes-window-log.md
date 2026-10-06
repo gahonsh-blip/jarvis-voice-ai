@@ -12397,3 +12397,89 @@ only `docs/*`, the window log and `jarvis_memory.json` (data), so the gates were
 NOT re-run after it — recorded as `NOT_RUN` for that commit, not assumed green. Security: `.env` ignored, no secret in the diff. Deploy:
 `NOT_CONFIGURED`. Main merge: NOT MERGED — awaiting human approval. No PR opened
 this slot; a fresh PR must be opened at the finalization slot.
+
+
+---
+
+## Slot — 2026-10-07 01:35 IST (WORK, slot 8)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:35
+Window date: 2026-10-06 -> 2026-10-07   Window slots completed so far: 8
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL slice advanced.
+  POST /api/blueprint/toggle-item (server.ts) flipped a deliverable's `done`
+  flag on the module-level BLUEPRINT_PHASES constant and answered
+  { success: true, phase } unconditionally. Two false-success shapes:
+  (1) the tick was never persisted — a restart restored the archived checklist
+  while the response had reported it saved; (2) a malformed body (a phaseId no
+  phase has, or an itemIndex outside the deliverable list) did nothing or
+  indexed undefined yet still answered success: true.
+  Fix: new src/utils/hardening/blueprintToggleTruth.ts
+  (applyBlueprintToggle / cloneBlueprintPhases / overlayPersistedPhases).
+  Live blueprintPhases = design constant overlaid with persisted tick state at
+  boot; the route classifies the request, refuses a malformed toggle with
+  success: false + HTTP 400, persists via persistBlueprintPhases() and rolls
+  back + answers HTTP 500 persisted: false when the write fails, answering
+  { success: true, applied: true, persisted: true } only for a durable change.
+  GET /api/blueprint and the report render now read the live list.
+  Evidence: src/utils/hardening/blueprintToggleTruth.ts; server.ts routes
+  /api/blueprint, /api/blueprint/toggle-item;
+  src/tests/blueprintToggleTruth.test.ts (16 cases: 7 unit, 5 overlay, 4
+  source guards). Observed targeted run: 1 file / 16 passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — PARTIAL; the sweep of unclassified
+  success: true sites in server.ts / server_tools.ts is not exhausted.
+
+Remaining:
+- #13 tail of unclassified success: true sites; #1/#2/#50/#55 hardware-blocked.
+
+Bugs Found:
+- /api/blueprint/toggle-item reported a durable, real tick for a change that was
+  neither persisted nor, for a malformed body, applied at all. Found by reading
+  the route against its own success literal while auditing item 13.
+
+Bugs Fixed:
+- The blueprint toggle route now persists the phases through persistMemory() and
+  refuses malformed input. Verification: new 16-case test file passes;
+  negative validation — the pre-fix route (git show 87c489a:server.ts) contains
+  BLUEPRINT_PHASES.find((p) => p.id === phaseId) and the unconditional
+  res.json({ success: true, phase }) that the new source guards forbid.
+
+Tests:    172 files / 2181 tests passed (28.51 s, 0 failed) — full npx vitest run
+Lint:     PASS — npm run lint (tsc --noEmit) exit 0
+Build:    PASS — npm run build exit 0; dist/server.cjs 1037308 bytes
+E2E:      NOT RUN — no handset / emulator / display session in this environment
+Security: .env git-ignored; no token/key staged; no node_modules/dist tracked.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row),
+               docs/CHANGELOG.md (slot 8 entry)
+Branch:  feature/hermes-full-completion
+Commit:  69f6032 (docs) on top of 529560d (fix)
+Push:    succeeded — origin/feature/hermes-full-completion 87c489a..69f6032
+
+PR:         NONE open (PR #5 was merged by the owner at 2026-10-06T07:26:11Z).
+            A fresh PR must be opened at the finalization slot.
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified artifact dist/server.cjs
+            is the deployment unit available.
+
+Blocked:
+- #1 Real Android Mobile Bridge connection — requires a paired physical handset.
+- #2 Android <-> JARVIS Server E2E test — requires a device.
+- #50 Real Screenshot — requires a display session.
+- #55 Real Computer Operator input — requires a real mouse/keyboard target.
+
+Human Approval Required:
+- Opening the PR to main at the finalization slot, and the human merge of that
+  PR. No automated merge is performed.
+
+Next Slot:
+- Continue item 13: audit the next unclassified success: true route in server.ts
+  and pin its verdict with a targeted test + negative validation.
+
+हिंदी सारांश (एक पंक्ति):
+- ब्लूप्रिंट टॉगल अब केवल तभी "सफल" कहता है जब टिक सचमुच डिस्क पर सेव हो और इनपुट वैध हो; गलत बॉडी अब मना कर दी जाती है।
