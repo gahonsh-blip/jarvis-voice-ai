@@ -4,6 +4,38 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-06 22:36 IST — **WORK SLOT 3** of the 2026-10-06 →
+2026-10-07 window, the 22:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the routine-trigger route reported a delivered briefing it never
+sent.** `POST /api/routines/trigger` (`server.ts`) selected a stored routine,
+answered `{ success: true, triggered: true, routine }`, and stopped — the
+briefing was only composed in memory and pushed nowhere. On a daemon with no
+configured Telegram chat, a triggered slot still read as a delivered routine.
+The route now pushes through `deliverTelegramMessage` (the same
+`telegramDelivery` / `interpretTelegramSend` path used elsewhere) and returns
+the observed outcome — `success` is true only when Telegram confirmed the send
+with a message id; an unconfigured chat yields `NOT_CONFIGURED`, a rejected
+send yields `FAILED`, and `triggered` names only the composition. The helper
+`routineTriggerDelivery` lives in `src/utils/hardening/routineTriggerTruth.ts`
+alongside the existing `resolveRoutineTrigger` slot validation. Guarded by
+`src/tests/routineTriggerTruth.test.ts` (10 cases: unit coverage on
+`resolveRoutineTrigger` / `ROUTINE_SLOTS` plus source guards that the route
+awaits `routineTriggerDelivery(` and no longer emits an unconditional
+`triggered: true, routine`). Negative-validated — `git checkout -- server.ts`
+failed exactly 1 of 10 (`1 failed | 9 passed`); restored → 10/10. Gates
+(observed this fire): lint (`tsc --noEmit`) exit 0; targeted
+`routineTriggerTruth` 1 file / 10 passed; full suite **169 files / 2139 tests
+passed** (26.89 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs`
+1030935 bytes). E2E: NOT RUN — no handset / emulator / display session, and no
+live Telegram bot token in this environment, so the `VERIFIED` delivery branch
+is exercised by unit test only. Deploy: `NOT_CONFIGURED`. Item 13 stays
+`PARTIAL` — the sweep is not exhausted (the tail of unclassified
+`success: true` sites in `server.ts` / `server_tools.ts` remains, truthfulness
+`UNKNOWN`). Hardware-blocked items #1/#2/#50/#55 remain
+`NOT_AVAILABLE`/`PARTIAL`. **This slot's commit (`6c1daa7`) is pushed to
+`feature/hermes-full-completion` but is not in any PR; a fresh PR must be
+opened at the finalization slot. Not merged — awaiting human approval.**
+
 Last cycle: 2026-10-06 21:35 IST — **WORK SLOT 2** of the 2026-10-06 →
 2026-10-07 window, the 21:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the telephony test-suite route reported a failing run as a success.**

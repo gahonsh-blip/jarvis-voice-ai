@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-06 22:36 IST (2026-10-06 17:06 UTC) — window slot 3: the routine-trigger route reports the Telegram delivery it actually observed
+
+### Fixed
+- **`POST /api/routines/trigger` (`server.ts`) answered `{ success: true, triggered: true, routine }` for a briefing that was only composed in memory.** The route selected a stored routine and returned — nothing was pushed anywhere. On a daemon with no configured Telegram chat, a triggered slot still read as a delivered routine. The route now pushes through `deliverTelegramMessage` (the existing `telegramDelivery` / `interpretTelegramSend` path) and returns the observed outcome: `success` is true only when Telegram confirmed the send with a message id; an unconfigured chat yields `NOT_CONFIGURED`, a rejected send yields `FAILED`, and `triggered` names only the composition. The helper `routineTriggerDelivery` lives in `src/utils/hardening/routineTriggerTruth.ts` beside the existing `resolveRoutineTrigger` slot validation.
+
+### Tests
+- `src/tests/routineTriggerTruth.test.ts` (10 cases: unit coverage on `resolveRoutineTrigger` / `ROUTINE_SLOTS` plus source guards that the route awaits `routineTriggerDelivery(` and no longer emits an unconditional `triggered: true, routine`). Negative-validated — `git checkout -- server.ts` failed exactly 1 of 10 (`1 failed | 9 passed`); restored → 10/10. Targeted `routineTriggerTruth` 1 file / 10 passed. Lint (`tsc --noEmit`) exit 0. Full suite **169 files / 2139 tests passed** (26.89 s, 0 failed). Build exit 0 (`dist/server.cjs` 1030935 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-06 21:35 IST (2026-10-06 16:05 UTC) — window slot 2: the telephony test-suite route no longer reports a failing run as success
 
 ### Fixed
