@@ -1,15 +1,16 @@
 {
   "window_date": "2026-10-06",
   "window_started_at": "2026-10-06T15:36:00Z",
-  "last_slot_at": "2026-10-06T20:57:20Z",
-  "slots_completed": 9,
+  "last_slot_at": "2026-10-06T22:26:00Z",
+  "slots_completed": 11,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "c32aa72",
+  "last_commit": "2d5ef8d",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
-  "last_report_path": "/tmp/hermes-window-report.md"
+  "last_report_path": "/tmp/hermes-window-report.md",
+  "note": "state branch was stale at slot 9; code-branch log showed slot 10 committed, so this fire recorded as slot 11"
 }
