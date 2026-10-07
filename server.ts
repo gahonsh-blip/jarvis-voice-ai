@@ -4778,7 +4778,7 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     level: 4,
     gate: uploadVerdict.success ? 'Level-4 authorization' : uploadVerdict.message,
   });
-  pushAuditEntry({
+  const uploadAuditRow = pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: stagingAudit.action,
@@ -4788,8 +4788,7 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-
-  persistMemory();
+  const uploadPersisted = persistMemory();
 
   if (!uploadVerdict.success) {
     const code = uploadVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : uploadVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
@@ -4802,8 +4801,25 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     });
   }
 
+  // A staged upload is only real once it is durable. A write that never reached
+  // disk (read-only volume, full disk) leaves this process holding a staged
+  // upload the next boot does not have, so roll it back and do not claim it.
+  if (!uploadPersisted) {
+    const postIndex = memoryState.socialPosts.indexOf(newPost);
+    if (postIndex !== -1) memoryState.socialPosts.splice(postIndex, 1);
+    const auditIndex = memoryState.auditLogs.indexOf(uploadAuditRow);
+    if (auditIndex !== -1) memoryState.auditLogs.splice(auditIndex, 1);
+    return res.status(500).json({
+      success: false,
+      staged: false,
+      persisted: false,
+      error: 'The staged upload could not be written to durable storage; it was not staged.',
+    });
+  }
+
   res.json({
     success: true,
+    persisted: true,
     post: newPost,
     message: `YouTube video staged for Level-4 Authorization in ${validPrivacy.toUpperCase()} mode.`,
   });
@@ -4867,7 +4883,7 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     level: 4,
     gate: testVerdict.success ? 'Level-4 authorization' : testVerdict.message,
   });
-  pushAuditEntry({
+  const testAuditRow = pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: stagingAudit.action,
@@ -4877,8 +4893,7 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-
-  persistMemory();
+  const testPersisted = persistMemory();
 
   if (!testVerdict.success) {
     const code = testVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : testVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
@@ -4891,7 +4906,23 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     });
   }
 
-  res.json({ success: true, post: newPost, message: 'YouTube test video draft created with Level 4 approval gate.' });
+  // A staged test draft is only real once it is durable. A write that never
+  // reached disk leaves this process holding a staged draft the next boot does
+  // not have, so roll it back and do not claim it.
+  if (!testPersisted) {
+    const postIndex = memoryState.socialPosts.indexOf(newPost);
+    if (postIndex !== -1) memoryState.socialPosts.splice(postIndex, 1);
+    const auditIndex = memoryState.auditLogs.indexOf(testAuditRow);
+    if (auditIndex !== -1) memoryState.auditLogs.splice(auditIndex, 1);
+    return res.status(500).json({
+      success: false,
+      staged: false,
+      persisted: false,
+      error: 'The staged test draft could not be written to durable storage; it was not staged.',
+    });
+  }
+
+  res.json({ success: true, persisted: true, post: newPost, message: 'YouTube test video draft created with Level 4 approval gate.' });
 });
 
 // Update an existing draft (e.g. modify title, description, privacyStatus before approval)
