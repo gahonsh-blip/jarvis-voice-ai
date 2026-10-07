@@ -6141,6 +6141,9 @@ app.get('/api/backup', (req: Request, res: Response) => {
 
 /** Restore a previously created backup. */
 app.post('/api/restore', (req: Request, res: Response) => {
+  // Snapshot before the merge: restoreBackup only reassigns top-level keys, so a
+  // shallow copy of the previous references is enough to undo it on failure.
+  const before = { ...memoryState };
   const result = restoreBackup(
     memoryState as unknown as Record<string, unknown>,
     req.body?.backup ?? req.body
@@ -6150,14 +6153,28 @@ app.post('/api/restore', (req: Request, res: Response) => {
     return res.status(400).json({ success: false, errors: result.errors });
   }
 
+  // A restore that cannot reach disk has not happened: the running process holds
+  // the restored values but the next boot reads the pre-restore file. The route
+  // used to answer success:true and write a VERIFIED audit row regardless, so an
+  // unwritable volume produced a restore that silently reverted on restart.
+  // Match /api/memory: roll the merge back and report the failure honestly.
+  if (!persistMemory()) {
+    memoryState = before as MemoryData;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      ...result,
+      error: 'The restore could not be written to durable storage; it was not applied.',
+    });
+  }
+
   addAuditLog(
     `Memory restored from backup: ${result.restoredKeys.length} keys replaced, ${result.preservedKeys.length} preserved`,
     4,
     'HUMAN_OPERATOR',
     'VERIFIED'
   );
-  persistMemory();
-  res.json({ success: true, ...result });
+  res.json({ success: true, persisted: true, ...result });
 });
 
 /** Deployment readiness check. Observes this process's real configuration. */
