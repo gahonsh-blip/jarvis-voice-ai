@@ -13167,3 +13167,80 @@ pushed before the long verification; docs in a follow-up commit). State branch
 ऑडिट नहीं; 2 नए टेस्ट हरे, पूरी सूट 2242 टेस्ट पास।
 
 ---
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35
+Window date: 2026-10-07 (window 2026-10-07 -> 2026-10-08 IST)   Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools — the /api/chat route no longer claims a
+  memory write that never reached disk. Evidence: server.ts case 'set_name'
+  (reports "could not write it to durable storage, so it is not saved" when
+  persistMemory() returns false; still records only a name passing
+  judgeSetNameIntent) and case 'create_file' (rolls the note back and reports
+  the failure). New src/tests/chatDurabilityTruth.test.ts — 4 cases, a real
+  server process against a memory file made read-only after the first write.
+  Observed 4 passed. Negative-validated: git stash push server.ts -> 4 failed;
+  restored -> 4 passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. Unclassified
+  success:true / discarded-persistMemory() sites still exist in server.ts and
+  server_tools.ts; the sweep continues slot by slot.
+
+Remaining:
+- #13 continued sweep (next slot).
+- Hardware/credential-blocked backlog items: #1, #2, #50, #55 (unchanged).
+
+Bugs Found:
+- /api/chat set_name discarded persistMemory()'s boolean and answered "Your
+  identity has been recorded into my durable memory banks."; create_file
+  discarded the boolean and answered "I have saved your note ... this is
+  stored." On an unwritable volume the record lived only in process memory.
+- Latent test-rot in src/tests/identityTruth.test.ts: the case 'set_name'
+  guards sliced a fixed 1400 characters, which stopped reaching the rejected
+  branch once the case grew. Found when the full suite went red after the fix.
+
+Bugs Fixed:
+- Both /api/chat cases made durability-honest (above). Proven by
+  chatDurabilityTruth.test.ts (4/4 with the fix, 0/4 with server.ts reverted).
+- identityTruth.test.ts now slices the case body to the next case label and
+  asserts the new failed-write reply. Proven: targeted 3 files / 22 passed.
+
+Tests:    181 files / 2247 tests passed (37.31 s, 0 failed) — full npx vitest run
+Lint:     npm run lint (tsc --noEmit) exit 0
+Build:    npm run build exit 0 — dist/server.cjs 1048807 bytes
+E2E:      NOT RUN — no Android handset in this sandbox
+Security: git check-ignore .env -> ignored; no .env, token, node_modules or dist
+          staged; working tree clean; diff vs origin/main limited to source,
+          tests and docs
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  2005bcb (code fix 973c489, test fix 3fd7517, docs 2005bcb)
+Push:    succeeded — origin/feature/hermes-full-completion (41394e8..2005bcb)
+State:   origin/automation/hermes-state 0623ce1 (slots_completed 9)
+
+PR:         none opened this slot (existing PR not re-checked this fire)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            dist/server.cjs is the deployment unit available
+
+Blocked:
+- #1, #2, #50, #55 — require Android hardware / provider credentials not present
+
+Human Approval Required:
+- None this slot. Item 13 is a hardening sweep; it does not change the
+  permission gateway or any external-action surface.
+
+Next Slot:
+- Continue #13: the highest-value remaining durability / success:true sites in
+  server.ts / server_tools.ts — any remaining bare persistMemory() call whose
+  result is discarded before a success reply.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में /api/chat के set_name और create_file अब झूठा "durable save" नहीं
+  बोलते — असली डिस्क-राइट विफल होने पर साफ़ मना करते हैं; 4 नए टेस्ट पास, पूरी
+  सूट 2247 टेस्ट पास, लिंट/बिल्ड ग्रीन; आइटम 13 अभी PARTIAL है।
