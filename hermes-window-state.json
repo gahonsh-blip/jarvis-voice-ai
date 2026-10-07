@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-07",
   "window_started_at": "2026-10-07T15:36:00Z",
-  "last_slot_at": "2026-10-07T20:35:00Z",
-  "slots_completed": 10,
+  "last_slot_at": "2026-10-07T21:35:00Z",
+  "slots_completed": 11,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "b8149c2",
+  "last_commit": "33822cc",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 10 (02:05 IST fire, 2026-10-08). POST /api/social/generate staged a draft into memoryState.socialPosts, called persistMemory() and discarded the boolean, wrote a PENDING staging audit row, and answered { success: true, post }. On an unwritable volume the draft lived only in process memory while the caller was told it had been created. The route now checks the persist result, splices the just-added draft back out, and answers HTTP 500 { success: false, persisted: false } WITHOUT writing the audit row; a durable draft answers { success: true, persisted: true, post }. New src/tests/socialDraftDurabilityTruth.test.ts (3 cases: real server against a read-only memory file + source guard); negative-validated (git stash of server.ts: 3 failed | 0 passed); restored 3/3. Targeted 6 files / 56 passed; full suite 182 files / 2250 passed (36.48s, 0 failed); lint exit 0; build exit 0 (dist/server.cjs 1049148 bytes). Item 13 stays PARTIAL. Next slot: continue the persistMemory()-discard / success:true sweep in server.ts (candidates: Telegram reply path ~3603, pending-action reject/approve routes that write to the in-memory pendingActionRequests array, social youtube upload-draft/draft-test unshift sites 4744/4833) and server_tools.ts."
+  "note": "Slot 11 (03:05 IST fire, 2026-10-08). POST /api/social/youtube/update-draft mutated the staged post metadata, called persistMemory() and discarded the boolean, then answered { success: true, applied: true, persisted: true }. On an unwritable volume the change lived only in process memory while the caller was told the draft was updated. The route now snapshots the fields it may touch (videoTitle, topic, videoDescription, content, privacyStatus, hashtags), writes durably, and on a failed write restores the snapshot and answers HTTP 500 { success: false, applied: false, persisted: false }; a durable update answers persisted: true. New src/tests/youtubeDraftUpdateDurabilityTruth.test.ts (3 cases: real server against a read-only memory file + source guard); negative-validated (reverting the route to its pre-fix shape: 3 failed | 0 passed); restored 3/3. Full suite 184 files / 2259 passed (38.71s, 0 failed); lint exit 0; build exit 0 (dist/server.cjs 1051066 bytes). Item 13 stays PARTIAL. Next slot: continue the persistMemory()-discard / success:true sweep in server.ts (candidates: Telegram webhook reply path ~4377, /api/social/publish helper persistMemory() sites ~2970/3018/3043/3099/3131) and server_tools.ts."
 }
