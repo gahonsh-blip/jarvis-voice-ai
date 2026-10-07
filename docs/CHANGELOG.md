@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 00:22 IST (2026-10-07 18:52 UTC) — window slot 8: the OAuth disconnect routes no longer report a credential removal that never reached disk
+
+### Fixed
+- **`POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect` (`server.ts`) cleared the credential in memory, called `persistMemory()` and discarded its boolean, wrote a `VERIFIED` "…Disconnected (…)" audit row, and answered `success: true`.** The routes already guarded on an existing connection (a no-op returns `NOT_CONNECTED`), but the durability of the removal was never checked. On an unwritable volume (read-only mount, full disk) the process held the disconnection while the next boot reloaded the connection from the pre-disconnect file — a credential removal that silently reverted on restart, recorded in the audit log as confirmed. Both routes now check the persist result, roll the connection back to its pre-disconnect value (so in-process state matches the durable file), and answer HTTP 500 `success: false, persisted: false` without writing the audit row. A durable disconnect still answers `success: true`.
+
+### Tests
+- Extended `src/tests/oauthDisconnectTruth.test.ts` (2 new cases: the persist check gates both the audit row and the success reply, the credential is rolled back, and the failure body is honest). Negative-validated — `git checkout` of `server.ts` failed 2 of 6 (`2 failed | 4 passed`); restored → 6/6. Targeted 1 file / 6 passed. Lint (`tsc --noEmit`) exit 0. Full suite **180 files / 2242 tests passed** (36.25 s, 0 failed). Build exit 0 (`dist/server.cjs` 1048205 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 00:06 IST (2026-10-07 18:36 UTC) — window slot 7: `POST /api/restore` no longer reports a restore that never reached disk
 
 ### Fixed
