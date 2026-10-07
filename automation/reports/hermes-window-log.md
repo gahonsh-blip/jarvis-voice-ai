@@ -13679,7 +13679,9 @@ Next Slot:
 
 **Observed clock:** `TZ=Asia/Kolkata date` = 03:35 IST at run start (sandbox clock drifts against the cron grid; recorded as observed, not inferred).
 
-**Finding:** the finalization slot had already committed to `feature/hermes-full-completion` (`30ba8ab` docs/COMPLETION_STATUS.md, `11735a3` window report) but `automation/hermes-state` still reported `finalized: false` / `finalization_result: null` (state tip `62b2aca`, `last_commit 7778000`). This fire therefore re-verified the finalization evidence first-hand instead of starting new development.
+**Finding:** the finalization slot had already committed to `feature/hermes-full-completion` (`30ba8ab` docs/COMPLETION_STATUS.md, `11735a3` window report). This fire therefore re-verified the finalization evidence first-hand instead of starting new development.
+
+**Correction to an earlier draft of this section (honesty note):** this section first claimed the state branch was stale at `finalized: false` (tip `62b2aca`, `last_commit 7778000`). That was a **stale local git ref**, not reality. Re-fetching showed `origin/automation/hermes-state` tip `42bd72a` = `chore(state): finalization slot 14 - window 2026-10-07 finalized`, a descendant of `62b2aca`, with `finalized: true`, `slots_completed: 14`, `last_commit: 11735a3`. The window **was** correctly finalized on the remote. This fire did **not** push any state-branch commit (pushing would have regressed `slots_completed` 14→13). No state regression occurred.
 
 **Honest correction:** the slot-13 section recorded the full-suite duration as `42.95 s`. This fire observed `42.89 s` for the same run (187 files / 2270 tests, 0 failed). Corrected to the observed value in this log (commit `c0c889f`). The correction was rebased onto the true origin tip `11735a3` and pushed as a fast-forward descendant — no force-push, no history rewrite.
 
