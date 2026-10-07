@@ -4663,6 +4663,20 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
     level: 2,
     gate: 'Level-2 draft review',
   });
+
+  // A draft is only real once it is durable. A write that never reaches disk
+  // (read-only volume, full disk) leaves this process holding a draft the next
+  // boot does not have, so do not log the staging or answer success for it.
+  if (!persistMemory()) {
+    const draftIndex = memoryState.socialPosts.indexOf(newPost);
+    if (draftIndex !== -1) memoryState.socialPosts.splice(draftIndex, 1);
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The draft could not be written to durable storage; it was not created.',
+    });
+  }
+
   pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
@@ -4674,8 +4688,7 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
     finalTruthState: stagingAudit.finalTruthState,
   });
 
-  persistMemory();
-  res.json({ success: true, post: newPost });
+  res.json({ success: true, persisted: true, post: newPost });
 });
 
 // Level 4 Social Action Endpoint with Strict Verification
