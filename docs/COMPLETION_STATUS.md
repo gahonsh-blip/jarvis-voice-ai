@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 03:35 IST — **WORK SLOT 12** of the 2026-10-07 →
+Last cycle: 2026-10-08 04:05 IST — **WORK SLOT 13** of the 2026-10-07 →
+2026-10-08 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — `executeApprovedAction` is now honest about durable writes, and the
+previous slot's fix is covered end to end.**
+
+The slot-12/13 fix made `executeApprovedAction` (`server.ts`) — the shared
+helper behind `POST /api/social/action`, the Telegram `approve_post_*` /
+`reject_post_*` callbacks and the scheduled publish worker — check
+`persistMemory()` at every audit-commit site, roll its in-memory audit row (and,
+for the non-publish branches, the post snapshot) back on a failed write, and
+report `persisted: false`; the publish path deliberately keeps the post state
+because a provider-confirmed publish really happened. Previously the helper
+discarded the boolean and answered `success: true` for a decision the store
+never kept. This slot adds `src/tests/socialActionDurabilityTruth.test.ts`: a
+real `tsx server.ts` process against a memory file made read-only after the
+first successful write. A writable-disk case proves a rejection records
+(`success:true`, `persisted:true`, `REJECTED`, audit row present); the
+read-only case proves it is refused (`success:false`, `persisted:false`, post
+snapshot restored to `DRAFT`, no rejection audit row). Negative-validated: with
+the reject branch reverted to its pre-fix shape (guard disabled) the failure
+case fails — `expected true to be false` on `body.success`; restored → 3/3. Also
+corrects a stray helper-name reference in the `executeApprovedAction` leading
+comment. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1
+file / 3 passed; full suite **186 files / 2267 tests passed** (42.02 s, 0
+failed); `npm run build` exit 0 (`dist/server.cjs` 1055861 bytes). E2E: NOT RUN
+(no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` —
+unclassified `persistMemory()`-discard sites remain in `server.ts` /
+`server_tools.ts`.
+
+Last cycle (previous): 2026-10-08 03:35 IST — **WORK SLOT 12** of the 2026-10-07 →
 2026-10-08 window, the 03:35 IST fire (second-to-last work slot). **Item 13
 (`Zero-fake-success for all tools`) — the Level-3/4 approval registry now
 survives a restart, and a staging that cannot reach disk is no longer reported

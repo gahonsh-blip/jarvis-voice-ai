@@ -13445,3 +13445,76 @@ Next Slot:
 - Level-3/4 approval registry अब restart के बाद भी सुरक्षित रहती है और डिस्क पर
   सेव न हो पाने वाली approval को "staged" नहीं बताया जाता — नया ड्यूरेबिलिटी टेस्ट
   (5/5) जोड़ा गया, पूरी सूट 2264 टेस्ट पास, बदलाव पुश हो गया; आइटम #13 अभी PARTIAL है।
+
+======================================================================
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:05
+Window date: 2026-10-07 → 2026-10-08   Window slots completed so far: 13
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL) — covered the slot-12/13
+  executeApprovedAction durability fix end to end. New
+  src/tests/socialActionDurabilityTruth.test.ts runs a real `tsx server.ts`
+  process against a memory file made read-only after the first write:
+  writable disk -> reject records (success:true, persisted:true, REJECTED,
+  audit row present); read-only disk -> refuse (success:false, persisted:false,
+  post snapshot restored to DRAFT, no rejection audit row). Negative-validated:
+  guard disabled -> failure case fails ("expected true to be false" on
+  body.success); restored -> 3/3. Also fixed a stray helper-name reference
+  (`commitDecision`) in the executeApprovedAction leading comment.
+
+In Progress:
+- #13 — unclassified `persistMemory()`-discard sites remain in server.ts /
+  server_tools.ts; the sweep is not exhausted.
+
+Remaining:
+- #13 is the active sweep; after it, the mandated order continues with the
+  still-open items (Voice, Wake Word, Production Hardening) plus the
+  hardware/credential-blocked items #1, #2, #50, #55.
+
+Bugs Found:
+- None new this slot. (The leading-comment reference to a non-existent
+  `commitDecision` helper was a documentation defect, corrected.)
+
+Bugs Fixed:
+- None new this slot — the executeApprovedAction durability fix landed in the
+  prior (slot-12/13) commit; this slot proved it end to end with a real-process
+  test and negative validation.
+
+Tests:    186 files / 2267 tests passed (42.02 s, 0 failed)
+Lint:     `tsc --noEmit` exit 0
+Build:    exit 0 — dist/server.cjs 1055861 bytes (built 22:47 UTC)
+E2E:      NOT RUN (no handset/device in sandbox)
+Security: git check-ignore/status reviewed; no .env, no tokens, no node_modules
+          or stray debug files staged. (See finalization slot for full audit.)
+
+Documentation: docs/COMPLETION_STATUS.md (new slot-13 "Last cycle" entry),
+          automation/reports/hermes-window-log.md (appended),
+          src/tests/socialActionDurabilityTruth.test.ts (new test).
+Branch:  feature/hermes-full-completion
+Commit:  0ca21e3
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE (opened by the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this
+            environment; the verified dist/server.cjs artifact is the deployment
+            unit available.
+
+Blocked:
+- #1, #2 — require a real Android handset / adb bridge (no device in sandbox)
+- #50, #55 — require a real credential/OAuth grant (Google/LinkedIn/carrier)
+
+Human Approval Required:
+- None for this slot. The window's final PR to main must be read and approved by
+  the owner before any merge.
+
+Next Slot:
+- Finalization (04:35 IST): run the full lint+tests+build gate, repository
+  security checks, ensure the PR to main is open and mergeable, and record the
+  final window state. No new development.
+
+हिंदी सारांश (एक पंक्ति):
+- approval-decision durability fix (executeApprovedAction) को असली सर्वर प्रोसेस
+  टेस्ट और negative-validation से verify किया; पूरी suite 2267 tests पास, build सफल।
