@@ -6,11 +6,11 @@
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "e93e9cb",
+  "last_commit": "1897ecd",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 7 (00:05 IST fire, 2026-10-08). POST /api/restore merged a backup, wrote a VERIFIED audit row and answered success:true while discarding persistMemory()'s boolean - an unwritable volume left the process holding restored values that the next boot reverted, logged as VERIFIED. Route now snapshots the pre-merge state, rolls back and answers 500 success:false persisted:false when the write fails (no audit row); durable restore answers persisted:true. New src/tests/restoreDurabilityTruth.test.ts (6 cases); negative-validated (4 failed | 2 passed on the reverted route); restored 6/6. Full suite 180 files / 2240 passed; lint exit 0; build exit 0 (dist/server.cjs 1047575 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true / actionExecuted:true sweep in server.ts / server_tools.ts."
+  "note": "Slot 7 (00:05 IST fire, 2026-10-08). POST /api/restore merged a backup, wrote a VERIFIED audit row and answered success:true while discarding persistMemory()'s boolean - an unwritable volume left the process holding restored values that the next boot reverted, logged as VERIFIED. Route now snapshots the pre-merge state, rolls back and answers 500 success:false persisted:false when the write fails (no audit row); durable restore answers persisted:true. New src/tests/restoreDurabilityTruth.test.ts (6 cases); negative-validated (4 failed | 2 passed on the reverted route); restored 6/6. Full suite 180 files / 2240 passed; lint exit 0; build exit 0 (dist/server.cjs 1047575 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true / actionExecuted:true sweep in server.ts / server_tools.ts. (Earlier this slot I wrongly suspected the slot-7 state push had not landed; re-fetching showed remote automation/hermes-state is at d1d55eb, so it HAD landed. This entry only refreshes last_commit to 1897ecd.)"
 }
