@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 02:05 IST (2026-10-07 20:35 UTC) — window slot 10: `/api/social/generate` no longer claims a draft that never reached disk
+
+### Fixed
+- **`POST /api/social/generate` (`server.ts`) staged a draft into `memoryState.socialPosts`, called `persistMemory()` and discarded its boolean, wrote a `PENDING` staging audit row, and answered `{ success: true, post: newPost }`.** On an unwritable volume (read-only mount, full disk) the draft lived only in the process's memory while the caller was told it had been created — the same durability class already fixed for `/api/chat`, `/api/memory`, `/api/restore`, the OAuth disconnect routes and the emergency kill switch. The route now checks the persist result, removes the just-added draft from the live array, and answers HTTP 500 `{ success: false, persisted: false }` **without** writing the staging audit row; a durable draft answers `{ success: true, persisted: true, post }`.
+
+### Tests
+- New `src/tests/socialDraftDurabilityTruth.test.ts` (3 cases: a real server process against a memory file made read-only after the first write, exercising the writable path, the failed-write path, and a source guard against the unconditional `success: true` reply). Negative-validated — `git stash` of `server.ts` failed 3 of 3; restored → 3/3. Targeted 6 files / 56 passed. Lint (`tsc --noEmit`) exit 0. Full suite **182 files / 2250 tests passed** (36.48 s, 0 failed). Build exit 0 (`dist/server.cjs` 1049148 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 00:37 IST (2026-10-07 19:07 UTC) — window slot 9: `/api/chat` no longer claims a memory write that never reached disk
 
 ### Fixed

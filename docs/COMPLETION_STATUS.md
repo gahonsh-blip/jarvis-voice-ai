@@ -4,7 +4,31 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 00:37 IST — **WORK SLOT 9** of the 2026-10-07 →
+Last cycle: 2026-10-08 02:05 IST — **WORK SLOT 10** of the 2026-10-07 →
+2026-10-08 window, the 02:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — `POST /api/social/generate` claimed a draft that never reached disk.**
+
+`POST /api/social/generate` (`server.ts`) staged a draft into
+`memoryState.socialPosts`, called `persistMemory()` and discarded its boolean,
+wrote a `PENDING` staging audit row, and answered `{ success: true, post }`. On
+an unwritable volume (read-only mount, full disk) the draft lived only in the
+process's memory while the caller was told it had been created — the same
+durability class already fixed for `/api/chat`, `/api/memory`, `/api/restore`,
+the OAuth disconnect routes and the emergency kill switch. The route now checks
+the persist result, removes the just-added draft from the live array, and
+answers HTTP 500 `{ success: false, persisted: false }` **without** writing the
+staging audit row; a durable draft answers `{ success: true, persisted: true,
+post }`. Guarded by the new `src/tests/socialDraftDurabilityTruth.test.ts`
+(3 cases; a real server process against a memory file made read-only after the
+first write, plus a source guard against the unconditional success reply).
+Negative-validated — `git stash` of `server.ts` failed 3 of 3; restored → 3/3.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 6 files /
+56 passed; full suite **182 files / 2250 tests passed** (36.48 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1049148 bytes). E2E: NOT RUN (no
+handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — unclassified
+`success: true` sites remain in `server.ts` / `server_tools.ts`.
+
+Last cycle (previous): 2026-10-08 00:37 IST — **WORK SLOT 9** of the 2026-10-07 →
 2026-10-08 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the `/api/chat` route claimed a memory write that never reached disk.**
 
