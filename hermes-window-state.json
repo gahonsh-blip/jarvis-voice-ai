@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-07",
   "window_started_at": "2026-10-07T15:36:00Z",
-  "last_slot_at": "2026-10-07T19:20:00Z",
-  "slots_completed": 9,
+  "last_slot_at": "2026-10-07T20:35:00Z",
+  "slots_completed": 10,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "2005bcb",
+  "last_commit": "b8149c2",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 9 (00:35 IST fire, 2026-10-08). The /api/chat set_name and create_file cases were the un-fixed siblings of the mobile processMobileCommand path: both called persistMemory() and discarded the boolean, then claimed a durable record ('recorded into my durable memory banks' / 'I have saved your note ... this is stored'). set_name now reports the failed write and still gates recording on judgeSetNameIntent; create_file rolls the note back and reports the failure. New src/tests/chatDurabilityTruth.test.ts (4 cases, real server against a read-only memory file); negative-validated (git stash of server.ts: 4 failed | 0 passed); restored 4/4. Also fixed test-rot in identityTruth.test.ts (fixed 1400-char slice no longer reached the rejected branch; now bounded at the next case label). Full suite 181 files / 2247 passed (37.31s, 0 failed); lint exit 0; build exit 0 (dist/server.cjs 1048807 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true / persistMemory()-discard sweep in server.ts / server_tools.ts."
+  "note": "Slot 10 (02:05 IST fire, 2026-10-08). POST /api/social/generate staged a draft into memoryState.socialPosts, called persistMemory() and discarded the boolean, wrote a PENDING staging audit row, and answered { success: true, post }. On an unwritable volume the draft lived only in process memory while the caller was told it had been created. The route now checks the persist result, splices the just-added draft back out, and answers HTTP 500 { success: false, persisted: false } WITHOUT writing the audit row; a durable draft answers { success: true, persisted: true, post }. New src/tests/socialDraftDurabilityTruth.test.ts (3 cases: real server against a read-only memory file + source guard); negative-validated (git stash of server.ts: 3 failed | 0 passed); restored 3/3. Targeted 6 files / 56 passed; full suite 182 files / 2250 passed (36.48s, 0 failed); lint exit 0; build exit 0 (dist/server.cjs 1049148 bytes). Item 13 stays PARTIAL. Next slot: continue the persistMemory()-discard / success:true sweep in server.ts (candidates: Telegram reply path ~3603, pending-action reject/approve routes that write to the in-memory pendingActionRequests array, social youtube upload-draft/draft-test unshift sites 4744/4833) and server_tools.ts."
 }
