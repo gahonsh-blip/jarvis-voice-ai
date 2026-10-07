@@ -13358,3 +13358,90 @@ Next Slot:
 - `/api/social/youtube/update-draft` अब डिस्क पर सेव न होने पर झूठी सफलता नहीं
   देता — नया ड्यूरेबिलिटी टेस्ट जोड़ा गया, पूरी सूट 2259 टेस्ट पास, बदलाव पुश
   हो गया; आइटम #13 अभी PARTIAL है।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK (second-to-last)  |  IST time: 03:35
+Window date: 2026-10-07 → 2026-10-08   Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools — the Level-3/4 approval registry is now
+  durable across restarts, and a staging that cannot reach disk is no longer
+  reported as staged.
+  Evidence: server.ts `persistApprovalRegistry()` (+ call sites in
+  /api/approvals/create, /api/approvals/resolve REJECT+APPROVE,
+  /api/telephony/outbound/stage and /authorize, YouTube upload-draft/draft-test,
+  Telegram approve_perm_/reject_perm_); server_tools.ts
+  `persistedActionRequests()` / `hydrateActionRequests()`; boot-path restore in
+  server.ts.
+  Test: src/tests/approvalDurabilityTruth.test.ts — 5 passed (real server against
+  a memory file made read-only after the first write; restart keeps the durable
+  request and drops the phantom one; source guards). Observed:
+  `Test Files 1 passed (1) / Tests 5 passed (5)`.
+  Also updated src/tests/youtubeDraftDurabilityTruth.test.ts (guard broadened to
+  accept the strictly-stronger persist) — 6 passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. Other `success: true`
+  / discarded-`persistMemory()` sites still exist in server.ts / server_tools.ts
+  (next candidates: Telegram webhook reply path, the /api/social/publish helper
+  persist sites). Not advanced this slot.
+
+Remaining:
+- #13 stays PARTIAL; the durability sweep continues next slot.
+- #1 Android Bridge, #2 Real Android E2E — BLOCKED (no physical device / adb).
+- #50, #55 — BLOCKED (hardware/credentials not present in the sandbox).
+- The rest of the 60-item backlog per docs/COMPLETION_STATUS.md.
+
+Bugs Found:
+- In this slot's own fix: the first rollback of a failed `/api/approvals/create`
+  restored only the live registry, not `memoryState.permissionRequests`. Because
+  `persistApprovalRegistry()` copies the request into `memoryState` *before*
+  writing, a phantom request survived a failed create and was resurrected by the
+  next successful persist. Found by the new restart case
+  (`expected [ 'perm-...-dufi', ...(2) ] to not include 'perm-...-dufi'`).
+
+Bugs Fixed:
+- Restoring `memoryState.permissionRequests = registryBefore` alongside
+  `hydrateActionRequests(registryBefore)` on the failed-write branch. Verification:
+  the restart case fails without the memoryState rollback and passes with it
+  (5/5 after the fix).
+
+Tests:    185 files / 2264 passed (41.33 s, 0 failed) — `npx vitest run`
+Lint:     PASS — `tsc --noEmit` exit 0
+Build:    PASS — `npm run build` exit 0 (`dist/server.cjs` built, 1.0 mb)
+E2E:      NOT RUN (no handset)
+Security: NOT RUN (no dedicated audit script run this slot); reviewed the diff —
+          no .env staged, no token/key in the diff, no node_modules/dist staged.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  6f957eb (test guard) on top of 9ff6a57 (fix); docs commit follows
+Push:    succeeded — origin/feature/hermes-full-completion = 6f957eb (verified
+         via `git ls-remote`)
+
+PR:         NONE opened this slot (branch pushed; no PR requested this fire).
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present
+            in this environment; the verified artifact (`dist/server.cjs`) is the
+            deployment unit available.
+
+Blocked:
+- #1 Android Bridge — requires a physical Android device / adb target.
+- #2 Real Android E2E — requires a physical Android device.
+- #50, #55 — require hardware/credentials not available in the sandbox.
+
+Human Approval Required:
+- Merge of `feature/hermes-full-completion` into `main` (owner must read the
+  final verification report and approve; automated merge is forbidden).
+
+Next Slot:
+- Continue #13: the remaining discarded-`persistMemory()` / unconditional
+  `success: true` sites — Telegram webhook reply path and the
+  `/api/social/publish` helper persist sites in server.ts, then server_tools.ts.
+
+हिंदी सारांश (एक पंक्ति):
+- Level-3/4 approval registry अब restart के बाद भी सुरक्षित रहती है और डिस्क पर
+  सेव न हो पाने वाली approval को "staged" नहीं बताया जाता — नया ड्यूरेबिलिटी टेस्ट
+  (5/5) जोड़ा गया, पूरी सूट 2264 टेस्ट पास, बदलाव पुश हो गया; आइटम #13 अभी PARTIAL है।

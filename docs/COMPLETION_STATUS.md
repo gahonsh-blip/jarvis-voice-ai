@@ -4,7 +4,47 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 03:05 IST — **WORK SLOT 11** of the 2026-10-07 →
+Last cycle: 2026-10-08 03:35 IST — **WORK SLOT 12** of the 2026-10-07 →
+2026-10-08 window, the 03:35 IST fire (second-to-last work slot). **Item 13
+(`Zero-fake-success for all tools`) — the Level-3/4 approval registry now
+survives a restart, and a staging that cannot reach disk is no longer reported
+as staged.**
+
+The approval queue (`pendingActionRequests` in `server_tools.ts`) lives outside
+`memoryState`, so it only reached disk through ad-hoc `persistMemory()` calls
+that discarded the boolean. A staged approval, a rejected request, or a resolved
+decision therefore lived only in the process's memory: a reboot silently emptied
+the queue and the approval card the operator answered afterwards resolved
+nothing — a fake success on the approval path itself. `persistApprovalRegistry()`
+(`server.ts`) now copies the live registry into `memoryState.permissionRequests`
+and returns whether the durable write reached disk; `server_tools.ts` gained
+`persistedActionRequests()` / `hydrateActionRequests()` and the boot path
+restores the queue. Wired into every staging/decision surface:
+`POST /api/approvals/create` (reports `persisted`, and on a failed write rolls
+back both the live registry **and** `memoryState.permissionRequests` — a phantom
+request left in `memoryState` would be resurrected by the next successful
+persist), `POST /api/approvals/resolve` REJECT and APPROVE branches,
+`POST /api/telephony/outbound/stage` and `/authorize`, the YouTube
+`upload-draft` / `draft-test` staging routes, and the Telegram
+`approve_perm_` / `reject_perm_` callbacks. Guarded by the new
+`src/tests/approvalDurabilityTruth.test.ts` (5 cases: a real server process
+against a memory file made read-only after the first write, a restart that keeps
+the durable request and drops the phantom one, plus source guards). The
+`youtubeDraftDurabilityTruth.test.ts` guard was broadened to accept the
+strictly-stronger `persistApprovalRegistry()` (it still requires the result to be
+checked and `persisted:false`/`persisted:true`). **Bug found and fixed by this
+slot's own test:** the first rollback attempt restored only the live registry,
+not `memoryState.permissionRequests`, so the restart case failed
+(`expected [ ... ] to not include 'perm-…-dufi'`) — the phantom request was
+resurrected on the next persist. Negative-validated: with the `memoryState`
+rollback the restart case passes; without it, it fails. Gates (observed this
+fire): lint (`tsc --noEmit`) exit 0; targeted 6 files / 48 passed; full suite
+**185 files / 2264 tests passed** (41.33 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` built, 1.0 mb). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — other `success: true` sites remain in
+`server.ts` / `server_tools.ts`.
+
+Last cycle (previous): 2026-10-08 03:05 IST — **WORK SLOT 11** of the 2026-10-07 →
 2026-10-08 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — `POST /api/social/youtube/update-draft` claimed an update that never
 reached disk.**

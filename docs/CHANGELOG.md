@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 03:35 IST (2026-10-07 22:05 UTC) — window slot 12: the Level-3/4 approval registry is now durable across restarts
+
+### Fixed
+- **The approval queue (`pendingActionRequests` in `server_tools.ts`) lives outside `memoryState`, so it only reached disk through ad-hoc `persistMemory()` calls that discarded the boolean.** A staged approval, a rejected request, or a resolved decision therefore lived only in the process's memory: a reboot silently emptied the queue and the approval card the operator answered afterwards resolved nothing — a fake success on the approval path itself. `persistApprovalRegistry()` (`server.ts`) now copies the live registry into `memoryState.permissionRequests` and returns whether the durable write reached disk; `server_tools.ts` gained `persistedActionRequests()` / `hydrateActionRequests()` and the boot path restores the queue. Wired into `POST /api/approvals/create` (reports `persisted`; on a failed write it rolls back the live registry **and** `memoryState.permissionRequests`, so a later successful persist cannot resurrect a request reported as not staged), `POST /api/approvals/resolve` REJECT and APPROVE branches, `POST /api/telephony/outbound/stage` and `/authorize`, the YouTube `upload-draft` / `draft-test` staging routes, and the Telegram `approve_perm_` / `reject_perm_` callbacks.
+
+### Tests
+- New `src/tests/approvalDurabilityTruth.test.ts` (5 cases: a real server process against a memory file made read-only after the first write, a restart that keeps the durable request and drops the phantom one, plus source guards). The `youtubeDraftDurabilityTruth.test.ts` guard was broadened to accept the strictly-stronger `persistApprovalRegistry()` while still requiring the result to be checked. A bug in the first rollback attempt (restoring only the live registry, not `memoryState.permissionRequests`) was caught by the restart case and fixed; negative-validated. Targeted 6 files / 48 passed. Lint (`tsc --noEmit`) exit 0. Full suite **185 files / 2264 tests passed** (41.33 s, 0 failed). Build exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-08 03:05 IST (2026-10-07 21:35 UTC) — window slot 11: `/api/social/youtube/update-draft` no longer claims an update that never reached disk
 
 ### Fixed
