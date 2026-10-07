@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 03:05 IST (2026-10-07 21:35 UTC) — window slot 11: `/api/social/youtube/update-draft` no longer claims an update that never reached disk
+
+### Fixed
+- **`POST /api/social/youtube/update-draft` (`server.ts`) mutated the staged post's metadata, called `persistMemory()` and discarded its boolean, then answered `{ success: true, applied: true, persisted: true }`.** On an unwritable volume (read-only mount, full disk) the metadata change lived only in the process's memory while the caller was told the draft had been updated — the same durability class already fixed for `/api/chat`, `/api/memory`, the YouTube staging routes and `/api/social/generate`. The route now snapshots the fields it may touch (`videoTitle`, `topic`, `videoDescription`, `content`, `privacyStatus`, `hashtags`), writes durably, and on a failed write restores the snapshot and answers HTTP 500 `{ success: false, applied: false, persisted: false }`; a durable update answers `{ success: true, applied: true, persisted: true }`.
+
+### Tests
+- New `src/tests/youtubeDraftUpdateDurabilityTruth.test.ts` (3 cases: a real server process against a memory file made read-only after the first write, exercising the writable path, the failed-write rollback, and a source guard against the unguarded `persistMemory();` reply). Negative-validated — reverting the route to its pre-fix shape failed 3 of 3; restored → 3/3. Lint (`tsc --noEmit`) exit 0. Full suite **184 files / 2259 tests passed** (38.71 s, 0 failed). Build exit 0 (`dist/server.cjs` 1051066 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 02:05 IST (2026-10-07 20:35 UTC) — window slot 10: `/api/social/generate` no longer claims a draft that never reached disk
 
 ### Fixed

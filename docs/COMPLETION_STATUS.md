@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 02:05 IST — **WORK SLOT 10** of the 2026-10-07 →
+Last cycle: 2026-10-08 03:05 IST — **WORK SLOT 11** of the 2026-10-07 →
+2026-10-08 window, the 03:05 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — `POST /api/social/youtube/update-draft` claimed an update that never
+reached disk.**
+
+`POST /api/social/youtube/update-draft` (`server.ts`) mutated the staged post's
+metadata, called `persistMemory()` and discarded its boolean, then answered
+`{ success: true, applied: true, persisted: true }`. On an unwritable volume
+(read-only mount, full disk) the metadata change lived only in the process's
+memory while the caller was told the draft had been updated — the same
+durability class already fixed for `/api/chat`, `/api/memory`, the YouTube
+staging routes and `/api/social/generate`. The route now snapshots the fields it
+may touch (`videoTitle`, `topic`, `videoDescription`, `content`,
+`privacyStatus`, `hashtags`), writes durably, and on a failed write restores the
+snapshot and answers HTTP 500 `{ success: false, applied: false, persisted:
+false }`; a durable update answers `{ success: true, applied: true, persisted:
+true }`. Guarded by the new `src/tests/youtubeDraftUpdateDurabilityTruth.test.ts`
+(3 cases; a real server process against a memory file made read-only after the
+first write, plus a source guard against the unguarded `persistMemory();`
+reply). Negative-validated — reverting the route to its pre-fix shape failed 3
+of 3; restored → 3/3. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted 1 file / 3 passed; full suite **184 files / 2259 tests passed**
+(38.71 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1051066 bytes).
+E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` —
+unclassified `persistMemory()`-discard sites remain in `server.ts` /
+`server_tools.ts`.
+
+Last cycle (previous): 2026-10-08 02:05 IST — **WORK SLOT 10** of the 2026-10-07 →
 2026-10-08 window, the 02:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — `POST /api/social/generate` claimed a draft that never reached disk.**
 
