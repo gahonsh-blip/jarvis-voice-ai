@@ -13036,3 +13036,47 @@ Item: #13 Zero-fake-success for all tools (PARTIAL).
   पर गेटेड, बूट पर हाइड्रेट, विफल लेखन पर रोल-बैक + ईमानदार 500; 8 नए टेस्ट पास।
 
 ---
+
+## Slot 6 — WORK — 2026-10-07 23:35 IST (2026-10-07 → 2026-10-08 window)
+
+**Item 13 (`Zero-fake-success for all tools`) — the emergency stop / global kill
+switch was never durable.** Same class of defect as slots 4–5: a module-level
+state object outside `memoryState`, persisted by nothing, reported as saved.
+
+- **Bug found & fixed:** `activateEmergencyKillSwitch` (`server_tools.ts`) set
+  `emergencyState.emergencyPaused`, a module-level object that is **not** part of
+  `memoryState`, so `persistMemory()` never serialized it. Pulling the kill
+  switch showed *"HARD PAUSE ACTIVE"* and the operator believed the system was
+  stopped; the next boot read the compile-time `false` and ran again. A safety
+  latch that silently resets on restart is the worst kind of false success —
+  operator belief and system state diverge with no error.
+- **Fix:** add `persistEmergencyState()` (copies the live latch into
+  `memoryState.emergencyState` before the durable write and returns the write
+  result); hydrate the latch from disk on boot via `hydrateEmergencyState()`;
+  make the kill-switch, resume and `POST /api/emergency/toggle` routes honor the
+  write result and report `persisted:true`/`false` instead of assuming a durable
+  save. The latch is always kept in memory regardless of the write, so a disk
+  error never silently un-freezes the system.
+- **Tests:** new `src/tests/emergencyStateDurabilityTruth.test.ts` (6 cases:
+  engage → `persisted:true` + latch on disk; a fresh `npx tsx server.ts` process
+  on the same memory file restores the freeze; resume clears it durably; 3 source
+  guards pinning the persist/hydrate/report wiring). Negative-validated —
+  disabling the boot hydration failed the restart and resume legs
+  (`2 failed | 4 passed`); restored → 6/6.
+- **Gates (observed):** lint `tsc --noEmit` exit 0; targeted 9 emergency files /
+  64 passed; full suite 179 files / 2234 tests passed (35.22 s, 0 failed); build
+  exit 0 (`dist/server.cjs` 1047291 bytes).
+- **Commits:** 8062d7c (fix + test), 58fc8bb (docs). Pushed to
+  `feature/hermes-full-completion`. State pushed to `automation/hermes-state`
+  (07273e7).
+- **Not run:** real Android E2E (no handset, no display session). Deploy:
+  NOT_CONFIGURED.
+- **Note / limitation:** `hardKillSwitchTriggered` is a read-only field the
+  kill-switch activation never sets (every gate reads `emergencyPaused`); its
+  truthfulness elsewhere is `UNKNOWN`.
+- **हिंदी:** इमरजेंसी स्टॉप (ग्लोबल किल स्विच) कभी टिकाऊ नहीं था — रीस्टार्ट पर
+  चुपचाप हट जाता था; अब persistEmergencyState() + बूट हाइड्रेशन + ईमानदार
+  persisted रिपोर्ट; 6 नए टेस्ट पास।
+
+---
+
