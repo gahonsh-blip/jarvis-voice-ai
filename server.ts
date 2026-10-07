@@ -91,6 +91,9 @@ import {
   persistedEmergencyState,
   hydrateEmergencyState,
   type EmergencyPersistedState,
+  persistedActionRequests,
+  hydrateActionRequests,
+  type PermissionActionRequest,
 } from './server_tools';
 import {
   TelephonySessionManager,
@@ -530,6 +533,13 @@ interface MemoryData {
    * is worse than none, because the operator still believes it holds.
    */
   emergencyState?: EmergencyPersistedState;
+  /**
+   * The Level-3/4 approval queue. Persisted so a pending human approval (and its
+   * terminal decisions) survives a restart instead of silently emptying — an
+   * approval card the operator resolves after a reboot must act on the same
+   * request it was shown.
+   */
+  permissionRequests?: PermissionActionRequest[];
 }
 
 /**
@@ -932,6 +942,18 @@ function persistSecurityMatrixState(): boolean {
  */
 function persistEmergencyState(): boolean {
   memoryState.emergencyState = persistedEmergencyState();
+  return persistMemory();
+}
+
+/**
+ * Write the approval registry to disk. Like the Security Matrix and the
+ * emergency freeze, the registry lives outside `memoryState`, so this first
+ * copies the live requests into `memoryState.permissionRequests` and then runs
+ * the durable write. Returns whether the queue is on disk — a route may report a
+ * staged or resolved approval only on `true`.
+ */
+function persistApprovalRegistry(): boolean {
+  memoryState.permissionRequests = persistedActionRequests();
   return persistMemory();
 }
 
@@ -1787,6 +1809,14 @@ let securityMatrixState = {
   });
   memoryState.emergencyState = persistedEmergencyState();
 }
+
+// Restore the persisted approval registry. Without this the Level-3/4 queue
+// silently emptied on every restart, so a pending approval card the operator
+// acted on after a reboot resolved nothing. A legacy file with no registry
+// hydrates empty rather than inventing requests, and the registry then re-writes
+// itself into `memoryState` so a later persist records exactly what it holds.
+hydrateActionRequests(memoryState.permissionRequests);
+memoryState.permissionRequests = persistedActionRequests();
 
 // Proactive Daily Reports.
 //
@@ -3672,6 +3702,9 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('approve_perm_')) {
     const permId = data.replace('approve_perm_', '');
     const updated = updateActionRequestStatus(permId, 'EXECUTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
+    // The mobile approval is durable so a restart cannot resurrect the request
+    // as pending and let it be approved a second time.
+    if (updated) persistApprovalRegistry();
     // This branch records the human approval only — no dispatcher runs here, so
     // no provider can confirm the external action. Never say "executed/verified".
     const confirmText = updated
@@ -3690,6 +3723,8 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('reject_perm_')) {
     const permId = data.replace('reject_perm_', '');
     const updated = updateActionRequestStatus(permId, 'REJECTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
+    // Durable so a restart cannot resurrect the rejected request as pending.
+    if (updated) persistApprovalRegistry();
     // A request that was already decided is not re-rejectable. Saying "cancelled
     // safely" for a null result told the operator a re-tap had withdrawn an
     // action that had in fact already run (or been rejected earlier).
@@ -4788,7 +4823,9 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-  const uploadPersisted = persistMemory();
+  // Persist the registry alongside the post/audit rows so the staged Level-4
+  // request survives a restart too, not just the draft it refers to.
+  const uploadPersisted = persistApprovalRegistry();
 
   if (!uploadVerdict.success) {
     const code = uploadVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : uploadVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
@@ -4893,7 +4930,9 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-  const testPersisted = persistMemory();
+  // Persist the registry alongside the post/audit rows so the staged Level-4
+  // test request survives a restart too, not just the draft it refers to.
+  const testPersisted = persistApprovalRegistry();
 
   if (!testVerdict.success) {
     const code = testVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : testVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
@@ -6704,6 +6743,8 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'exactAction and target are required' });
   }
 
+  const registryBefore = getAllActionRequests();
+
   const result = createPendingActionRequest({
     exactAction,
     target,
@@ -6751,6 +6792,30 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     });
   }
 
+  // The staged approval must be durable: the queue lives outside `memoryState`,
+  // so a discarded write silently emptied it on the next restart and the
+  // operator's later decision resolved nothing. The write result is honored — a
+  // request that cannot reach disk is not reported as a staged approval.
+  const persisted = persistApprovalRegistry();
+  if (!persisted) {
+    // The write failed, so roll the live registry back to what it held before
+    // this request. `persistApprovalRegistry` copies the request into
+    // `memoryState.permissionRequests` before writing, so both that field and
+    // the live registry must be restored — otherwise a later successful persist
+    // (for any other reason) writes the phantom request to disk and the next
+    // boot resurrects an approval that was reported as not staged.
+    hydrateActionRequests(registryBefore);
+    memoryState.permissionRequests = registryBefore;
+    return res.status(500).json({
+      success: false,
+      staged: false,
+      persisted: false,
+      outcome: 'NOT_DURABLE',
+      reason: 'Approval request could not be written to durable storage; it was not reported as staged.',
+      request: result.request,
+    });
+  }
+
   // If source is Telegram or requested with notification, send approval card to Telegram
   if (activeTelegramChatId && getCleanTelegramToken()) {
     const cardText = `⚠️ *PERMISSION LEVEL ${level} ACTION REQUEST*\n\n• *EXACT ACTION*: ${exactAction}\n• *TARGET*: \`${target}\`\n• *CHANGES / PAYLOAD*: ${contentChanges}\n• *REQUIRED PERMISSION*: LEVEL ${level} (Human Confirmation)\n\nReply with *YES / APPROVE* or *NO / REJECT*.`;
@@ -6765,7 +6830,7 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     sendRealTelegramMessage(activeTelegramChatId, cardText, keyboard).catch(() => {});
   }
 
-  res.json({ success: true, staged: true, outcome: verdict.outcome, request: result.request });
+  res.json({ success: true, staged: true, persisted, outcome: verdict.outcome, request: result.request });
 });
 
 app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
@@ -6799,8 +6864,16 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       verificationStatus: 'STANDBY',
       finalTruthState: 'REJECTED',
     });
-    persistMemory();
-    return res.json({ success: true, request: updated, message: 'Action rejected and cancelled safely.' });
+    // The decision must survive a restart, or a reboot would resurrect the
+    // rejected request as pending again. A write that cannot reach disk is
+    // reported rather than hidden behind an unconditional success.
+    const persisted = persistApprovalRegistry();
+    return res.json({
+      success: true,
+      persisted,
+      request: updated,
+      message: 'Action rejected and cancelled safely.',
+    });
   }
 
   // APPROVE & EXECUTE
@@ -6882,9 +6955,13 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       finalTruthState: resolution.outcome,
     });
 
-    persistMemory();
+    // The terminal decision must be durable; an unpersisted approval would let a
+    // reboot re-offer the same request for execution. A write that cannot reach
+    // disk is named in `persisted` rather than reported as a clean success.
+    const persisted = persistApprovalRegistry();
     res.json({
       success: resolution.executed,
+      persisted,
       request: updated,
       executionResult,
       outcome: resolution.outcome,
@@ -9479,9 +9556,15 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
       ? `सर, मैं इस नंबर पर कॉल करने वाला हूँ: ${request.destinationMasked}। क्या आप अनुमति देते हैं?`
       : `Sir, I am about to place an outbound call to: ${request.destinationMasked}. Do you authorize this?`;
 
+    // The staged Level-4 action must be durable; otherwise the approval card the
+    // operator later acts on has no matching request after a restart. A write
+    // that cannot reach disk is named in `persisted`.
+    const persisted = persistApprovalRegistry();
+
     res.json({
       success: true,
       staged: true,
+      persisted,
       outcome: verdict.outcome,
       request,
       actionId: actionReq.request.id,
@@ -9518,16 +9601,23 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
     }
 
     if (requestedDecision === 'REJECT') {
-      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', approverName);
+      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', { resolvedBy: approverName });
+      // Durable so a restart cannot resurrect the rejected dial as pending.
+      const persisted = persistApprovalRegistry();
       return res.json({
         success: true,
         authorized: false,
+        persisted,
         outcome: verdict.outcome,
         message: verdict.message,
       });
     }
 
-    if (actionId) updateActionRequestStatus(actionId, 'APPROVED', approverName);
+    if (actionId) updateActionRequestStatus(actionId, 'APPROVED', { resolvedBy: approverName });
+    // The authorization decision is durable independently of whether the carrier
+    // later confirms the dial; persist it before any dispatch attempt so a
+    // reboot cannot re-offer an already-approved call.
+    persistApprovalRegistry();
 
     // Verify the active engine can actually place a PSTN call before
     // connecting (Section V). The raw `isConfigured()` boolean is not enough:

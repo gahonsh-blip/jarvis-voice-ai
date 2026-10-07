@@ -183,6 +183,29 @@ export function getAllActionRequests(): PermissionActionRequest[] {
 }
 
 /**
+ * The registry snapshot that is persisted. Kept to the same 50-record cap the
+ * live array uses, and round-tripped through JSON so only serialisable data is
+ * written.
+ */
+export function persistedActionRequests(): PermissionActionRequest[] {
+  return JSON.parse(JSON.stringify(pendingActionRequests.slice(0, 50)));
+}
+
+/**
+ * Replace the live registry with a previously persisted snapshot. Used on boot
+ * to restore the approval queue and to roll the queue back when a write that
+ * was reported could not actually reach disk. A non-array (or a legacy file
+ * with no registry) leaves the registry empty rather than inventing requests.
+ */
+export function hydrateActionRequests(stored: unknown): void {
+  if (!Array.isArray(stored)) {
+    pendingActionRequests = [];
+    return;
+  }
+  pendingActionRequests = (stored as PermissionActionRequest[]).slice(0, 50);
+}
+
+/**
  * Statuses a request can no longer move out of. A decision is a fact: once a
  * request is REJECTED, EXECUTED, FAILED or blocked by the emergency stop, a
  * later call must not rewrite it. Before this guard the shared helper accepted
