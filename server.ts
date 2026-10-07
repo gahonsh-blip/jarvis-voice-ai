@@ -10040,10 +10040,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         // name updates memory and counts.
         if (verdict.kind === 'name') {
           memoryState.name = verdict.name;
-          persistMemory();
-          spokenResponse = `I will remember that, ${verdict.name}. Your identity has been recorded into my primary memory banks.`;
+          // The reply claims a durable record, so it must follow the real write.
+          // A failed persistMemory() (read-only volume, full disk) leaves the name
+          // only in this process's memory; claiming a save there is the same fake
+          // success the Telegram path already refuses. Mirrors that branch.
+          const persisted = persistMemory();
+          if (persisted) {
+            spokenResponse = `I will remember that, ${verdict.name}. Your identity has been recorded into my durable memory banks.`;
+          } else {
+            spokenResponse = `I read your name as ${verdict.name}, but I could not write it to durable storage, so it is not saved. Please try again.`;
+          }
           actionExecuted = true;
-          actionDetail = { type: 'set_name', title: 'Memory Updated', payload: { name: verdict.name } };
+          actionDetail = { type: 'set_name', title: persisted ? 'Memory Updated' : 'Memory Write Failed', payload: { name: verdict.name, persisted } };
         } else {
           spokenResponse = language.startsWith('hi')
             ? 'क्षमा करें, मैं आपका नाम नहीं समझ सका। कृपया ऐसे कहें: "मेरा नाम [नाम] है"।'
@@ -10246,10 +10254,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           createdAt: new Date().toISOString(),
         };
         memoryState.notes.unshift(newNote);
-        persistMemory();
-        spokenResponse = `I have saved your note to Jarvis_Notes in memory. There is no download endpoint, so this is stored, not exported.`;
+        // "saved your note ... stored" is a durability claim. If the write cannot
+        // reach disk, roll the note back and say so instead of reporting a save
+        // that never happened. Mirrors POST /api/memory's rollback-on-failure.
+        const persisted = persistMemory();
+        if (persisted) {
+          spokenResponse = `I have saved your note to Jarvis_Notes in memory. There is no download endpoint, so this is stored, not exported.`;
+        } else {
+          memoryState.notes = memoryState.notes.filter((n) => n.id !== newNote.id);
+          spokenResponse = `I could not write your note to durable storage, so it was not saved. Please try again.`;
+        }
         actionExecuted = true;
-        actionDetail = { type: 'create_file', title: 'Saved Note', payload: newNote };
+        actionDetail = { type: 'create_file', title: persisted ? 'Saved Note' : 'Note Write Failed', payload: { ...newNote, persisted } };
         break;
       }
       case 'system_diagnostic': {
