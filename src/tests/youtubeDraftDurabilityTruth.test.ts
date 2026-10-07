@@ -202,7 +202,10 @@ describe('YouTube staging routes are guarded in source against a regression', ()
     ["app.post('/api/social/youtube/draft-test'", "app.post('/api/social/youtube/update-draft'"],
   ])('%s checks the persist result before answering success', (start, end) => {
     const route = routeOf(start, end);
-    expect(route).toMatch(/const \w+Persisted = persistMemory\(\)/);
+    // `persistApprovalRegistry()` is a strict superset of `persistMemory()` — it
+    // also writes the Level-3/4 approval queue this route stages into — so either
+    // durable write satisfies the guard, but the result must still be checked.
+    expect(route).toMatch(/const \w+Persisted = persist\w+\(\)/);
     expect(route).toMatch(/if \(!\w+Persisted\)/);
     expect(route).toContain('persisted: false');
     expect(route).toContain('persisted: true');
