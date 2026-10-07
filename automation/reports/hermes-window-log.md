@@ -13106,7 +13106,7 @@ state object outside `memoryState`, persisted by nothing, reported as saved.
 **Gates (observed this fire)**
 - Lint `tsc --noEmit`: exit 0.
 - Targeted: 1 file / 6 passed.
-- Full suite: **180 files / 2240 tests passed** (37.58 s, 0 failed).
+- Full suite: **180 files / 2240 tests passed** (36.70 s, 0 failed).
 - Build: exit 0 — `dist/server.cjs` 1047575 bytes.
 - E2E: NOT RUN (no handset, no display session). Security: NOT RUN (no new secret
   surface touched). Deploy: NOT_CONFIGURED.
