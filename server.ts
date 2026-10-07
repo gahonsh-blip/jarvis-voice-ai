@@ -515,6 +515,23 @@ interface MemoryData {
     content: string;
     timestamp: string;
   }[];
+  /**
+   * The Security Matrix gates (level, human approval, masking, credential-leak
+   * protection). Persisted so an operator's toggle survives a restart — the
+   * update route may report a save only once the gate is durable.
+   */
+  securityMatrix?: SecurityMatrixPersistedState;
+}
+
+/**
+ * The durable subset of the Security Matrix. Only the operator-settable gates
+ * are stored; the descriptive `levels` catalog is static and re-derived on boot.
+ */
+interface SecurityMatrixPersistedState {
+  currentLevel: 1 | 2 | 3 | 4;
+  humanApprovalForExternal: boolean;
+  maskSensitiveData: boolean;
+  credentialLeakProtection: boolean;
 }
 
 const defaultSocialPosts: ServerSocialPost[] = [
@@ -605,6 +622,32 @@ const defaultFreelanceLeads: ServerFreelanceLead[] = [
   },
 ];
 
+/**
+ * The compile-time Security Matrix gates. `securityMatrixState` is declared
+ * further down, so `memoryState` seeds from this literal and the boot hydration
+ * (below the declaration) overwrites it with whatever the file holds.
+ */
+const SECURITY_MATRIX_DEFAULTS: SecurityMatrixPersistedState = {
+  currentLevel: 2,
+  humanApprovalForExternal: true,
+  maskSensitiveData: true,
+  credentialLeakProtection: true,
+};
+
+/**
+ * The durable gate values, read straight from `memoryState`. This is the single
+ * source of truth for what `persistSecurityMatrixState` writes, so the writer and
+ * the in-memory matrix can never drift.
+ */
+function persistedSecurityMatrix(): SecurityMatrixPersistedState {
+  return {
+    currentLevel: securityMatrixState.currentLevel,
+    humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
+    maskSensitiveData: securityMatrixState.maskSensitiveData,
+    credentialLeakProtection: securityMatrixState.credentialLeakProtection,
+  };
+}
+
 let memoryState: MemoryData = {
   name: '',
   notes: [
@@ -631,6 +674,7 @@ let memoryState: MemoryData = {
   auditLogs: defaultAuditLogs,
   freelanceLeads: defaultFreelanceLeads,
   schedulerState: {},
+  securityMatrix: { ...SECURITY_MATRIX_DEFAULTS },
 };
 
 // Load memory from disk on startup
@@ -663,6 +707,7 @@ try {
       freelanceLeads: coerceArray(parsed.freelanceLeads, memoryState.freelanceLeads),
       conversationHistory: coerceArray(parsed.conversationHistory, []),
       schedulerState: parsed.schedulerState || {},
+      securityMatrix: parsed.securityMatrix,
       linkedInConnection: parsed.linkedInConnection ? {
         ...parsed.linkedInConnection,
         accessToken: parsed.linkedInConnection.accessTokenEncrypted
@@ -854,6 +899,17 @@ function persistMemory(): boolean {
     console.warn('[Storage] Error writing to jarvis_memory.json:', err?.message);
     return false;
   }
+}
+
+/**
+ * Write the Security Matrix gates to disk. The matrix lives outside `memoryState`,
+ * so this first copies the live gates into `memoryState.securityMatrix` and then
+ * runs the durable write. Returns whether the gates are on disk — the update route
+ * may report a save only on `true`.
+ */
+function persistSecurityMatrixState(): boolean {
+  memoryState.securityMatrix = persistedSecurityMatrix();
+  return persistMemory();
 }
 
 export function addAuditLog(
@@ -1672,6 +1728,26 @@ let securityMatrixState = {
     return memoryState.auditLogs;
   },
 };
+
+// Restore the persisted Security Matrix gates. Each field is validated before it
+// is adopted, so a hand-edited or legacy file cannot install an out-of-range
+// level or a non-boolean gate; anything invalid keeps the default. The matrix
+// then re-writes itself back into `memoryState` in lockstep, so a later persist
+// records exactly what the running matrix holds.
+{
+  const stored = memoryState.securityMatrix as Partial<SecurityMatrixPersistedState> | undefined;
+  if (stored && typeof stored === 'object') {
+    const level = stored.currentLevel;
+    if (level === 1 || level === 2 || level === 3 || level === 4) {
+      securityMatrixState.currentLevel = level;
+    }
+    const gates = ['humanApprovalForExternal', 'maskSensitiveData', 'credentialLeakProtection'] as const;
+    for (const gate of gates) {
+      if (typeof stored[gate] === 'boolean') securityMatrixState[gate] = stored[gate] as boolean;
+    }
+  }
+  memoryState.securityMatrix = persistedSecurityMatrix();
+}
 
 // Proactive Daily Reports.
 //
@@ -6128,10 +6204,36 @@ app.post('/api/security/update', (req: Request, res: Response) => {
     });
   }
 
+  // The matrix gates live outside `memoryState`, so `persistMemory()` alone never
+  // wrote them. `persistSecurityMatrixState()` copies the live gates into the
+  // persisted snapshot and writes it; only a durable write may read as a save.
+  const preGates = persistedSecurityMatrix();
+
   if (verdict.applied.currentLevel !== undefined) securityMatrixState.currentLevel = verdict.applied.currentLevel;
   if (verdict.applied.humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = verdict.applied.humanApprovalForExternal;
   if (verdict.applied.maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = verdict.applied.maskSensitiveData;
-  persistMemory();
+
+  if (!persistSecurityMatrixState()) {
+    // The write did not reach disk. Roll the in-memory matrix back to the
+    // pre-request gates so the running matrix and the durable file agree, and
+    // refuse to report a save the disk never received.
+    securityMatrixState.currentLevel = preGates.currentLevel;
+    securityMatrixState.humanApprovalForExternal = preGates.humanApprovalForExternal;
+    securityMatrixState.maskSensitiveData = preGates.maskSensitiveData;
+    memoryState.securityMatrix = persistedSecurityMatrix();
+    return res.status(500).json({
+      success: false,
+      applied: false,
+      persisted: false,
+      rejected: verdict.rejected,
+      message: 'The security-matrix change could not be written to durable storage; it was not applied.',
+      securityState: {
+        ...preGates,
+        levels: securityMatrixState.levels,
+        auditLogs: memoryState.auditLogs,
+      },
+    });
+  }
 
   // Echo the state *after* the classified fields are applied. The previous
   // snapshot was captured before the assignments above, so a successful toggle
@@ -6151,6 +6253,7 @@ app.post('/api/security/update', (req: Request, res: Response) => {
   res.json({
     success: true,
     applied: true,
+    persisted: true,
     rejected: verdict.rejected,
     message: verdict.message,
     securityState: {
