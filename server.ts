@@ -4957,6 +4957,17 @@ app.post('/api/social/youtube/update-draft', (req: Request, res: Response) => {
   }
 
   const { changes } = verdict;
+  // Snapshot the fields this update may touch so a failed durable write can be
+  // rolled back. Without this the process holds a metadata change the next boot
+  // does not have, while the caller was told the draft was updated.
+  const before = {
+    videoTitle: post.videoTitle,
+    topic: post.topic,
+    videoDescription: post.videoDescription,
+    content: post.content,
+    privacyStatus: post.privacyStatus,
+    hashtags: post.hashtags,
+  };
   if (changes.videoTitle !== undefined) {
     post.videoTitle = changes.videoTitle;
     post.topic = changes.videoTitle;
@@ -4972,8 +4983,27 @@ app.post('/api/social/youtube/update-draft', (req: Request, res: Response) => {
     post.hashtags = changes.hashtags;
   }
 
-  persistMemory();
-  res.json({ success: true, outcome: verdict.outcome, applied: true, message: verdict.message, post });
+  // An update is only real once it is durable. Roll the draft back and refuse to
+  // claim the change when the write never reached disk.
+  if (!persistMemory()) {
+    post.videoTitle = before.videoTitle;
+    post.topic = before.topic;
+    post.videoDescription = before.videoDescription;
+    post.content = before.content;
+    post.privacyStatus = before.privacyStatus;
+    post.hashtags = before.hashtags;
+    return res.status(500).json({
+      success: false,
+      outcome: verdict.outcome,
+      applied: false,
+      persisted: false,
+      message: verdict.message,
+      error: 'The draft update could not be written to durable storage; it was not applied.',
+      post,
+    });
+  }
+
+  res.json({ success: true, outcome: verdict.outcome, applied: true, persisted: true, message: verdict.message, post });
 });
 
 /**
