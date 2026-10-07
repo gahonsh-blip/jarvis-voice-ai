@@ -13244,3 +13244,34 @@ Next Slot:
 - इस स्लॉट में /api/chat के set_name और create_file अब झूठा "durable save" नहीं
   बोलते — असली डिस्क-राइट विफल होने पर साफ़ मना करते हैं; 4 नए टेस्ट पास, पूरी
   सूट 2247 टेस्ट पास, लिंट/बिल्ड ग्रीन; आइटम 13 अभी PARTIAL है।
+
+---
+
+## Slot 10 — WORK — 2026-10-08 02:05 IST (2026-10-07 20:35 UTC)
+
+Item #13 `Zero-fake-success for all tools` — PARTIAL (advanced one route).
+
+**Fixed:** `POST /api/social/generate` (`server.ts`) staged a draft into
+`memoryState.socialPosts`, called `persistMemory()` and discarded its boolean,
+wrote a `PENDING` staging audit row, and answered `{ success: true, post }`. On
+an unwritable volume the draft lived only in process memory while the caller was
+told it had been created. The route now checks the persist result, splices the
+just-added draft back out of the live array, and answers HTTP 500
+`{ success: false, persisted: false }` **without** writing the staging audit
+row; a durable draft answers `{ success: true, persisted: true, post }`.
+
+**Tests:** new `src/tests/socialDraftDurabilityTruth.test.ts` (3 cases; a real
+server process against a memory file made read-only after the first write, plus a
+source guard against the unconditional success reply). Negative-validated —
+`git stash` of `server.ts` → 3 failed | 0 passed; restored → 3/3.
+Targeted 6 files / 56 passed. Full suite **182 files / 2250 tests passed**
+(36.48 s, 0 failed). Lint (`tsc --noEmit`) exit 0. Build exit 0
+(`dist/server.cjs` 1049148 bytes).
+
+**Commits:** `6ace3bf` (fix+test), `b8149c2` (docs). Pushed to
+`origin/feature/hermes-full-completion`. E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED.
+
+**Next slot:** continue the `persistMemory()`-discard / `success: true` sweep —
+candidates: Telegram reply path (~3603), pending-action reject/approve routes,
+social youtube upload-draft / draft-test unshift sites (4744, 4833).
