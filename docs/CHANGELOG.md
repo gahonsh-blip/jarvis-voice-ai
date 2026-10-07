@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 22:06 IST (2026-10-07 16:36 UTC) — window slot 3: a freelance lead and status change that never reached disk are no longer reported as saved
+
+### Fixed
+- **`POST /api/freelance/create-lead` and `POST /api/freelance/update-status` (`server.ts`) answered `stored: true` / `applied: true` for a change that was only held in the process's memory.** Both routes applied the change to `memoryState`, called `persistMemory(): boolean`, and discarded its result. On a read-only volume or a full disk the write failed while the response still read as a saved lead or a completed pipeline transition. Both routes now gate on `persistMemory()` and roll back the in-memory change on failure — the lead snapshot for `create-lead`, the previous status for `update-status` — answering HTTP 500 `success: false, stored/applied: false, persisted: false, outcome: NOT_PERSISTED`. A successful response carries `persisted: true`.
+
+### Tests
+- New `src/tests/freelanceLeadDurabilityTruth.test.ts` (6 cases: a real `npx tsx server.ts` process against a memory file made read-only after the first write — proving the EACCES path returns 500 and that neither the unsaved lead nor the unsaved status change is readable — plus source guards on the wiring and the rollback). Negative-validated — disabling both `if (!persistMemory())` guards failed exactly 4 of 6 cases (`4 failed | 2 passed`); restored → 6/6. Targeted 3 files / 35 passed. Lint (`tsc --noEmit`) exit 0. Full suite **177 files / 2216 tests passed** (30.28 s, 0 failed). Build exit 0 (`dist/server.cjs` 1042996 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 21:35 IST (2026-10-07 16:05 UTC) — window slot 1: a memory save that never reached disk is no longer reported as success
 
 ### Fixed

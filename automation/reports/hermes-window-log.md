@@ -12939,3 +12939,26 @@ Next Slot:
   देते हैं और बदलाव रोल-बैक करते हैं; 6 नए टेस्ट पास, पूरी सूट 176 फ़ाइल/2210
   टेस्ट पास, lint/build हरा। #13 अभी PARTIAL है।
 
+
+## 2026-10-07T16:36:00Z — slot 3/16 (WORK)
+- Item worked: #13 Zero-fake-success for all tools
+- Status: PARTIAL (sweep advanced; not exhausted)
+- Change: `POST /api/freelance/create-lead` and `POST /api/freelance/update-status`
+  (`server.ts`) now gate on the `persistMemory()` boolean and roll back the
+  in-memory change on a failed disk write, instead of answering
+  `stored: true` / `applied: true` for a write that never reached disk.
+  Failure returns HTTP 500 `success:false, stored/applied:false,
+  persisted:false, outcome:NOT_PERSISTED`; success carries `persisted:true`.
+- Tests: new `src/tests/freelanceLeadDurabilityTruth.test.ts` 6/6 pass (real
+  `npx tsx server.ts` process, EACCES via read-only memory file). Negative
+  validation: guards disabled -> 4/6 fail; restored -> 6/6. Full suite
+  177 files / 2216 tests passed (30.28 s, 0 failed). Lint exit 0. Build exit 0
+  (`dist/server.cjs` 1042996 bytes).
+- Commit: e58d827 (+ docs)  Push: ok -> origin/feature/hermes-full-completion
+- Notes / blockers: #1/#2/#50/#55 remain hardware-blocked (no handset). Deploy
+  NOT_CONFIGURED. Next slot: continue the `success:true` sweep in
+  server.ts / server_tools.ts.
+- हिंदी: फ्रीलांस lead/status रूट विफल डिस्क लेखन पर भी "saved" बताते थे; अब
+  persistMemory() पर गेट + रोल-बैक, ईमानदार 500/persisted:false; 6 नए टेस्ट पास।
+
+---
