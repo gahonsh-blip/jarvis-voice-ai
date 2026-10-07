@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-07 23:06 IST — **WORK SLOT 5** of the 2026-10-07 →
+Last cycle: 2026-10-07 23:49 IST — **WORK SLOT 6** of the 2026-10-07 →
+2026-10-08 window, the 23:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the emergency stop / global kill switch was never durable.**
+
+`activateEmergencyKillSwitch` (`server_tools.ts`) set `emergencyState.emergencyPaused`
+— a module-level object that is **not** part of `memoryState`, so `persistMemory()`
+never serialized it. Pulling the kill switch showed *"HARD PAUSE ACTIVE"* and the
+operator believed the system was stopped; the next boot read the compile-time
+`false` and ran again. That is the worst kind of false success: the operator's
+belief and the system's state diverge silently. The fix adds
+`persistEmergencyState()` (copies the live latch into `memoryState.emergencyState`
+before the durable write and returns the write result), hydrates the latch from
+disk on boot (`hydrateEmergencyState`), and makes the kill-switch, resume and
+`/api/emergency/toggle` routes honor the write result and report `persisted`
+instead of assuming a durable save. The latch is always kept in memory regardless
+of the write, so a disk error never silently un-freezes the system. Guarded by
+`src/tests/emergencyStateDurabilityTruth.test.ts` (6 cases: engage → `persisted:true`
++ latch on disk, a fresh `npx tsx server.ts` process on the same memory file
+restores the freeze, resume clears it durably, plus 3 source guards pinning the
+persist/hydrate/report wiring). Negative-validated — disabling the boot hydration
+failed the restart and resume legs (`2 failed | 4 passed`); restored → 6/6. Gates
+(observed this fire): lint (`tsc --noEmit`) exit 0; targeted 9 emergency files /
+64 passed; full suite **179 files / 2234 tests passed** (35.22 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1047291 bytes). E2E: NOT RUN (no handset,
+no display session). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — unclassified
+`success: true` sites remain in `server.ts` / `server_tools.ts`. Note:
+`hardKillSwitchTriggered` is a read-only field the kill-switch activation never
+sets (every gate reads `emergencyPaused`); its truthfulness elsewhere is `UNKNOWN`.
+
+Last cycle (previous): 2026-10-07 23:06 IST — **WORK SLOT 5** of the 2026-10-07 →
 2026-10-08 window, the 23:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the Security Matrix update route reported a saved gate with no durable
 store.**
