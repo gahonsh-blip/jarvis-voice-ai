@@ -2981,9 +2981,21 @@ async function executeApprovedAction(
   post?: ServerSocialPost;
   auditEntry: AuditLogEntry;
   userMessage: string;
+  persisted: boolean;
 }> {
   const post = memoryState.socialPosts.find((p) => p.id === postIdOrActionId);
   const actionLogId = `audit-${Date.now()}`;
+
+  // A Level-4 decision (an external publish or its rejection) is only real once
+  // its audit row and the post's new state are on disk. The helper previously
+  // called persistMemory() at each of these sites and discarded the boolean, so
+  // a read-only volume or full disk produced a "confirmed" publish in the reply
+  // for a decision the store never kept. `commitDecision` gates the durable
+  // write and rolls the in-memory audit row back when it fails, so a later
+  // persist cannot resurrect a decision that was reported as not recorded.
+  const rollbackAudit = (entry: AuditLogEntry) => {
+    memoryState.auditLogs = memoryState.auditLogs.filter((e) => e !== entry);
+  };
 
   if (!post) {
     const fallbackAudit: AuditLogEntry = {
@@ -2997,11 +3009,20 @@ async function executeApprovedAction(
       finalTruthState: 'FAILED',
     };
     pushAuditEntry(fallbackAudit);
-    persistMemory();
+    if (!persistMemory()) {
+      rollbackAudit(fallbackAudit);
+      return {
+        success: false,
+        auditEntry: fallbackAudit,
+        userMessage: 'Target post / action ID was not found, and the audit row could not be written to durable storage.',
+        persisted: false,
+      };
+    }
     return {
       success: false,
       auditEntry: fallbackAudit,
       userMessage: 'Target post / action ID was not found.',
+      persisted: true,
     };
   }
 
@@ -3024,10 +3045,18 @@ async function executeApprovedAction(
       post,
       auditEntry: existingAudit,
       userMessage: `Post was already published and verified on ${post.platform} (Share ID: ${post.providerUrn || 'verified'}).`,
+      persisted: true,
     };
   }
 
   if (actionType === 'reject') {
+    const rejectedSnapshot = {
+      status: post.status,
+      executionStatus: post.executionStatus,
+      verificationStatus: post.verificationStatus,
+      finalTruthState: post.finalTruthState,
+      errorReason: post.errorReason,
+    };
     post.status = 'draft';
     post.executionStatus = 'DRAFT';
     post.verificationStatus = 'STANDBY';
@@ -3045,13 +3074,28 @@ async function executeApprovedAction(
       finalTruthState: 'REJECTED',
     };
     pushAuditEntry(rejectAudit);
-    persistMemory();
+    if (!persistMemory()) {
+      rollbackAudit(rejectAudit);
+      post.status = rejectedSnapshot.status;
+      post.executionStatus = rejectedSnapshot.executionStatus;
+      post.verificationStatus = rejectedSnapshot.verificationStatus;
+      post.finalTruthState = rejectedSnapshot.finalTruthState;
+      post.errorReason = rejectedSnapshot.errorReason;
+      return {
+        success: false,
+        post,
+        auditEntry: rejectAudit,
+        userMessage: 'The rejection could not be written to durable storage; the draft was not changed.',
+        persisted: false,
+      };
+    }
 
     return {
       success: true,
       post,
       auditEntry: rejectAudit,
       userMessage: 'Draft rejected. Post returned to offline draft status.',
+      persisted: true,
     };
   }
 
@@ -3070,12 +3114,22 @@ async function executeApprovedAction(
       errorReason: 'Operation blocked: Global Kill Switch / Emergency Stop is active.',
     };
     pushAuditEntry(killAudit);
-    persistMemory();
+    if (!persistMemory()) {
+      rollbackAudit(killAudit);
+      return {
+        success: false,
+        post,
+        auditEntry: killAudit,
+        userMessage: '🚨 Action blocked: Global Kill Switch / Emergency Stop is active. (The block audit row could not be written to durable storage.)',
+        persisted: false,
+      };
+    }
     return {
       success: false,
       post,
       auditEntry: killAudit,
       userMessage: '🚨 Action blocked: Global Kill Switch / Emergency Stop is active.',
+      persisted: true,
     };
   }
 
@@ -3106,6 +3160,13 @@ async function executeApprovedAction(
     // broadcast is recorded as dispatched, not verified: there is no platform
     // response to verify it with. Engagement counts are deliberately omitted
     // rather than generated, since invented numbers read as real metrics.
+    const internalSnapshot = {
+      status: post.status,
+      executionStatus: post.executionStatus,
+      verificationStatus: post.verificationStatus,
+      finalTruthState: post.finalTruthState,
+      verifiedAt: post.verifiedAt,
+    };
     post.status = 'not_published';
     post.executionStatus = 'NOT_PUBLISHED';
     post.verificationStatus = 'STANDBY';
@@ -3126,16 +3187,35 @@ async function executeApprovedAction(
         'No external provider is configured for this channel, so the broadcast could not be verified. No engagement metrics are reported.',
     };
     pushAuditEntry(internalAudit);
-    persistMemory();
+    if (!persistMemory()) {
+      rollbackAudit(internalAudit);
+      post.status = internalSnapshot.status;
+      post.executionStatus = internalSnapshot.executionStatus;
+      post.verificationStatus = internalSnapshot.verificationStatus;
+      post.finalTruthState = internalSnapshot.finalTruthState;
+      post.verifiedAt = internalSnapshot.verifiedAt;
+      return {
+        success: false,
+        post,
+        auditEntry: internalAudit,
+        userMessage: `⚠️ NOT_VERIFIED: ${post.platform} has no configured provider to confirm against, and the dispatch audit row could not be written to durable storage.`,
+        persisted: false,
+      };
+    }
 
     return {
       success: false,
       post,
       auditEntry: internalAudit,
       userMessage: `⚠️ NOT_VERIFIED: ${post.platform} has no configured provider to confirm against. Nothing was reported as published, and no engagement metrics are shown.`,
+      persisted: true,
     };
   }
 
+  // The post state reflects what the provider actually did and is never rolled
+  // back: a verified publish really happened even if the local record cannot be
+  // written. The durable-write result is reported separately so no caller reads
+  // the local record as confirmed when it is not on disk.
   post.status = result.finalTruthState === 'VERIFIED' ? 'published' : result.finalTruthState === 'FAILED' ? 'failed' : 'not_published';
   post.executionStatus = result.executionStatus;
   post.verificationStatus = result.verificationStatus;
@@ -3158,13 +3238,23 @@ async function executeApprovedAction(
     finalTruthState: result.finalTruthState,
   };
   pushAuditEntry(auditEntry);
-  persistMemory();
+  const persisted = persistMemory();
+  if (!persisted) {
+    // The publish already happened at the provider and is not undone. Drop the
+    // audit row that could not be written so the in-memory log does not claim a
+    // durable record, and tell the caller the local record is not on disk.
+    rollbackAudit(auditEntry);
+  }
 
+  const baseMessage = result.userMessage;
   return {
     success: result.success,
     post,
     auditEntry,
-    userMessage: result.userMessage,
+    userMessage: persisted
+      ? baseMessage
+      : `${baseMessage}\n⚠️ The publish outcome could not be written to durable storage; the local record may be lost on restart.`,
+    persisted,
   };
 }
 
@@ -3672,9 +3762,12 @@ async function handleTelegramCallback(callbackQuery: any) {
     const postId = data.startsWith('approve_post_') ? data.replace('approve_post_', '') : 'post-1';
     const result = await executeApprovedAction(postId, 'approve_and_publish', 'HUMAN_CONFIRMATION_TELEGRAM_MOBILE');
 
+    const approveDurabilityNote = result.persisted
+      ? ''
+      : '\n\n⚠️ *DURABILITY WARNING*: this outcome could not be written to durable storage and may be lost on restart.';
     const confirmText = result.success
-      ? `✅ *LEVEL 4 AUTHORIZATION CONFIRMED*\n\n${result.userMessage}\n\n• *Audit Log ID*: \`${result.auditEntry.id}\`\n• *Verification Status*: ${result.auditEntry.verificationStatus}`
-      : `⚠️ *LEVEL 4 EXECUTION NOTICE*\n\n${result.userMessage}\n\n• *Audit Log ID*: \`${result.auditEntry.id}\`\n• *Truth State*: ${result.auditEntry.finalTruthState}`;
+      ? `✅ *LEVEL 4 AUTHORIZATION CONFIRMED*\n\n${result.userMessage}\n\n• *Audit Log ID*: \`${result.auditEntry.id}\`\n• *Verification Status*: ${result.auditEntry.verificationStatus}${approveDurabilityNote}`
+      : `⚠️ *LEVEL 4 EXECUTION NOTICE*\n\n${result.userMessage}\n\n• *Audit Log ID*: \`${result.auditEntry.id}\`\n• *Truth State*: ${result.auditEntry.finalTruthState}${approveDurabilityNote}`;
 
     const botMsg = {
       id: `tg-${Date.now()}`,
@@ -3689,7 +3782,9 @@ async function handleTelegramCallback(callbackQuery: any) {
     const postId = data.startsWith('reject_post_') ? data.replace('reject_post_', '') : 'post-1';
     const result = await executeApprovedAction(postId, 'reject', 'HUMAN_CONFIRMATION_TELEGRAM_MOBILE');
 
-    const cancelText = `❌ *ACTION REJECTED*\n\nUnderstood, Sir. The post remains saved as a local draft in memory with status: \`${result.post?.finalTruthState || 'REJECTED'}\`.`;
+    const cancelText = result.success
+      ? `❌ *ACTION REJECTED*\n\nUnderstood, Sir. The post remains saved as a local draft in memory with status: \`${result.post?.finalTruthState || 'REJECTED'}\`.${result.persisted ? '' : '\n\n⚠️ *DURABILITY WARNING*: the rejection could not be written to durable storage and may be lost on restart.'}`
+      : `⚠️ *REJECTION NOT RECORDED*\n\n${result.userMessage}`;
     const botMsg = {
       id: `tg-${Date.now()}`,
       sender: 'jarvis_bot' as const,
@@ -4409,8 +4504,11 @@ app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
     } else if (update.callback_query) {
       await handleTelegramCallback(update.callback_query);
     }
-    persistMemory();
-    res.json({ ok: true });
+    // The receipt is acknowledged either way, but the caller is told whether the
+    // processed-update marker actually reached durable storage, so a read-only
+    // volume does not look like a clean, durable receipt.
+    const webhookPersisted = persistMemory();
+    res.json({ ok: true, persisted: webhookPersisted });
   } catch (err: any) {
     console.error('Webhook error:', err);
     res.status(500).json({ error: err.message });
@@ -4741,6 +4839,7 @@ app.post('/api/social/action', async (req: Request, res: Response) => {
     success: result.success,
     post: result.post,
     auditEntry: result.auditEntry,
+    persisted: result.persisted,
     message: result.userMessage,
   });
 });
