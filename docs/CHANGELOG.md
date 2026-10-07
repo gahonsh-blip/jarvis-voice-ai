@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 23:06 IST (2026-10-07 17:36 UTC) — window slot 5: the Security Matrix update route no longer reports a saved gate with no durable store
+
+### Fixed
+- **`POST /api/security/update` (`server.ts`) wrote the accepted fields onto the module-level `securityMatrixState`, called `persistMemory()`, discarded its return value, and answered `success: true` / `applied: true`.** `securityMatrixState` is not part of `memoryState`, and `persistMemory()` serializes `memoryState` only — so the gates were never written to disk. The surface that gates external actions, credential masking and credential-leak protection silently reverted to the compile-time defaults on the next boot while the route claimed a durable save. `securityMatrix` is now part of `MemoryData` (seeded from a `SECURITY_MATRIX_DEFAULTS` literal), the live gates are persisted through `persistSecurityMatrixState()` (copies them into `memoryState` before the durable write and returns the write result), `securityMatrixState` is hydrated from the file on boot (per-field validated), and the route is gated: a failed write rolls the in-memory matrix back and answers HTTP 500 `success: false, persisted: false` without touching the file. A successful response carries `persisted: true`.
+- **Latent boot crash fixed in the same change.** The first `memoryState.securityMatrix` seed called `persistedSecurityMatrix()`, which reads `securityMatrixState` declared *after* `memoryState`; the module threw "Cannot access 'securityMatrixState' before initialization" on boot. The seed now uses the `SECURITY_MATRIX_DEFAULTS` literal.
+
+### Tests
+- New `src/tests/securityMatrixDurabilityTruth.test.ts` (8 cases: defaults on an empty file, a read-only-file write refused with rollback and the file left untouched, out-of-range/empty bodies still rejected, a successful save surviving a real server restart, and 4 source guards pinning the durability check and rollback). Negative-validated — disabling the durability guard failed 3 of 8 (`3 failed | 5 passed`); disabling the boot hydration failed the restart leg (`1 failed | 7 passed`); restored → 8/8. Targeted 1 file / 8 passed. Lint (`tsc --noEmit`) exit 0. Full suite **178 files / 2228 tests passed** (33.98 s, 0 failed). Build exit 0 (`dist/server.cjs` 1045615 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 22:36 IST (2026-10-07 17:06 UTC) — window slot 4: the Telegram set_name path no longer claims a durable save it never made
 
 ### Fixed

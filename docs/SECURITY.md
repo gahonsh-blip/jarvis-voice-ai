@@ -14,6 +14,22 @@ HERMES JARVIS enforces a strict 4-level permission policy across all subsystems:
 ### Level 4 Invariant:
 No external write, upload, or broadcasting action can occur without explicit human approval ("YES / APPROVE").
 
+### Security Matrix durability
+The matrix that carries the Level-4 gates (`humanApprovalForExternal`,
+`maskSensitiveData`, `credentialLeakProtection`) must survive a restart, or a
+tightened gate silently reverts to its default. `POST /api/security/update`
+(`server.ts`) previously wrote the accepted fields onto the module-level
+`securityMatrixState` and answered `success: true` after a `persistMemory()`
+call whose result it discarded — but `securityMatrixState` is not part of
+`memoryState`, so nothing was written and the gates reset on the next boot.
+
+The gates are now persisted (`persistSecurityMatrixState()` copies them into
+`memoryState` before the durable write and returns its result), hydrated on boot
+from the memory file with per-field validation, and the route is gated: a failed
+write rolls the in-memory matrix back and answers HTTP 500 `success: false,
+persisted: false` without touching the file. Pinned by
+`src/tests/securityMatrixDurabilityTruth.test.ts` (negative-validated).
+
 ### Spoken-approval parsing (Android bridge)
 The approval gate is only as strong as the parser that reads the owner's reply.
 `evaluateOwnerApproval` in `src/utils/androidBridgeEngine.ts` previously returned
