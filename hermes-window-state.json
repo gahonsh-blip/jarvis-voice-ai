@@ -1,16 +1,16 @@
 {
-  "window_date": "2026-10-06",
-  "window_started_at": "2026-10-06T15:36:00Z",
-  "last_slot_at": "2026-10-06T23:14:00Z",
-  "slots_completed": 14,
+  "window_date": "2026-10-07",
+  "window_started_at": "2026-10-07T15:36:00Z",
+  "last_slot_at": "2026-10-07T15:45:00Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "f0c33a7",
+  "last_commit": "bf77488",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "FINALIZATION 2026-10-07 04:35 IST. Tip c5d6903 re-verified: lint exit 0; 175 files / 2204 tests passed (29.30 s, 0 failed); build exit 0 (dist/server.cjs 1041085 bytes). Security clean; npm audit 5 findings (1 critical, 1 high, 3 moderate, transitive, not applied). PR #6 opened (open, non-draft, mergeable true). CI check could not run: owner account locked for billing (check-run annotation), not a code failure. Main NOT merged — awaiting human approval. Deploy NOT_CONFIGURED. Item 13 remains PARTIAL.",
+  "finalized": false,
+  "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Window 2026-10-06/07 closed. 13 work slots produced 11 item-13 truthfulness fixes (32 commits, 30 files, +3208/-62 vs main). Finalization slot 04:35 IST opened PR #6 and froze tip; finalization docs commit f0c33a7 pushed. Next window opens 21:05 IST 2026-10-07; continue item 13 (audit remaining unclassified success:true sites in server.ts / server_tools.ts)."
+  "note": "New window 2026-10-07 opened at 21:05 IST (slot 1). Orientation + truthfulness audit of the /api/chat intent switch only; no source change landed, no gates run. Next slot: classify open_google/open_youtube/open_gmail/open_chatgpt + open_computer_operator and land one guarded slice."
 }
