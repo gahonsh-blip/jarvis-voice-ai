@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-07",
   "window_started_at": "2026-10-07T15:36:00Z",
-  "last_slot_at": "2026-10-07T18:20:00Z",
-  "slots_completed": 6,
+  "last_slot_at": "2026-10-07T18:36:00Z",
+  "slots_completed": 7,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "58fc8bb",
+  "last_commit": "e93e9cb",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 6 (23:35 IST fire). Closed another real fake-success path: the emergency stop / global kill switch was never durable. activateEmergencyKillSwitch set emergencyState.emergencyPaused, a module-level object outside memoryState, so persistMemory() never serialized it - the operator saw HARD PAUSE ACTIVE while the next boot silently resumed. Added persistEmergencyState() (copies the latch into memoryState.emergencyState before the durable write, returns the result), boot hydration via hydrateEmergencyState(), and persisted:true/false reporting on the kill-switch, resume and /api/emergency/toggle routes (latch kept in memory regardless of write). New src/tests/emergencyStateDurabilityTruth.test.ts (6 cases incl. a real server restart); negative-validated (2 failed | 4 passed when hydration disabled); restored 6/6. Full suite 179 files / 2234 passed; lint exit 0; build exit 0 (dist/server.cjs 1047291 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true sweep in server.ts/server_tools.ts."
+  "note": "Slot 7 (00:05 IST fire, 2026-10-08). POST /api/restore merged a backup, wrote a VERIFIED audit row and answered success:true while discarding persistMemory()'s boolean - an unwritable volume left the process holding restored values that the next boot reverted, logged as VERIFIED. Route now snapshots the pre-merge state, rolls back and answers 500 success:false persisted:false when the write fails (no audit row); durable restore answers persisted:true. New src/tests/restoreDurabilityTruth.test.ts (6 cases); negative-validated (4 failed | 2 passed on the reverted route); restored 6/6. Full suite 180 files / 2240 passed; lint exit 0; build exit 0 (dist/server.cjs 1047575 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true / actionExecuted:true sweep in server.ts / server_tools.ts."
 }
