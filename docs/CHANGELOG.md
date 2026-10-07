@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 00:37 IST (2026-10-07 19:07 UTC) — window slot 9: `/api/chat` no longer claims a memory write that never reached disk
+
+### Fixed
+- **`/api/chat` `set_name` and `create_file` cases (`server.ts`) called `persistMemory()` and discarded its boolean, then claimed a durable record.** `set_name` answered "Your identity has been recorded into my durable memory banks." and `create_file` answered "I have saved your note … this is stored." On an unwritable volume (read-only mount, full disk) the name or note lived only in the process's memory while the reply claimed a save — the same fake success the mobile `processMobileCommand` path and `POST /api/memory` already refuse. `set_name` now reports the failed write ("could not write it to durable storage, so it is not saved") and still records only a name that passes `judgeSetNameIntent`; `create_file` rolls the note back and reports the failure. A durable write still answers with the save confirmed.
+
+### Tests
+- New `src/tests/chatDurabilityTruth.test.ts` (4 cases: a real server process against a memory file made read-only after the first write, exercising the writable and failed-write paths for both cases). Negative-validated — `git stash` of `server.ts` failed 4 of 4; restored → 4/4.
+- Fixed a latent test-rot bug in `src/tests/identityTruth.test.ts`: the `case 'set_name'` guards sliced a fixed 1400 chars, which no longer reached the rejected branch once the case grew. It now slices to the next case label and asserts the new failed-write reply. Targeted 3 files / 22 passed. Lint (`tsc --noEmit`) exit 0. Full suite **181 files / 2247 tests passed** (37.31 s, 0 failed). Build exit 0 (`dist/server.cjs` 1048807 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 00:22 IST (2026-10-07 18:52 UTC) — window slot 8: the OAuth disconnect routes no longer report a credential removal that never reached disk
 
 ### Fixed

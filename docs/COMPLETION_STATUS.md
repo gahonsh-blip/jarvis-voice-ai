@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 00:22 IST — **WORK SLOT 8** of the 2026-10-07 →
+Last cycle: 2026-10-08 00:37 IST — **WORK SLOT 9** of the 2026-10-07 →
+2026-10-08 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the `/api/chat` route claimed a memory write that never reached disk.**
+
+The `/api/chat` `set_name` and `create_file` cases (`server.ts`) were the
+un-fixed siblings of the mobile `processMobileCommand` path hardened in an
+earlier slot. `set_name` called `persistMemory()` and discarded the boolean,
+then answered "Your identity has been recorded into my durable memory banks.";
+`create_file` unshifted the note, discarded the boolean, and answered "I have
+saved your note … this is stored." On an unwritable volume (read-only mount,
+full disk) the name or note lived only in the process's memory while the reply
+claimed a durable save. `set_name` now reports the failed write ("could not
+write it to durable storage, so it is not saved") and still records only a name
+that passes `judgeSetNameIntent`; `create_file` rolls the note back and reports
+the failure when the write fails. Guarded by the new
+`src/tests/chatDurabilityTruth.test.ts` (4 cases; a real server process against a
+memory file made read-only after the first write, so the failure path is
+exercised, not read from source text). Negative-validated — `git stash` of
+`server.ts` failed 4 of 4; restored → 4/4. Also fixed a latent test-rot bug:
+`identityTruth.test.ts` sliced a fixed 1400 chars from `case 'set_name'`, which
+no longer reached the rejected branch once the case grew; it now slices to the
+next case label and asserts the new failed-write reply. Gates (observed this
+fire): lint (`tsc --noEmit`) exit 0; targeted 3 files / 22 passed; full suite
+**181 files / 2247 tests passed** (37.31 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1048807 bytes). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — unclassified `success: true` sites
+remain in `server.ts` / `server_tools.ts`.
+
+Last cycle (previous): 2026-10-08 00:22 IST — **WORK SLOT 8** of the 2026-10-07 →
 2026-10-08 window, the 00:35 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — the OAuth disconnect routes reported a credential removal that never
 reached disk.**
