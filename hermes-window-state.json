@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-07",
   "window_started_at": "2026-10-07T15:36:00Z",
-  "last_slot_at": "2026-10-07T21:35:00Z",
-  "slots_completed": 11,
+  "last_slot_at": "2026-10-07T22:05:00Z",
+  "slots_completed": 12,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "07f439d",
+  "last_commit": "ef767f4",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 11 (03:05 IST fire, 2026-10-08). POST /api/social/youtube/update-draft mutated the staged post metadata, called persistMemory() and discarded the boolean, then answered { success: true, applied: true, persisted: true }. On an unwritable volume the change lived only in process memory while the caller was told the draft was updated. The route now snapshots the fields it may touch (videoTitle, topic, videoDescription, content, privacyStatus, hashtags), writes durably, and on a failed write restores the snapshot and answers HTTP 500 { success: false, applied: false, persisted: false }; a durable update answers persisted: true. New src/tests/youtubeDraftUpdateDurabilityTruth.test.ts (3 cases: real server against a read-only memory file + source guard); negative-validated (reverting the route to its pre-fix shape: 3 failed | 0 passed); restored 3/3. Full suite 184 files / 2259 passed (38.71s, 0 failed); lint exit 0; build exit 0 (dist/server.cjs 1051066 bytes). Item 13 stays PARTIAL. Next slot: continue the persistMemory()-discard / success:true sweep in server.ts (candidates: Telegram webhook reply path ~4377, /api/social/publish helper persistMemory() sites ~2970/3018/3043/3099/3131) and server_tools.ts."
+  "note": "Slot 12 (03:35 IST fire, 2026-10-08, second-to-last work slot). Made the Level-3/4 approval registry durable across restarts. pendingActionRequests (server_tools.ts) lives outside memoryState and only reached disk via ad-hoc persistMemory() calls whose boolean was discarded, so a staged approval / rejected request / resolved decision lived only in process memory and a reboot silently emptied the queue. persistApprovalRegistry() (server.ts) now copies the registry into memoryState.permissionRequests and returns whether the durable write reached disk; server_tools.ts gained persistedActionRequests()/hydrateActionRequests() and the boot path restores the queue. Wired into /api/approvals/create (reports persisted; on failed write rolls back the live registry AND memoryState.permissionRequests so a later successful persist cannot resurrect a request reported as not staged), /api/approvals/resolve REJECT+APPROVE, /api/telephony/outbound/stage and /authorize, YouTube upload-draft/draft-test, and Telegram approve_perm_/reject_perm_ callbacks. New src/tests/approvalDurabilityTruth.test.ts (5 cases); youtubeDraftDurabilityTruth.test.ts guard broadened to accept the stronger persist (6 passed). Bug found by the new restart case and fixed: the first rollback restored only the live registry, not memoryState.permissionRequests, so a phantom request was resurrected by the next persist. Negative-validated. Gates observed this fire: lint (tsc --noEmit) exit 0; targeted 6 files / 48 passed; full suite 185 files / 2264 tests passed (41.33s, 0 failed); build exit 0 (dist/server.cjs built). E2E NOT RUN (no handset). Deploy NOT_CONFIGURED. Item 13 stays PARTIAL. Next slot (finalization at 04:35): no new development; run full verification, security checks, ensure PR to main is open/mergeable, do NOT merge."
 }
