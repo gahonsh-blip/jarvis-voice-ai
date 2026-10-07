@@ -93,3 +93,29 @@ describe('offline engine set_name does not record a pasted sentence', () => {
     expect(result.updatedMemory?.stats.actionsExecuted).toBe(1);
   });
 });
+
+describe('Telegram processMobileCommand set_name is wired to the truth helper', () => {
+  // The Telegram path branches on `intentData.intent === 'set_name'` rather than
+  // a `case` label, so locate it by that expression.
+  const label = serverFlat.indexOf("intentData.intent === 'set_name'");
+  const body = serverFlat.slice(label, label + 1400);
+
+  it('locates the Telegram set_name branch', () => {
+    expect(label).toBeGreaterThan(-1);
+  });
+
+  it('routes the extracted payload through judgeSetNameIntent', () => {
+    expect(body).toContain('judgeSetNameIntent(');
+  });
+
+  it('does not claim the identity was recorded on the rejected branch', () => {
+    expect(body).toContain('set_name_rejected');
+    expect(body).toContain('actionExecuted: false');
+  });
+
+  it('reports a failed durable write instead of a fake save', () => {
+    // A genuine name whose persistMemory() returns false must not still say it
+    // was recorded into durable memory banks.
+    expect(body).toContain('could not write it to durable storage');
+  });
+});

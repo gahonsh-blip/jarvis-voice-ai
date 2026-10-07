@@ -3390,10 +3390,26 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
     botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: ${posture.levelLabel}\n• *Human Approval*: ${posture.humanApproval}\n• *Secret Masking*: ${posture.secretMasking}\n• *Credential Leak Protection*: ${posture.credentialLeakProtection}\n• *Audit Trail*: ${describeAuditTrail(memoryState.auditLogs)} (${auditTrailCounts(memoryState.auditLogs).total} total)`;
     actionData = { type: 'security_audit', level: securityMatrixState.currentLevel };
   } else if (intentData.intent === 'set_name') {
-    const detectedName = intentData.actionPayload?.name || clean.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
-    memoryState.name = detectedName;
-    persistMemory();
-    botReplyText = `Understood, ${detectedName}! Your identity has been recorded into my durable memory banks.`;
+    // Mirrors the /api/chat set_name case and the offline engine: the classifier's
+    // name group is greedy over a whitespace class, so a pasted sentence or a
+    // digit-only payload reaches here. Recording that as the identity and telling
+    // the user it was saved is a spoken fake success. Only a plausible name is
+    // written, and the reply reflects whether it actually reached disk.
+    const rawName = intentData.actionPayload?.name || clean.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
+    const verdict = judgeSetNameIntent(rawName);
+    if (verdict.kind === 'name') {
+      memoryState.name = verdict.name;
+      const persisted = persistMemory();
+      if (persisted) {
+        botReplyText = `Understood, ${verdict.name}! Your identity has been recorded into my durable memory banks.`;
+      } else {
+        botReplyText = `I read your name as *${verdict.name}*, but I could not write it to durable storage, so it is not saved. Please try again.`;
+      }
+      actionData = { type: 'set_name', name: verdict.name, persisted };
+    } else {
+      botReplyText = `I could not read a usable name there (${verdict.reason}). Please say it plainly, for example "My name is [your name]".`;
+      actionData = { type: 'set_name_rejected', reason: verdict.reason, actionExecuted: false };
+    }
   } else if (intentData.intent === 'get_name') {
     if (memoryState.name) {
       botReplyText = `Your name is *${memoryState.name}*, as logged in our neural memory banks.`;
