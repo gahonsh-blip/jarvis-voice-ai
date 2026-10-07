@@ -13080,3 +13080,45 @@ state object outside `memoryState`, persisted by nothing, reported as saved.
 
 ---
 
+## 2026-10-08 00:06 IST — WORK SLOT 7 (00:05 IST fire) — item 13: `POST /api/restore` no longer reports a restore that never reached disk
+
+**Completed**
+- `POST /api/restore` (`server.ts`) merged a backup into `memoryState`, wrote a
+  `VERIFIED` audit row and answered `success: true` while discarding
+  `persistMemory()`'s boolean. On an unwritable volume the process held the
+  restored values while the next boot read the pre-restore file: a restore that
+  silently reverted on restart, and an audit log that recorded it as `VERIFIED`.
+  The route now snapshots the pre-merge state, rolls the merge back when
+  `persistMemory()` returns false, and answers HTTP 500
+  `success: false, persisted: false` without writing the audit row; a durable
+  restore answers `persisted: true`, matching `/api/memory` and
+  `/api/memory/sync`.
+
+**Evidence**
+- `src/tests/restoreDurabilityTruth.test.ts` (6 cases: valid restore applies and
+  reports `persisted: true`; read-only-file restore refused with the merge rolled
+  back and the file holding the last good value; malformed backup rejected before
+  any disk write; 3 source guards pinning the persist check, the rollback, and the
+  ordering of the persist check before the `VERIFIED` audit row).
+- Negative-validated — `git checkout` of `server.ts` failed 4 of 6
+  (`4 failed | 2 passed`); restored → 6/6.
+
+**Gates (observed this fire)**
+- Lint `tsc --noEmit`: exit 0.
+- Targeted: 1 file / 6 passed.
+- Full suite: **180 files / 2240 tests passed** (37.58 s, 0 failed).
+- Build: exit 0 — `dist/server.cjs` 1047575 bytes.
+- E2E: NOT RUN (no handset, no display session). Security: NOT RUN (no new secret
+  surface touched). Deploy: NOT_CONFIGURED.
+
+**Branch/commit**: `feature/hermes-full-completion` @ `2eba97c` (fix pushed before
+the long verification; docs in a follow-up commit).
+
+**Item 13 stays `PARTIAL`** — unclassified `success: true` sites remain in
+`server.ts` / `server_tools.ts`.
+
+**हिंदी सारांश**: इस स्लॉट में `/api/restore` को ईमानदार बनाया गया — डिस्क पर सेव
+न होने पर अब 500 `persisted: false` और rollback, झूठा `VERIFIED` ऑडिट नहीं; 6 नए
+टेस्ट हरे, पूरी सूट 2240 टेस्ट पास।
+
+---
