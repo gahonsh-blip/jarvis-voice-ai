@@ -7405,16 +7405,39 @@ app.post('/api/memory/sync', (req: Request, res: Response) => {
     // silently applied over the authoritative server copy.
     const verdict = classifyMemorySync(result, remote);
 
+    // Snapshot the pre-change values so a failed disk write can be rolled back
+    // rather than reported as a completed sync.
+    const before = {
+      name: memoryState.name,
+      notes: memoryState.notes,
+      customKeyValues: memoryState.customKeyValues,
+    };
+
     memoryState.notes = result.merged.notes;
     // A name that differs on both sides is a flagged conflict, not a value to
     // write. Applying it here overwrote the authoritative name while the
     // response still reported it as merged — a silent overwrite read as success.
     if (verdict.nameApplied) memoryState.name = result.merged.name as string;
     memoryState.customKeyValues = result.merged.customKeyValues;
-    persistMemory();
+
+    // The merge is only real once it is on disk; a write failure must not read
+    // as a completed sync.
+    if (!persistMemory()) {
+      memoryState.name = before.name;
+      memoryState.notes = before.notes;
+      memoryState.customKeyValues = before.customKeyValues;
+      return res.status(500).json({
+        success: false,
+        stored: false,
+        persisted: false,
+        outcome: verdict.outcome,
+        error: 'Memory sync could not be written to durable storage; the merge was not saved.',
+      });
+    }
 
     res.json({
       success: true,
+      persisted: true,
       stored: verdict.stored,
       nameApplied: verdict.nameApplied,
       outcome: verdict.outcome,
@@ -8535,6 +8558,15 @@ app.post('/api/memory', (req: Request, res: Response) => {
       customKeyValues: memoryState.customKeyValues,
     });
 
+    // A save is only real once it is on disk. Snapshot the pre-change values so
+    // a failed write can be rolled back rather than reported as a completed save.
+    const before = {
+      name: memoryState.name,
+      notes: memoryState.notes,
+      customKeyValues: memoryState.customKeyValues,
+      stats: { ...memoryState.stats },
+    };
+
     if (verdict.applied.name !== undefined) memoryState.name = verdict.applied.name;
     if (verdict.applied.notes !== undefined) memoryState.notes = verdict.applied.notes as any;
     if (verdict.applied.customKeyValues !== undefined) {
@@ -8575,9 +8607,26 @@ app.post('/api/memory', (req: Request, res: Response) => {
       memoryState.stats.lastActive = new Date().toISOString();
     }
 
-    persistMemory();
+    // Success must mean the change is durable, not merely held in this process's
+    // memory. The route used to answer `success: true` for a save that never
+    // reached disk; report failure (and roll back) instead.
+    if (!persistMemory()) {
+      memoryState.name = before.name;
+      memoryState.notes = before.notes;
+      memoryState.customKeyValues = before.customKeyValues;
+      memoryState.stats = before.stats;
+      return res.status(500).json({
+        success: false,
+        stored: false,
+        persisted: false,
+        outcome: verdict.outcome,
+        error: 'Memory could not be written to durable storage; the change was not saved.',
+      });
+    }
+
     res.json({
       success: true,
+      persisted: true,
       outcome: verdict.outcome,
       message: verdict.message,
       memory: {
