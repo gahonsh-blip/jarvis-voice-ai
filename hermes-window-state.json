@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-07",
   "window_started_at": "2026-10-07T15:36:00Z",
-  "last_slot_at": "2026-10-07T18:36:00Z",
-  "slots_completed": 7,
+  "last_slot_at": "2026-10-07T18:53:00Z",
+  "slots_completed": 8,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "1897ecd",
+  "last_commit": "01b77f4",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 7 (00:05 IST fire, 2026-10-08). POST /api/restore merged a backup, wrote a VERIFIED audit row and answered success:true while discarding persistMemory()'s boolean - an unwritable volume left the process holding restored values that the next boot reverted, logged as VERIFIED. Route now snapshots the pre-merge state, rolls back and answers 500 success:false persisted:false when the write fails (no audit row); durable restore answers persisted:true. New src/tests/restoreDurabilityTruth.test.ts (6 cases); negative-validated (4 failed | 2 passed on the reverted route); restored 6/6. Full suite 180 files / 2240 passed; lint exit 0; build exit 0 (dist/server.cjs 1047575 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true / actionExecuted:true sweep in server.ts / server_tools.ts. (Earlier this slot I wrongly suspected the slot-7 state push had not landed; re-fetching showed remote automation/hermes-state is at d1d55eb, so it HAD landed. This entry only refreshes last_commit to 1897ecd.)"
+  "note": "Slot 8 (00:35 IST fire, 2026-10-08). The OAuth disconnect routes guarded on an existing connection but then cleared the credential, discarded persistMemory()'s boolean, wrote a VERIFIED 'Disconnected' audit row and answered success:true - so a write that never reached disk reverted on the next boot while the audit log claimed a confirmed credential removal. Both /api/auth/linkedin/disconnect and /api/auth/youtube/disconnect now check the persist result, roll the connection back and answer 500 success:false persisted:false with no audit row. Extended src/tests/oauthDisconnectTruth.test.ts (2 new cases); negative-validated (2 failed | 4 passed on the reverted route); restored 6/6. Full suite 180 files / 2242 passed (36.25s, 0 failed); lint exit 0; build exit 0 (dist/server.cjs 1048205 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true / persistMemory()-discard sweep in server.ts / server_tools.ts."
 }
