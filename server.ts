@@ -2990,9 +2990,10 @@ async function executeApprovedAction(
   // its audit row and the post's new state are on disk. The helper previously
   // called persistMemory() at each of these sites and discarded the boolean, so
   // a read-only volume or full disk produced a "confirmed" publish in the reply
-  // for a decision the store never kept. `commitDecision` gates the durable
-  // write and rolls the in-memory audit row back when it fails, so a later
-  // persist cannot resurrect a decision that was reported as not recorded.
+  // for a decision the store never kept. Each site now checks the persist
+  // result, rolls its in-memory audit row back when the write fails, and reports
+  // `persisted: false` so a later persist cannot resurrect a decision that was
+  // reported as not recorded.
   const rollbackAudit = (entry: AuditLogEntry) => {
     memoryState.auditLogs = memoryState.auditLogs.filter((e) => e !== entry);
   };
