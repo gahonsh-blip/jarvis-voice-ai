@@ -12868,3 +12868,74 @@ Next Slot:
 - Targeted tests: `npx vitest run src/tests/browserDispatchTruth.test.ts` -> 1 file passed, 24/24 tests passed.
 - Finding: the `open_google/open_youtube/open_gmail/open_chatgpt/open_chrome` branch is ALREADY guarded by `src/utils/browserDispatchTruth.ts` (`browserOpenVerdict`/`browserOpenActionDetail`) and pinned by `src/tests/browserDispatchTruth.test.ts`. So #13 for that surface is evidence-backed, not fake-success.
 - Full suite: NOT RUN this slot (budget). Build: NOT RUN this slot.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:35 (run began 21:36 IST)
+Window date: 2026-10-07   Window slots completed so far: 2
+
+Completed:
+- #13 Zero-fake-success for all tools — FIXED a real fake-success site.
+  `POST /api/memory` and `POST /api/memory/sync` (server.ts) answered
+  `success: true` for a change held only in the process's memory.
+  `persistMemory(): boolean` is the only durability signal and both routes
+  discarded it, so a read-only volume / full disk produced a "saved" response
+  for a write that failed. Both now gate on `persistMemory()`, roll back the
+  in-memory change, and answer HTTP 500 `success:false, stored:false,
+  persisted:false`; success carries `persisted:true`. Mirrors the existing
+  /api/autonomous/schedule and /api/blueprint/toggle-item pattern.
+  Evidence: server.ts ~7408-7436 (sync) and ~8538-8615 (write);
+  src/tests/memoryDurabilityTruth.test.ts (6/6).
+
+In Progress:
+- #13 — the success:true / actionExecuted:true sweep is not exhausted;
+  unclassified sites remain in server.ts and server_tools.ts.
+
+Bugs Found:
+- POST /api/memory: `success:true` returned when persistMemory() === false
+  (unwritable memory file). The persistMemory() return value was never checked.
+- POST /api/memory/sync: same class — merge reported as stored, no durability check.
+
+Bugs Fixed:
+- Both routes above. Proof: a real `npx tsx server.ts` process against a memory
+  file chmod'd 0o444 after the first write returns HTTP 500 persisted:false, and
+  the unsaved note is NOT readable from GET /api/memory (rollback holds).
+  Negative validation: disabling both `if (!persistMemory())` guards failed 5 of
+  6 cases (`5 failed | 1 passed`); restored → 6/6.
+
+Tests:    176 files / 2210 tests passed (npx vitest run, 29.57 s, 0 failed).
+Lint:     `npm run lint` (tsc --noEmit) exit 0.
+Build:    `npm run build` exit 0 — dist/server.cjs 1042286 bytes.
+E2E:      NOT RUN — no physical Android device/emulator in this sandbox.
+Security: .env ignored (.gitignore:4); git status clean; no secret in diff;
+          no node_modules/dist committed. npm audit: NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle), docs/CHANGELOG.md.
+Branch:  feature/hermes-full-completion
+Commit:  5b2d034 (fix+test), 96d99be (docs)
+Push:    succeeded — origin/feature/hermes-full-completion
+State:   automation/hermes-state ae242c3 (slots_completed 2, finalized false)
+
+PR:         #6 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/6 (pre-existing)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present.
+
+Blocked:
+- #1 Android Bridge, #2 Real Android E2E, #50, #55 — need a physical Android
+  device/emulator + credentials not present in this sandbox.
+
+Human Approval Required:
+- Merge of feature/hermes-full-completion -> main (PR #6).
+- GitHub Actions billing lock on the owner account (CI cannot run).
+
+Next Slot:
+- Continue #13: next unclassified `success:true` site in server.ts (rotate areas;
+  do not re-scan the /api/chat intent switch — already audited).
+
+हिंदी सारांश (एक पंक्ति):
+- #13 के तहत एक असली नकली-सफलता ठीक की — /api/memory और /api/memory/sync अब
+  डिस्क लिखने में विफल होने पर success:true नहीं लौटाते, बल्कि 500/persisted:false
+  देते हैं और बदलाव रोल-बैक करते हैं; 6 नए टेस्ट पास, पूरी सूट 176 फ़ाइल/2210
+  टेस्ट पास, lint/build हरा। #13 अभी PARTIAL है।
+
