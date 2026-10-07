@@ -12861,3 +12861,10 @@ Next Slot:
 - यह स्लॉट सत्य-ऑडिट पर गया - /api/chat इंटेंट स्विच में actionExecuted = true
   स्थलों की जाँच की; कोई बदलाव लैंड नहीं हुआ, कोई टेस्ट नहीं चला (NOT RUN), कोई
   नकली-सफलता दावा नहीं किया गया; #13 अभी PARTIAL है।
+
+### Slot 1 amendment — observed gate evidence (same run)
+
+- Lint: `npm run lint` (tsc --noEmit) -> EXIT 0 (clean).
+- Targeted tests: `npx vitest run src/tests/browserDispatchTruth.test.ts` -> 1 file passed, 24/24 tests passed.
+- Finding: the `open_google/open_youtube/open_gmail/open_chatgpt/open_chrome` branch is ALREADY guarded by `src/utils/browserDispatchTruth.ts` (`browserOpenVerdict`/`browserOpenActionDetail`) and pinned by `src/tests/browserDispatchTruth.test.ts`. So #13 for that surface is evidence-backed, not fake-success.
+- Full suite: NOT RUN this slot (budget). Build: NOT RUN this slot.
