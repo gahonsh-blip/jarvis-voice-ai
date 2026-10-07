@@ -54,18 +54,31 @@ describe('judgeSetNameIntent — a name clause only counts when a name was read'
 });
 
 describe('/api/chat set_name case is wired to the truth helper', () => {
-  it('routes the extracted payload through judgeSetNameIntent', () => {
+  // Bound the case body at the next case label rather than a fixed character
+  // count: the body grows as the case is hardened, and a magic length silently
+  // truncates the assertions below when it no longer reaches the rejected branch.
+  const chatSetNameBody = () => {
     const label = serverFlat.indexOf("case 'set_name':");
     expect(label).toBeGreaterThan(-1);
-    const body = serverFlat.slice(label, label + 1400);
-    expect(body).toContain('judgeSetNameIntent(');
+    const end = serverFlat.indexOf("case 'get_name':", label);
+    expect(end, 'next case label missing').toBeGreaterThan(label);
+    return serverFlat.slice(label, end);
+  };
+
+  it('routes the extracted payload through judgeSetNameIntent', () => {
+    expect(chatSetNameBody()).toContain('judgeSetNameIntent(');
   });
 
   it('does not claim the identity was recorded on the rejected branch', () => {
-    const label = serverFlat.indexOf("case 'set_name':");
-    const body = serverFlat.slice(label, label + 1400);
+    const body = chatSetNameBody();
     expect(body).toContain('set_name_rejected');
     expect(body).toContain('actionExecuted = false');
+  });
+
+  it('reports a failed durable write instead of a fake save', () => {
+    // A genuine name whose persistMemory() returns false must not still say it
+    // was recorded into durable memory banks.
+    expect(chatSetNameBody()).toContain('could not write it to durable storage');
   });
 });
 
