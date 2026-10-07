@@ -13449,7 +13449,9 @@ Next Slot:
 ======================================================================
 
 HERMES JARVIS — AUTONOMOUS WINDOW REPORT
-Slot:        WORK  |  IST time: 04:05
+Slot:        WORK (13th of window, per state counter)  |  IST time: 04:05 fire
+             (observed clock: 03:35 IST at run start, 04:18 IST at report; sandbox
+              clock drifts against the cron slots — recorded as observed)
 Window date: 2026-10-07 → 2026-10-08   Window slots completed so far: 13
 
 Completed:
