@@ -88,6 +88,9 @@ import {
   YouTubeVideoInfo,
   YouTubeTranscriptSegment,
   runFinanceGuardSelfCheck,
+  persistedEmergencyState,
+  hydrateEmergencyState,
+  type EmergencyPersistedState,
 } from './server_tools';
 import {
   TelephonySessionManager,
@@ -521,6 +524,12 @@ interface MemoryData {
    * update route may report a save only once the gate is durable.
    */
   securityMatrix?: SecurityMatrixPersistedState;
+  /**
+   * The emergency stop / global kill-switch freeze. Persisted so a safety stop
+   * an operator engaged survives a restart — a freeze that evaporates on reboot
+   * is worse than none, because the operator still believes it holds.
+   */
+  emergencyState?: EmergencyPersistedState;
 }
 
 /**
@@ -675,6 +684,7 @@ let memoryState: MemoryData = {
   freelanceLeads: defaultFreelanceLeads,
   schedulerState: {},
   securityMatrix: { ...SECURITY_MATRIX_DEFAULTS },
+  emergencyState: { emergencyPaused: false, hardKillSwitchTriggered: false },
 };
 
 // Load memory from disk on startup
@@ -708,6 +718,7 @@ try {
       conversationHistory: coerceArray(parsed.conversationHistory, []),
       schedulerState: parsed.schedulerState || {},
       securityMatrix: parsed.securityMatrix,
+      emergencyState: parsed.emergencyState,
       linkedInConnection: parsed.linkedInConnection ? {
         ...parsed.linkedInConnection,
         accessToken: parsed.linkedInConnection.accessTokenEncrypted
@@ -909,6 +920,18 @@ function persistMemory(): boolean {
  */
 function persistSecurityMatrixState(): boolean {
   memoryState.securityMatrix = persistedSecurityMatrix();
+  return persistMemory();
+}
+
+/**
+ * Write the emergency/kill-switch freeze to disk. Like the Security Matrix, the
+ * emergency state lives outside `memoryState`, so this first copies the live
+ * state into `memoryState.emergencyState` and then runs the durable write.
+ * Returns whether the freeze is on disk — a route may report a held freeze only
+ * on `true`.
+ */
+function persistEmergencyState(): boolean {
+  memoryState.emergencyState = persistedEmergencyState();
   return persistMemory();
 }
 
@@ -1747,6 +1770,22 @@ let securityMatrixState = {
     }
   }
   memoryState.securityMatrix = persistedSecurityMatrix();
+}
+
+// Restore the persisted emergency stop / kill-switch freeze. A safety stop an
+// operator engaged must survive a restart; without this the freeze silently
+// reverted to the compile-time `false` on the next boot. A hand-edited or legacy
+// file can only restore a genuine boolean freeze, never invent one.
+{
+  const stored = memoryState.emergencyState as Partial<EmergencyPersistedState> | undefined;
+  hydrateEmergencyState({
+    emergencyPaused: stored?.emergencyPaused === true,
+    hardKillSwitchTriggered: stored?.hardKillSwitchTriggered === true,
+    ...(typeof stored?.pausedAt === 'string' ? { pausedAt: stored.pausedAt } : {}),
+    ...(typeof stored?.pausedBy === 'string' ? { pausedBy: stored.pausedBy } : {}),
+    ...(typeof stored?.reason === 'string' ? { reason: stored.reason } : {}),
+  });
+  memoryState.emergencyState = persistedEmergencyState();
 }
 
 // Proactive Daily Reports.
@@ -6371,7 +6410,7 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
   const verdict = emergencyToggleVerdict(resolvedAction, { ...pre });
 
   if (!verdict.actionExecuted) {
-    persistMemory();
+    persistEmergencyState();
     return res.json({
       success: false,
       actionExecuted: false,
@@ -6387,6 +6426,14 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
   }
   const updated = getEmergencyState();
   const engaged = updated.emergencyPaused === true;
+
+  // The freeze must be durable: a safety stop that evaporates on reboot is worse
+  // than none, because the operator still believes it holds. The write result is
+  // honored — a transition that cannot reach disk is reported as persisted:false
+  // rather than a durable success. The transitioned state is kept in memory (a
+  // disk error must never silently un-freeze the system); the response names the
+  // durability gap so the operator can act.
+  const persisted = persistEmergencyState();
 
   pushAuditEntry({
     id: `log-emerg-${Date.now()}`,
@@ -6409,8 +6456,7 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
-  persistMemory();
-  res.json({ success: true, actionExecuted: true, action: resolvedAction, title: verdict.title, ...updated });
+  res.json({ success: true, actionExecuted: true, action: resolvedAction, title: verdict.title, persisted, ...updated });
 });
 
 // Global Kill Switch API (HUD & System Level)
@@ -6454,12 +6500,17 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
-  persistMemory();
+  // 5. Durably hold the latch. A kill switch that is reported engaged but is not
+  // on disk would silently release on the next boot — the most dangerous kind of
+  // false success. The latch is kept in memory regardless (never auto-release),
+  // and `persisted` names the durability gap when the write cannot reach disk.
+  const persisted = persistEmergencyState();
 
   res.status(killVerdict.outcome === 'UNKNOWN' ? 503 : 200).json({
     success: killVerdict.actionExecuted,
     outcome: killVerdict.outcome,
     actionExecuted: killVerdict.actionExecuted,
+    persisted,
     headline: killVerdict.headline,
     message: killVerdict.message,
     clearedTasksCount: killVerdict.clearedTasksCount,
@@ -6478,7 +6529,7 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
   const verdict = emergencyResumeVerdict(getEmergencyState());
 
   if (!verdict.actionExecuted) {
-    persistMemory();
+    persistEmergencyState();
     return res.json({
       success: false,
       released: false,
@@ -6508,11 +6559,14 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
     finalTruthState: 'VERIFIED',
   });
 
-  persistMemory();
+  // The release must be durable too: a "resumed" report that is not on disk
+  // would re-freeze on the next boot. Kept in memory regardless of the write.
+  const persisted = persistEmergencyState();
 
   res.json({
     success: true,
     released: true,
+    persisted,
     outcome: verdict.outcome,
     message: verdict.message,
     emergencyState: resumedState,

@@ -36,6 +36,44 @@ export function getEmergencyState(): EmergencyState {
   return { ...emergencyState };
 }
 
+/**
+ * The durable subset of the emergency/kill-switch state. Persisted so a freeze
+ * an operator engaged survives a restart — a safety stop that evaporates on
+ * reboot is worse than no stop, because the operator still believes it holds.
+ */
+export interface EmergencyPersistedState {
+  emergencyPaused: boolean;
+  hardKillSwitchTriggered: boolean;
+  pausedAt?: string;
+  pausedBy?: string;
+  reason?: string;
+}
+
+export function persistedEmergencyState(): EmergencyPersistedState {
+  return {
+    emergencyPaused: emergencyState.emergencyPaused === true,
+    hardKillSwitchTriggered: emergencyState.hardKillSwitchTriggered === true,
+    ...(emergencyState.pausedAt ? { pausedAt: emergencyState.pausedAt } : {}),
+    ...(emergencyState.pausedBy ? { pausedBy: emergencyState.pausedBy } : {}),
+    ...(emergencyState.reason ? { reason: emergencyState.reason } : {}),
+  };
+}
+
+/**
+ * Replace the live emergency state with a previously persisted snapshot. Used
+ * on boot to restore a freeze, and to roll the freeze back when a write that
+ * was reported could not actually reach disk.
+ */
+export function hydrateEmergencyState(stored: EmergencyPersistedState | null | undefined): void {
+  emergencyState = {
+    emergencyPaused: stored?.emergencyPaused === true,
+    hardKillSwitchTriggered: stored?.hardKillSwitchTriggered === true,
+    ...(stored?.pausedAt ? { pausedAt: stored.pausedAt } : {}),
+    ...(stored?.pausedBy ? { pausedBy: stored.pausedBy } : {}),
+    ...(stored?.reason ? { reason: stored.reason } : {}),
+  };
+}
+
 export function toggleEmergencyStop(
   requestedBy: string = 'HUMAN_OPERATOR',
   reason: string = 'User triggered emergency safety stop'
