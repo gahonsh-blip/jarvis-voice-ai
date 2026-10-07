@@ -3041,11 +3041,33 @@ async function executeApprovedAction(
       finalTruthState: 'VERIFIED',
       errorReason: 'Action was already executed and verified previously.',
     };
+    // Refusing a duplicate is itself a decision and must reach disk like any
+    // other. This branch used to build the row, discard it, and still answer
+    // `persisted: true` — so `auditEntry.id` named a row absent from the audit
+    // log and the duplicate refusal was gone on reboot. Commit it and report the
+    // durable outcome honestly.
+    pushAuditEntry(existingAudit);
+    if (!persistMemory()) {
+      rollbackAudit(existingAudit);
+      return {
+        success: false,
+        post,
+        auditEntry: {
+          ...existingAudit,
+          errorReason:
+            'The duplicate-approval block could not be written to durable storage; it was not recorded.',
+        },
+        userMessage: `Post was already published and verified on ${post.platform}, but the duplicate-approval block could not be written to durable storage.`,
+        persisted: false,
+      };
+    }
     return {
       success: true,
       post,
       auditEntry: existingAudit,
-      userMessage: `Post was already published and verified on ${post.platform} (Share ID: ${post.providerUrn || 'verified'}).`,
+      userMessage: post.providerUrn
+        ? `Post was already published and verified on ${post.platform} (Share ID: ${post.providerUrn}).`
+        : `Post was already published and verified on ${post.platform}, but no provider share ID was recorded.`,
       persisted: true,
     };
   }
