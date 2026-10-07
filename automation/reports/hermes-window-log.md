@@ -12989,3 +12989,50 @@ Item: #13 Zero-fake-success for all tools (PARTIAL).
   अब judgeSetNameIntent से गेटेड, असली लेखन-परिणाम बताता है; 4 नए टेस्ट पास।
 
 ---
+
+---
+
+## 2026-10-07 23:05 IST — WORK SLOT 5 (window 2026-10-07 → 2026-10-08)
+
+Item: #13 Zero-fake-success for all tools (PARTIAL).
+
+- **Bug found & fixed:** `POST /api/security/update` (`server.ts`) wrote the
+  accepted fields onto the module-level `securityMatrixState`, called
+  `persistMemory()`, discarded its return value, and answered `success: true` /
+  `applied: true`. `securityMatrixState` is not part of `memoryState` and
+  `persistMemory()` serializes `memoryState` only — so the gates were never
+  written to disk and the Level-4 surface (human approval for external actions,
+  credential masking, credential-leak protection) silently reverted to the
+  compile-time defaults on the next boot while the route claimed a durable save.
+- **Fix:** add `securityMatrix` to `MemoryData` (seeded from a new
+  `SECURITY_MATRIX_DEFAULTS` literal); persist the live gates through
+  `persistSecurityMatrixState()` (copies them into `memoryState` before the
+  durable write and returns the write result); hydrate `securityMatrixState`
+  from the file on boot with per-field validation; gate the route — a failed
+  write rolls the in-memory matrix back and answers HTTP 500 `success:false`
+  `persisted:false` without touching the file; a successful response carries
+  `persisted:true`.
+- **Second bug found & fixed (latent):** the first `memoryState.securityMatrix`
+  seed called `persistedSecurityMatrix()`, which reads `securityMatrixState`
+  declared *after* `memoryState`; the module threw "Cannot access
+  'securityMatrixState' before initialization" on boot. Fixed by seeding from
+  the `SECURITY_MATRIX_DEFAULTS` literal.
+- **Tests:** new `src/tests/securityMatrixDurabilityTruth.test.ts` (8 cases:
+  defaults on an empty file, read-only-file write refused with rollback and the
+  file left untouched, out-of-range/empty bodies still rejected, a successful
+  save surviving a real server restart, and 4 source guards pinning the
+  durability check and rollback). Negative-validated — disabling the durability
+  guard → 3 failed | 5 passed; disabling the boot hydration → 1 failed | 7
+  passed; restored → 8/8.
+- **Gates (observed):** lint `tsc --noEmit` exit 0; targeted 1 file / 8 passed;
+  full suite 178 files / 2228 tests passed (33.98 s, 0 failed); build exit 0
+  (`dist/server.cjs` 1045615 bytes).
+- **Commits:** b819e6b (fix + test), 5a5878a (docs). Pushed to
+  `feature/hermes-full-completion`. State pushed to `automation/hermes-state`
+  (f7b0ad4).
+- **Not run:** real Android E2E (no handset). Deploy: NOT_CONFIGURED.
+- **हिंदी:** Security Matrix अपडेट रूट बिना किसी टिकाऊ स्टोर के "सेव हो गया" बताता
+  था (गेट रीस्टार्ट पर डिफ़ॉल्ट में लौट जाते थे); अब persistSecurityMatrixState()
+  पर गेटेड, बूट पर हाइड्रेट, विफल लेखन पर रोल-बैक + ईमानदार 500; 8 नए टेस्ट पास।
+
+---
