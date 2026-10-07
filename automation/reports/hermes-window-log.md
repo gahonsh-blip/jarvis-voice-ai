@@ -13520,3 +13520,81 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - approval-decision durability fix (executeApprovedAction) को असली सर्वर प्रोसेस
   टेस्ट और negative-validation से verify किया; पूरी suite 2267 tests पास, build सफल।
+
+
+---
+
+## Slot: WORK | IST 03:35 | Window date 2026-10-07 → 2026-10-08 (slot 13 of window)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:35 (sandbox-observed; clock drifts vs cron)
+Window date: 2026-10-07   Window slots completed so far: 13
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL) — finished the last unguarded
+  decision site in `executeApprovedAction` (`server.ts`). The duplicate-approval
+  idempotency branch (post `published` + `finalTruthState === 'VERIFIED'`) built a
+  "Duplicate Approval Blocked" audit row, DISCARDED it, and returned
+  `persisted: true` with no disk write. The discarded `auditEntry.id` is echoed to
+  callers (POST /api/social/action returns `auditEntry`; the Telegram
+  `approve_post_*` callback prints `result.auditEntry.id` as the confirmed "Audit
+  Log ID"), so the reply named a row absent from the log, and the refusal vanished
+  on restart. Fix: commit the row (`pushAuditEntry(existingAudit)`) and guard
+  `persistMemory()` — on failure `rollbackAudit` and return `success:false`,
+  `persisted:false` with an `errorReason`; on success `persisted:true`, quoting a
+  share ID only when `providerUrn` is present.
+  Evidence: `src/tests/duplicateApprovalDurabilityTruth.test.ts` (3 passed).
+  Negative-validated: reverted branch -> 3 failed; restored -> 3/3 passed.
+
+In Progress:
+- #13 — unclassified `persistMemory()`-discard / `success: true` sites remain in
+  server.ts / server_tools.ts; the sweep is not exhausted.
+
+Remaining:
+- #13 is the active sweep; then the mandated order continues with the still-open
+  items (Voice, Wake Word, Production Hardening) plus the hardware/credential-
+  blocked items #1, #2, #50, #55.
+
+Bugs Found:
+- The duplicate-approval branch of `executeApprovedAction` returned
+  `persisted: true` for a decision it never wrote to disk, and its phantom audit
+  id was surfaced to callers. Found by auditing every `persisted: true` return in
+  the helper against the persist guard.
+
+Bugs Fixed:
+- As above; proof is the new 3-case real-process test, failing before and passing
+  after the fix.
+
+Tests:    187 files / 2270 tests passed (42.95 s, 0 failed) — run first-hand this fire
+Lint:     `tsc --noEmit` exit 0 — run first-hand this fire
+Build:    exit 0 — dist/server.cjs 1056498 bytes (run first-hand this fire)
+E2E:      NOT RUN (no handset/device in the sandbox)
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; tree clean; no
+          token/key in the diff vs main; no .env/node_modules/dist staged.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md,
+          automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  2896848 (docs) / 547d145 (fix)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE (opened by the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this environment.
+
+Blocked:
+- #1, #2 — require a real Android handset / adb bridge (no device in sandbox)
+- #50, #55 — require a real credential/OAuth grant (Google/LinkedIn/carrier)
+
+Human Approval Required:
+- None for this slot. The window's final PR to main must be read and approved by
+  the owner before any merge.
+
+Next Slot:
+- Finalization (04:35 IST): full lint+tests+build gate, security checks, ensure
+  the PR to main is open and mergeable, record final window state. No new dev.
+
+हिंदी सारांश (एक पंक्ति):
+- duplicate-approval block अब सच में audit log में लिखा जाता है और disk-write
+  विफल होने पर साफ़ मना करता है; नई 3-test file से negative-validation सहित
+  सत्यापित, पूरी suite 2270 tests पास, build सफल।
