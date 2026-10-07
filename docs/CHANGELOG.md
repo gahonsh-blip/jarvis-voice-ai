@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 03:35 IST (2026-10-07 22:35 UTC) — window slot 13 (continued): the duplicate-approval block is now a recorded decision, not a phantom audit id
+
+### Fixed
+- **The duplicate-approval idempotency branch of `executeApprovedAction` (`server.ts`) built a `Duplicate Approval Blocked` audit row, discarded it, and returned `persisted: true` with no disk write.** It is the branch taken when a human re-approves a post already `published` and `VERIFIED`. The returned `auditEntry.id` was echoed to callers — `POST /api/social/action` returns `auditEntry`, and the Telegram `approve_post_*` callback prints `result.auditEntry.id` as the confirmed "Audit Log ID" — so the reply named a row absent from the audit log, and the refusal vanished on restart. This was the last `persisted: true` in the helper without a `persistMemory()` guard (the source-guard test in `socialActionDurabilityTruth.test.ts` only checked three specific pre-fix strings and missed it). The branch now commits the row with `pushAuditEntry(existingAudit)` and guards the write: on failure it `rollbackAudit`s the row and returns `success:false`, `persisted:false` with an `errorReason` naming the unwritten block; on success it returns `persisted:true` and only quotes a share ID when `providerUrn` is actually present.
+
+### Tests
+- New `src/tests/duplicateApprovalDurabilityTruth.test.ts` (3 cases: a real `tsx server.ts` process against a memory file seeded with a published+VERIFIED post). A writable-disk case proves the block records and the returned audit id is really in `/api/security`'s audit log; a read-only case proves the block is refused (`success:false`, `persisted:false`) and its row is absent. Negative-validated: reverted to the pre-fix branch, all 3 fail (`expected true to be false` on `body.success`); restored → 3/3. Targeted 1 file / 3 passed. Lint (`tsc --noEmit`) exit 0. Full suite **187 files / 2270 tests passed** (42.95 s, 0 failed). Build exit 0 (`dist/server.cjs` 1056498 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 03:35 IST (2026-10-07 22:05 UTC) — window slot 12: the Level-3/4 approval registry is now durable across restarts
 
 ### Fixed

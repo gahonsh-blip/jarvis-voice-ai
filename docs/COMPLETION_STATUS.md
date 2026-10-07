@@ -4,7 +4,42 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 04:05 IST — **WORK SLOT 13** of the 2026-10-07 →
+Last cycle: 2026-10-08 03:35 IST (sandbox-observed; cron slot 13 continuation —
+the sandbox clock drifts from the fire time, recorded as observed) —
+**WORK SLOT 13 (continued)** of the 2026-10-07 → 2026-10-08 window. **Item 13
+(`Zero-fake-success for all tools`) — the last unguarded decision site in
+`executeApprovedAction` now commits its audit row and reports the durable
+outcome honestly.**
+
+The duplicate-approval idempotency branch of `executeApprovedAction`
+(`server.ts`, `post.status === 'published' && finalTruthState === 'VERIFIED'`)
+built a `Duplicate Approval Blocked` audit row, **discarded it**, and returned
+`persisted: true` with no disk write. The discarded `auditEntry.id` was echoed
+to callers: `POST /api/social/action` returns `auditEntry`, and the Telegram
+`approve_post_*` callback prints `result.auditEntry.id` as the confirmed "Audit
+Log ID" — so the reply named a row absent from the audit log, and the refusal
+was gone on restart. This was the only `persisted: true` in the helper with no
+`persistMemory()` guard. The branch now `pushAuditEntry(existingAudit)` and
+guards the write: on failure it `rollbackAudit`s the row and returns
+`success:false`, `persisted:false` with an `errorReason` naming the unwritten
+block; on success it returns `persisted:true` and no longer implies a share ID
+when `providerUrn` is absent. Covered by
+`src/tests/duplicateApprovalDurabilityTruth.test.ts`: a real `tsx server.ts`
+process against a memory file seeded with a published+VERIFIED post. A
+writable-disk case proves the block records and the returned audit id is really
+in `/api/security`'s log; a read-only case proves the block is refused
+(`success:false`, `persisted:false`) and its row is absent. Negative-validated:
+with the branch reverted to its pre-fix shape the 3 tests fail (`expected true
+to be false` on `body.success`; source-guard assertion misses); restored →
+3/3. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file /
+3 passed; full suite **187 files / 2270 tests passed** (42.95 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1056498 bytes). Security:
+`git check-ignore -v .env` → `.gitignore:4:.env`; no token/key in the diff vs
+`main`; working tree clean. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — unclassified `success: true` sites remain in
+`server.ts` / `server_tools.ts`.
+
+Last cycle (previous): 2026-10-08 04:05 IST — **WORK SLOT 13** of the 2026-10-07 →
 2026-10-08 window, the 04:05 IST fire. **Item 13 (`Zero-fake-success for all
 tools`) — `executeApprovedAction` is now honest about durable writes, and the
 previous slot's fix is covered end to end.**
