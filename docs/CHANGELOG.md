@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 22:36 IST (2026-10-07 17:06 UTC) — window slot 4: the Telegram set_name path no longer claims a durable save it never made
+
+### Fixed
+- **The Telegram `set_name` branch of `processMobileCommand` (`server.ts`) stored whatever text followed the name phrase as the owner's identity and replied that it had been "recorded into my durable memory banks".** A pasted sentence, a digit-only payload, or a `persistMemory()` write that never reached disk all read as a saved identity — the write's boolean was discarded and the `persisted` field was hardcoded `true`. The `/api/chat` case and the offline engine (`localJarvisEngine.ts`) already route through `judgeSetNameIntent`; this third path was missed. It now runs the same helper, records only a `kind === 'name'` verdict, answers `set_name_rejected` / `actionExecuted: false` for a non-name, and reports "could not write it to durable storage" instead of a fake save when the write fails.
+
+### Tests
+- `src/tests/identityTruth.test.ts` — 4 added source-guard cases pinning the Telegram branch's wiring (runs `judgeSetNameIntent`, rejects a non-name with `actionExecuted: false`, and reports a failed durable write). Negative-validated — `git stash` of `server.ts` failed exactly the 3 new assertions (`3 failed | 8 passed`); restored → 11/11 in the file. Targeted 1 file / 11 passed. Lint (`tsc --noEmit`) exit 0. Full suite **177 files / 2220 tests passed** (31.43 s, 0 failed). Build exit 0 (`dist/server.cjs` 1043626 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 22:06 IST (2026-10-07 16:36 UTC) — window slot 3: a freelance lead and status change that never reached disk are no longer reported as saved
 
 ### Fixed
