@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-07",
   "window_started_at": "2026-10-07T15:36:00Z",
-  "last_slot_at": "2026-10-07T22:05:00Z",
-  "slots_completed": 12,
+  "last_slot_at": "2026-10-07T22:48:52Z",
+  "slots_completed": 13,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "ef767f4",
+  "last_commit": "7778000",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 12 (03:35 IST fire, 2026-10-08, second-to-last work slot). Made the Level-3/4 approval registry durable across restarts. pendingActionRequests (server_tools.ts) lives outside memoryState and only reached disk via ad-hoc persistMemory() calls whose boolean was discarded, so a staged approval / rejected request / resolved decision lived only in process memory and a reboot silently emptied the queue. persistApprovalRegistry() (server.ts) now copies the registry into memoryState.permissionRequests and returns whether the durable write reached disk; server_tools.ts gained persistedActionRequests()/hydrateActionRequests() and the boot path restores the queue. Wired into /api/approvals/create (reports persisted; on failed write rolls back the live registry AND memoryState.permissionRequests so a later successful persist cannot resurrect a request reported as not staged), /api/approvals/resolve REJECT+APPROVE, /api/telephony/outbound/stage and /authorize, YouTube upload-draft/draft-test, and Telegram approve_perm_/reject_perm_ callbacks. New src/tests/approvalDurabilityTruth.test.ts (5 cases); youtubeDraftDurabilityTruth.test.ts guard broadened to accept the stronger persist (6 passed). Bug found by the new restart case and fixed: the first rollback restored only the live registry, not memoryState.permissionRequests, so a phantom request was resurrected by the next persist. Negative-validated. Gates observed this fire: lint (tsc --noEmit) exit 0; targeted 6 files / 48 passed; full suite 185 files / 2264 tests passed (41.33s, 0 failed); build exit 0 (dist/server.cjs built). E2E NOT RUN (no handset). Deploy NOT_CONFIGURED. Item 13 stays PARTIAL. Next slot (finalization at 04:35): no new development; run full verification, security checks, ensure PR to main is open/mergeable, do NOT merge."
+  "note": "Slot 13 (this is a WORK slot; state counter now 13 of 15 work slots, finalization is the next fire). Observed sandbox clock drifted: 03:35 IST at run start, ~04:18 IST at report. Work done: covered the slot-12/13 executeApprovedAction durability fix end to end. New src/tests/socialActionDurabilityTruth.test.ts runs a real tsx server.ts process against a memory file made read-only after the first write: writable disk -> reject records (success:true, persisted:true, REJECTED, audit row present); read-only disk -> refuse (success:false, persisted:false, post snapshot restored to DRAFT, no rejection audit row). Negative-validated: guard disabled -> failure case fails (expected true to be false on body.success); restored -> 3/3. Also corrected a stray commitDecision helper reference in the executeApprovedAction leading comment. Gates observed: lint (tsc --noEmit) exit 0; targeted 1 file / 3 passed; full suite 186 files / 2267 tests passed (42.02s, 0 failed); build exit 0 (dist/server.cjs 1055861 bytes). E2E NOT RUN (no handset). Deploy NOT_CONFIGURED. Item 13 stays PARTIAL. Next fire is the finalization slot: no new development; run the full gate, security checks, ensure the PR to main is open/mergeable, do NOT merge."
 }
