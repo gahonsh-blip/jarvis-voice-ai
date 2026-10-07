@@ -13122,3 +13122,48 @@ the long verification; docs in a follow-up commit).
 टेस्ट हरे, पूरी सूट 2240 टेस्ट पास।
 
 ---
+
+---
+
+## 2026-10-08 00:35 IST — WORK SLOT 8 (00:35 IST fire), window 2026-10-07
+
+**Item 13 (`Zero-fake-success for all tools`) — `PARTIAL` (slice: OAuth
+disconnect durability).**
+
+`POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect`
+(`server.ts`) already guarded on an existing connection, but then cleared the
+credential in memory, called `persistMemory()` and discarded its boolean, wrote a
+`VERIFIED` "…Disconnected (…)" audit row, and answered `success: true`. On an
+unwritable volume (read-only mount, full disk) the process held the disconnection
+while the next boot reloaded the connection from the pre-disconnect file — a
+credential removal that silently reverted on restart, recorded as confirmed. Both
+routes now check the persist result, roll the connection back to its
+pre-disconnect value, and answer HTTP 500 `success: false, persisted: false`
+without writing the audit row; a durable disconnect still answers `success: true`.
+
+**Evidence**: `server.ts` (both disconnect routes) +
+`src/tests/oauthDisconnectTruth.test.ts` (2 new cases; 6/6 in the file).
+
+**Negative validation**: `git checkout -- server.ts` (reverted route) →
+`2 failed | 4 passed`; fix restored → `6/6`.
+
+**Gates (observed this fire)**
+- Lint `tsc --noEmit`: exit 0.
+- Targeted: 1 file / 6 passed.
+- Full suite: **180 files / 2242 tests passed** (36.25 s, 0 failed).
+- Build: exit 0 — `dist/server.cjs` 1048205 bytes.
+- E2E: NOT RUN (no handset, no OAuth grant). Security: NOT RUN (no new secret
+  surface touched). Deploy: NOT_CONFIGURED.
+
+**Branch/commit**: `feature/hermes-full-completion` @ `01b77f4` (fix `7df690d`
+pushed before the long verification; docs in a follow-up commit). State branch
+`automation/hermes-state` @ `d7f9056` (`slots_completed: 8`).
+
+**Item 13 stays `PARTIAL`** — unclassified `success: true` sites remain in
+`server.ts` / `server_tools.ts`.
+
+**हिंदी सारांश**: इस स्लॉट में LinkedIn/YouTube डिस्कनेक्ट रूट को ईमानदार बनाया —
+डिस्क पर सेव न होने पर अब rollback और 500 `persisted: false`, झूठा `VERIFIED`
+ऑडिट नहीं; 2 नए टेस्ट हरे, पूरी सूट 2242 टेस्ट पास।
+
+---
