@@ -4409,9 +4409,24 @@ app.post('/api/freelance/create-lead', (req: Request, res: Response) => {
     budget: budgetAmount,
     createdAt: new Date().toISOString(),
   }) as ServerFreelanceLead;
+  // The lead is only real once it is on disk. The route previously unshifted
+  // the record, discarded persistMemory()'s return value, and answered
+  // `stored: true` — so a read-only volume or full disk produced a "created
+  // lead" for a write that never reached storage. Gate on the durable write and
+  // roll the record back when it fails.
+  const leadSnapshot = memoryState.freelanceLeads.slice();
   memoryState.freelanceLeads.unshift(newLead);
-  persistMemory();
-  res.json({ success: true, stored: true, clientIdentified: intake.hasClientIdentity, lead: newLead, message: intake.message });
+  if (!persistMemory()) {
+    memoryState.freelanceLeads = leadSnapshot;
+    return res.status(500).json({
+      success: false,
+      stored: false,
+      persisted: false,
+      outcome: 'NOT_PERSISTED',
+      message: 'The lead could not be written to durable storage; it was not saved.',
+    });
+  }
+  res.json({ success: true, stored: true, persisted: true, clientIdentified: intake.hasClientIdentity, lead: newLead, message: intake.message });
 });
 
 app.post('/api/freelance/update-status', (req: Request, res: Response) => {
@@ -4433,9 +4448,23 @@ app.post('/api/freelance/update-status', (req: Request, res: Response) => {
       lead,
     });
   }
+  const previousStatus = lead.status;
   lead.status = verdict.status as string;
-  persistMemory();
-  res.json({ success: true, outcome: verdict.outcome, applied: true, message: verdict.message, lead });
+  // The status change is only real once it is on disk. The route previously
+  // discarded persistMemory()'s return value and reported `applied: true` for a
+  // write that could fail, so the pipeline showed a stage the store never kept.
+  if (!persistMemory()) {
+    lead.status = previousStatus;
+    return res.status(500).json({
+      success: false,
+      outcome: 'NOT_PERSISTED',
+      applied: false,
+      persisted: false,
+      message: 'The status change could not be written to durable storage; it was not applied.',
+      lead,
+    });
+  }
+  res.json({ success: true, outcome: verdict.outcome, applied: true, persisted: true, message: verdict.message, lead });
 });
 
 // Social Media Engine APIs
