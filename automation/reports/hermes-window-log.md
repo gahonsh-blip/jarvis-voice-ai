@@ -12962,3 +12962,30 @@ Next Slot:
   persistMemory() पर गेट + रोल-बैक, ईमानदार 500/persisted:false; 6 नए टेस्ट पास।
 
 ---
+
+## 2026-10-07 22:35 IST — WORK SLOT 4 (window 2026-10-07 → 2026-10-08)
+
+Item: #13 Zero-fake-success for all tools (PARTIAL).
+
+- **Bug found & fixed:** the Telegram `processMobileCommand` `set_name` branch
+  (`server.ts`) stored any trailing text as the owner's identity and replied
+  "recorded into my durable memory banks" — including for a pasted sentence, a
+  digit-only payload, or a `persistMemory()` write that never reached disk (its
+  boolean was discarded and the `persisted` field was hardcoded `true`). The
+  `/api/chat` case and the offline engine already route through
+  `judgeSetNameIntent`; this third path was missed.
+- **Fix:** route through `judgeSetNameIntent`; record only `kind === 'name'`;
+  answer `set_name_rejected` / `actionExecuted: false` for a non-name; report
+  "could not write it to durable storage" when the write fails.
+- **Tests:** 4 added source-guard cases in `src/tests/identityTruth.test.ts`
+  (11/11 in file). Negative-validated — `git stash` of `server.ts` → 3 failed |
+  8 passed; restored → 11/11.
+- **Gates (observed):** lint `tsc --noEmit` exit 0; full suite 177 files / 2220
+  tests passed (31.43 s, 0 failed); build exit 0 (`dist/server.cjs` 1043626 bytes).
+- **Commits:** 2e33887 (fix), 6d0dc91 (docs). Pushed to
+  `feature/hermes-full-completion`.
+- **Not run:** real Android E2E (no handset). Deploy: NOT_CONFIGURED.
+- **हिंदी:** Telegram का set_name रास्ता झूठा "durable memory में सेव" बताता था;
+  अब judgeSetNameIntent से गेटेड, असली लेखन-परिणाम बताता है; 4 नए टेस्ट पास।
+
+---
