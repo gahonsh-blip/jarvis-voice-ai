@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-07 21:35 IST (2026-10-07 16:05 UTC) — window slot 1: a memory save that never reached disk is no longer reported as success
+
+### Fixed
+- **`POST /api/memory` and `POST /api/memory/sync` (`server.ts`) answered `success: true` for a change that was only held in the process's memory.** `persistMemory(): boolean` is the only signal that the change is durable, and both routes discarded it. On a read-only volume or a full disk the write failed while the response still read as a completed save. Both routes now gate on `persistMemory()`, roll back the in-memory change to its pre-request snapshot, and answer HTTP 500 `success: false, stored: false, persisted: false` — matching `POST /api/autonomous/schedule` and `/api/blueprint/toggle-item`. A successful response carries `persisted: true`.
+
+### Tests
+- New `src/tests/memoryDurabilityTruth.test.ts` (6 cases: a real `npx tsx server.ts` process against a memory file made read-only after the first write — proving the EACCES path returns 500 and that the unsaved note is not readable — plus source guards on the wiring and the rollback). Negative-validated — disabling both `if (!persistMemory())` guards failed exactly 5 of 6 cases (`5 failed | 1 passed`); restored → 6/6. Targeted 3 files / 28 passed. Lint (`tsc --noEmit`) exit 0. Full suite **176 files / 2210 tests passed** (29.57 s, 0 failed). Build exit 0 (`dist/server.cjs` 1042286 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-07 03:35 IST (2026-10-06 22:05 UTC) — window slot 11: a fix-plan all-clear now requires the scan to have actually covered its scope
 
 ### Fixed

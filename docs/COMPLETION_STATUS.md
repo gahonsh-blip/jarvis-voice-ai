@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-07 03:35 IST — **WORK SLOT 11** of the 2026-10-06 →
+Last cycle: 2026-10-07 21:35 IST — **WORK SLOT 1** of the 2026-10-07 →
+2026-10-08 window, the 21:35 IST fire. **Item 13 (`Zero-fake-success for all
+tools`) — the memory routes reported a save that never reached disk.**
+
+`POST /api/memory` (`server.ts`) applied the caller's change to the in-process
+`memoryState`, called `persistMemory()`, and answered `success: true`
+regardless. `persistMemory(): boolean` is the only signal that the change is on
+disk, and its result was discarded — so a read-only volume or a full disk
+produced a "saved" response for a write that failed. `POST /api/memory/sync` had
+the same hole: it merged the offline snapshot, ignored the same return value, and
+reported the merge as completed. Both routes now gate on `persistMemory()`,
+**roll back** the in-memory change to its pre-request snapshot, and answer HTTP
+500 `success: false, stored: false, persisted: false` — the exact pattern
+`POST /api/autonomous/schedule` and `/api/blueprint/toggle-item` already use. A
+successful response now carries `persisted: true`. Guarded by
+`src/tests/memoryDurabilityTruth.test.ts` (6 cases: a real `npx tsx server.ts`
+process against a memory file made read-only after the first write, proving the
+EACCES path returns 500 and that the unsaved note is not readable; plus source
+guards on the wiring and the rollback). Negative-validated — disabling both
+`if (!persistMemory())` guards failed 5 of 6 cases (`5 failed | 1 passed`);
+restored → 6/6. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted 3 files / 28 passed; full suite **176 files / 2210 tests passed**
+(29.57 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1042286 bytes).
+E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` —
+the sweep is not exhausted (unclassified `success: true` sites remain in
+`server.ts`).
+
+Last cycle (previous): 2026-10-07 03:35 IST — **WORK SLOT 11** of the 2026-10-06 →
 2026-10-07 window, the 03:35 IST fire (second-to-last slot). **Item 13
 (`Zero-fake-success for all tools`) — `/api/github/fix-plan` reported an
 all-clear the scan never established.**
