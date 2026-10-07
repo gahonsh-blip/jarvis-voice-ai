@@ -13565,7 +13565,7 @@ Bugs Fixed:
 - As above; proof is the new 3-case real-process test, failing before and passing
   after the fix.
 
-Tests:    187 files / 2270 tests passed (42.95 s, 0 failed) — run first-hand this fire
+Tests:    187 files / 2270 tests passed (42.89 s, 0 failed) — run first-hand this fire
 Lint:     `tsc --noEmit` exit 0 — run first-hand this fire
 Build:    exit 0 — dist/server.cjs 1056498 bytes (run first-hand this fire)
 E2E:      NOT RUN (no handset/device in the sandbox)
