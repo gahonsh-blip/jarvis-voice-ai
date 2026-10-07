@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-07",
   "window_started_at": "2026-10-07T15:36:00Z",
-  "last_slot_at": "2026-10-07T18:53:00Z",
-  "slots_completed": 8,
+  "last_slot_at": "2026-10-07T19:20:00Z",
+  "slots_completed": 9,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "01b77f4",
+  "last_commit": "2005bcb",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 8 (00:35 IST fire, 2026-10-08). The OAuth disconnect routes guarded on an existing connection but then cleared the credential, discarded persistMemory()'s boolean, wrote a VERIFIED 'Disconnected' audit row and answered success:true - so a write that never reached disk reverted on the next boot while the audit log claimed a confirmed credential removal. Both /api/auth/linkedin/disconnect and /api/auth/youtube/disconnect now check the persist result, roll the connection back and answer 500 success:false persisted:false with no audit row. Extended src/tests/oauthDisconnectTruth.test.ts (2 new cases); negative-validated (2 failed | 4 passed on the reverted route); restored 6/6. Full suite 180 files / 2242 passed (36.25s, 0 failed); lint exit 0; build exit 0 (dist/server.cjs 1048205 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true / persistMemory()-discard sweep in server.ts / server_tools.ts."
+  "note": "Slot 9 (00:35 IST fire, 2026-10-08). The /api/chat set_name and create_file cases were the un-fixed siblings of the mobile processMobileCommand path: both called persistMemory() and discarded the boolean, then claimed a durable record ('recorded into my durable memory banks' / 'I have saved your note ... this is stored'). set_name now reports the failed write and still gates recording on judgeSetNameIntent; create_file rolls the note back and reports the failure. New src/tests/chatDurabilityTruth.test.ts (4 cases, real server against a read-only memory file); negative-validated (git stash of server.ts: 4 failed | 0 passed); restored 4/4. Also fixed test-rot in identityTruth.test.ts (fixed 1400-char slice no longer reached the rejected branch; now bounded at the next case label). Full suite 181 files / 2247 passed (37.31s, 0 failed); lint exit 0; build exit 0 (dist/server.cjs 1048807 bytes). Item 13 stays PARTIAL. Next slot: continue the success:true / persistMemory()-discard sweep in server.ts / server_tools.ts."
 }
