@@ -82,4 +82,42 @@ describe('social OAuth disconnect reports the real connection state', () => {
     expect(youtubeHandler).toContain('} else {');
     expect(youtubeHandler).toContain('data.message');
   });
+
+  // A disconnect that never reaches disk is not a disconnect: the process drops
+  // the credential but the next boot reloads it from the pre-disconnect file.
+  // Both routes used to discard persistMemory()'s boolean, write a VERIFIED
+  // "Disconnected" audit row, and answer success:true anyway — a removal that
+  // reverted on restart, logged as confirmed. These assertions pin the durability
+  // check, the rollback, and the honest failure response.
+  const durabilityRoutes = [
+    {
+      path: '/api/auth/linkedin/disconnect',
+      connectionField: 'linkedInConnection',
+      noun: 'account is still connected',
+    },
+    {
+      path: '/api/auth/youtube/disconnect',
+      connectionField: 'youTubeConnection',
+      noun: 'channel is still connected',
+    },
+  ];
+
+  for (const route of durabilityRoutes) {
+    it(`${route.path} only reports success after the removal is durable`, () => {
+      const block = routeBlock(route.path);
+      const persistCheckAt = block.indexOf('if (!persistMemory())');
+      const auditAt = block.indexOf('addAuditLog(');
+      const successAt = block.indexOf('success: true');
+      // The durability check must gate both the audit row and the success reply.
+      expect(persistCheckAt).toBeGreaterThanOrEqual(0);
+      expect(auditAt).toBeGreaterThan(persistCheckAt);
+      expect(successAt).toBeGreaterThan(persistCheckAt);
+      // The failed write must roll the credential back, so the in-process state
+      // matches the durable file, and must answer honestly.
+      expect(block).toContain(`memoryState.${route.connectionField} = connectionBefore;`);
+      expect(block).toContain('persisted: false');
+      expect(block).toContain('success: false');
+      expect(block).toContain(route.noun);
+    });
+  }
 });

@@ -5493,12 +5493,25 @@ app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  // The credential removal is real, so the row stays VERIFIED — but the NAME
-  // must be the one that was recorded, never the `'LinkedIn User'` placeholder
-  // the route used to print when memory held no name.
+  // The NAME must be the one that was recorded, never the `'LinkedIn User'`
+  // placeholder the route used to print when memory held no name.
   const prevMember = disconnectAccountLabel(memoryState.linkedInConnection.name);
+  const connectionBefore = memoryState.linkedInConnection;
   memoryState.linkedInConnection = undefined;
-  persistMemory();
+
+  // The disconnect is only real once the credential removal is durable. A write
+  // that never reaches disk leaves this process "disconnected" while the next
+  // boot reloads the connection — so the route used to log a VERIFIED
+  // "Disconnected" row and answer success:true for a removal that reverted on
+  // restart. Restore the connection and report the failure honestly instead.
+  if (!persistMemory()) {
+    memoryState.linkedInConnection = connectionBefore;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The disconnect could not be written to durable storage; the account is still connected.',
+    });
+  }
 
   addAuditLog(
     `LinkedIn Personal Profile Disconnected (${prevMember})`,
@@ -5948,12 +5961,23 @@ app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  // The credential removal is real, so the row stays VERIFIED — but the NAME
-  // must be the recorded channel title, never the `'YouTube Account'`
+  // The NAME must be the recorded channel title, never the `'YouTube Account'`
   // placeholder the route used to print when the channel was unnamed.
   const prevChannel = disconnectAccountLabel(memoryState.youTubeConnection.channelTitle);
+  const connectionBefore = memoryState.youTubeConnection;
   memoryState.youTubeConnection = undefined;
-  persistMemory();
+
+  // Same durability rule as LinkedIn: the removal is only real once it reaches
+  // disk. A dropped write reverted on the next boot while the audit log already
+  // claimed a VERIFIED disconnection. Restore and report failure honestly.
+  if (!persistMemory()) {
+    memoryState.youTubeConnection = connectionBefore;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The disconnect could not be written to durable storage; the channel is still connected.',
+    });
+  }
 
   addAuditLog(
     `YouTube Channel Disconnected (${prevChannel})`,
