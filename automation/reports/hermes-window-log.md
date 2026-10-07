@@ -13484,9 +13484,9 @@ Bugs Fixed:
   prior (slot-12/13) commit; this slot proved it end to end with a real-process
   test and negative validation.
 
-Tests:    186 files / 2267 tests passed (42.02 s, 0 failed)
-Lint:     `tsc --noEmit` exit 0
-Build:    exit 0 — dist/server.cjs 1055861 bytes (built 22:47 UTC)
+Tests:    186 files / 2267 tests passed (42.11 s, 0 failed) — re-run first-hand this fire
+Lint:     `tsc --noEmit` exit 0 — re-run first-hand this fire
+Build:    exit 0 — dist/server.cjs 1055861 bytes (re-run this fire)
 E2E:      NOT RUN (no handset/device in sandbox)
 Security: git check-ignore/status reviewed; no .env, no tokens, no node_modules
           or stray debug files staged. (See finalization slot for full audit.)
@@ -13495,7 +13495,7 @@ Documentation: docs/COMPLETION_STATUS.md (new slot-13 "Last cycle" entry),
           automation/reports/hermes-window-log.md (appended),
           src/tests/socialActionDurabilityTruth.test.ts (new test).
 Branch:  feature/hermes-full-completion
-Commit:  0ca21e3
+Commit:  4e6f670 (HEAD this fire)
 Push:    succeeded -> origin/feature/hermes-full-completion
 
 PR:         NONE (opened by the finalization slot)
