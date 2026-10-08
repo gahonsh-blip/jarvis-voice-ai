@@ -169,7 +169,11 @@ describe('the durability wiring cannot be quietly dropped', () => {
       serverSource.indexOf("app.post('/api/system/kill-switch'"),
       serverSource.indexOf("app.post('/api/system/resume'"),
     );
-    expect(killSwitchRoute).toMatch(/const persisted = persistEmergencyState\(\);/);
+    // The kill-switch `persisted` is now the conjunction of the latch write and
+    // the termination row landing on disk, so neither can be reported alone.
+    expect(killSwitchRoute).toMatch(/const statePersisted = persistEmergencyState\(\) && emergencyStateOnDisk\(true\);/);
+    expect(killSwitchRoute).toMatch(/const auditPersisted =[\s\S]*?diskHasAuditRow\(killAuditRow\.id\)/);
+    expect(killSwitchRoute).toMatch(/const persisted = statePersisted && auditPersisted;/);
     expect(killSwitchRoute).toMatch(/persisted,/);
 
     const resumeRoute = serverSource.slice(
