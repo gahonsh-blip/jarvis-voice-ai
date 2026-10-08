@@ -36,7 +36,7 @@ import {
   applyPhonePermissionUpdate,
   type PhonePermissionStore,
 } from './src/utils/hardening/phonePermissionStoreTruth';
-import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
+import { classifyTelephonySettingsUpdate, TELEPHONY_SETTING_KEYS } from './src/utils/hardening/telephonySettingsTruth';
 import { classifyTelephonySuiteRun } from './src/utils/hardening/telephonySuiteTruth';
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
@@ -540,6 +540,13 @@ interface MemoryData {
    * request it was shown.
    */
   permissionRequests?: PermissionActionRequest[];
+  /**
+   * The telephony settings the operator saved (provider, greeting, voice rate,
+   * screening flags...). Persisted so a save survives a restart — the settings
+   * route may report a stored setting only once it is durable, or the operator
+   * is told "SAVED" for a change that silently reverts on the next boot.
+   */
+  telephonySettings?: Record<string, unknown>;
 }
 
 /**
@@ -954,6 +961,19 @@ function persistEmergencyState(): boolean {
  */
 function persistApprovalRegistry(): boolean {
   memoryState.permissionRequests = persistedActionRequests();
+  return persistMemory();
+}
+
+/**
+ * Write the live telephony settings to disk. Like the Security Matrix, the
+ * emergency freeze and the approval queue, the settings object lives outside
+ * `memoryState`, so this first copies the live values into
+ * `memoryState.telephonySettings` and then runs the durable write. Returns
+ * whether the settings are on disk — the settings route may report a save only
+ * on `true`, or the operator is told "SAVED" for values the next boot discards.
+ */
+function persistTelephonySettingsState(): boolean {
+  memoryState.telephonySettings = { ...telephonySettingsState };
   return persistMemory();
 }
 
@@ -9238,6 +9258,32 @@ let telephonySettingsState: any = {
   voiceRate: 1.05,
 };
 
+// Restore the settings the operator saved. Without this the module-local state
+// above silently reverted to the compile-time defaults on every boot, so a
+// provider or greeting the settings route reported "SAVED" was gone the next
+// time the process started. Only keys that are real settings and carry a
+// primitive value are adopted, so a hand-edited or legacy file cannot inject an
+// unknown key or a malformed value into the live settings.
+{
+  const stored = memoryState.telephonySettings;
+  if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+    const known = new Set<string>(TELEPHONY_SETTING_KEYS);
+    for (const [key, value] of Object.entries(stored)) {
+      if (!known.has(key)) continue;
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        telephonySettingsState[key] = value;
+      }
+    }
+    // Re-apply the saved engine selection to the live registry, mirroring the
+    // settings route, so a restart serves the engine the operator last chose.
+    if (typeof stored.provider === 'string') {
+      const providerId = telephonyEngineProviderId(stored.provider);
+      if (providerId !== null) TelephonyProviderRegistry.setActiveProvider(providerId);
+    }
+  }
+  memoryState.telephonySettings = { ...telephonySettingsState };
+}
+
 // 1. Get Telephony Calls
 app.get('/api/telephony/calls', (req: Request, res: Response) => {
   res.json({ success: true, calls: telephonyCalls });
@@ -9322,6 +9368,8 @@ app.get('/api/telephony/settings', (req: Request, res: Response) => {
 
 app.post('/api/telephony/settings', (req: Request, res: Response) => {
   try {
+    // Snapshot the live settings so a failed durable write can be rolled back.
+    const previousSettings = { ...telephonySettingsState };
     // The route used to spread any caller-supplied object over the live
     // settings and answer `success: true` unconditionally: an unknown or
     // misspelled key was "stored", a malformed value corrupted state, and a
@@ -9347,6 +9395,33 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
       ...verdict.applied,
     };
 
+    // A stored setting must survive a restart. The live state used to be a
+    // module-local object that was never written to disk, so every "SAVED"
+    // setting (provider, greeting, voice rate...) silently reverted on the next
+    // boot. Write it, and if the write cannot reach disk, roll the change back
+    // and refuse the save rather than announce one that cannot be kept.
+    const persisted = persistTelephonySettingsState();
+    if (!persisted) {
+      telephonySettingsState = {
+        ...telephonySettingsState,
+        ...previousSettings,
+      };
+      memoryState.telephonySettings = { ...telephonySettingsState };
+      return res.status(500).json({
+        success: false,
+        persisted: false,
+        outcome: 'NOT_PERSISTED',
+        applied: false,
+        changed: false,
+        rejected: verdict.rejected,
+        message: 'Telephony settings could not be written to durable storage; they were not saved.',
+        settings: {
+          ...telephonySettingsState,
+          twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',
+        },
+      });
+    }
+
     // Apply the selected engine to the live registry. Without this the
     // selector was decorative: the status endpoint kept reporting whatever
     // TELEPHONY_PROVIDER had set at boot. The result is reported honestly so
@@ -9366,6 +9441,7 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      persisted: true,
       outcome: verdict.changed ? 'APPLIED' : 'UNCHANGED',
       applied: verdict.changed,
       changed: verdict.changed,
