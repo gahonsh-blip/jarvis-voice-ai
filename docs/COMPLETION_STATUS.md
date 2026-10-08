@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 04:35 IST — **FINALIZATION SLOT** of the 2026-10-07 →
+Last cycle: 2026-10-08 21:05 IST — **WORK SLOT 1** of the fresh 2026-10-08 →
+2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the OAuth
+*connect* callbacks announced a connection that could silently not persist.**
+`GET /api/auth/linkedin/callback` and `GET /api/auth/youtube/callback`
+(`server.ts`) stored the freshly-received credential and then **discarded
+`persistMemory()`'s return value**, rendered the green "Connected!" popup, and
+wrote a `VERIFIED` "… Connected via OAuth 2.0" audit row — unconditionally. On a
+read-only volume or full disk the credential never reached
+`jarvis_memory.json`, so the popup (and the audit row) announced a connection the
+next boot does not have. Both callbacks now gate on the durable write: on failure
+they drop the unpersisted credential (`memoryState.linkedInConnection = undefined`
+/ `youTubeConnection = undefined`), **skip the audit row**, and post
+`LINKEDIN_OAUTH_ERROR` / `YOUTUBE_OAUTH_ERROR` to the opener so the Social Media
+Hub shows the connection did not persist. Guarded by
+`src/tests/oauthConnectionDurabilityTruth.test.ts` (source-text assertions, the
+`oauthDisconnectTruth` convention): the guard must exist and precede both the
+`addAuditLog(` and the success popup, the failure branch must drop the credential
+and post the error — and must not contain the success marker.
+Negative-validated: with `server.ts` reverted to its pre-fix shape all 4 new
+tests fail (`persistCheckAt` → −1); restored → 4/4. Gates (observed this fire):
+lint (`tsc --noEmit`) exit 0; targeted `oauthConnectionDurabilityTruth` +
+`oauthDisconnectTruth` 2 files / 10 passed; full suite **188 files / 2274 tests
+passed** (43.97 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs`
+1058989 bytes). E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays
+`PARTIAL` — the sweep is not exhausted (the tail of unclassified `success: true`
+/ discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` remains,
+truthfulness `UNKNOWN`). Hardware-blocked items #1/#2/#50/#55 remain
+`NOT_AVAILABLE`/`PARTIAL`.
+
+Last cycle (previous): 2026-10-08 04:35 IST — **FINALIZATION SLOT** of the 2026-10-07 →
 2026-10-08 window. No new development. Verified the **true remote tip**
 `a0e551b` on `feature/hermes-full-completion` (my working clone had started a
 few commits behind at the stale ancestor `c66cfaa`; the concurrent slot-13

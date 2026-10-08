@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 21:05 IST (2026-10-08 15:36 UTC) — window slot 1: the OAuth *connect* callbacks no longer announce a connection that did not persist
+
+### Fixed
+- **`GET /api/auth/linkedin/callback` and `GET /api/auth/youtube/callback` (`server.ts`) stored the freshly-received credential, discarded `persistMemory()`'s return value, rendered the green "Connected!" popup, and wrote a `VERIFIED` "… Connected via OAuth 2.0" audit row — unconditionally.** On a read-only volume or full disk the credential never reached `jarvis_memory.json`, so the popup and the audit row announced a connection the next boot does not have; the in-process `memoryState.linkedInConnection` / `youTubeConnection` stayed set as a phantom. Both callbacks now gate on the durable write: on failure they drop the unpersisted credential (`memoryState.linkedInConnection = undefined` / `youTubeConnection = undefined`), skip the audit row, and post `LINKEDIN_OAUTH_ERROR` / `YOUTUBE_OAUTH_ERROR` to the opener (`SocialMediaModal`'s existing handler) so the Social Media Hub is told the connection did not persist. This is the *connect* counterpart to the disconnect truth fix of the 2026-10-06 window.
+
+### Tests
+- New `src/tests/oauthConnectionDurabilityTruth.test.ts` (source-text assertions, the `oauthDisconnectTruth` convention). For each callback it pins that the `if (!persistMemory())` guard exists and precedes both the `addAuditLog(` row and the success popup, that the failure branch drops the credential and posts the provider `*_OAUTH_ERROR` type, and that the failure branch contains no success marker. Negative-validated: with `server.ts` reverted to its pre-fix shape all 4 tests fail (`persistCheckAt` → −1); restored → 4/4. Targeted `oauthConnectionDurabilityTruth` + `oauthDisconnectTruth` 2 files / 10 passed. Lint (`tsc --noEmit`) exit 0. Full suite **188 files / 2274 tests passed** (43.97 s, 0 failed). Build exit 0 (`dist/server.cjs` 1058989 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 03:35 IST (2026-10-07 22:35 UTC) — window slot 13 (continued): the duplicate-approval block is now a recorded decision, not a phantom audit id
 
 ### Fixed
