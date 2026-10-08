@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-08",
   "window_started_at": "2026-10-08T15:36:00Z",
-  "last_slot_at": "2026-10-08T17:27:33Z",
-  "slots_completed": 2,
+  "last_slot_at": "2026-10-08T17:47:00Z",
+  "slots_completed": 3,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "c79485d1f9d5c3ee5942342f7bb17ff11746ea8c",
+  "last_commit": "b22a1db",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 2 (22:35 IST fire). Item 13: POST /api/telephony/settings reported SAVED/success:true while telephonySettingsState was module-local and never in memoryState (persistMemory serialized it not at all). Added telephonySettings to MemoryData + persistTelephonySettingsState(); boot restore of saved settings/engine; route now returns 500/NOT_PERSISTED and rolls back on failed write. New telephonySettingsDurabilityTruth.test.ts (7 cases, real server + restart + read-only file), negative-validated (2/7 fail without fix). Gates: lint 0, targeted 2 files/18 passed, full suite 189 files/2281 passed (0 failed), build exit 0 (dist/server.cjs 1060724 bytes). Next slot: continue classifying remaining discarded-persistMemory()/success:true sites in server.ts/server_tools.ts."
+  "note": "Slot 3 (23:05 IST fire). Item 13: telephony call-history routes (POST/DELETE /api/telephony/calls, DELETE /api/telephony/calls/:id) mutated module-local telephonyCalls and reported success, but the array was never in memoryState (persistMemory serialized it not at all); calls/deletions reverted on boot. Added telephonyCallRecords to MemoryData + persistTelephonyCalls(); boot hydration; routes now gate success on the durable write and answer 500/NOT_PERSISTED with rollback. New telephonyCallDurabilityTruth.test.ts (9 cases, real server + restart + read-only file), negative-validated (3/9 fail without fix). Gates: lint 0, targeted 3 files/30 passed, full suite 190 files/2290 passed (0 failed), build exit 0 (dist/server.cjs 1062574 bytes). Commits f738302 (fix), 6a107bd/docs, b22a1db/report. Next slot: continue classifying remaining discarded-persistMemory()/success:true sites in server.ts/server_tools.ts."
 }
