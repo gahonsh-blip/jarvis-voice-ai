@@ -13696,3 +13696,59 @@ Next Slot:
 **PR #6** (feature/hermes-full-completion → main): open, non-draft, `mergeable: true`, head `c0c889f`, `mergeable_state: unstable`. CI check `typecheck · tests · build` is red, but the job ran 2026-10-07T23:03:26Z→23:03:28Z (2 s) with **zero steps** and no logs (`BlobNotFound`) — an infrastructure/billing startup failure, not a code failure. Local gates are green on the same commit.
 
 **Main merge: NOT MERGED — awaiting human approval.** Item 13 stays PARTIAL (the `persistMemory()` discard-site sweep is not exhausted).
+
+---
+
+## 2026-10-08 21:05 IST — window slot 1 (fresh 2026-10-08 → 2026-10-09 window)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:05
+Window date: 2026-10-08   Window slots completed so far: 1
+
+Clock note: the sandbox read `21:06` IST at run start, matching the `21:05` fire. The previous window (2026-10-07 → 2026-10-08) is `finalized: true` on `automation/hermes-state`; today is 2026-10-08 IST, so this run is **slot 1 of a fresh window** (idempotency guard evaluated: not a re-run).
+
+Completed:
+- #13 `Zero-fake-success for all tools` (slice: social OAuth **connect** durability) — the OAuth connect callbacks announced a connection that could silently not persist. Evidence: `server.ts` `GET /api/auth/linkedin/callback` and `GET /api/auth/youtube/callback`; new test `src/tests/oauthConnectionDurabilityTruth.test.ts` (4/4 passed); negative-validated (server.ts reverted → 4 failed, restored → 4/4).
+
+In Progress:
+- #13 `Zero-fake-success for all tools` — the sweep is not exhausted; the tail of unclassified `persistMemory()`-discard / `success: true` sites in `server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`.
+
+Remaining:
+- #13 tail classification (the next slot's pick). Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`.
+
+Bugs Found:
+- `GET /api/auth/{linkedin,youtube}/callback` (`server.ts`) stored the freshly-received OAuth credential and then **discarded `persistMemory()`'s return value**, rendered the green "Connected!" popup, and wrote a `VERIFIED` "… Connected via OAuth 2.0" audit row — unconditionally. Found by continuing the item-13 fake-success audit from prior windows' records (the connect counterpart to the 2026-10-06 disconnect truth fix). On a read-only volume or full disk the credential never reached `jarvis_memory.json`, so the popup and audit row announced a connection the next boot does not have, and the in-process `memoryState.linkedInConnection` / `youTubeConnection` stayed set as a phantom.
+
+Bugs Fixed:
+- Both callbacks now gate on the durable write. On failure they drop the unpersisted credential (`memoryState.linkedInConnection = undefined` / `youTubeConnection = undefined`), skip the audit row, and post `LINKEDIN_OAUTH_ERROR` / `YOUTUBE_OAUTH_ERROR` to the opener (an existing `SocialMediaModal` handler) so the Social Media Hub is told the connection did not persist. Verification that proves it: `src/tests/oauthConnectionDurabilityTruth.test.ts` asserts the `if (!persistMemory())` guard exists and precedes both `addAuditLog(` and the success popup, that the failure branch drops the credential and emits the provider `*_OAUTH_ERROR` type, and that the failure branch contains no success marker. Negative-validated: with `server.ts` reverted to its pre-fix shape all 4 tests fail (`persistCheckAt` → −1); restored → 4/4.
+
+Tests:    2 files / 10 passed targeted (`oauthConnectionDurabilityTruth` + `oauthDisconnectTruth`); full suite 188 files / 2274 tests passed (43.97 s, 0 failed)
+Lint:     pass — `tsc --noEmit` exit 0
+Build:    pass — `npm run build` exit 0; `dist/server.cjs` 1058989 bytes
+E2E:      NOT RUN — no handset / emulator / display session
+Security: `git check-ignore -v .env` → `.gitignore:4:.env`; working tree clean (reverted the suite's tracked `jarvis_memory.json` hydration); token/key scan of the diff vs `origin/main` returned no match; nothing from `node_modules/` or `dist/` staged
+
+Documentation: `docs/COMPLETION_STATUS.md` (new "Last cycle" entry), `docs/CHANGELOG.md` (new Unreleased entry)
+Branch:  feature/hermes-full-completion
+Commit:  9beaa68 (fix + test), b9a6dc3 (docs)
+Push:    succeeded → origin/feature/hermes-full-completion (9beaa68, b9a6dc3)
+
+PR:         #6 (opened in the previous window) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/6
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present in this environment; the verified artifact is the deployment unit available
+
+Blocked:
+- #1/#2 Android Bridge / Real Android E2E — require a physical handset + emulator
+- #50 Real Screenshot — requires a display/device session
+- #55 — requires a physical device
+
+Human Approval Required:
+- Approve/merge PR #6 to `main` after reading the report (never auto-merged)
+- Resolve the GitHub account billing lock so CI can actually run (previous window: CI red for infrastructure only)
+- Decide on the 5 pre-existing `npm audit` transitive findings (1 critical `proxy-addr`, 1 high `source-map-js`, 3 moderate) — not touched this slot
+
+Next Slot:
+- Continue item 13: classify the remaining `persistMemory()`-discard `success: true` sites in `server.ts` / `server_tools.ts` and convert a further slice to honest durable-write reporting.
+
+हिंदी सारांश (एक पंक्ति):
+- OAuth connect callbacks (LinkedIn/YouTube) अब "Connected!" popup और VERIFIED audit row सिर्फ़ durable write सफल होने पर दिखाते हैं; नया टेस्ट पास, lint/test/build हरे (188 फ़ाइलें / 2274 टेस्ट)।
