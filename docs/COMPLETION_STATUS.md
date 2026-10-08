@@ -4,7 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 23:05 IST — **WORK SLOT 3** of the 2026-10-08 →
+Last cycle: 2026-10-09 00:05 IST — **WORK SLOT 4** of the 2026-10-08 →
+2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the social
+*draft-staging audit row* was reported as durable while it never reached disk.**
+`POST /api/social/generate` (`server.ts`) appended its Level-2 staging audit row
+with `pushAuditEntry()` **after** calling `persistMemory()`, so the row was never
+serialized into `jarvis_memory.json`: it lived only in the process's
+`memoryState.auditLogs` and vanished on the next boot, yet the route answered
+`{ success: true, persisted: true }`. The existing durability test read the row
+back through the *same* process's `/api/security`, so an in-memory row satisfied
+it and the disk defect went unnoticed. The fix appends the row **before** the
+durable write and gates success on both the write result and a new
+`diskHasAuditRow(id)` helper that reads the memory file and confirms the row id is
+actually present; a write that never reaches disk rolls back the draft *and* the
+audit row and answers HTTP 500 `success: false, persisted: false`. Guarded by
+`src/tests/socialDraftAuditDurabilityTruth.test.ts` (real server on a temp memory
+file: the row is present in the memory file on disk, the row survives a real
+restart, an unwritable volume is refused with the draft and row rolled back, plus
+a source-order guard) and the existing `socialDraftDurabilityTruth` source guard
+was strengthened to the new condition. Negative-validated: reverting `server.ts`
+to HEAD fails 2 of 4 new cases (the on-disk row check and the source-order guard);
+restored → 4/4. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted `socialDraftAuditDurabilityTruth` + `socialDraftDurabilityTruth` +
+`socialGenerationTruth` 3 files / 17 passed; full suite **191 files / 2294 tests
+passed** (49.13 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1063043
+bytes). E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL`
+— the sweep is not exhausted (the tail of unclassified `success: true` /
+discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` remains,
+truthfulness `UNKNOWN`). Hardware-blocked items #1/#2/#50/#55 remain
+`NOT_AVAILABLE`/`PARTIAL`.
+
+Last cycle (previous): 2026-10-08 23:05 IST — **WORK SLOT 3** of the 2026-10-08 →
 2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the telephony
 *call-history* routes reported a saved call that never reached disk.**
 `POST /api/telephony/calls`, `DELETE /api/telephony/calls` and

@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 00:05 IST (2026-10-08 18:35 UTC) — window slot 4: the social *draft-staging audit row* is now durable before success is reported
+
+### Fixed
+- **`POST /api/social/generate` (`server.ts`) appended its Level-2 staging audit row with `pushAuditEntry()` *after* calling `persistMemory()`, so the row was never serialized into `jarvis_memory.json` and vanished on the next boot — yet the route answered `{ success: true, persisted: true }`.** The existing durability test read the row back through the *same* process's `/api/security`, so an in-memory row satisfied it and the disk defect went unnoticed. The route now appends the row **before** the durable write and gates success on both the write result and a new `diskHasAuditRow(id)` helper that reads the memory file and confirms the row id is actually present. A write that never reaches disk rolls back the draft *and* the audit row and answers HTTP 500 `success: false, persisted: false`.
+
+### Tests
+- New `src/tests/socialDraftAuditDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file): the staging row is present in the memory file on disk, it survives a real restart, an unwritable volume is refused with the draft and the row rolled back, plus a source-order guard. The existing `socialDraftDurabilityTruth` source guard was strengthened to the new condition. Negative-validated: reverting `server.ts` to HEAD fails 2 of 4 new cases; restored → 4/4. Targeted `socialDraftAuditDurabilityTruth` + `socialDraftDurabilityTruth` + `socialGenerationTruth` 3 files / 17 passed. Lint (`tsc --noEmit`) exit 0. Full suite **191 files / 2294 tests passed** (49.13 s, 0 failed). Build exit 0 (`dist/server.cjs` 1063043 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 23:05 IST (2026-10-08 17:36 UTC) — window slot 3: the telephony *call-history* routes no longer report a saved call that never reached disk
 
 ### Fixed
