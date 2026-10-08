@@ -5583,7 +5583,34 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       scopes: grantedScopes,
       accessToken,
     };
-    persistMemory();
+    // A connection is real only once the credential is durable. A write that
+    // never reaches disk (read-only volume, full disk) leaves this process
+    // "connected" while the next boot has no account — so the route used to
+    // discard persistMemory()'s return value and always render the "Connected!"
+    // popup for a grant that was silently lost on restart. Gate on the durable
+    // write, drop the unpersisted credential, and render the failure popup so
+    // the UI is told the connection did not persist.
+    if (!persistMemory()) {
+      memoryState.linkedInConnection = undefined;
+      const persistErr = 'The LinkedIn connection could not be written to durable storage; it was not saved.';
+      res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>LinkedIn Not Saved</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 480px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">❌ LinkedIn Not Saved</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${persistErr}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'LINKEDIN_OAUTH_ERROR', error: ${JSON.stringify(persistErr)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+      return;
+    }
 
     // Log security audit entry
     addAuditLog(
@@ -5954,7 +5981,34 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       accessToken,
       refreshToken,
     };
-    persistMemory();
+    // A connection is real only once the credential is durable. A write that
+    // never reaches disk (read-only volume, full disk) leaves this process
+    // "connected" while the next boot has no channel — so the route used to
+    // discard persistMemory()'s return value and always render the "Connected!"
+    // popup for a grant that was silently lost on restart. Gate on the durable
+    // write, drop the unpersisted credential, and render the failure popup so
+    // the UI is told the connection did not persist.
+    if (!persistMemory()) {
+      memoryState.youTubeConnection = undefined;
+      const persistErr = 'The YouTube connection could not be written to durable storage; it was not saved.';
+      res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>YouTube Not Saved</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 480px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">❌ YouTube Not Saved</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${persistErr}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'YOUTUBE_OAUTH_ERROR', error: ${JSON.stringify(persistErr)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+      return;
+    }
 
     addAuditLog(
       `YouTube Channel Connected via OAuth 2.0 (${channelDisplay} - ${channelId || 'Authenticated'})`,
