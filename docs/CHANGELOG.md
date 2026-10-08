@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 00:35 IST (2026-10-08 19:05 UTC) — window slot 5: the emergency stop no longer reports a durable, verified freeze whose latch or audit row never reached disk
+
+### Fixed
+- **`POST /api/emergency/toggle` (`server.ts`) reported the safety freeze as held (`persisted: true`) and wrote a Level-4 `EMERGENCY STOP ACTIVATED … VERIFIED` audit row while gating only on `persistMemory()`, which returns `true` without writing when the file already holds identical bytes — and `persisted` was computed from the flag flip, not from storage at all.** So a transition could be reported as a durable, audited freeze while neither the `emergencyPaused` latch nor the activation row reached `jarvis_memory.json`. The route now derives a single durability verdict by reading both back from disk: a new `emergencyStateOnDisk(expected)` helper parses the memory file and confirms the latch, and the existing `diskHasAuditRow(id)` confirms the appended row; `persisted` is `statePersisted && auditPersisted`. An engagement whose writes did not land is refused with HTTP 500 `success: false, persisted: false` and the row rolled back; the latch is deliberately kept in memory so a disk error never silently un-freezes the system.
+
+### Tests
+- New `src/tests/emergencyToggleDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file): the latch *and* the activation row are present in the memory file on disk, both survive a real restart, a read-only volume is refused with the row rolled back, plus a source guard. Negative-validated: reverting `server.ts` to HEAD fails 5 of 7 new cases; restored → 7/7. Targeted `emergencyToggleDurabilityTruth` + `emergencyToggleRouteTruth` 2 files / 16 passed. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 1063892 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-09 00:05 IST (2026-10-08 18:35 UTC) — window slot 4: the social *draft-staging audit row* is now durable before success is reported
 
 ### Fixed

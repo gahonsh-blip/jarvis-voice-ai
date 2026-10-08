@@ -4,7 +4,38 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 00:05 IST — **WORK SLOT 4** of the 2026-10-08 →
+Last cycle: 2026-10-09 00:35 IST — **WORK SLOT 5** of the 2026-10-08 →
+2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the
+emergency-stop route reported the safety freeze as held (`persisted: true`) and
+wrote a Level-4 `EMERGENCY STOP ACTIVATED … VERIFIED` audit row while gating only
+on `persistMemory()`.** `POST /api/emergency/toggle` (`server.ts`) trusted the
+`persistMemory()` boolean — which returns `true` without writing when the file
+already holds identical bytes — and its honesty did not depend on the state write
+at all: `persisted` was computed from the flag flip, not from storage. So a
+transition could be reported as a durable, verified freeze while neither the
+`emergencyPaused` latch nor the activation row reached `jarvis_memory.json`. The
+fix reads both back from disk: a new `emergencyStateOnDisk(expected)` helper
+parses the memory file and confirms the latch, and the existing
+`diskHasAuditRow(id)` confirms the appended row; `persisted` is
+`statePersisted && auditPersisted`. An engagement whose writes did not land is
+refused with HTTP 500 `success: false, persisted: false` and the row rolled back;
+the latch is deliberately kept in memory so a disk error never silently
+un-freezes the system. Guarded by
+`src/tests/emergencyToggleDurabilityTruth.test.ts` (real `tsx server.ts` process
+on a temp memory file: the latch *and* the activation row are in the memory file
+on disk, both survive a real restart, a read-only volume is refused with the row
+rolled back, plus a source guard). Negative-validated: reverting `server.ts` to
+HEAD fails 5 of 7 new cases; restored → 7/7. Gates (observed this fire): lint
+(`tsc --noEmit`) exit 0; targeted `emergencyToggleDurabilityTruth` +
+`emergencyToggleRouteTruth` 2 files / 16 passed; full suite 192 files / 2301 tests
+passed (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1063892 bytes). E2E:
+NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep
+is not exhausted (the tail of unclassified `success: true` /
+discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` remains,
+truthfulness `UNKNOWN`). Hardware-blocked items #1/#2/#50/#55 remain
+`NOT_AVAILABLE`/`PARTIAL`.
+
+Last cycle (previous): 2026-10-09 00:05 IST — **WORK SLOT 4** of the 2026-10-08 →
 2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the social
 *draft-staging audit row* was reported as durable while it never reached disk.**
 `POST /api/social/generate` (`server.ts`) appended its Level-2 staging audit row
