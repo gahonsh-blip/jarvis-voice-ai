@@ -4,7 +4,40 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 22:35 IST — **WORK SLOT 2** of the 2026-10-08 →
+Last cycle: 2026-10-08 23:05 IST — **WORK SLOT 3** of the 2026-10-08 →
+2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the telephony
+*call-history* routes reported a saved call that never reached disk.**
+`POST /api/telephony/calls`, `DELETE /api/telephony/calls` and
+`DELETE /api/telephony/calls/:id` (`server.ts`) mutated the module-local
+`telephonyCalls` array and answered `success: true` / a removed count, but the
+array was never part of `memoryState`, so `persistMemory()` serialized it *not at
+all*: every recorded call and every deletion silently reverted on the next boot
+while the UI was told it was saved. This is the same defect class as the slot-2
+settings route, on the sibling array. The fix adds `telephonyCallRecords` to
+`MemoryData` and a `persistTelephonyCalls()` helper (copies the live array into
+`memoryState` before the durable write and returns the write result), hydrates the
+history on boot (adopting only plain-object entries with string ids), snapshots
+the previous array before each mutation, and **gates success on the durable
+write**: on a failed write the mutation is rolled back and the route answers HTTP
+500 `success: false, persisted: false, outcome: 'NOT_PERSISTED'`. Guarded by
+`src/tests/telephonyCallDurabilityTruth.test.ts` (9 cases against a **real server
+process** on a temp memory file: a recorded call reports `persisted: true` and is
+present in the memory file on disk, it survives a real restart, a deletion reports
+the real removed count and is gone from disk, and a read-only-file write is
+refused with HTTP 500 and the live array rolled back). Negative-validated: with
+`persistTelephonyCalls()` stubbed to `return true`, 3 of 9 fail (on-disk write,
+restart survival, refused unpersistable write); restored → 9/9. Gates (observed
+this fire): lint (`tsc --noEmit`) exit 0; targeted
+`telephonyCallDurabilityTruth` + `telephonyCallDeleteTruth` +
+`telephonyCallRecordTruth` 3 files / 30 passed; full suite **190 files / 2290
+tests passed** (47.82 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs`
+1062574 bytes). E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays
+`PARTIAL` — the sweep is not exhausted (the tail of unclassified `success: true` /
+discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` remains,
+truthfulness `UNKNOWN`). Hardware-blocked items #1/#2/#50/#55 remain
+`NOT_AVAILABLE`/`PARTIAL`.
+
+Last cycle (previous): 2026-10-08 22:35 IST — **WORK SLOT 2** of the 2026-10-08 →
 2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the telephony
 settings route reported a `SAVED` that never reached disk.**
 `POST /api/telephony/settings` (`server.ts`) copied the accepted fields onto the

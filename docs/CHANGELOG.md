@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 23:05 IST (2026-10-08 17:36 UTC) — window slot 3: the telephony *call-history* routes no longer report a saved call that never reached disk
+
+### Fixed
+- **`POST /api/telephony/calls`, `DELETE /api/telephony/calls` and `DELETE /api/telephony/calls/:id` (`server.ts`) mutated the module-local `telephonyCalls` array and answered `success: true` / a removed count, but the array was never part of `memoryState`.** `persistMemory()` serialized it not at all: every recorded call and every deletion silently reverted on the next boot while the UI was told it was saved. Same defect class as the slot-2 settings route, on the sibling array. `telephonyCallRecords` is now part of `MemoryData`, `persistTelephonyCalls()` copies the live array into `memoryState` before the durable write and returns the write result, and the boot path hydrates the history (adopting only plain-object entries with string ids). Each mutating route snapshots the previous array, runs the durable write, rolls back and answers HTTP 500 `success: false, persisted: false, outcome: 'NOT_PERSISTED'` when the write cannot reach disk, and reports the real removed count.
+
+### Tests
+- New `src/tests/telephonyCallDurabilityTruth.test.ts` (9 cases against a real `tsx server.ts` process on a temp memory file): a recorded call reports `persisted: true` and is present in the memory file on disk, it survives a real restart, a deletion reports the real removed count and is gone from disk, and a read-only-file write is refused with HTTP 500 and the live array rolled back. Negative-validated: with `persistTelephonyCalls()` stubbed to `return true`, 3 of 9 fail; restored → 9/9. Targeted `telephonyCallDurabilityTruth` + `telephonyCallDeleteTruth` + `telephonyCallRecordTruth` 3 files / 30 passed. Lint (`tsc --noEmit`) exit 0. Full suite **190 files / 2290 tests passed** (47.82 s, 0 failed). Build exit 0 (`dist/server.cjs` 1062574 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 22:35 IST (2026-10-08 17:06 UTC) — window slot 2: the telephony settings route no longer reports a `SAVED` that never reached disk
 
 ### Fixed
