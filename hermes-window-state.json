@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-08",
   "window_started_at": "2026-10-08T15:36:00Z",
-  "last_slot_at": "2026-10-08T20:35:00Z",
-  "slots_completed": 6,
+  "last_slot_at": "2026-10-08T21:26:00Z",
+  "slots_completed": 7,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "b4efd40",
+  "last_commit": "c33c82e",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 6 (02:05 IST fire). Item 13: POST /api/system/kill-switch engaged the freeze and wrote its Level-4 GLOBAL KILL SWITCH TRIGGERED ... VERIFIED audit row, but the row was only pushed to memoryState.auditLogs (never explicitly persisted) and the route trusted persistEmergencyState()'s boolean, which returns true without writing on identical bytes. Now emergencyStateOnDisk(true) confirms the latch and diskHasAuditRow(killAuditRow.id) confirms the row; persisted = statePersisted && auditPersisted. A real engagement whose writes did not land is refused with HTTP 500, the phantom row rolled back, the Telegram notice suppressed, and the latch kept in memory. New killSwitchDurabilityTruth.test.ts (real server + restart + read-only file + no-op re-engagement + source guard). Negative-validated (2/8 fail on neuter). Gates: lint 0; targeted 2 files/17 passed; full suite 193 files/2309 passed (0 failed); build exit 0 (dist/server.cjs 1064713 bytes). Commits 10721dd (fix), 13eb110 (test align), b4efd40 (docs)."
+  "note": "Slot 7 (02:35 IST fire). Item 13: POST /api/system/resume computed persisted from the raw persistEmergencyState() boolean (returns true without writing on identical bytes) and never read the cleared latch or the appended SYSTEM RESUMED ... VERIFIED row back from disk; a non-durable release could be reported and the Telegram resumption notice sent while the next boot still read the freeze as engaged, and the phantom row was never rolled back. Now emergencyStateOnDisk(false) confirms the cleared latch and diskHasAuditRow(auditRow.id) confirms the row; a non-durable release is refused with HTTP 500 and the row rolled back; the notice is sent only for a durable release. New resumeDurabilityTruth.test.ts (real server + restart + source guard); emergencyStateDurabilityTruth guard re-pinned. Also fixed a test-harness defect: five durability suites shared listen ports and, with vitest running files in parallel, the second binder's requests hit the first file's server (telephonyCallDurabilityTruth and emergencyStateDurabilityTruth both bound 4793, failing 3/4 only when run together); ports reassigned to unique 4813/4815/4816/4817/4818. Negative-validated resume fix (revert server.ts -> 4/6 fail). Gates: lint 0; targeted 3 files/19 passed; full suite 194 files/2315 passed (0 failed); build exit 0 (dist/server.cjs 1065295 bytes). Commits f0114ac (fix), b72d5e3 (test ports), c33c82e (docs)."
 }
