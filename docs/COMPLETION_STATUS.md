@@ -7839,12 +7839,15 @@ passed** (25.37 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs`
 ## Known limitations
 
 - **Finalization slot, 2026-10-09 04:35 IST — window 2026-10-08/09 closed; no
-  new backlog item was advanced.** Froze and re-verified the tip `dea9193` on
+  new backlog item was advanced.** Froze and re-verified the tip `abbd2ec` on
   `feature/hermes-full-completion` — the output of **9 work slots** (55 files,
-  +10635/−206 vs `main`). Observed this slot: `npm run lint` (`tsc --noEmit`)
-  exit 0; full `npx vitest run` **196 files / 2328 tests passed** (65.24 s,
-  0 failed); `npm run build` exit 0 with artifact `dist/server.cjs` **1069266
-  bytes**. Security: `git check-ignore -v .env` → `.gitignore:4:.env`;
+  +10635/−206 vs `main`). A concurrent slot pushed `110f9c8`
+  (`test(harness): give approvalResolveDurabilityTruth its own port`) mid-run, so
+  this commit was rebased onto it (no force-push, no history rewrite) and every
+  gate was re-run on the true tip `abbd2ec`. Observed this slot: `npm run lint`
+  (`tsc --noEmit`) exit 0; full `npx vitest run` **196 files / 2328 tests passed**
+  (63.28 s, 0 failed); `npm run build` exit 0 with artifact `dist/server.cjs`
+  **1069266 bytes**. Security: `git check-ignore -v .env` → `.gitignore:4:.env`;
   `git status --short` clean (the suite's hydration of `jarvis_memory.json` was
   reverted); the diff-vs-main credential-pattern scan (55 files) matched
   nothing; no `.env`, token, key, `node_modules/` or `dist/` tracked or staged.

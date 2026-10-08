@@ -14105,8 +14105,12 @@ Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --shor
 Documentation: automation/reports/hermes-window-log.md (this section);
                docs/COMPLETION_STATUS.md "Known limitations"
 Branch:  feature/hermes-full-completion
-Commit:  dea9193 (verified tip) + this report's docs commit
-Push:    succeeded → origin/feature/hermes-full-completion
+Commit:  abbd2ec (verified tip after rebase) — dea9193 was the observed tip at
+         first verification; a concurrent slot pushed 110f9c8
+         (test(harness): give approvalResolveDurabilityTruth its own port) during
+         this run, so this commit was rebased onto it (no force-push, no history
+         rewrite) and every gate was re-run on the true tip abbd2ec.
+Push:    succeeded → origin/feature/hermes-full-completion (110f9c8..abbd2ec)
 
 PR:         #6 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/6
             open, non-draft, mergeable: true, mergeable_state: unstable (CI only)
