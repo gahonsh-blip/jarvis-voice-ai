@@ -968,6 +968,23 @@ function emergencyStateOnDisk(expected: boolean): boolean {
 }
 
 /**
+ * True only when the approval request `id` is present in the memory file on disk
+ * with the expected terminal status. `persistMemory()` can return true without
+ * writing when the file already holds the identical bytes, so a route that
+ * reports a decision as durable must read the request back rather than trust the
+ * boolean. A missing request is treated as not durable.
+ */
+function actionRequestStatusOnDisk(id: string, expected: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const rows: any[] = Array.isArray(onDisk.permissionRequests) ? onDisk.permissionRequests : [];
+    return rows.some((r) => r?.id === id && r?.status === expected);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Write the Security Matrix gates to disk. The matrix lives outside `memoryState`,
  * so this first copies the live gates into `memoryState.securityMatrix` and then
  * runs the durable write. Returns whether the gates are on disk — the update route
@@ -7186,7 +7203,7 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       // audit entry or answer success for a resolution that never happened.
       return res.status(404).json({ success: false, error: `No pending action request with id ${id}.` });
     }
-    pushAuditEntry({
+    const rejectAuditRow: AuditLogEntry = {
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `REJECTED Action "${updated?.exactAction || id}" by ${approver}`,
@@ -7195,14 +7212,37 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       status: 'REJECTED',
       verificationStatus: 'STANDBY',
       finalTruthState: 'REJECTED',
-    });
+    };
+    pushAuditEntry(rejectAuditRow);
     // The decision must survive a restart, or a reboot would resurrect the
-    // rejected request as pending again. A write that cannot reach disk is
-    // reported rather than hidden behind an unconditional success.
-    const persisted = persistApprovalRegistry();
+    // rejected request as pending again. The registry lives outside `memoryState`,
+    // and `persistMemory()` can return true without writing when the file already
+    // holds identical bytes, so the REJECTED status is read back from disk rather
+    // than trusting the write boolean. A decision that cannot reach disk is
+    // refused (HTTP 500) and rolled back — the request is restored to
+    // PENDING_APPROVAL and the phantom audit row removed, so a later successful
+    // persist (for any other reason) cannot write a rejection that was reported
+    // as failed to disk.
+    const persisted = persistApprovalRegistry() && actionRequestStatusOnDisk(id, 'REJECTED');
+    if (!persisted) {
+      const liveReq = getAllActionRequests().find((r) => r.id === id);
+      if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+      // `persistApprovalRegistry` copied the rejected snapshot into
+      // `memoryState.permissionRequests` before the write failed, so resync it
+      // from the restored live registry — otherwise a later unrelated
+      // `persistMemory()` would write the phantom rejection to disk.
+      memoryState.permissionRequests = persistedActionRequests();
+      memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== rejectAuditRow.id);
+      return res.status(500).json({
+        success: false,
+        persisted: false,
+        request: updated,
+        error: 'The rejection could not be written to durable storage; it was not recorded.',
+      });
+    }
     return res.json({
       success: true,
-      persisted,
+      persisted: true,
       request: updated,
       message: 'Action rejected and cancelled safely.',
     });
@@ -7274,7 +7314,7 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       resolvedBy: approver,
     });
 
-    pushAuditEntry({
+    const auditRow = pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `${resolution.executed ? 'EXECUTED' : 'UNCONFIRMED'} Approved Action: ${targetReq.exactAction} on ${targetReq.target}`,
@@ -7288,12 +7328,38 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
     });
 
     // The terminal decision must be durable; an unpersisted approval would let a
-    // reboot re-offer the same request for execution. A write that cannot reach
-    // disk is named in `persisted` rather than reported as a clean success.
-    const persisted = persistApprovalRegistry();
+    // reboot re-offer the same request for execution. As with the REJECT branch,
+    // the registry lives outside `memoryState` and `persistMemory()` can return
+    // true without writing, so the request's terminal status is read back from
+    // disk rather than trusting the write boolean. If the terminal decision
+    // cannot be confirmed on disk, the response must not present it as recorded:
+    // the status reverts to PENDING_APPROVAL (the pre-decision state), the
+    // phantom audit row is removed, and the outcome is reported as UNPERSISTED
+    // with HTTP 500 — so the operator is never told a decision landed that the
+    // next boot would discard. The external action itself, if any, already ran
+    // and is reported by `executionResult`; only the durability claim is refused.
+    const terminalStatus = resolution.executed ? 'EXECUTED' : 'FAILED';
+    const persisted = persistApprovalRegistry() && actionRequestStatusOnDisk(id, terminalStatus);
+    if (!persisted) {
+      const liveReq = getAllActionRequests().find((r) => r.id === id);
+      if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+      // Resync the persisted copy, which `persistApprovalRegistry` set to the
+      // terminal snapshot before the failed write.
+      memoryState.permissionRequests = persistedActionRequests();
+      memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== auditRow.id);
+      return res.status(500).json({
+        success: false,
+        persisted: false,
+        recorded: false,
+        request: getAllActionRequests().find((r) => r.id === id) ?? updated,
+        executionResult,
+        outcome: 'UNPERSISTED',
+        error: 'The decision could not be written to durable storage; it was not recorded as a terminal decision.',
+      });
+    }
     res.json({
       success: resolution.executed,
-      persisted,
+      persisted: true,
       request: updated,
       executionResult,
       outcome: resolution.outcome,
