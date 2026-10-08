@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-08",
   "window_started_at": "2026-10-08T15:36:00Z",
-  "last_slot_at": "2026-10-08T18:49:00Z",
-  "slots_completed": 4,
+  "last_slot_at": "2026-10-08T19:22:02Z",
+  "slots_completed": 5,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "035b16d",
+  "last_commit": "662ea74",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 4 (00:05 IST fire). Item 13: POST /api/social/generate pushed its Level-2 staging audit row AFTER persistMemory(), so the row never reached jarvis_memory.json and was lost on restart while the route answered persisted:true. Now the row is appended before the durable write and success is gated on persistMemory() AND diskHasAuditRow(id). New socialDraftAuditDurabilityTruth.test.ts (real server + restart + read-only file + source-order guard). Negative-validated (2/4 fail on revert). Gates: lint 0; targeted 3 files/17 passed; full suite 191 files/2294 passed (0 failed); build exit 0 (dist/server.cjs 1063043 bytes). Commits 3b53c2c (fix), 035b16d (docs)."
+  "note": "Slot 5 (00:35 IST fire). Item 13: POST /api/emergency/toggle reported the safety freeze as held (persisted:true) and wrote a Level-4 EMERGENCY STOP ACTIVATED ... VERIFIED audit row while gating only on persistMemory(), which returns true without writing on identical bytes; persisted was derived from the flag flip, not storage. Now both the latch (emergencyStateOnDisk) and the appended row (diskHasAuditRow) are read back from disk; an engagement whose writes did not land is refused with HTTP 500 and the row rolled back, latch kept in memory. New emergencyToggleDurabilityTruth.test.ts (real server + restart + read-only file + source guard). Negative-validated (5/7 fail on revert). Gates: lint 0; targeted 2 files/16 passed; full suite 192 files/2301 passed (0 failed); build exit 0 (dist/server.cjs 1063892 bytes). Commits e6b5f0a (fix), 662ea74 (docs)."
 }
