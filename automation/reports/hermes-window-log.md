@@ -13953,3 +13953,17 @@ Commits: 3b53c2c (fix), 035b16d (docs). Branch:
 - Item 13 stays `PARTIAL`: unclassified `success: true` / discarded-`persistMemory()` sites remain in `server.ts` / `server_tools.ts`.
 
 हिंदी सारांश: रिज़्यूम रूट अब डिस्क रीड-बैक के बाद ही स्थायी रिलीज़ बताता है (रिवर्ट पर 4/6 फेल), और पाँच टेस्ट-पोर्ट टकराव ठीक किए; पूरी सूट 2315 पास।
+
+---
+
+## Slot 2026-10-09 03:05 IST — WORK SLOT 8 (window 2026-10-08)
+
+**Item 13 (`Zero-fake-success for all tools`) — approval resolve route.** `POST /api/approvals/resolve` reported both the REJECT and the APPROVE decision as durable from `persistApprovalRegistry()`'s boolean — which is `true` whenever `persistMemory()` returns `true`, and `persistMemory()` returns `true` without writing when the memory file already holds identical bytes. A decision that never reached `jarvis_memory.json` could answer `success: true, persisted: true` while the next boot resurrected the request as `PENDING_APPROVAL`. Fix: both branches now read the terminal status back from disk — `actionRequestStatusOnDisk(id, 'REJECTED')` / `actionRequestStatusOnDisk(id, terminalStatus)`; on absence the decision is refused with HTTP 500, the request is rolled back to `PENDING_APPROVAL`, the phantom audit row is dropped, and `memoryState.permissionRequests` is resynced so a later unrelated `persistMemory()` cannot write the phantom decision either. The APPROVE branch reports `outcome: 'UNPERSISTED'` / `recorded: false`. New `src/tests/approvalResolveDurabilityTruth.test.ts` (real `tsx server.ts`, temp memory file made read-only, real restart, source guard).
+
+- Tests: full suite **195 files / 2322 passed** (0 failed, 61.64 s). Negative-validated: run the new suite against the pre-fix `server.ts` from HEAD → **4 of 7 fail** (HTTP 200 fake-success instead of 500); restored → 7/7.
+- Lint: `tsc --noEmit` exit 0. Build: exit 0 (`dist/server.cjs` 1067091 bytes).
+- E2E: NOT RUN (no handset). Security: NOT RUN (finalization step). Deploy: NOT_CONFIGURED.
+- Commits: 14aa28c (fix + test). Branch: `feature/hermes-full-completion`. PR: NONE. Main merge: NOT MERGED — awaiting human approval.
+- Item 13 stays `PARTIAL`: unclassified `success: true` / discarded-`persistMemory()` sites remain in `server.ts` / `server_tools.ts`.
+
+हिंदी सारांश: अप्रूवल-रिज़ॉल्व रूट अब डिस्क रीड-बैक के बाद ही स्थायी निर्णय बताता है (रिवर्ट पर 4/7 फेल); पूरी सूट 2322 पास।

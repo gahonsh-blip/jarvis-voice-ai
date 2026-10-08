@@ -4,7 +4,39 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 02:35 IST — **WORK SLOT 7** of the 2026-10-08 →
+Last cycle: 2026-10-09 03:05 IST — **WORK SLOT 8** of the 2026-10-08 →
+2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the
+`/api/approvals/resolve` decision route reported a resolution as durable whose
+terminal status never reached disk.** Both the REJECT and the APPROVE branch of
+`POST /api/approvals/resolve` (`server.ts`) derived `success`/`persisted` from
+`persistApprovalRegistry()`'s boolean, which is `true` whenever `persistMemory()`
+returns `true` — and `persistMemory()` returns `true` without writing when the
+memory file already holds identical bytes. A decision that never reached
+`jarvis_memory.json` could therefore answer `success: true, persisted: true`
+while the next boot resurrected the request as `PENDING_APPROVAL`. Both branches
+now read the request's terminal status back from disk with
+`actionRequestStatusOnDisk(id, …)`; when it is absent the decision is refused
+with HTTP 500 `success: false, persisted: false`, the request is rolled back to
+`PENDING_APPROVAL`, the phantom audit row is removed, and
+`memoryState.permissionRequests` is resynced so a later unrelated
+`persistMemory()` cannot write the phantom decision either. The APPROVE branch
+additionally reports `outcome: 'UNPERSISTED'` and `recorded: false` so an
+execution result is never conflated with a durability claim. Guarded by
+`src/tests/approvalResolveDurabilityTruth.test.ts` (real `tsx server.ts` process
+on a temp memory file made read-only: an unpersisted REJECT/APPROVE returns 500
+and leaves the request pending, a writable write is recorded, a recorded
+rejection is not resurrected by a real restart, plus a source guard on both
+branches). Negative-validated: running the new suite against the pre-fix
+`server.ts` from HEAD fails 4 of 7 cases (HTTP 200 fake-success instead of 500);
+restored → 7/7. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full
+suite 195 files / 2322 tests passed (0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1067091 bytes). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted (the tail of
+unclassified `success: true` / discarded-`persistMemory()` sites in `server.ts` /
+`server_tools.ts` remains, truthfulness `UNKNOWN`). Hardware-blocked items
+#1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`.
+
+Last cycle (previous): 2026-10-09 02:35 IST — **WORK SLOT 7** of the 2026-10-08 →
 2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the resume
 route reported a durable freeze release whose latch and audit row never reached
 disk.** `POST /api/system/resume` (`server.ts`) computed `persisted` from the

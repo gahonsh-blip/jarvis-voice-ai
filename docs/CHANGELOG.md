@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 03:05 IST (2026-10-08 21:35 UTC) — window slot 8: the approval resolve route no longer reports a decision as durable whose terminal status never reached disk
+
+### Fixed
+- **`POST /api/approvals/resolve` (`server.ts`) reported both the REJECT and the APPROVE decision as durable (`success`/`persisted`) from `persistApprovalRegistry()`'s boolean, which is `true` whenever `persistMemory()` returns `true` — and `persistMemory()` returns `true` without writing when the memory file already holds identical bytes.** A decision that never reached `jarvis_memory.json` could therefore answer `success: true, persisted: true` while the next boot resurrected the request as `PENDING_APPROVAL`. Both branches now read the request's terminal status back from disk with `actionRequestStatusOnDisk(id, …)`; when it is absent the decision is refused with HTTP 500 `success: false, persisted: false`, the request is rolled back to `PENDING_APPROVAL`, the phantom audit row is removed, and `memoryState.permissionRequests` is resynced so a later unrelated `persistMemory()` cannot write the phantom decision either. The APPROVE branch reports `outcome: 'UNPERSISTED'` / `recorded: false` so an execution result is never conflated with a durability claim. Same defect class as the slot-5/6/7 fixes (emergency toggle, kill switch, resume).
+
+### Tests
+- New `src/tests/approvalResolveDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file made read-only after the first write): an unpersisted REJECT and an unpersisted APPROVE each return HTTP 500 and leave the request readable as pending, a writable REJECT/APPROVE is recorded, a recorded rejection is not resurrected by a real restart, plus a source guard pinning the disk read-back on both branches. Negative-validated: running the suite against the pre-fix `server.ts` from HEAD fails 4 of 7 cases (HTTP 200 fake-success instead of 500); restored → 7/7.
+- Lint (`tsc --noEmit`) exit 0. Full suite **195 files / 2322 tests passed** (61.64 s, 0 failed). Build exit 0 (`dist/server.cjs` 1067091 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-09 02:35 IST (2026-10-08 21:05 UTC) — window slot 7: the resume route no longer reports a durable freeze release whose latch or audit row never reached disk
 
 ### Fixed
