@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-08",
   "window_started_at": "2026-10-08T15:36:00Z",
-  "last_slot_at": "2026-10-08T19:22:02Z",
-  "slots_completed": 5,
+  "last_slot_at": "2026-10-08T20:35:00Z",
+  "slots_completed": 6,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "662ea74",
+  "last_commit": "b4efd40",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 5 (00:35 IST fire). Item 13: POST /api/emergency/toggle reported the safety freeze as held (persisted:true) and wrote a Level-4 EMERGENCY STOP ACTIVATED ... VERIFIED audit row while gating only on persistMemory(), which returns true without writing on identical bytes; persisted was derived from the flag flip, not storage. Now both the latch (emergencyStateOnDisk) and the appended row (diskHasAuditRow) are read back from disk; an engagement whose writes did not land is refused with HTTP 500 and the row rolled back, latch kept in memory. New emergencyToggleDurabilityTruth.test.ts (real server + restart + read-only file + source guard). Negative-validated (5/7 fail on revert). Gates: lint 0; targeted 2 files/16 passed; full suite 192 files/2301 passed (0 failed); build exit 0 (dist/server.cjs 1063892 bytes). Commits e6b5f0a (fix), 662ea74 (docs)."
+  "note": "Slot 6 (02:05 IST fire). Item 13: POST /api/system/kill-switch engaged the freeze and wrote its Level-4 GLOBAL KILL SWITCH TRIGGERED ... VERIFIED audit row, but the row was only pushed to memoryState.auditLogs (never explicitly persisted) and the route trusted persistEmergencyState()'s boolean, which returns true without writing on identical bytes. Now emergencyStateOnDisk(true) confirms the latch and diskHasAuditRow(killAuditRow.id) confirms the row; persisted = statePersisted && auditPersisted. A real engagement whose writes did not land is refused with HTTP 500, the phantom row rolled back, the Telegram notice suppressed, and the latch kept in memory. New killSwitchDurabilityTruth.test.ts (real server + restart + read-only file + no-op re-engagement + source guard). Negative-validated (2/8 fail on neuter). Gates: lint 0; targeted 2 files/17 passed; full suite 193 files/2309 passed (0 failed); build exit 0 (dist/server.cjs 1064713 bytes). Commits 10721dd (fix), 13eb110 (test align), b4efd40 (docs)."
 }
