@@ -953,6 +953,21 @@ function diskHasAuditRow(id: string): boolean {
 }
 
 /**
+ * True only when the memory file on disk carries the expected `emergencyPaused`
+ * latch. `persistMemory()` can return true without writing when the file already
+ * holds the identical bytes, so a safety route that reports the freeze as
+ * durable must read the latch back rather than trust the boolean.
+ */
+function emergencyStateOnDisk(expected: boolean): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    return onDisk?.emergencyState?.emergencyPaused === expected;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Write the Security Matrix gates to disk. The matrix lives outside `memoryState`,
  * so this first copies the live gates into `memoryState.securityMatrix` and then
  * runs the durable write. Returns whether the gates are on disk — the update route
@@ -6826,9 +6841,13 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
   // rather than a durable success. The transitioned state is kept in memory (a
   // disk error must never silently un-freeze the system); the response names the
   // durability gap so the operator can act.
-  const persisted = persistEmergencyState();
+  const statePersisted = persistEmergencyState() && emergencyStateOnDisk(engaged);
 
-  pushAuditEntry({
+  // The engagement claim and its audit row share one durability verdict: the
+  // row is appended, then persisted, then read back from disk with
+  // `diskHasAuditRow` — `persistMemory()` can return true without writing. A
+  // freeze reported as held whose row is not durable is refused.
+  const auditRow: AuditLogEntry = {
     id: `log-emerg-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: engaged
@@ -6839,7 +6858,27 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
     status: 'EXECUTED',
     verificationStatus: 'VERIFIED',
     finalTruthState: 'VERIFIED',
-  });
+  };
+  pushAuditEntry(auditRow);
+  const auditPersisted = persistMemory() && diskHasAuditRow(auditRow.id);
+  const persisted = statePersisted && auditPersisted;
+
+  if (engaged && !persisted) {
+    // A hard stop that is reported held but is not on disk would silently
+    // release on the next boot. Roll the row back and report the durability gap
+    // instead of a clean success. (The release direction keeps reporting the
+    // gap through `persisted: false` without a spurious 500.)
+    memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== auditRow.id);
+    return res.status(500).json({
+      success: false,
+      actionExecuted: true,
+      action: resolvedAction,
+      title: verdict.title,
+      persisted: false,
+      emergencyState: getEmergencyState(),
+      error: 'Emergency freeze could not be written to durable storage.',
+    });
+  }
 
   // Notify Telegram Admin if connected
   if (activeTelegramChatId && getCleanTelegramToken()) {
