@@ -4,7 +4,39 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 00:35 IST — **WORK SLOT 5** of the 2026-10-08 →
+Last cycle: 2026-10-09 02:05 IST — **WORK SLOT 6** of the 2026-10-08 →
+2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the global
+kill switch reported a durable termination whose latch and audit row never
+reached disk.** `POST /api/system/kill-switch` (`server.ts`) engaged the freeze
+and wrote its Level-4 `🚨 GLOBAL KILL SWITCH TRIGGERED … VERIFIED` audit row,
+but the row was only pushed to `memoryState.auditLogs` — never explicitly
+persisted — and the route trusted `persistEmergencyState()`'s boolean, which
+returns `true` without writing when the file already holds identical bytes. So a
+termination could be reported (and a Telegram notice sent) while neither the
+`emergencyPaused` latch nor the row reached `jarvis_memory.json`; a restart then
+silently released the freeze. The fix reads both back from disk:
+`emergencyStateOnDisk(true)` confirms the latch, `diskHasAuditRow(killAuditRow.id)`
+confirms the appended row, and `persisted = statePersisted && auditPersisted`. A
+real engagement whose writes did not land is refused with HTTP 500
+`success: false, persisted: false`, the phantom row rolled back, and the
+Telegram notice suppressed; the latch is kept in memory so a disk error never
+silently un-freezes the system. Guarded by
+`src/tests/killSwitchDurabilityTruth.test.ts` (real `tsx server.ts` process on a
+temp memory file: the latch *and* the termination row are in the memory file on
+disk, both survive a real restart, a re-engagement is a no-op with no new row, a
+read-only volume is refused with the row rolled back, plus a source guard); the
+existing `emergencyStateDurabilityTruth` wiring assertion was aligned to pin
+`statePersisted && auditPersisted`. Negative-validated: neutering the durability
+guard fails 2 of 8 new cases; restored → 8/8. Gates (observed this fire): lint
+(`tsc --noEmit`) exit 0; targeted `killSwitchTruth` + `killSwitchDurabilityTruth`
+2 files / 17 passed; full suite 193 files / 2309 tests passed (0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1064713 bytes). E2E: NOT RUN (no
+handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not
+exhausted (the tail of unclassified `success: true` / discarded-`persistMemory()`
+sites in `server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`).
+Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`.
+
+Last cycle (previous): 2026-10-09 00:35 IST — **WORK SLOT 5** of the 2026-10-08 →
 2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the
 emergency-stop route reported the safety freeze as held (`persisted: true`) and
 wrote a Level-4 `EMERGENCY STOP ACTIVATED … VERIFIED` audit row while gating only

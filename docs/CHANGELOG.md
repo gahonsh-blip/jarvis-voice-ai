@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 02:05 IST (2026-10-08 20:35 UTC) — window slot 6: the global kill switch no longer reports a durable termination whose latch or audit row never reached disk
+
+### Fixed
+- **`POST /api/system/kill-switch` (`server.ts`) engaged the freeze and wrote its Level-4 `🚨 GLOBAL KILL SWITCH TRIGGERED … VERIFIED` audit row, but the row was only pushed to `memoryState.auditLogs` — never explicitly persisted — and the route trusted `persistEmergencyState()`'s boolean, which returns `true` without writing when the file already holds identical bytes.** So a termination could be reported (and a Telegram notice sent) while neither the `emergencyPaused` latch nor the row reached `jarvis_memory.json`; a restart then silently released the freeze. The route now derives one durability verdict by reading both back from disk: `emergencyStateOnDisk(true)` confirms the latch, `diskHasAuditRow(killAuditRow.id)` confirms the appended row, and `persisted = statePersisted && auditPersisted`. A real engagement whose writes did not land is refused with HTTP 500 `success: false, persisted: false`, the phantom row is rolled back, and the Telegram notice is suppressed; the latch is deliberately kept in memory so a disk error never silently un-freezes the system.
+
+### Tests
+- New `src/tests/killSwitchDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file): the latch *and* the termination row are present in the memory file on disk, both survive a real restart, a re-engagement of the already-frozen system is a no-op with no new row, a read-only volume is refused with the row rolled back, plus a source guard. Negative-validated: neutering the durability guard fails 2 of 8 new cases; restored → 8/8. The existing `emergencyStateDurabilityTruth` wiring assertion was aligned to pin `statePersisted && auditPersisted`. Lint (`tsc --noEmit`) exit 0. Full suite **193 files / 2309 tests passed** (53.83 s, 0 failed). Build exit 0 (`dist/server.cjs` 1064713 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-09 00:35 IST (2026-10-08 19:05 UTC) — window slot 5: the emergency stop no longer reports a durable, verified freeze whose latch or audit row never reached disk
 
 ### Fixed

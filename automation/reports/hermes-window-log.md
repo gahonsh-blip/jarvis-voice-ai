@@ -13923,3 +13923,17 @@ Commits: 3b53c2c (fix), 035b16d (docs). Branch:
 - Item 13 stays `PARTIAL`: unclassified `success: true` / discarded-`persistMemory()` sites remain in `server.ts` / `server_tools.ts`.
 
 हिंदी सारांश: इमरजेंसी-स्टॉप रूट अब डिस्क रीड-बैक के बाद ही स्थायी सफलता बताता है; 7/7 नए टेस्ट पास, पूरी सूट 2301 पास।
+
+---
+
+## Slot 2026-10-09 02:05 IST — WORK SLOT 6 (window 2026-10-08)
+
+**Item 13 (`Zero-fake-success for all tools`) — global kill-switch route.** `POST /api/system/kill-switch` engaged the freeze and wrote its Level-4 `🚨 GLOBAL KILL SWITCH TRIGGERED ... VERIFIED` audit row, but the row was only pushed to `memoryState.auditLogs` — never explicitly persisted — and the route trusted `persistEmergencyState()`'s boolean (which returns true without writing on identical bytes). A termination could be reported, and a Telegram notice sent, while neither the `emergencyPaused` latch nor the row reached `jarvis_memory.json`; a restart silently released the freeze. Fix: one durability verdict read back from disk — `emergencyStateOnDisk(true)` for the latch, `diskHasAuditRow(killAuditRow.id)` for the row, `persisted = statePersisted && auditPersisted`. A real engagement whose writes did not land is refused with HTTP 500, the phantom row rolled back, the Telegram notice suppressed, and the latch kept in memory so a disk error never silently un-freezes. New `src/tests/killSwitchDurabilityTruth.test.ts` (real `tsx server.ts`, temp memory file, real restart, read-only volume, source guard).
+
+- Tests: targeted 2 files / 17 passed; full suite 193 files / 2309 passed (0 failed, 53.83 s). Negative-validated: neuter the guard → 2/8 fail; restored → 8/8.
+- Lint: `tsc --noEmit` exit 0. Build: exit 0 (`dist/server.cjs` 1064713 bytes).
+- E2E: NOT RUN (no handset). Security: NOT RUN (finalization step). Deploy: NOT_CONFIGURED.
+- Commits: 10721dd (fix), 13eb110 (test align), docs commit below. Branch: `feature/hermes-full-completion`. PR: NONE. Main merge: NOT MERGED — awaiting human approval.
+- Item 13 stays `PARTIAL`: unclassified `success: true` / discarded-`persistMemory()` sites remain in `server.ts` / `server_tools.ts`.
+
+हिंदी सारांश: ग्लोबल किल-स्विच अब डिस्क रीड-बैक के बाद ही स्थायी सफलता बताता है; 8/8 नए टेस्ट पास, पूरी सूट 2309 पास।
