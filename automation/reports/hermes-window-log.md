@@ -13752,3 +13752,80 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - OAuth connect callbacks (LinkedIn/YouTube) अब "Connected!" popup और VERIFIED audit row सिर्फ़ durable write सफल होने पर दिखाते हैं; नया टेस्ट पास, lint/test/build हरे (188 फ़ाइलें / 2274 टेस्ट)।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:35
+Window date: 2026-10-08   Window slots completed so far: 2
+
+Completed:
+- #13 Zero-fake-success for all tools — slice: `POST /api/telephony/settings`
+  reported `SAVED`/`success:true` while `telephonySettingsState` was a
+  module-local object never written to `memoryState` (so `persistMemory()`
+  serialized it not at all) and it spread the raw request body over live
+  settings. Fixed: `telephonySettings` added to `MemoryData`; new
+  `persistTelephonySettingsState()`; boot restore of saved settings + engine
+  selection (validated against `TELEPHONY_SETTING_KEYS`); route persists, rolls
+  back on failure, answers HTTP 500 `NOT_PERSISTED`, and reports
+  `persisted`/`changed`. Evidence: `server.ts`,
+  `src/tests/telephonySettingsDurabilityTruth.test.ts` (7 passed).
+  Negative-validated: stubbing `persistTelephonySettingsState()` to `return true`
+  failed 2 of 7; restored -> 7/7.
+
+In Progress:
+- #13 Zero-fake-success for all tools — still PARTIAL; the tail of unclassified
+  `success: true` / discarded-`persistMemory()` sites in `server.ts` /
+  `server_tools.ts` remains.
+
+Remaining:
+- #1 Android Bridge, #2 Real Android E2E, #3 Real Screenshot, #4 Computer
+  Operator, ... (hardware-blocked items #1/#2/#50/#55 remain NOT_AVAILABLE/PARTIAL).
+
+Bugs Found:
+- The telephony settings route's success flag was decoupled from durability: the
+  module-local settings object was never in `memoryState`, so the persisted save
+  it claimed could not exist. Found by reading the route and confirming
+  `telephonySettingsState` was absent from `MemoryData`.
+
+Bugs Fixed:
+- Telephony settings now persist to `jarvis_memory.json` and are restored on
+  boot; an unpersistable save is refused (HTTP 500, `NOT_PERSISTED`) and rolled
+  back. Proved by `telephonySettingsDurabilityTruth.test.ts` (real server +
+  restart + read-only file), negative-validated.
+
+Tests:    189 files / 2281 passed (46.25 s, 0 failed) — observed via `npx vitest run`
+Lint:     exit 0 (`npm run lint` = `tsc --noEmit`) — observed
+Build:    exit 0 (`npm run build`; `dist/server.cjs` 1060724 bytes) — observed
+E2E:      NOT RUN (no handset)
+Security: `git check-ignore -v .env` -> `.gitignore:4`; `git status --short` clean
+          (the suite's hydration of `telephonySettings` into the tracked
+          `jarvis_memory.json` was reverted before commit); no live secret in the
+          diff; `npm audit` NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, docs/SECURITY.md
+Branch:  feature/hermes-full-completion
+Commit:  3a9e105 (code+test), 689ae8a (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         existing PR #6 (feature/hermes-full-completion -> main) — not touched this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this environment
+
+Blocked:
+- #1 Android Bridge / #2 Real Android E2E / #3 Real Screenshot / #50 / #55 —
+  require a physical handset / emulator / display session.
+
+Human Approval Required:
+- Merge of PR #6 to `main` (owner approval only).
+
+Next Slot:
+- #13 — continue the sweep: classify the remaining `success: true` /
+  discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` (next
+  candidates: any module-local state written to disk only through a discarded
+  `persistMemory()`).
+
+हिंदी सारांश (एक पंक्ति):
+- टेलीफोनी सेटिंग्स रूट अब झूठा "SAVED" नहीं दिखाता — सेटिंग्स असल में डिस्क पर
+  सेव होती हैं और रीस्टार्ट के बाद बनी रहती हैं; लिखने में विफल होने पर साफ़
+  HTTP 500 लौटता है।
