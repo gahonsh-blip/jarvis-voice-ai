@@ -547,6 +547,13 @@ interface MemoryData {
    * is told "SAVED" for a change that silently reverts on the next boot.
    */
   telephonySettings?: Record<string, unknown>;
+  /**
+   * The telephony call history. Persisted so a recorded call (and a deletion)
+   * survives a restart — the call routes may report a stored or removed record
+   * only once it is durable, or a call the operator logged silently disappears
+   * on the next boot.
+   */
+  telephonyCallRecords?: unknown[];
 }
 
 /**
@@ -974,6 +981,19 @@ function persistApprovalRegistry(): boolean {
  */
 function persistTelephonySettingsState(): boolean {
   memoryState.telephonySettings = { ...telephonySettingsState };
+  return persistMemory();
+}
+
+/**
+ * Write the live telephony call history to disk. Like the settings object, the
+ * history lives outside `memoryState`, so this first copies the live array into
+ * `memoryState.telephonyCallRecords` and then runs the durable write. Returns
+ * whether the history is on disk — the call routes may report a stored or
+ * removed record only on `true`, or a recorded call is gone on the next boot
+ * while the caller was told it was saved.
+ */
+function persistTelephonyCalls(): boolean {
+  memoryState.telephonyCallRecords = telephonyCalls;
   return persistMemory();
 }
 
@@ -9284,6 +9304,21 @@ let telephonySettingsState: any = {
   memoryState.telephonySettings = { ...telephonySettingsState };
 }
 
+// Restore the recorded call history. The array above is module-local and was
+// never read back, so every call the operator logged vanished on restart while
+// the route had reported it saved. Only plain objects are adopted, so a
+// hand-edited or legacy file cannot inject a malformed row into the history.
+{
+  const storedCalls = memoryState.telephonyCallRecords;
+  if (Array.isArray(storedCalls)) {
+    telephonyCalls = storedCalls.filter(
+      (row): row is Record<string, unknown> =>
+        !!row && typeof row === 'object' && !Array.isArray(row)
+    );
+  }
+  memoryState.telephonyCallRecords = telephonyCalls;
+}
+
 // 1. Get Telephony Calls
 app.get('/api/telephony/calls', (req: Request, res: Response) => {
   res.json({ success: true, calls: telephonyCalls });
@@ -9312,6 +9347,10 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
     const stored = existing
       ? { ...existing, ...verdict.changes }
       : { ...verdict.changes, id: verdict.id };
+    // A recorded call is only real once it is on disk. Snapshot the history so a
+    // failed durable write can be rolled back rather than answered `success:
+    // true` for a record the next boot does not have.
+    const callsSnapshot = telephonyCalls.slice();
     if (existingIdx >= 0) {
       telephonyCalls[existingIdx] = stored;
     } else {
@@ -9323,8 +9362,22 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
       telephonyCalls = telephonyCalls.slice(0, 100);
     }
 
+    if (!persistTelephonyCalls()) {
+      telephonyCalls = callsSnapshot;
+      memoryState.telephonyCallRecords = telephonyCalls;
+      return res.status(500).json({
+        success: false,
+        persisted: false,
+        action: verdict.action,
+        call: null,
+        outcome: 'NOT_PERSISTED',
+        message: 'The call record could not be written to durable storage; it was not saved.',
+      });
+    }
+
     res.json({
       success: true,
+      persisted: true,
       action: verdict.action,
       call: stored,
       message: verdict.message,
@@ -9337,21 +9390,54 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
 
 // 3. Delete / Clear Telephony Calls
 app.delete('/api/telephony/calls', (req: Request, res: Response) => {
-  const before = telephonyCalls.length;
+  const beforeCalls = telephonyCalls.slice();
+  const before = beforeCalls.length;
   telephonyCalls = [];
   // Clearing an already-empty history removes nothing; report the real count
   // rather than asserting a deletion that never happened.
   const verdict = classifyTelephonyCallDeletion(before);
+  if (verdict.success) {
+    // A deletion is only real once the emptied history is durable: a write that
+    // never reaches disk leaves the next boot believing every call still
+    // exists. Refuse the claim and restore the history in memory.
+    if (!persistTelephonyCalls()) {
+      telephonyCalls = beforeCalls;
+      memoryState.telephonyCallRecords = telephonyCalls;
+      return res.status(500).json({
+        success: false,
+        removed: 0,
+        outcome: 'NOT_PERSISTED',
+        persisted: false,
+        message: 'The call history could not be cleared in durable storage; nothing was deleted.',
+      });
+    }
+    return res.json({ ...verdict, persisted: true });
+  }
   res.json({ ...verdict });
 });
 
 app.delete('/api/telephony/calls/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const before = telephonyCalls.length;
+  const before = telephonyCalls.slice();
   telephonyCalls = telephonyCalls.filter((c) => c.id !== id);
   // Deleting an id that was never recorded removes nothing; the old route
   // still answered success: true and named the call as deleted.
-  const verdict = classifyTelephonyCallDeletion(before - telephonyCalls.length, id);
+  const verdict = classifyTelephonyCallDeletion(before.length - telephonyCalls.length, id);
+  if (verdict.success) {
+    // As above, the removal must reach disk before it is reported as deleted.
+    if (!persistTelephonyCalls()) {
+      telephonyCalls = before;
+      memoryState.telephonyCallRecords = telephonyCalls;
+      return res.status(500).json({
+        success: false,
+        removed: 0,
+        outcome: 'NOT_PERSISTED',
+        persisted: false,
+        message: `Call "${id}" could not be deleted from durable storage; nothing was deleted.`,
+      });
+    }
+    return res.json({ ...verdict, persisted: true });
+  }
   res.json({ ...verdict });
 });
 
