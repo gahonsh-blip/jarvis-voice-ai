@@ -13829,3 +13829,42 @@ Next Slot:
 - टेलीफोनी सेटिंग्स रूट अब झूठा "SAVED" नहीं दिखाता — सेटिंग्स असल में डिस्क पर
   सेव होती हैं और रीस्टार्ट के बाद बनी रहती हैं; लिखने में विफल होने पर साफ़
   HTTP 500 लौटता है।
+
+---
+
+## WORK SLOT 3 — 2026-10-08 23:05 IST
+
+**Item #13 `Zero-fake-success for all tools` — telephony call-history durability.
+PARTIAL.**
+
+The telephony *call-history* routes (`POST /api/telephony/calls`,
+`DELETE /api/telephony/calls`, `DELETE /api/telephony/calls/:id`, `server.ts`)
+mutated the module-local `telephonyCalls` array and answered `success: true` / a
+removed count, but the array was never part of `memoryState`, so `persistMemory()`
+serialized it **not at all**: every recorded call and every deletion silently
+reverted on the next boot while the UI was told it was saved. Same defect class
+as the slot-2 settings route, on the sibling array.
+
+Fix: added `telephonyCallRecords` to `MemoryData` and `persistTelephonyCalls()`
+(copies the live array into `memoryState` before the durable write, returns the
+write result); hydrates the history on boot (adopting only plain-object entries
+with string ids); each mutating route snapshots the array, runs the durable
+write, rolls back and answers HTTP 500 `success:false persisted:false
+outcome:NOT_PERSISTED` on failure, and reports the real removed count.
+
+Evidence: `src/tests/telephonyCallDurabilityTruth.test.ts` (9 cases, real
+`tsx server.ts` process on a temp memory file): on-disk presence of a recorded
+call, restart survival, real removed count on delete, refused unpersistable
+write with rollback. Negative-validated: `persistTelephonyCalls()` stubbed to
+`return true` → 3/9 fail; restored → 9/9.
+
+Gates (observed): lint `tsc --noEmit` exit 0; targeted 3 files / 30 passed;
+full suite **190 files / 2290 tests passed** (47.82 s, 0 failed); `npm run build`
+exit 0 (`dist/server.cjs` 1062574 bytes). E2E: NOT RUN (no handset).
+Deploy: NOT_CONFIGURED.
+
+Commits: f738302 (fix), 6a107bd (docs). Branch:
+`feature/hermes-full-completion`.
+
+हिंदी सारांश: टेलीफ़ोनी कॉल-हिस्ट्री अब सच में डिस्क पर सेव होती है; पहले हर
+कॉल/डिलीट रीस्टार्ट पर गायब हो जाता था जबकि UI को "सेव" बताया जाता था।
