@@ -14070,7 +14070,7 @@ Window date: 2026-10-09 (window 2026-10-08)   Window slots completed so far: 10
 
 Completed:
 - No new backlog item advanced (finalization slot). Froze and re-verified the
-  existing tip dea9193 on feature/hermes-full-completion (output of the 9
+  existing tip abbd2ec on feature/hermes-full-completion (output of the 9
   preceding work slots). Item 13 (Zero-fake-success for all tools) remains
   PARTIAL — the tail of unclassified `success: true` / persist-discard sites in
   server.ts / server_tools.ts is still not individually audited (truthfulness
@@ -14087,11 +14087,22 @@ Remaining:
 
 Bugs Found:
 - None this slot. No source change was made.
+- Flakiness evidence for the human: a concurrent finalization run recorded this
+  same window's suite RED at tip dea9193 — 2 files / 9 of 2328 tests failed from
+  a `JARVIS_PORT` 4795 collision between approvalResolveDurabilityTruth and
+  emergencyToggleDurabilityTruth — and fixed it by moving that suite to port 4819
+  (commit 110f9c8). On the true tip abbd2ec this run observed the suite GREEN
+  (196/2328). The collision is therefore intermittent: port assignment races
+  between concurrently-running harnesses, not a product defect. It is now pinned
+  to a distinct port, but the underlying pattern (fixed ports shared across
+  suites) is worth an owner look.
 
 Bugs Fixed:
-- None this slot.
+- None this slot (no source change by this run).
 
-Tests:    196 files / 2328 tests passed (65.24 s, 0 failed) — `npx vitest run`
+Tests:    196 files / 2328 tests passed (63.28 s, 0 failed) — `npx vitest run`
+          on tip abbd2ec (after rebasing onto 110f9c8); the harness fix itself
+          was separately re-run: approvalResolveDurabilityTruth 7/7 passed
 Lint:     pass — `npm run lint` (`tsc --noEmit`) exit 0
 Build:    pass — exit 0; artifact dist/server.cjs 1069266 bytes
 E2E:      NOT RUN — no handset / emulator / display session in this sandbox
