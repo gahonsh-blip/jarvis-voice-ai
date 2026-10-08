@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-08",
   "window_started_at": "2026-10-08T15:36:00Z",
-  "last_slot_at": "2026-10-08T21:26:00Z",
-  "slots_completed": 7,
+  "last_slot_at": "2026-10-08T22:05:00Z",
+  "slots_completed": 8,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "c33c82e",
+  "last_commit": "0521d05",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 7 (02:35 IST fire). Item 13: POST /api/system/resume computed persisted from the raw persistEmergencyState() boolean (returns true without writing on identical bytes) and never read the cleared latch or the appended SYSTEM RESUMED ... VERIFIED row back from disk; a non-durable release could be reported and the Telegram resumption notice sent while the next boot still read the freeze as engaged, and the phantom row was never rolled back. Now emergencyStateOnDisk(false) confirms the cleared latch and diskHasAuditRow(auditRow.id) confirms the row; a non-durable release is refused with HTTP 500 and the row rolled back; the notice is sent only for a durable release. New resumeDurabilityTruth.test.ts (real server + restart + source guard); emergencyStateDurabilityTruth guard re-pinned. Also fixed a test-harness defect: five durability suites shared listen ports and, with vitest running files in parallel, the second binder's requests hit the first file's server (telephonyCallDurabilityTruth and emergencyStateDurabilityTruth both bound 4793, failing 3/4 only when run together); ports reassigned to unique 4813/4815/4816/4817/4818. Negative-validated resume fix (revert server.ts -> 4/6 fail). Gates: lint 0; targeted 3 files/19 passed; full suite 194 files/2315 passed (0 failed); build exit 0 (dist/server.cjs 1065295 bytes). Commits f0114ac (fix), b72d5e3 (test ports), c33c82e (docs)."
+  "note": "Slot 8 (03:05 IST fire). Item 13: POST /api/approvals/resolve reported both REJECT and APPROVE as durable from persistApprovalRegistry()'s boolean (true whenever persistMemory() returns true, which is true without writing on identical bytes). Both branches now read the terminal status back from disk with actionRequestStatusOnDisk(id, 'REJECTED'/terminalStatus); an unpersisted decision is refused with HTTP 500, the request rolled back to PENDING_APPROVAL, the phantom audit row dropped, and memoryState.permissionRequests resynced so a later persistMemory() cannot write the phantom decision. APPROVE also reports outcome:'UNPERSISTED'/recorded:false. New approvalResolveDurabilityTruth.test.ts (real tsx server.ts, temp memory file made read-only, real restart, source guard). Negative-validated: against pre-fix server.ts from HEAD, 4/7 fail (HTTP 200 fake-success); restored 7/7. Gates: lint 0; full suite 195 files/2322 passed (0 failed); build exit 0 (dist/server.cjs 1067091 bytes). Commits 14aa28c (fix+test), 0521d05 (docs)."
 }
