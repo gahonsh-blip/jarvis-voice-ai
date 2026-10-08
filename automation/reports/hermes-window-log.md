@@ -14135,3 +14135,70 @@ Next Slot:
   को दोबारा सत्यापित किया — lint exit 0, 196 फ़ाइलें / 2328 टेस्ट पास, build exit 0
   (dist/server.cjs 1069266 bytes); PR #6 खुला और conflict-free है, मर्ज मानव-अनुमोदन
   की प्रतीक्षा में है; deploy NOT_CONFIGURED।
+
+## Finalization slot — 2026-10-09 04:35 IST (window 2026-10-08 → 2026-10-09)
+
+Slot: FINALIZATION. No new feature work started.
+
+This run raced with a concurrent finalization run that pushed its own report as
+`abbd2ec`, on top of this run's harness fix `110f9c8`. Both reports stand; this
+section adds the harness fix and the corrected verification that the earlier
+green observation could not see.
+
+Bugs Found:
+- The full suite was RED at tip `dea9193`. `npx vitest run` → 2 files failed,
+  9 of 2328 tests failed: `approvalResolveDurabilityTruth` 5/7 and
+  `emergencyToggleDurabilityTruth` 4/7. Cause: the approval-resolve suite (added
+  in slot 8) reused `JARVIS_PORT = 4795`, which the emergency-toggle suite already
+  binds. Vitest runs test files in parallel, so one file's server answered the
+  other file's requests (wrong memory file, ECONNRESET). It is flaky — each file
+  passes alone (7/7) and the pair together failed 5/14 — so a prior green run was
+  timing luck, not correctness.
+
+Bugs Fixed:
+- `test(harness)`: moved `approvalResolveDurabilityTruth` to unused port 4819, the
+  same class of fix as slot 7 (which reassigned five other colliding ports).
+  Negative-validated: the pair on 4795 failed 5/14; the pair on 4819 passes 14/14.
+
+Tests:    196 files / 2328 tests passed (0 failed) — `npx vitest run`
+Lint:     pass — `npm run lint` (`tsc --noEmit`) exit 0
+Build:    pass — exit 0; artifact dist/server.cjs 1069266 bytes
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox
+Security: `git check-ignore -v .env` → `.gitignore:4:.env`; working tree clean
+          after reverting the suite's `jarvis_memory.json` hydration; diff-vs-main
+          credential scan → no real secret (only clearly-labeled e2e fixtures);
+          no .env/token/node_modules/dist staged; `npm audit` → 5 vulnerabilities
+          (3 moderate, 1 high source-map-js, 1 critical proxy-addr) — pre-existing
+          transitive, NOT fixed.
+
+Documentation: automation/reports/hermes-window-log.md (this section)
+Branch:  feature/hermes-full-completion
+Commit:  110f9c8 (harness fix) + this report commit
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #6 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/6
+            open, non-draft, mergeable: true, mergeable_state: unstable (CI only)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target / hosting integration present
+            (no DEPLOY_URL, no vercel/netlify/render/railway/fly config); the
+            verified dist/server.cjs is the deployment unit.
+
+Blocked:
+- #1 / #2 Android bridge real-device leg — requires a paired physical handset
+- #50 Hands-free Android control — requires an Android device
+- #55 Real-device E2E suite — requires an Android device / Windows host
+- #51 live credential rotation, #54 external pentest — require provider credentials
+- CI workflow — red for infrastructure only: the owner's account is locked for a
+  billing issue, so the job never starts; not a code failure.
+
+Human Approval Required:
+- Merge of PR #6; and resolution of the owner-account billing lock that blocks CI.
+
+Next Slot:
+- No next slot — window 2026-10-08 → 2026-10-09 is closed. The next window would
+  resume item 13 with the per-site `success: true` audit in server.ts / server_tools.ts.
+
+हिंदी सारांश (एक पंक्ति):
+- अंतिम स्लॉट में पूरा टेस्ट-सूट लाल मिला (पोर्ट 4795 का टकराव); approvalResolve सूट
+  को पोर्ट 4819 पर ले जाकर ठीक किया — अब 196 फ़ाइलें / 2328 टेस्ट पास, lint 0, build 0;
+  PR #6 खुला और conflict-free है, मर्ज मानव-अनुमोदन की प्रतीक्षा में; deploy NOT_CONFIGURED।
