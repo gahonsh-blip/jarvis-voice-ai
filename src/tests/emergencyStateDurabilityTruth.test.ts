@@ -27,8 +27,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const FIRST_PORT = 4793;
-const RESTART_PORT = 4794;
+const FIRST_PORT = 4817;
+const RESTART_PORT = 4818;
 let jarvis: ChildProcess | undefined;
 let memoryDir: string;
 let memoryFile: string;

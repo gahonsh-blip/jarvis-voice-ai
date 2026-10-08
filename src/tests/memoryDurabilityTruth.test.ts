@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const JARVIS_PORT = 4761;
+const JARVIS_PORT = 4813;
 let jarvis: ChildProcess | undefined;
 let memoryDir: string;
 let memoryFile: string;
