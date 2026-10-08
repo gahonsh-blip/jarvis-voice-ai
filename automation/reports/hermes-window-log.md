@@ -13967,3 +13967,97 @@ Commits: 3b53c2c (fix), 035b16d (docs). Branch:
 - Item 13 stays `PARTIAL`: unclassified `success: true` / discarded-`persistMemory()` sites remain in `server.ts` / `server_tools.ts`.
 
 हिंदी सारांश: अप्रूवल-रिज़ॉल्व रूट अब डिस्क रीड-बैक के बाद ही स्थायी निर्णय बताता है (रिवर्ट पर 4/7 फेल); पूरी सूट 2322 पास।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:35
+Window date: 2026-10-08   Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (one more coherent slice, the
+  outbound-call authorization durability fix).
+  Evidence: `POST /api/telephony/outbound/authorize` (`server.ts`) derived
+  `persisted` from `persistApprovalRegistry()`'s boolean, which is `true`
+  whenever `persistMemory()` returns `true` — and `persistMemory()` returns
+  `true` without writing when the memory file already holds identical bytes.
+  On REJECT a cancellation that never reached disk was reported as recorded; on
+  APPROVE the route reached the carrier-dispatch branch and placed the call, an
+  irreversible dial on a decision the next boot would resurrect as
+  `PENDING_AUTHORIZATION`. Both branches now read the terminal action status
+  back from disk with `actionRequestStatusOnDisk`; an unpersisted decision is
+  refused with HTTP 500 `success: false, persisted: false, recorded: false,
+  outcome: 'UNPERSISTED'`, the session request is reverted to
+  `PENDING_AUTHORIZATION` via the new
+  `TelephonySessionManager.revertOutboundAuthorization`, and the action is
+  rolled back to `PENDING_APPROVAL`.
+  Test: `src/tests/outboundAuthorizeDurabilityTruth.test.ts` — 6 cases against a
+  real `tsx server.ts` process on a temp memory file made read-only after the
+  first write (observed 6 passed / 6).
+
+In Progress:
+- #13 Zero-fake-success for all tools — PARTIAL. Remaining: the tail of
+  unclassified `success: true` / discarded-`persistMemory()` sites in
+  `server.ts` / `server_tools.ts`; truthfulness UNKNOWN until each is read.
+
+Remaining:
+- #1/#2/#50/#55 hardware-gated (Android bridge / real screenshot / computer
+  operator / wake word) — NOT_AVAILABLE or PARTIAL, no handset in this sandbox.
+- Other backlog items already VERIFIED; item 13 is the active sweep.
+
+Bugs Found:
+- Outbound-call authorization reported a decision as durable without reading it
+  back from disk, and dialled the carrier on the unverified decision. Found by
+  reading the route's `persisted` source and the `persistMemory()` write-skip
+  behaviour on identical bytes (same defect class as slots 4-8).
+
+Bugs Fixed:
+- `POST /api/telephony/outbound/authorize` both branches now gate on a disk
+  read-back and refuse/roll back an unpersisted decision; the dial never runs on
+  an unverified authorization. Proof: negative validation — `git stash push
+  server.ts` (pre-fix HEAD) failed 4 of 6 new cases (`4 failed | 2 passed`);
+  restored -> 6/6. Related suites re-run green (5 files / 43 passed).
+
+Tests:    196 files / 2328 tests passed (0 failed) — observed, `npx vitest run`
+Lint:     PASS — `npm run lint` (`tsc --noEmit`) exit 0
+Build:    PASS — `npm run build` exit 0, `dist/server.cjs` 1069266 bytes
+E2E:      NOT RUN — no carrier / no handset in this sandbox
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; no `.env` staged, no
+          token/key in the diff vs `main` (scan returned only synthetic test
+          fixtures and docs text); `node_modules/` and `dist/` ignored and
+          untracked; `jarvis_memory.json` test artifact reverted before commit.
+          `npm audit` NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md (header + item 13 evidence),
+               docs/CHANGELOG.md (slot 9 entry)
+Branch:  feature/hermes-full-completion
+Commit:  56c0164 (docs) on top of b5c7264 (fix + test)
+Push:    succeeded — origin/feature/hermes-full-completion (b5c7264..56c0164)
+         State: origin/automation/hermes-state (bb26987)
+
+PR:         none opened this slot (no PR action requested this slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified artifact is the deployment
+            unit available.
+
+Blocked:
+- #1 Android Bridge (real handset) — requires an Android device / emulator
+- #2 Real Android E2E — requires an Android device
+- #50 Computer Operator (real display) — requires a real desktop session
+- #55 Wake Word (real microphone) — requires microphone hardware
+
+Human Approval Required:
+- None this slot. (Merging `feature/hermes-full-completion` to `main` remains a
+  human decision.)
+
+Next Slot:
+- Continue item 13: audit the next unclassified `success: true` /
+  discarded-`persistMemory()` site in `server.ts` / `server_tools.ts` and fix the
+  same defect class, with a real-process truth test and negative validation.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में आउटबाउंड कॉल authorization रूट को ठीक किया — अब बिना डिस्क पर
+  सत्यापित किए decision को durable नहीं बताता और unverified decision पर कॉल नहीं
+  डायल करता; 196 फाइलें / 2328 टेस्ट पास, lint व build पास।
