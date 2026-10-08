@@ -13937,3 +13937,19 @@ Commits: 3b53c2c (fix), 035b16d (docs). Branch:
 - Item 13 stays `PARTIAL`: unclassified `success: true` / discarded-`persistMemory()` sites remain in `server.ts` / `server_tools.ts`.
 
 हिंदी सारांश: ग्लोबल किल-स्विच अब डिस्क रीड-बैक के बाद ही स्थायी सफलता बताता है; 8/8 नए टेस्ट पास, पूरी सूट 2309 पास।
+
+---
+
+## Slot 2026-10-09 02:35 IST — WORK SLOT 7 (window 2026-10-08)
+
+**Item 13 (`Zero-fake-success for all tools`) — resume route.** `POST /api/system/resume` reported the freeze release as durable (`persisted`) from the raw `persistEmergencyState()` boolean — which returns true without writing when the file already holds identical bytes — and never read the cleared latch or the appended `SYSTEM RESUMED ... VERIFIED` row back from disk. A release that never reached disk could be reported, and the Telegram resumption notice sent, while the next boot still read the freeze as engaged; the phantom row was never rolled back. Fix: one durability verdict read back from disk — `emergencyStateOnDisk(false)` for the cleared latch, `diskHasAuditRow(auditRow.id)` for the row; a non-durable release is refused with HTTP 500, the row rolled back, and the notice sent only for a durable release. Same defect class as the slot-5/slot-6 fixes. New `src/tests/resumeDurabilityTruth.test.ts`; `emergencyStateDurabilityTruth` guard re-pinned.
+
+**Harness fix found while verifying:** five durability suites shared a listen port with another suite; vitest runs files in parallel, so the second binder's requests hit the first file's server. `telephonyCallDurabilityTruth` and `emergencyStateDurabilityTruth` both bound 4793 and reproducibly failed 3/4 assertions only when run together (4761/4791/4792/4794 also collided). Reassigned to unique ports 4813/4815/4816/4817/4818.
+
+- Tests: targeted 3 files / 19 passed; full suite **194 files / 2315 passed** (0 failed, 55.77 s). Negative-validated: revert only `server.ts` → 4/6 fail; restored → 6/6. Port fix verified by the suite going 3 failed/2312 passed → 0 failed/2315 passed with no production-code change.
+- Lint: `tsc --noEmit` exit 0. Build: exit 0 (`dist/server.cjs` 1065295 bytes).
+- E2E: NOT RUN (no handset). Security: NOT RUN (finalization step). Deploy: NOT_CONFIGURED.
+- Commits: f0114ac (fix), b72d5e3 (test ports). Branch: `feature/hermes-full-completion`. PR: NONE. Main merge: NOT MERGED — awaiting human approval.
+- Item 13 stays `PARTIAL`: unclassified `success: true` / discarded-`persistMemory()` sites remain in `server.ts` / `server_tools.ts`.
+
+हिंदी सारांश: रिज़्यूम रूट अब डिस्क रीड-बैक के बाद ही स्थायी रिलीज़ बताता है (रिवर्ट पर 4/6 फेल), और पाँच टेस्ट-पोर्ट टकराव ठीक किए; पूरी सूट 2315 पास।

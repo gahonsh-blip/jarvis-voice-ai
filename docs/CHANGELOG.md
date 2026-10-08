@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 02:35 IST (2026-10-08 21:05 UTC) — window slot 7: the resume route no longer reports a durable freeze release whose latch or audit row never reached disk
+
+### Fixed
+- **`POST /api/system/resume` (`server.ts`) reported the freeze release as durable (`persisted`) from the raw `persistEmergencyState()` boolean, which returns `true` without writing when the file already holds identical bytes, and never read the cleared latch or the appended `SYSTEM RESUMED … VERIFIED` row back from disk.** A release that never reached `jarvis_memory.json` could be reported — and the Telegram resumption notice sent — while the next boot still read the freeze as engaged; the phantom row was never rolled back. The route now derives one durability verdict by reading both back from disk: `emergencyStateOnDisk(false)` confirms the cleared latch, `diskHasAuditRow(auditRow.id)` confirms the appended row. A release whose writes did not land is refused with HTTP 500 `success: false, persisted: false`, the row is rolled back, and the notice is suppressed. Same defect class as the slot-5 (emergency toggle) and slot-6 (kill switch) fixes.
+
+### Tests
+- New `src/tests/resumeDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file): a durable release writes the cleared latch and the row to disk, a real restart boots from that disk state, plus a source guard. Negative-validated: reverting only `server.ts` to HEAD fails 4 of 6 new cases; restored → 6/6. The existing `emergencyStateDurabilityTruth` wiring assertion was aligned to pin the durable shape.
+- **Test harness:** five durability suites shared a listen port with another suite. Because vitest runs test files in parallel, the second binder's requests hit the first file's server and returned the wrong data — `telephonyCallDurabilityTruth` and `emergencyStateDurabilityTruth` both bound 4793 and reproducibly failed 3/4 assertions only when run together (4761/4791/4792/4794 had the same hazard). Reassigned the colliding ports to unused values (4813/4815/4816/4817/4818). No production code changed.
+- Lint (`tsc --noEmit`) exit 0. Targeted resume + state guards + kill-switch 3 files / 19 passed. Full suite **194 files / 2315 tests passed** (55.77 s, 0 failed) — up from 3 failed / 2312 passed before the port fix, with no production-code change. Build exit 0 (`dist/server.cjs` 1065295 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-09 02:05 IST (2026-10-08 20:35 UTC) — window slot 6: the global kill switch no longer reports a durable termination whose latch or audit row never reached disk
 
 ### Fixed

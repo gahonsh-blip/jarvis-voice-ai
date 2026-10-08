@@ -4,7 +4,40 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 02:05 IST — **WORK SLOT 6** of the 2026-10-08 →
+Last cycle: 2026-10-09 02:35 IST — **WORK SLOT 7** of the 2026-10-08 →
+2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the resume
+route reported a durable freeze release whose latch and audit row never reached
+disk.** `POST /api/system/resume` (`server.ts`) computed `persisted` from the
+raw `persistEmergencyState()` boolean, which returns `true` without writing when
+the file already holds identical bytes, and never read the cleared latch or the
+appended `SYSTEM RESUMED … VERIFIED` row back from disk. A release that never
+reached `jarvis_memory.json` could be reported — and the Telegram resumption
+notice sent — while the next boot still read the freeze as engaged, and the
+phantom row was never rolled back. The route now derives one durability verdict
+from disk: `emergencyStateOnDisk(false)` confirms the cleared latch,
+`diskHasAuditRow(auditRow.id)` confirms the appended row, and a release whose
+writes did not land is refused with HTTP 500 `success: false, persisted: false`
+with the row rolled back and the notice suppressed. Guarded by
+`src/tests/resumeDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp
+memory file: durable release writes the cleared latch and the row to disk, a
+real restart boots from the disk state, plus a source guard); the existing
+`emergencyStateDurabilityTruth` wiring assertion was aligned to pin the durable
+shape. Negative-validated: reverting only `server.ts` to HEAD fails 4 of 6 new
+cases; restored → 6/6. Also fixed a test-harness defect found while verifying:
+five durability suites shared a listen port and, because vitest runs files in
+parallel, the second binder's requests hit the first file's server —
+`telephonyCallDurabilityTruth` and `emergencyStateDurabilityTruth` both bound
+4793 and failed 3/4 assertions only when run together; ports reassigned to unique
+values (4813/4815/4816/4817/4818). Gates (observed this fire): lint
+(`tsc --noEmit`) exit 0; targeted resume + state guards + kill-switch 3 files /
+19 passed; full suite 194 files / 2315 tests passed (0 failed); `npm run build`
+exit 0 (`dist/server.cjs` 1065295 bytes). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted (the tail of
+unclassified `success: true` / discarded-`persistMemory()` sites in `server.ts` /
+`server_tools.ts` remains, truthfulness `UNKNOWN`). Hardware-blocked items
+#1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`.
+
+Last cycle (previous): 2026-10-09 02:05 IST — **WORK SLOT 6** of the 2026-10-08 →
 2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the global
 kill switch reported a durable termination whose latch and audit row never
 reached disk.** `POST /api/system/kill-switch` (`server.ts`) engaged the freeze
