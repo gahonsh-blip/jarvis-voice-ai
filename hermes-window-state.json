@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-08",
   "window_started_at": "2026-10-08T15:36:00Z",
-  "last_slot_at": "2026-10-08T15:45:00Z",
-  "slots_completed": 1,
+  "last_slot_at": "2026-10-08T17:27:33Z",
+  "slots_completed": 2,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "b9a6dc3",
+  "last_commit": "c79485d1f9d5c3ee5942342f7bb17ff11746ea8c",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Fresh window 2026-10-08 -> 2026-10-09, slot 1 (21:05 IST fire). Advanced item 13: OAuth connect callbacks (LinkedIn + YouTube) now gate their Connected! popup and VERIFIED audit row on a durable persistMemory() write; on failure they drop the unpersisted credential and post *_OAUTH_ERROR. New test oauthConnectionDurabilityTruth.test.ts. Full suite 188 files / 2274 passed, lint exit 0, build exit 0. Next slot: classify the remaining persistMemory()-discard success:true sites in server.ts / server_tools.ts."
+  "note": "Slot 2 (22:35 IST fire). Item 13: POST /api/telephony/settings reported SAVED/success:true while telephonySettingsState was module-local and never in memoryState (persistMemory serialized it not at all). Added telephonySettings to MemoryData + persistTelephonySettingsState(); boot restore of saved settings/engine; route now returns 500/NOT_PERSISTED and rolls back on failed write. New telephonySettingsDurabilityTruth.test.ts (7 cases, real server + restart + read-only file), negative-validated (2/7 fail without fix). Gates: lint 0, targeted 2 files/18 passed, full suite 189 files/2281 passed (0 failed), build exit 0 (dist/server.cjs 1060724 bytes). Next slot: continue classifying remaining discarded-persistMemory()/success:true sites in server.ts/server_tools.ts."
 }
