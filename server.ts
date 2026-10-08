@@ -10122,12 +10122,36 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
 
     if (requestedDecision === 'REJECT') {
       if (actionId) updateActionRequestStatus(actionId, 'REJECTED', { resolvedBy: approverName });
-      // Durable so a restart cannot resurrect the rejected dial as pending.
-      const persisted = persistApprovalRegistry();
+      // Durable so a restart cannot resurrect the rejected dial as pending. As on
+      // the web decision routes, `persistApprovalRegistry()` can return true
+      // without writing when the file already holds identical bytes, so the
+      // terminal status is read back from disk rather than trusting the boolean.
+      // A rejection that never reached disk is refused and the session request
+      // reverted, so a reboot cannot re-offer a call the operator was told was
+      // cancelled.
+      const persisted =
+        persistApprovalRegistry() &&
+        (!actionId || actionRequestStatusOnDisk(actionId, 'REJECTED'));
+      if (!persisted) {
+        TelephonySessionManager.revertOutboundAuthorization(requestId, 'REJECTED');
+        if (actionId) {
+          const liveReq = getAllActionRequests().find((r) => r.id === actionId);
+          if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+          memoryState.permissionRequests = persistedActionRequests();
+        }
+        return res.status(500).json({
+          success: false,
+          authorized: false,
+          persisted: false,
+          recorded: false,
+          outcome: 'UNPERSISTED',
+          message: 'The decision could not be written to durable storage; it was not recorded.',
+        });
+      }
       return res.json({
         success: true,
         authorized: false,
-        persisted,
+        persisted: true,
         outcome: verdict.outcome,
         message: verdict.message,
       });
@@ -10136,8 +10160,31 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
     if (actionId) updateActionRequestStatus(actionId, 'APPROVED', { resolvedBy: approverName });
     // The authorization decision is durable independently of whether the carrier
     // later confirms the dial; persist it before any dispatch attempt so a
-    // reboot cannot re-offer an already-approved call.
-    persistApprovalRegistry();
+    // reboot cannot re-offer an already-approved call. The write is verified on
+    // disk (the boolean alone is true without writing on identical bytes). A
+    // decision that did not reach disk must not be dialled: the carrier call
+    // would be irreversible while the next boot re-offers the same request for a
+    // duplicate dial. Refuse, revert the session request, and roll the action
+    // back to pending so the operator can decide again.
+    const persisted =
+      persistApprovalRegistry() && (!actionId || actionRequestStatusOnDisk(actionId, 'APPROVED'));
+    if (!persisted) {
+      TelephonySessionManager.revertOutboundAuthorization(requestId, 'AUTHORIZED');
+      if (actionId) {
+        const liveReq = getAllActionRequests().find((r) => r.id === actionId);
+        if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+        memoryState.permissionRequests = persistedActionRequests();
+      }
+      return res.status(500).json({
+        success: false,
+        authorized: false,
+        persisted: false,
+        recorded: false,
+        outcome: 'UNPERSISTED',
+        message:
+          'The authorization could not be written to durable storage; the call was not placed.',
+      });
+    }
 
     // Verify the active engine can actually place a PSTN call before
     // connecting (Section V). The raw `isConfigured()` boolean is not enough:

@@ -709,6 +709,26 @@ export class TelephonySessionManager {
     }
   }
 
+  /**
+   * Undo an authorization decision that could not be persisted. The authorize
+   * route calls this only when the recorded decision did not reach disk: the
+   * request returns to PENDING_AUTHORIZATION so a reboot cannot keep a decision
+   * the operator was told had failed, and the call can be decided again. Only a
+   * request still carrying the decision just recorded is reverted; anything else
+   * is left untouched.
+   */
+  static revertOutboundAuthorization(
+    id: string,
+    recordedStatus: OutboundCallRequest['status']
+  ): boolean {
+    const req = this.pendingOutboundRequests.get(id);
+    if (!req || req.status !== recordedStatus) return false;
+    req.status = 'PENDING_AUTHORIZATION';
+    req.authorizedAt = undefined;
+    req.authorizedBy = undefined;
+    return true;
+  }
+
   static getCallHistory(): TelephonySession[] {
     return [...this.callHistoryArchive];
   }
