@@ -153,7 +153,9 @@ describe('POST /api/social/generate is guarded in source against a regression', 
       flat.indexOf("app.post('/api/social/generate'"),
       flat.indexOf("app.post('/api/social/action'")
     );
-    expect(route).toContain('if (!persistMemory())');
+    // The guard now also proves the staging audit row reached disk, so it is
+    // stricter than the plain persist-boolean check it replaced.
+    expect(route).toContain('if (!persistMemory() || !diskHasAuditRow(auditRow.id))');
     expect(route).toContain('persisted: true');
     // The unconditional success reply this route used to emit must not return.
     expect(route).not.toContain('res.json({ success: true, post: newPost })');

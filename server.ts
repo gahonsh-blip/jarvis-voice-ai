@@ -937,6 +937,22 @@ function persistMemory(): boolean {
 }
 
 /**
+ * True only when the audit row with `id` is present in the memory file on disk.
+ * `persistMemory()` can return true without writing when the file already holds
+ * the identical bytes, so a route that appends a row and then persists needs a
+ * disk check to be sure the row is durable rather than trusting the boolean.
+ */
+function diskHasAuditRow(id: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const rows: AuditLogEntry[] = Array.isArray(onDisk.auditLogs) ? onDisk.auditLogs : [];
+    return rows.some((r) => r?.id === id);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Write the Security Matrix gates to disk. The matrix lives outside `memoryState`,
  * so this first copies the live gates into `memoryState.securityMatrix` and then
  * runs the durable write. Returns whether the gates are on disk — the update route
@@ -4860,20 +4876,12 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
     gate: 'Level-2 draft review',
   });
 
-  // A draft is only real once it is durable. A write that never reaches disk
-  // (read-only volume, full disk) leaves this process holding a draft the next
-  // boot does not have, so do not log the staging or answer success for it.
-  if (!persistMemory()) {
-    const draftIndex = memoryState.socialPosts.indexOf(newPost);
-    if (draftIndex !== -1) memoryState.socialPosts.splice(draftIndex, 1);
-    return res.status(500).json({
-      success: false,
-      persisted: false,
-      error: 'The draft could not be written to durable storage; it was not created.',
-    });
-  }
-
-  pushAuditEntry({
+  // Append the staging audit row before the durable write, then verify the row
+  // itself reached disk. The row used to be pushed *after* `persistMemory()`,
+  // so it was never written to the memory file and a restart dropped it — yet
+  // the route still answered `persisted: true`. Persisting first, then checking
+  // the file, proves the row is durable instead of trusting the write boolean.
+  const auditRow = pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: stagingAudit.action,
@@ -4883,6 +4891,21 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
+
+  // A draft is only real once it — and its audit row — are durable. A write that
+  // never reaches disk (read-only volume, full disk) leaves this process holding
+  // a draft the next boot does not have, so do not answer success for it.
+  if (!persistMemory() || !diskHasAuditRow(auditRow.id)) {
+    const draftIndex = memoryState.socialPosts.indexOf(newPost);
+    if (draftIndex !== -1) memoryState.socialPosts.splice(draftIndex, 1);
+    const auditIndex = memoryState.auditLogs.indexOf(auditRow);
+    if (auditIndex !== -1) memoryState.auditLogs.splice(auditIndex, 1);
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The draft could not be written to durable storage; it was not created.',
+    });
+  }
 
   res.json({ success: true, persisted: true, post: newPost });
 });
