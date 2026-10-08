@@ -13868,3 +13868,43 @@ Commits: f738302 (fix), 6a107bd (docs). Branch:
 
 हिंदी सारांश: टेलीफ़ोनी कॉल-हिस्ट्री अब सच में डिस्क पर सेव होती है; पहले हर
 कॉल/डिलीट रीस्टार्ट पर गायब हो जाता था जबकि UI को "सेव" बताया जाता था।
+
+---
+
+## WORK SLOT 4 — 2026-10-09 00:05 IST
+
+**Item #13 `Zero-fake-success for all tools` — social draft-staging audit-row
+durability. PARTIAL.**
+
+`POST /api/social/generate` (`server.ts`) appended its Level-2 staging audit row
+with `pushAuditEntry()` **after** calling `persistMemory()`, so the row was never
+serialized into `jarvis_memory.json`: it lived only in the process's
+`memoryState.auditLogs`, vanished on the next boot, yet the route answered
+`{ success: true, persisted: true }`. The existing durability test read the row
+back through the *same* process's `/api/security`, so an in-memory row satisfied
+it and the disk defect went unnoticed.
+
+Fix: append the row **before** the durable write and gate success on both the
+write result and a new `diskHasAuditRow(id)` helper that reads the memory file
+and confirms the row id is actually present. A write that never reaches disk
+rolls back the draft *and* the audit row and answers HTTP 500
+`success:false persisted:false`.
+
+Evidence: new `src/tests/socialDraftAuditDurabilityTruth.test.ts` (real
+`tsx server.ts` process on a temp memory file): the staging row is present in the
+memory file on disk, it survives a real restart, an unwritable volume is refused
+with the draft and row rolled back, plus a source-order guard. The existing
+`socialDraftDurabilityTruth` source guard was strengthened to the new condition
+(stricter, not weaker). Negative-validated: reverting `server.ts` to HEAD fails
+2 of 4 new cases; restored → 4/4.
+
+Gates (observed): lint `tsc --noEmit` exit 0; targeted 3 files / 17 passed; full
+suite **191 files / 2294 tests passed** (49.13 s, 0 failed); `npm run build`
+exit 0 (`dist/server.cjs` 1063043 bytes). E2E: NOT RUN (no handset).
+Deploy: NOT_CONFIGURED.
+
+Commits: 3b53c2c (fix), 035b16d (docs). Branch:
+`feature/hermes-full-completion`.
+
+हिंदी सारांश: सोशल ड्राफ़्ट का ऑडिट-रो अब सच में डिस्क पर लिखा जाता है; पहले
+`persisted:true` कहा जाता था जबकि रो रीस्टार्ट पर गायब हो जाता था।
