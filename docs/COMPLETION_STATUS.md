@@ -4,7 +4,43 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-08 21:05 IST — **WORK SLOT 1** of the fresh 2026-10-08 →
+Last cycle: 2026-10-08 22:35 IST — **WORK SLOT 2** of the 2026-10-08 →
+2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the telephony
+settings route reported a `SAVED` that never reached disk.**
+`POST /api/telephony/settings` (`server.ts`) copied the accepted fields onto the
+module-local `telephonySettingsState`, called `persistMemory()`, **discarded its
+return value**, and answered `success: true` — but `telephonySettingsState` was
+never part of `memoryState`, so `persistMemory()` serializes it *not at all*:
+every saved provider / greeting / voice rate silently reverted to the
+compile-time defaults on the next boot while the UI showed "SAVED". The route
+also spread the raw request body over the live settings (`...updates`), so
+unknown keys were "stored" and a malformed value corrupted live state, and an
+empty body reported a save with no change. The fix adds `telephonySettings` to
+`MemoryData`, adds `persistTelephonySettingsState()` (copies the live state into
+`memoryState` before the durable write and returns the write result), hydrates
+the defaults, and **restores the saved settings and engine selection on boot**
+(adopting only real `TELEPHONY_SETTING_KEYS` with primitive values). The route
+now snapshots the previous settings, runs the durable write, rolls back and
+answers HTTP 500 `success: false, persisted: false, outcome: 'NOT_PERSISTED'`
+when the write cannot reach disk, and reports `persisted` / `changed` honestly.
+Guarded by `src/tests/telephonySettingsDurabilityTruth.test.ts` (7 cases against
+a **real server process** on a temp memory file: a save reports `persisted: true`
+and `changed: true`, the value is present in the memory file on disk, a repeat of
+the stored value reports `changed: false`, the value survives a real restart, and
+a read-only-file save is refused with HTTP 500 and the live value rolled back —
+plus 2 source guards pinning the persist call and boot hydration).
+Negative-validated: with `persistTelephonySettingsState()` stubbed to
+`return true`, 2 of 7 fail (the on-disk write and the refused unpersistable save);
+restored → 7/7. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted `telephonySettingsDurabilityTruth` + `telephonySettingsTruth` 2 files /
+18 passed; full suite **189 files / 2281 tests passed** (46.25 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1060724 bytes). E2E: NOT RUN (no
+handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not
+exhausted (the tail of unclassified `success: true` / discarded-`persistMemory()`
+sites in `server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`).
+Hardware-blocked items #1/#2/#50/#55 remain `NOT_AVAILABLE`/`PARTIAL`.
+
+Last cycle (previous): 2026-10-08 21:05 IST — **WORK SLOT 1** of the fresh 2026-10-08 →
 2026-10-09 window. **Item 13 (`Zero-fake-success for all tools`) — the OAuth
 *connect* callbacks announced a connection that could silently not persist.**
 `GET /api/auth/linkedin/callback` and `GET /api/auth/youtube/callback`

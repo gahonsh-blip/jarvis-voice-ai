@@ -30,6 +30,21 @@ write rolls the in-memory matrix back and answers HTTP 500 `success: false,
 persisted: false` without touching the file. Pinned by
 `src/tests/securityMatrixDurabilityTruth.test.ts` (negative-validated).
 
+### Telephony settings durability
+The telephony settings carry security-relevant configuration (the calling
+provider, the auto-answer policy, the agent persona). `POST /api/telephony/settings`
+(`server.ts`) previously wrote them onto a module-local `telephonySettingsState`
+that was not part of `memoryState` and answered `success: true` after a
+`persistMemory()` call whose result it discarded — so the settings never reached
+disk and silently reverted to the compile-time defaults on the next boot.
+
+The settings are now part of `memoryState` (`persistTelephonySettingsState()`),
+restored on boot from the memory file (per-key validated against
+`TELEPHONY_SETTING_KEYS`), and the route is gated: a failed write rolls the live
+settings back and answers HTTP 500 `success: false, persisted: false,
+outcome: 'NOT_PERSISTED'`. Pinned by
+`src/tests/telephonySettingsDurabilityTruth.test.ts` (negative-validated).
+
 ### Spoken-approval parsing (Android bridge)
 The approval gate is only as strong as the parser that reads the owner's reply.
 `evaluateOwnerApproval` in `src/utils/androidBridgeEngine.ts` previously returned

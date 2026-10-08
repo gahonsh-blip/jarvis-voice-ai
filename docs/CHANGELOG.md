@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-08 22:35 IST (2026-10-08 17:06 UTC) — window slot 2: the telephony settings route no longer reports a `SAVED` that never reached disk
+
+### Fixed
+- **`POST /api/telephony/settings` (`server.ts`) copied the accepted fields onto the module-local `telephonySettingsState`, called `persistMemory()`, discarded its return value, and answered `success: true`.** `telephonySettingsState` was never part of `memoryState`, so `persistMemory()` serialized it not at all: every saved provider / greeting / voice rate silently reverted to the compile-time defaults on the next boot while the UI showed "SAVED". The route also spread the raw request body over the live settings (`...updates`), so unknown keys were "stored" and a malformed value corrupted live state, and an empty body reported a save with no change. `telephonySettings` is now part of `MemoryData`, `persistTelephonySettingsState()` copies the live state into `memoryState` before the durable write and returns the write result, the defaults are hydrated, and the boot path **restores the saved settings and engine selection** (adopting only real `TELEPHONY_SETTING_KEYS` with primitive values). The route snapshots the previous settings, runs the durable write, rolls back and answers HTTP 500 `success: false, persisted: false, outcome: 'NOT_PERSISTED'` when the write cannot reach disk, and reports `persisted` / `changed` honestly.
+
+### Tests
+- New `src/tests/telephonySettingsDurabilityTruth.test.ts` (7 cases against a real `tsx server.ts` process on a temp memory file): a save reports `persisted: true` / `changed: true`, the value is present in the memory file on disk, a repeat of the stored value reports `changed: false`, the value survives a real restart, and a read-only-file save is refused with HTTP 500 and the live value rolled back — plus 2 source guards pinning the persist call and boot hydration. Negative-validated: with `persistTelephonySettingsState()` stubbed to `return true`, 2 of 7 fail; restored → 7/7. Targeted `telephonySettingsDurabilityTruth` + `telephonySettingsTruth` 2 files / 18 passed. Lint (`tsc --noEmit`) exit 0. Full suite **189 files / 2281 tests passed** (46.25 s, 0 failed). Build exit 0 (`dist/server.cjs` 1060724 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-08 21:05 IST (2026-10-08 15:36 UTC) — window slot 1: the OAuth *connect* callbacks no longer announce a connection that did not persist
 
 ### Fixed
