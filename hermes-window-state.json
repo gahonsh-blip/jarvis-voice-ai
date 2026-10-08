@@ -2,15 +2,15 @@
   "window_date": "2026-10-08",
   "window_started_at": "2026-10-08T15:36:00Z",
   "last_slot_at": "2026-10-08T22:05:00Z",
-  "slots_completed": 8,
+  "slots_completed": 9,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "0521d05",
+  "last_commit": "56c0164",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 8 (03:05 IST fire). Item 13: POST /api/approvals/resolve reported both REJECT and APPROVE as durable from persistApprovalRegistry()'s boolean (true whenever persistMemory() returns true, which is true without writing on identical bytes). Both branches now read the terminal status back from disk with actionRequestStatusOnDisk(id, 'REJECTED'/terminalStatus); an unpersisted decision is refused with HTTP 500, the request rolled back to PENDING_APPROVAL, the phantom audit row dropped, and memoryState.permissionRequests resynced so a later persistMemory() cannot write the phantom decision. APPROVE also reports outcome:'UNPERSISTED'/recorded:false. New approvalResolveDurabilityTruth.test.ts (real tsx server.ts, temp memory file made read-only, real restart, source guard). Negative-validated: against pre-fix server.ts from HEAD, 4/7 fail (HTTP 200 fake-success); restored 7/7. Gates: lint 0; full suite 195 files/2322 passed (0 failed); build exit 0 (dist/server.cjs 1067091 bytes). Commits 14aa28c (fix+test), 0521d05 (docs)."
+  "note": "Slot 9 (03:35 IST fire). Item 13: POST /api/telephony/outbound/authorize reported both REJECT and APPROVE as durable from persistApprovalRegistry()'s boolean (true whenever persistMemory() returns true, which is true without writing on identical bytes), and on APPROVE dialled the carrier on the unverified decision - an irreversible call the next boot would resurrect as PENDING_AUTHORIZATION. Both branches now read the terminal status back from disk with actionRequestStatusOnDisk; an unpersisted decision is refused with HTTP 500 success:false persisted:false recorded:false outcome:UNPERSISTED, the session request is reverted to PENDING_AUTHORIZATION via the new TelephonySessionManager.revertOutboundAuthorization, and the action is rolled back to PENDING_APPROVAL. New outboundAuthorizeDurabilityTruth.test.ts (real tsx server.ts, temp memory file made read-only, source guards). Negative-validated: against pre-fix server.ts from HEAD, 4/6 fail (HTTP 200 fake-success); restored 6/6. Gates: lint 0; full suite 196 files/2328 passed (0 failed); build exit 0 (dist/server.cjs 1069266 bytes). Commits b5c7264 (fix+test), 56c0164 (docs)."
 }
