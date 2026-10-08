@@ -7003,14 +7003,19 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
 
   const resumedState = resumeSystemOperation(requestedBy);
 
-  // Re-enable telegram live polling if token is valid
-  if (getCleanTelegramToken() && !telegramPollingActive) {
-    startTelegramPolling().catch((err: any) => {
-      console.warn('[Telegram Bot] Resumption notice:', err.message);
-    });
-  }
+  // The release must be durable too: a "resumed" report that is not on disk
+  // would re-freeze on the next boot, so the cleared latch is read back from
+  // disk (`emergencyStateOnDisk(false)`) rather than trusting
+  // `persistEmergencyState()`'s boolean, which can return true without writing
+  // when the file already holds the identical bytes.
+  const statePersisted = persistEmergencyState() && emergencyStateOnDisk(false);
 
-  pushAuditEntry({
+  // The release claim and its audit row share one durability verdict: the row
+  // is appended, then persisted, then read back from disk with
+  // `diskHasAuditRow`. A release reported as durable whose row never landed is
+  // refused and the phantom row rolled back. The release itself is kept in
+  // memory so a disk error does not leave the system looking frozen.
+  const auditRow: AuditLogEntry = {
     id: `log-resume-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `🟢 SYSTEM RESUMED by ${requestedBy}: Subsystems returned to standard Level 1-4 permission mode.`,
@@ -7019,11 +7024,30 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
     status: 'EXECUTED',
     verificationStatus: 'VERIFIED',
     finalTruthState: 'VERIFIED',
-  });
+  };
+  pushAuditEntry(auditRow);
+  const auditPersisted = persistMemory() && diskHasAuditRow(auditRow.id);
+  const persisted = statePersisted && auditPersisted;
 
-  // The release must be durable too: a "resumed" report that is not on disk
-  // would re-freeze on the next boot. Kept in memory regardless of the write.
-  const persisted = persistEmergencyState();
+  if (!persisted) {
+    memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== auditRow.id);
+    return res.status(500).json({
+      success: false,
+      released: false,
+      persisted: false,
+      outcome: verdict.outcome,
+      message: verdict.message,
+      emergencyState: resumedState,
+      error: 'The resume could not be written to durable storage.',
+    });
+  }
+
+  // Re-enable telegram live polling only for a durable release
+  if (getCleanTelegramToken() && !telegramPollingActive) {
+    startTelegramPolling().catch((err: any) => {
+      console.warn('[Telegram Bot] Resumption notice:', err.message);
+    });
+  }
 
   res.json({
     success: true,

@@ -180,7 +180,12 @@ describe('the durability wiring cannot be quietly dropped', () => {
       serverSource.indexOf("app.post('/api/system/resume'"),
       serverSource.indexOf('// Approvals & Action Requests Registry'),
     );
-    expect(resumeRoute).toMatch(/const persisted = persistEmergencyState\(\);/);
+    // The resume `persisted` is the same conjunction: the cleared latch must be
+    // read back from disk and the release row confirmed present, so a release
+    // that never reached disk is not reported as durable.
+    expect(resumeRoute).toMatch(/const statePersisted = persistEmergencyState\(\) && emergencyStateOnDisk\(false\);/);
+    expect(resumeRoute).toMatch(/const auditPersisted = persistMemory\(\) && diskHasAuditRow\(auditRow\.id\);/);
+    expect(resumeRoute).toMatch(/const persisted = statePersisted && auditPersisted;/);
     expect(resumeRoute).toMatch(/persisted,/);
   });
 });
