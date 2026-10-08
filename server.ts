@@ -6912,31 +6912,61 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
 
   // 3. Log the Level 4 audit event only when the engagement actually did the
   // work it claims; an already-engaged (or unobserved) kill switch must not
-  // write a "terminated all background tasks" row.
-  if (killVerdict.actionExecuted) {
-    pushAuditEntry({
-      id: `log-killswitch-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killVerdict.clearedTasksCount} pending PermissionGateway item(s).`,
-      levelRequired: 4,
-      approvedBy: requestedBy,
-      status: 'EXECUTED',
-      verificationStatus: 'VERIFIED',
-      finalTruthState: 'VERIFIED',
+  // write a "terminated all background tasks" row. The row is appended before
+  // the durable write below so it is serialized with the latch, then read back
+  // from disk to confirm it landed.
+  const killAuditRow: AuditLogEntry | null = killVerdict.actionExecuted
+    ? pushAuditEntry({
+        id: `log-killswitch-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killVerdict.clearedTasksCount} pending PermissionGateway item(s).`,
+        levelRequired: 4,
+        approvedBy: requestedBy,
+        status: 'EXECUTED',
+        verificationStatus: 'VERIFIED',
+        finalTruthState: 'VERIFIED',
+      })
+    : null;
+
+  // 4. Durably hold the latch and its audit row. A kill switch that is reported
+  // engaged but is not on disk would silently release on the next boot — the
+  // most dangerous kind of false success. `persistEmergencyState()` returns the
+  // `persistMemory()` boolean, which can be true without writing when the file
+  // already holds the identical bytes, so the latch is read back from disk
+  // (`emergencyStateOnDisk`) and the appended row is confirmed present
+  // (`diskHasAuditRow`). `persisted` is the conjunction, not the write boolean.
+  const statePersisted = persistEmergencyState() && emergencyStateOnDisk(true);
+  const auditPersisted =
+    killAuditRow === null ? true : persistMemory() && diskHasAuditRow(killAuditRow.id);
+  const persisted = statePersisted && auditPersisted;
+
+  // A real engagement whose latch or row is not durable must not be reported as
+  // held. Roll the phantom row back and answer honestly; the latch is kept in
+  // memory so a disk error never silently un-freezes the system.
+  if (killVerdict.actionExecuted && !persisted) {
+    if (killAuditRow) {
+      memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== killAuditRow.id);
+    }
+    return res.status(500).json({
+      success: false,
+      outcome: killVerdict.outcome,
+      actionExecuted: true,
+      persisted: false,
+      headline: killVerdict.headline,
+      message: killVerdict.message,
+      clearedTasksCount: killVerdict.clearedTasksCount,
+      wasTelegramPolling,
+      emergencyState: killResult.emergencyState,
+      error: 'The kill switch freeze could not be written to durable storage.',
     });
   }
 
-  // 4. Send Emergency Telegram Notice only for a real engagement.
-  if (killVerdict.actionExecuted && activeTelegramChatId && getCleanTelegramToken()) {
+  // 5. Send the Emergency Telegram Notice only for a real, durably held
+  // engagement — never for a freeze that did not reach disk.
+  if (killVerdict.actionExecuted && persisted && activeTelegramChatId && getCleanTelegramToken()) {
     const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killVerdict.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
-
-  // 5. Durably hold the latch. A kill switch that is reported engaged but is not
-  // on disk would silently release on the next boot — the most dangerous kind of
-  // false success. The latch is kept in memory regardless (never auto-release),
-  // and `persisted` names the durability gap when the write cannot reach disk.
-  const persisted = persistEmergencyState();
 
   res.status(killVerdict.outcome === 'UNKNOWN' ? 503 : 200).json({
     success: killVerdict.actionExecuted,

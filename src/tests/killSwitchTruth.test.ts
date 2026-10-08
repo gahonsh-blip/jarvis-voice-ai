@@ -88,7 +88,9 @@ describe('the kill-switch route uses the engagement verdict', () => {
   });
 
   it('gates the audit row and Telegram notice on a real engagement', () => {
-    expect(block).toMatch(/if \(killVerdict\.actionExecuted\) \{ pushAuditEntry/);
-    expect(block).toMatch(/if \(killVerdict\.actionExecuted && activeTelegramChatId/);
+    // The row is built only for a real engagement (ternary on the verdict)…
+    expect(block).toMatch(/killAuditRow[^=]*= killVerdict\.actionExecuted\s*\? pushAuditEntry/);
+    // …and the notice requires the engagement to be durably held.
+    expect(block).toMatch(/if \(killVerdict\.actionExecuted && persisted && activeTelegramChatId/);
   });
 });
