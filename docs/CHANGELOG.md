@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 03:35 IST (2026-10-08 22:05 UTC) — window slot 9: the outbound-call authorization route no longer reports a decision as durable without reading it back from disk, and never dials on an unverified decision
+
+### Fixed
+- **`POST /api/telephony/outbound/authorize` (`server.ts`) reported both the REJECT and the APPROVE decision as durable (`success`/`persisted`) from `persistApprovalRegistry()`'s boolean, which is `true` whenever `persistMemory()` returns `true` — and `persistMemory()` returns `true` without writing when the memory file already holds identical bytes.** On the APPROVE branch the route then reached the carrier-dispatch branch and placed the call: an irreversible outbound call on a decision the next boot would resurrect as `PENDING_AUTHORIZATION`, inviting a duplicate dial. Both branches now read the request's terminal action status back from disk with `actionRequestStatusOnDisk(id, …)`; when it is absent the decision is refused with HTTP 500 `success: false, persisted: false, recorded: false, outcome: 'UNPERSISTED'`, the session request is reverted to `PENDING_AUTHORIZATION` through the new `TelephonySessionManager.revertOutboundAuthorization`, and the action is rolled back to `PENDING_APPROVAL`. The dial never runs unless the authorization is durable. Same defect class as the slot-4…8 fixes (restore, OAuth disconnect, security matrix, emergency toggle, kill switch, resume, approval resolve).
+
+### Tests
+- New `src/tests/outboundAuthorizeDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file made read-only after the first write): an unpersisted REJECT and an unpersisted APPROVE each return HTTP 500 with the action still readable as pending and no carrier dispatch reported; a writable REJECT is recorded; a writable APPROVE passes the durability gate to the honest dial-engine check; plus source guards on both branches. Negative-validated: the new suite against the pre-fix `server.ts` from HEAD fails 4 of 6 cases (HTTP 200 fake-success instead of 500); restored → 6/6.
+- Lint (`tsc --noEmit`) exit 0. Full suite **196 files / 2328 tests passed** (58.84 s, 0 failed). Build exit 0 (`dist/server.cjs` 1069266 bytes).
+
+---
+
+
 ## [Unreleased] - 2026-10-09 03:05 IST (2026-10-08 21:35 UTC) — window slot 8: the approval resolve route no longer reports a decision as durable whose terminal status never reached disk
 
 ### Fixed
