@@ -13908,3 +13908,18 @@ Commits: 3b53c2c (fix), 035b16d (docs). Branch:
 
 हिंदी सारांश: सोशल ड्राफ़्ट का ऑडिट-रो अब सच में डिस्क पर लिखा जाता है; पहले
 `persisted:true` कहा जाता था जबकि रो रीस्टार्ट पर गायब हो जाता था।
+
+
+---
+
+## Slot 2026-10-09 00:35 IST — WORK SLOT 5 (window 2026-10-08)
+
+**Item 13 (`Zero-fake-success for all tools`) — emergency-stop route.** `POST /api/emergency/toggle` reported the safety freeze as held (`persisted:true`) and wrote a Level-4 `EMERGENCY STOP ACTIVATED ... VERIFIED` audit row while gating only on `persistMemory()` (which returns true without writing on identical bytes); `persisted` was derived from the in-memory flag flip, not storage. Fix: read both back from disk — new `emergencyStateOnDisk(expected)` for the latch, existing `diskHasAuditRow(id)` for the row; `persisted = statePersisted && auditPersisted`; a non-durable engagement is refused with HTTP 500 and the row rolled back, latch kept in memory so a disk error never silently un-freezes. New `src/tests/emergencyToggleDurabilityTruth.test.ts` (real `tsx server.ts`, temp memory file, real restart, read-only volume, source guard).
+
+- Tests: targeted 2 files / 16 passed; full suite 192 files / 2301 passed (0 failed, 51.39 s). Negative-validated: revert → 5/7 fail; restored → 7/7.
+- Lint: `tsc --noEmit` exit 0. Build: exit 0 (`dist/server.cjs` 1063892 bytes).
+- E2E: NOT RUN (no handset). Security: NOT RUN (finalization step). Deploy: NOT_CONFIGURED.
+- Commits: e6b5f0a (fix), 662ea74 (docs). Branch: `feature/hermes-full-completion`. PR: NONE. Main merge: NOT MERGED — awaiting human approval.
+- Item 13 stays `PARTIAL`: unclassified `success: true` / discarded-`persistMemory()` sites remain in `server.ts` / `server_tools.ts`.
+
+हिंदी सारांश: इमरजेंसी-स्टॉप रूट अब डिस्क रीड-बैक के बाद ही स्थायी सफलता बताता है; 7/7 नए टेस्ट पास, पूरी सूट 2301 पास।
