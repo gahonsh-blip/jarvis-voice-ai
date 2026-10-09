@@ -6277,12 +6277,17 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
         const customUrl = item.snippet?.customUrl || '';
         const avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '';
 
+        // The live probe verifies the channel, but the refreshed fields are only
+        // durable once they reach disk. Capture the write result so the reply
+        // carries it, instead of reporting a re-verified cache that a dropped
+        // write would lose on the next boot.
+        let profilePersisted = true;
         if (memoryState.youTubeConnection) {
           if (title) memoryState.youTubeConnection.channelTitle = title;
           memoryState.youTubeConnection.channelId = chId;
           memoryState.youTubeConnection.customUrl = customUrl;
           if (avatarUrl) memoryState.youTubeConnection.avatarUrl = avatarUrl;
-          persistMemory();
+          profilePersisted = persistMemory();
         }
 
         const conn = memoryState.youTubeConnection;
@@ -6290,6 +6295,12 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
         // canPublish therefore follows the recorded grant: true only when the
         // upload scope is on record, false when it is absent or unrecorded.
         const uploadScopeGranted = publishScopeGranted('youtube', conn?.scopes) === true;
+        // The account is genuinely verified against Google, but a refreshed
+        // profile cache that did not reach disk is not durable. Report that gap
+        // rather than a saved-connection claim the next boot would contradict.
+        const profileMessage = uploadScopeGranted
+          ? undefined
+          : `Channel confirmed read-only. The upload scope (${PLATFORM_PUBLISH_SCOPES.youtube}) is not on record for this connection, so publishing is not confirmed — reconnect to grant upload access.`;
         return res.json({
           connected: true,
           status: 'API_VERIFIED',
@@ -6306,9 +6317,10 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
           hasClientSecret: Boolean(clientSecret),
           hasApiKey: Boolean(apiKey),
           redirectUri,
-          message: uploadScopeGranted
-            ? undefined
-            : `Channel confirmed read-only. The upload scope (${PLATFORM_PUBLISH_SCOPES.youtube}) is not on record for this connection, so publishing is not confirmed — reconnect to grant upload access.`,
+          profilePersisted,
+          message: profilePersisted
+            ? profileMessage
+            : `The channel was verified against Google, but the refreshed profile could not be written to durable storage, so it is not cached. ${profileMessage ?? ''}`.trim(),
         });
       } else {
         const is403 = probeRes.status === 403;
