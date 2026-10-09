@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 04:05 IST (2026-10-09 22:35 UTC) — window slot 12: the offline status no longer claims a local save the browser refused
+
+### Fixed
+- **The offline writers in `src/utils/offlineStorage.ts` (`saveLocalChatHistory`, `saveLocalMemory`, `saveLocalVoiceSettings`, `queuePendingSync`, `clearLocalChatHistory`) returned `void` and swallowed the storage error in their `catch`, while the offline branch of the App command handler (`src/App.tsx`) set `'LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE'` unconditionally.** On a full disk, in private mode, or with storage refused, the change never reached `localStorage`, yet the operator read a completed save the next reload would not find. The writers now return whether the write landed; the offline branch captures the chat-history and memory results before touching React state and branches the status line — a landed write reads `PERSISTED TO LOCAL STORAGE`, a refused one reads `NOT SAVED LOCALLY (STORAGE UNAVAILABLE)` and logs the failure.
+
+### Tests
+- `src/tests/offlinePersistenceTruth.test.ts` (new): landed/refused/no-window writes for all four writers, plus 3 source guards (the unconditional literal is gone, the status line branches on `localWriteLanded`, the chat-history result is captured). Negative-validated: `git stash` of `offlineStorage.ts` fails 3 of 6 and `git stash` of `App.tsx` fails the other 3 of 6; restored → 6/6.
+- Lint (`tsc --noEmit`) exit 0; targeted 2 files / 14 tests passed; full `npx vitest run` 206 files / 2378 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1073865 bytes).
+
 ## [Unreleased] - 2026-10-10 03:07 IST (2026-10-09 21:37 UTC) — window slot 11: the YouTube status probe no longer reports a refreshed cache that failed to persist
 
 ### Fixed
