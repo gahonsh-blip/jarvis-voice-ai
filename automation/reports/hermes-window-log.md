@@ -14391,3 +14391,41 @@ slots_completed updated. PR: none (work slot). Main merge: NOT MERGED.
 
 **Next slot:** #13 continued -- audit `server_tools.ts` for discarded
 `persistMemory()` / bare `success: true` sites (no pass of this kind yet).
+
+---
+
+## Slot 5 — 2026-10-10 00:06 IST (2026-10-09 18:36 UTC) — WORK
+
+**Item:** #13 `Zero-fake-success for all tools` (stays `PARTIAL`).
+
+**Advanced:** The GitHub nightly-run history reported a run it had not durably
+recorded. `recordNightlyRun()` (`server.ts`) appended a nightly-run entry and
+called a bare `persistMemory()` whose boolean nobody read, while
+`POST /api/github/nightly/run` answered with the run record and no survival
+signal. `persistMemory()` writes only when the memory file's bytes change, so on
+a read-only volume or a full disk the row never reached `jarvis_memory.json` —
+the operator saw a nightly run the next boot would not have, and
+`getNightlyRuns()` (feeding `/api/github/nightly`) would then silently
+under-report the runs that actually happened. `recordNightlyRun()` now returns
+`: boolean`, reads the record back from disk with the new
+`nightlyRunOnDisk(record.runId)` helper (guarding the identical-bytes false
+positive), drops the phantom in-memory row when the write did not land, and the
+route reports the verdict as `recorded`.
+
+**Evidence:** `server.ts` (`nightlyRunOnDisk`, `recordNightlyRun` ~lines
+7751-7783; route `app.post('/api/github/nightly/run')` ~line 8063);
+`src/tests/nightlyRunRecordDurabilityTruth.test.ts` (4 cases). Negative-validated
+with `git stash`: reverting `server.ts` fails 4 of 4; restored -> 4/4.
+
+**Gates (observed):** lint (`tsc --noEmit`) exit 0; full suite **201 files /
+2355 tests passed** (0 failed, 62.01 s); `npm run build` exit 0
+(`dist/server.cjs` ~1.0 mb). Targeted file 4/4; related GitHub suites
+(`githubAutomationWorkflow`, `githubNightlyChecker`) 38/38. E2E: NOT RUN.
+Deploy: `NOT_CONFIGURED`.
+
+**Commits:** `7adb1de` (fix+tests), `733171b` (docs). Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed updated. PR: none (work slot). Main merge: NOT MERGED.
+
+**Next slot:** #13 continued — audit `server_tools.ts` for discarded
+`persistMemory()` / bare `success: true` sites (no pass of this kind yet).
