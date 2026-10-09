@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 21:05 IST (2026-10-09 15:35 UTC) — window slot 1: the Telegram mobile perm handlers no longer report an approval/rejection as durable without reading it back from disk
+
+### Fixed
+- **Both the `approve_perm_` and `reject_perm_` branches of `handleTelegramCallback` (`server.ts`) called `persistApprovalRegistry()` and discarded its boolean, while their comments claimed the decision was durable.** The approval registry lives outside `memoryState`, so `persistMemory()` returns `true` without writing when `jarvis_memory.json` already holds identical bytes. A decision that never reached disk was reported to the mobile admin as recorded, and the next boot resurrected the request as `PENDING_APPROVAL` for a duplicate external action (an approval) or a re-offered cancellation (a rejection). Both branches now read the terminal status back with `persistApprovalRegistry() && actionRequestStatusOnDisk(permId, 'EXECUTED' | 'REJECTED')`; when it is false the in-memory request is reverted to `PENDING_APPROVAL` and `memoryState.permissionRequests` is resynced so a later unrelated `persistMemory()` cannot write a phantom decision. The admin now receives an honest `APPROVAL NOT RECORDED` / `REJECTION NOT RECORDED` notice instead of a success claim. Same defect class as the slot-4…9 fixes (restore, OAuth disconnect, security matrix, emergency toggle, kill switch, resume, approval resolve, outbound-call authorize).
+
+### Tests
+- Extended `src/tests/approvalRegistryTerminalTruth.test.ts` (10 tests) with a case pinning the `actionRequestStatusOnDisk` readback, the `PENDING_APPROVAL` revert, and both refusal strings on each Telegram branch; the existing re-tap guard was widened to cover the longer branch. Negative-validated: the new guard against the pre-fix `server.ts` (`git stash`) fails `1 failed | 9 passed`; restored → 10/10.
+- Lint (`tsc --noEmit`) exit 0. Full suite **196 files / 2329 tests passed** (59.27 s, 0 failed). Build exit 0 (`dist/server.cjs` 1070244 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-09 03:35 IST (2026-10-08 22:05 UTC) — window slot 9: the outbound-call authorization route no longer reports a decision as durable without reading it back from disk, and never dials on an unverified decision
 
 ### Fixed

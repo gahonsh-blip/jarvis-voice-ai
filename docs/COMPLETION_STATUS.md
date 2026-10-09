@@ -4,7 +4,36 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 04:35 IST — **FINALIZATION SLOT** of the 2026-10-08 →
+Last cycle: 2026-10-09 21:05 IST — **WORK SLOT 1** of the fresh 2026-10-09 →
+2026-10-10 window. **Item 13 (`Zero-fake-success for all tools`) — the Telegram
+mobile `approve_perm_` / `reject_perm_` branches reported an approval/rejection
+as durable without reading it back from disk.** Both branches of the
+`handleTelegramCallback` perm handlers (`server.ts`) called
+`persistApprovalRegistry()` and discarded its boolean, while their comments
+claimed the decision was durable. The approval registry lives outside
+`memoryState`, so `persistMemory()` returns `true` without writing when
+`jarvis_memory.json` already holds identical bytes — a decided request that
+never reached disk could be reported as recorded, and the next boot would
+resurrect it as `PENDING_APPROVAL` for a duplicate external action. Both
+branches now read the terminal status back with
+`actionRequestStatusOnDisk(permId, …)`; when it is absent the in-memory request
+is reverted to `PENDING_APPROVAL` (so a later unrelated `persistMemory()` cannot
+write a phantom decision) and the mobile admin receives an honest
+`APPROVAL NOT RECORDED` / `REJECTION NOT RECORDED` notice instead of a success
+claim. Guarded by
+`src/tests/approvalRegistryTerminalTruth.test.ts` (source guards pinning the
+disk readback, the `PENDING_APPROVAL` revert, and both refusal strings on the
+two branches). Negative-validated: running the new guard against the pre-fix
+`server.ts` fails 1 of 10 cases; restored → 10/10. Gates (observed this fire):
+lint (`tsc --noEmit`) exit 0; full suite **196 files / 2329 tests passed** (0
+failed, 59.27 s); `npm run build` exit 0 (`dist/server.cjs` 1070244 bytes). E2E:
+NOT RUN (Telegram callback requires a live bot token + handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted (the tail
+of unclassified `success: true` / discarded-`persistMemory()` sites in
+`server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`). PR #6 to
+`main` remains open, non-draft; **NOT MERGED — awaiting human approval**.
+
+Last cycle (previous): 2026-10-09 04:35 IST — **FINALIZATION SLOT** of the 2026-10-08 →
 2026-10-09 window. No new development was started (finalization). The verified
 tip `dea9193` on `feature/hermes-full-completion` was frozen and re-verified
 end-to-end. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full suite
@@ -7833,6 +7862,42 @@ cluster **20 files / 273 tests passed**; full suite **161 files / 2049 tests
 passed** (25.37 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs`
 1015350 bytes). E2E: NOT RUN ‚Äî no handset. Deploy: NOT_CONFIGURED. Item 13 stays
 `PARTIAL` ‚Äî the sweep is not exhausted.
+
+---
+
+## Bugs found and fixed (cycle 13 ‚Äî Telegram mobile perm decision durability truth)
+
+1. **The Telegram mobile approval branch reported a durable approval it never
+   confirmed.** The `approve_perm_` branch of `handleTelegramCallback`
+   (`server.ts`) flipped the request to `EXECUTED`, then ran
+   `if (updated) persistApprovalRegistry();` and discarded the result. The
+   approval registry lives outside `memoryState`, so `persistMemory()` returns
+   `true` without writing when `jarvis_memory.json` already holds identical
+   bytes. A decision that never reached disk was reported as recorded, and the
+   next boot resurrected the request as `PENDING_APPROVAL` for a duplicate
+   external action. The branch now reads the status back with
+   `persistApprovalRegistry() && actionRequestStatusOnDisk(permId, 'EXECUTED')`;
+   when it is false the in-memory request is reverted to `PENDING_APPROVAL` (and
+   `memoryState.permissionRequests` resynced), and the admin receives
+   `APPROVAL NOT RECORDED` instead of the approval reply.
+
+2. **The rejection branch carried the same fake-success.** The `reject_perm_`
+   branch ran `if (updated) persistApprovalRegistry();` with a comment claiming
+   the rejection was durable, so a rejection that never reached disk was
+   reported as `ACTION REJECTED … cancelled safely`. It now applies the same
+   on-disk readback, reverts to `PENDING_APPROVAL` on failure, and replies
+   `REJECTION NOT RECORDED`.
+
+Both are guarded by `src/tests/approvalRegistryTerminalTruth.test.ts` (10 tests;
+the new case pins the `actionRequestStatusOnDisk` readback, the
+`PENDING_APPROVAL` revert, and both refusal strings on each branch). The
+existing re-tap guard was widened to cover the longer branch. Negative-validated:
+running the new guard against the pre-fix `server.ts` (`git stash`) fails
+`1 failed | 9 passed`; restored → 10/10. Gates: `npm run lint` (`tsc --noEmit`)
+exit 0; full suite **196 files / 2329 tests passed** (0 failed, 59.27 s);
+`npm run build` exit 0 (`dist/server.cjs` 1070244 bytes). E2E: NOT RUN — the
+callback needs a live bot token and a handset. Deploy: NOT_CONFIGURED. Item 13
+stays `PARTIAL` — the sweep is not exhausted.
 
 ---
 

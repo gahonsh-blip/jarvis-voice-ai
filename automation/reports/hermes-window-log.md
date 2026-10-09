@@ -14217,3 +14217,75 @@ Next Slot:
 - अंतिम स्लॉट में पूरा टेस्ट-सूट लाल मिला (पोर्ट 4795 का टकराव); approvalResolve सूट
   को पोर्ट 4819 पर ले जाकर ठीक किया — अब 196 फ़ाइलें / 2328 टेस्ट पास, lint 0, build 0;
   PR #6 खुला और conflict-free है, मर्ज मानव-अनुमोदन की प्रतीक्षा में; deploy NOT_CONFIGURED।
+
+---
+
+## Slot 2026-10-09 21:05 IST — WORK SLOT 1 (window 2026-10-09 → 2026-10-10)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:05
+Window date: 2026-10-09   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — Telegram mobile `approve_perm_` /
+  `reject_perm_` branches (`handleTelegramCallback`, `server.ts`) reported an
+  approval/rejection as durable while discarding `persistApprovalRegistry()`'s
+  boolean. Both now confirm the terminal status on disk with
+  `actionRequestStatusOnDisk(permId, 'EXECUTED' | 'REJECTED')`; on failure the
+  in-memory request is reverted to `PENDING_APPROVAL` and `memoryState.permissionRequests`
+  resynced, and the admin gets an honest `APPROVAL NOT RECORDED` /
+  `REJECTION NOT RECORDED` notice. Evidence: `src/tests/approvalRegistryTerminalTruth.test.ts`
+  (10 tests; new guard) — observed 10/10 pass.
+
+In Progress:
+- #13 — sweep not exhausted; the tail of unclassified `success:true` /
+  discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` remains.
+
+Remaining:
+- #1/#2/#50/#51/#54/#55 hardware/credential-blocked (NOT_AVAILABLE / PARTIAL);
+  the rest of the 60-item backlog is tracked in `docs/COMPLETION_STATUS.md`.
+
+Bugs Found:
+- `approve_perm_` / `reject_perm_` (`server.ts`): the comment claimed the
+  decision was durable but the code called `if (updated) persistApprovalRegistry();`
+  and discarded the boolean; the registry lives outside `memoryState`, so
+  `persistMemory()` can return true without writing on identical bytes. Found by
+  auditing mutating routes for a discarded durability boolean.
+
+Bugs Fixed:
+- Both branches now gate on an on-disk read-back (see Completed). Negative-
+  validated: the new guard against the pre-fix `server.ts` (`git stash`) fails
+  `1 failed | 9 passed`; restored → 10/10.
+
+Tests:    196 files / 2329 tests passed (0 failed, 59.27 s) — observed
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 — observed
+Build:    exit 0, `dist/server.cjs` 1070244 bytes — observed
+E2E:      NOT RUN (Telegram callback requires a live bot token + handset)
+Security: no secrets printed/committed; .env not touched; full audit in finalization
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, this log
+Branch:  feature/hermes-full-completion
+Commit:  42de885 (code+test), docs commit follows
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #6 (existing) — open, non-draft
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this environment
+
+Blocked:
+- #1/#2 Android bridge/E2E — requires a real Android handset/emulator
+- #50 Voice — requires a handset/mic session
+- #54/#55 — provider credentials / hardware
+
+Human Approval Required:
+- Merge of PR #6 to `main` (human review of the final verification report)
+- npm audit 5 transitive findings — dependency-upgrade decision
+
+Next Slot:
+- #13 — audit the next mutating route with a discarded `persistMemory()` boolean
+  or an ungated `success:true` (recommended: `POST /api/computer-operator/execute`,
+  `POST /api/security/evaluate`, or the `/api/github/*` mutating routes).
+
+हिंदी सारांश (एक पंक्ति):
+- Telegram मोबाइल approve/reject बटन अब डिस्क पर पुष्टि के बिना सफलता का दावा नहीं
+  करते; 196 फ़ाइलें / 2329 टेस्ट पास, lint 0, build 0; PR #6 मानव-अनुमोदन की प्रतीक्षा में।
