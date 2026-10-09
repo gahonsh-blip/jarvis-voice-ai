@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-09",
   "window_started_at": "2026-10-09T15:35:00Z",
-  "last_slot_at": "2026-10-09T19:41:00Z",
-  "slots_completed": 7,
+  "last_slot_at": "2026-10-09T20:33:00Z",
+  "slots_completed": 8,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "ac8a7bf",
+  "last_commit": "3000bac",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 51, 54, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 7 (01:05 IST 2026-10-10 = 19:41 UTC 2026-10-09) of the 2026-10-09 window. buildYouTubeSummary in server_tools.ts set success:true as soon as video metadata was fetched, even when the video exposed no transcript/description and the summary was empty (source:none). success now true only on the gemini/extractive branches and false on source:none (videoInfo still returned); the Telegram and /api/chat summarize reply builders in server.ts gate on videoInfo in the union so metadata still shows while the summary framing and executed-work credit are withheld. Guarded by src/tests/remainingFakeSuccess.test.ts (no-content asserts success:false; new positive extractive case asserts success:true/VERIFIED). Negative-validated: restoring success:true on the none branch fails the new assertion (1 failed/53 passed), restored -> 54/54. Gates observed: lint exit 0; targeted 4 files/81 passed; full suite 202 files/2361 passed; build exit 0. E2E NOT RUN. Deploy NOT_CONFIGURED. Security: no .env tracked, tree clean, credential scan clean. Item 13 stays PARTIAL; next: continue server.ts/server_tools.ts success:true sweep."
+  "note": "Slot 8 (01:36 IST 2026-10-10 = 20:33 UTC 2026-10-09) of the 2026-10-09 window. The /api/chat create_file case in server.ts credited a note save that had been rolled back: on persistMemory() failure it already rolled the note back and replied 'not saved' but still set actionExecuted = true, advancing the user-visible 'Autonomous Actions Executed' counter. actionExecuted now follows the durable outcome (actionExecuted = persisted). Removed the now-stale create_file entry from AUDITED_TRUE_SITES in src/tests/actionExecutedSweepAudit.test.ts (registry enumerates literal true sites only). Guarded by src/tests/remainingFakeSuccess.test.ts (source guard pins actionExecuted = persisted and forbids the unconditional true). Negative-validated: restoring actionExecuted = true fails the guard (1 failed/54 skipped), restored -> 55/55. Gates observed: lint tsc --noEmit exit 0; targeted 2 files/59 passed; full vitest 202 files/2362 passed; build exit 0 (dist/server.cjs 1.0mb). E2E NOT RUN. Deploy NOT_CONFIGURED. Security: no .env tracked, tree clean, credential scan clean. Item 13 stays PARTIAL; next: continue server.ts/server_tools.ts success:true sweep."
 }
