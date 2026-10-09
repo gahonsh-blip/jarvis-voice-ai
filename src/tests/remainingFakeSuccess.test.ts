@@ -682,3 +682,18 @@ describe('computer-operator screen capture is credited only from a host-backed o
     }
   });
 });
+
+describe('a note that could not be persisted is not credited as executed work', () => {
+  // The /api/chat `create_file` case rolls the note back when `persistMemory()`
+  // fails and tells the user it was "not saved", but it still set
+  // `actionExecuted = true`, advancing the user-visible "Autonomous Actions
+  // Executed" counter for a save that never happened. The executed flag must
+  // follow the durable outcome. Guarded at the source level like the other
+  // /api/chat cases (server.ts binds a port on import).
+  it('the create_file case credits execution only when the note was persisted', () => {
+    const body = caseBody('create_file', 2200);
+    expect(body).toContain('memoryState.notes = memoryState.notes.filter');
+    expect(body).toContain('actionExecuted = persisted;');
+    expect(body).not.toContain('actionExecuted = true;');
+  });
+});

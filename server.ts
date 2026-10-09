@@ -11170,7 +11170,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           memoryState.notes = memoryState.notes.filter((n) => n.id !== newNote.id);
           spokenResponse = `I could not write your note to durable storage, so it was not saved. Please try again.`;
         }
-        actionExecuted = true;
+        // A note that could not be persisted was rolled back above, so no note
+        // exists. Crediting `true` here advanced the user-visible "Autonomous
+        // Actions Executed" counter for a save that never happened; the executed
+        // flag must follow the durable outcome exactly as the spoken reply does.
+        actionExecuted = persisted;
         actionDetail = { type: 'create_file', title: persisted ? 'Saved Note' : 'Note Write Failed', payload: { ...newNote, persisted } };
         break;
       }
