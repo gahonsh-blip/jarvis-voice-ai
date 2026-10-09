@@ -30,8 +30,11 @@ failed, 59.27 s); `npm run build` exit 0 (`dist/server.cjs` 1070244 bytes). E2E:
 NOT RUN (Telegram callback requires a live bot token + handset). Deploy:
 NOT_CONFIGURED. Item 13 stays `PARTIAL` — the sweep is not exhausted (the tail
 of unclassified `success: true` / discarded-`persistMemory()` sites in
-`server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`). PR #6 to
-`main` remains open, non-draft; **NOT MERGED — awaiting human approval**.
+`server.ts` / `server_tools.ts` remains, truthfulness `UNKNOWN`). PR #6 (window
+2026-10-07/08) was **merged to `main` by a human** at 2026-10-09 11:09 UTC; this
+slot's two commits (`42de885`, `6f9cd2c`) sit cleanly on top of merged `main`
+(branch is 2 commits ahead, no conflicts). A fresh PR to `main` for this window
+will be opened at finalization.
 
 Last cycle (previous): 2026-10-09 04:35 IST — **FINALIZATION SLOT** of the 2026-10-08 →
 2026-10-09 window. No new development was started (finalization). The verified

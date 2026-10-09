@@ -14289,3 +14289,11 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - Telegram मोबाइल approve/reject बटन अब डिस्क पर पुष्टि के बिना सफलता का दावा नहीं
   करते; 196 फ़ाइलें / 2329 टेस्ट पास, lint 0, build 0; PR #6 मानव-अनुमोदन की प्रतीक्षा में।
+
+CORRECTION (same slot, 21:05 IST): the line above reading "PR: #6 (existing) —
+open, non-draft" was WRONG. A live GitHub API check during this slot shows PR #6
+was **closed and merged by a human at 2026-10-09T11:09:25Z** to `main`. This
+window's commits (`42de885`, `6f9cd2c`) sit cleanly on top of merged `main`
+(branch 2 commits ahead, no conflicts). The only open PR now is #7 (a different
+branch). A fresh PR for this window will be opened at finalization. Corrected in
+`docs/COMPLETION_STATUS.md`.
