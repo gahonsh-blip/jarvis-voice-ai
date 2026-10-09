@@ -4,7 +4,7 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 20:33 UTC (2026-10-10 01:36 IST) — WORK SLOT 9 of the
+Last cycle: 2026-10-09 20:33 UTC (2026-10-10 01:36 IST) — WORK SLOT 8 of the
 2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) — the
 `/api/chat` `create_file` case credited a save that had been rolled back. The case
 unshifts a note into `memoryState.notes`, then calls `persistMemory()`. On failure

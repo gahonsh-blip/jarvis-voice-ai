@@ -14507,7 +14507,7 @@ for bare `success: true` / discarded `persistMemory()` verdicts.
 
 ---
 
-## Slot 9 — 2026-10-10 01:36 IST (WORK SLOT)
+## Slot 8 — 2026-10-10 01:36 IST (WORK SLOT)
 
 Item 13 (`Zero-fake-success for all tools`) — the `/api/chat` `create_file` case
 credited a save that had been rolled back. The case unshifts a note into

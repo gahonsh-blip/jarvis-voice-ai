@@ -4,7 +4,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-10 01:36 IST (2026-10-09 20:33 UTC) — window slot 9: the chat create_file case no longer credits a note save that was rolled back
+## [Unreleased] - 2026-10-10 01:36 IST (2026-10-09 20:33 UTC) — window slot 8: the chat create_file case no longer credits a note save that was rolled back
 
 ### Fixed
 - **The `/api/chat` `create_file` case (`server.ts`) set `actionExecuted = true` even when the note write failed and was rolled back.** The case unshifts the note into `memoryState.notes`, calls `persistMemory()`, and on failure already rolls the note back and replies "I could not write your note to durable storage, so it was not saved" — but the executed flag still advanced the user-visible "Autonomous Actions Executed" counter for a save that never happened, contradicting its own spoken reply. `actionExecuted` now follows the durable outcome (`actionExecuted = persisted;`).
@@ -77,7 +77,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-09 03:35 IST (2026-10-08 22:05 UTC) — window slot 9: the outbound-call authorization route no longer reports a decision as durable without reading it back from disk, and never dials on an unverified decision
+## [Unreleased] - 2026-10-09 03:35 IST (2026-10-08 22:05 UTC) — window slot 8: the outbound-call authorization route no longer reports a decision as durable without reading it back from disk, and never dials on an unverified decision
 
 ### Fixed
 - **`POST /api/telephony/outbound/authorize` (`server.ts`) reported both the REJECT and the APPROVE decision as durable (`success`/`persisted`) from `persistApprovalRegistry()`'s boolean, which is `true` whenever `persistMemory()` returns `true` — and `persistMemory()` returns `true` without writing when the memory file already holds identical bytes.** On the APPROVE branch the route then reached the carrier-dispatch branch and placed the call: an irreversible outbound call on a decision the next boot would resurrect as `PENDING_AUTHORIZATION`, inviting a duplicate dial. Both branches now read the request's terminal action status back from disk with `actionRequestStatusOnDisk(id, …)`; when it is absent the decision is refused with HTTP 500 `success: false, persisted: false, recorded: false, outcome: 'UNPERSISTED'`, the session request is reverted to `PENDING_AUTHORIZATION` through the new `TelephonySessionManager.revertOutboundAuthorization`, and the action is rolled back to `PENDING_APPROVAL`. The dial never runs unless the authorization is durable. Same defect class as the slot-4…8 fixes (restore, OAuth disconnect, security matrix, emergency toggle, kill switch, resume, approval resolve).
@@ -212,7 +212,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-08 00:37 IST (2026-10-07 19:07 UTC) — window slot 9: `/api/chat` no longer claims a memory write that never reached disk
+## [Unreleased] - 2026-10-08 00:37 IST (2026-10-07 19:07 UTC) — window slot 8: `/api/chat` no longer claims a memory write that never reached disk
 
 ### Fixed
 - **`/api/chat` `set_name` and `create_file` cases (`server.ts`) called `persistMemory()` and discarded its boolean, then claimed a durable record.** `set_name` answered "Your identity has been recorded into my durable memory banks." and `create_file` answered "I have saved your note … this is stored." On an unwritable volume (read-only mount, full disk) the name or note lived only in the process's memory while the reply claimed a save — the same fake success the mobile `processMobileCommand` path and `POST /api/memory` already refuse. `set_name` now reports the failed write ("could not write it to durable storage, so it is not saved") and still records only a name that passes `judgeSetNameIntent`; `create_file` rolls the note back and reports the failure. A durable write still answers with the save confirmed.
@@ -304,7 +304,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-07 02:05 IST (2026-10-06 20:35 UTC) — window slot 9: a decided outbound-call request can no longer be decided again
+## [Unreleased] - 2026-10-07 02:05 IST (2026-10-06 20:35 UTC) — window slot 8: a decided outbound-call request can no longer be decided again
 
 ### Fixed
 - **`TelephonySessionManager.authorizeOutboundRequest` (`src/utils/telephonySessionManager.ts`) looked the request up by id but never checked its current status, and the route `POST /api/telephony/outbound/authorize` (`server.ts`) treated any `{ success: true }` from the manager as a fresh authorization.** A request a human had already `REJECTED` could be sent back with `decision: 'APPROVE'`; the manager flipped it to `AUTHORIZED` and reported success, `classifyOutboundAuthorization` returned `APPROVED`, and the route reached the carrier-dispatch branch — placing a call that had been explicitly rejected. An already-`AUTHORIZED` request could likewise be authorized again, a duplicate dial, and any recorded decision could be silently overwritten. The manager now refuses any request whose status is not `PENDING_AUTHORIZATION`, returning `{ success: false, request, error: 'Request already decided (status …)' }` and leaving the recorded decision untouched. The route's existing `if (!verdict.success)` guard already answers HTTP 404 and never reaches the carrier, so no route change was needed.
@@ -406,7 +406,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-06 03:05 IST (2026-10-05 21:35 UTC) — window slot 9: a YouTube metadata outline is no longer labelled a loaded transcript
+## [Unreleased] - 2026-10-06 03:05 IST (2026-10-05 21:35 UTC) — window slot 8: a YouTube metadata outline is no longer labelled a loaded transcript
 
 ### Fixed
 - **`fetchYouTubeTranscriptData` (`server_tools.ts`) set `videoInfo.transcriptLength = videoInfo.description.length` on the description/metadata fallback path.** When a video exposed no caption track the function still built an outline from the description and chapter metadata, but reported the description's character count under `transcriptLength` — a field named for a transcript length. `AutonomousToolsModal.tsx` badged any `hasTranscript` video `🟢 Transcript Loaded` and rendered the `[Video Metadata & Outline]` block under a `Timestamped Transcript ({segments?.length || 0})` tab, so an outline — or an absent result — read as a real transcript. `transcriptLength` is now `0` for the description-only path, and the modal derives its badge and tab label from the new `src/utils/hardening/youtubeTranscriptLabelTruth.ts` (`transcriptBadgeLabel` / `transcriptTabLabel` / `transcriptSegmentCount`). The helper returns `null` → `UNKNOWN` for an unmeasured count instead of a coerced `0`, and names a description-only video `Metadata Outline`.
@@ -549,7 +549,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-05 01:35 IST (2026-10-04 20:05 UTC) — window slot 9: youtube draft update reports success only when a field actually changed
+## [Unreleased] - 2026-10-05 01:35 IST (2026-10-04 20:05 UTC) — window slot 8: youtube draft update reports success only when a field actually changed
 
 ### Fixed
 - **`POST /api/social/youtube/update-draft` answered `{ success: true, post }` for every request that matched a staged post, including one that changed nothing, and the Social Hub announced "YouTube video parameters updated." for a repeat submission or a cleared form.** The route applied each field behind a truthiness guard and reported success unconditionally, so a no-op read as a saved update. New `classifyYouTubeDraftUpdate` (`src/utils/hardening/youtubeDraftUpdateTruth.ts`) decides which fields actually differ — a blank title, a non-string description and a repeat of the stored `private` privacy are all non-changes — and the route writes only those, answering `success: false, applied: false, outcome: UNCHANGED` for a no-op. `src/components/SocialMediaModal.tsx` now speaks the route's message, so a no-op is not voiced as an update. The missing-post 404 also carries `success: false`.
@@ -692,7 +692,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-04 01:50 IST (2026-10-03 20:20 UTC) — window slot 9: the mobile bridge heartbeat route reports live device truth
+## [Unreleased] - 2026-10-04 01:50 IST (2026-10-03 20:20 UTC) — window slot 8: the mobile bridge heartbeat route reports live device truth
 
 ### Fixed
 - **`POST /api/mobile/bridge/heartbeat` (`server.ts`) answered `success: true, outcome: 'VERIFIED'` for every heartbeat the gateway accepted.** A simulated device, and a heartbeat whose session had already lapsed so the bridge status read `MOBILE_NOT_CONNECTED`, were both reported as a verified live bridge. The route now passes the observed heartbeat through `classifyBridgeHeartbeat` (`src/utils/hardening/bridgeHeartbeatTruth.ts`): a real, live, non-simulated device is `VERIFIED`; a simulated device is `SIMULATION_ONLY`; a heartbeat that did not leave the bridge live is `PARTIAL`. `success` equals `VERIFIED`, and a new `verified` field carries the same proof.
@@ -872,7 +872,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-03 01:16 IST (2026-10-02 19:46 UTC) — window slot 9: the Security Matrix update route stops reporting unapplied changes as saved
+## [Unreleased] - 2026-10-03 01:16 IST (2026-10-02 19:46 UTC) — window slot 8: the Security Matrix update route stops reporting unapplied changes as saved
 
 ### Fixed
 - **`POST /api/security/update` (`server.ts`) copied whichever fields the body carried over the running matrix and answered `{ success: true }` unconditionally.** Three false-success shapes followed: an empty body read as a successful save; a `currentLevel` outside the real 1..4 range was stored as-is; and an unknown field (a typo such as `humanApprovlForExternal`, or a key from a stale client) was written into the matrix and reported as applied. For the two boolean gates the last shape is worse than cosmetic — a string such as `"false"` is truthy in every `if (humanApprovalForExternal)` / `if (maskSensitiveData)` gate downstream while a tri-state renderer reads it as neither true nor false. New `classifySecurityMatrixUpdate(body)` (`src/utils/hardening/securityMatrixUpdateTruth.ts`) accepts only the real fields with valid values (`currentLevel` in 1..4 as a number; the two gates as booleans), refuses everything else, and distinguishes `NO_KEYS` from `ALL_INVALID`. The route applies only `verdict.applied`, answers `success: false` / `applied: false` with the reason and rejected field names when nothing valid was supplied, and names any ignored keys on a partial apply.
@@ -1019,7 +1019,7 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
-## [Unreleased] - 2026-10-02 01:16 IST (2026-10-01 19:46 UTC) — window slot 9: browser-open dispatch answers Hindi users in Hindi
+## [Unreleased] - 2026-10-02 01:16 IST (2026-10-01 19:46 UTC) — window slot 8: browser-open dispatch answers Hindi users in Hindi
 
 ### Fixed
 - **The `open_google` / `open_youtube` / `open_gmail` / `open_chatgpt` dispatch case (`server.ts`) gated its Hindi reply on `language === 'hi'`.** The client (`src/App.tsx`) posts `voiceSettings.language` — a locale such as `hi-IN` or `hinglish`, never a bare `hi` — so the comparison was dead code and every Hindi user got the English `verdict.replyEn`. It is the only bare-`hi` comparison in `server.ts`; every other language gate uses `language.startsWith('hi')`. Now uses `language.startsWith('hi')`.
