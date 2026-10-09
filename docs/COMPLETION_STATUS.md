@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 18:36 UTC (2026-10-10 00:06 IST) — the GitHub
+Last cycle: 2026-10-09 19:12 UTC (2026-10-10 00:36 IST) — WORK SLOT 8 of the
+2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) — the
+memory-backup route (`GET /api/backup`, `server.ts`) reported a backup it had not
+durably recorded. The route validated the backup body, appended a `VERIFIED` audit
+row through `addAuditLog()` — which already returns whether the row is durable —
+discarded that verdict, then called a bare `persistMemory()` whose boolean nobody
+read. `persistMemory()` writes only when the memory file's bytes change, so on a
+read-only volume or a full disk the record never reached `jarvis_memory.json`,
+yet the caller received `success: true, verified: true` with no survival signal: a
+backup presented as recorded that no restart would find. The route now gates on
+`addAuditLog()`'s boolean and answers HTTP 500
+`success:false, persisted:false, verified:false` when the row did not land;
+success now carries `persisted: true`. Guarded by
+`src/tests/backupDurabilityTruth.test.ts` (5 cases: a real `tsx server.ts` process
+on a temp memory file made read-only after the first write — `GEMINI_API_KEY`
+blanked so the audit-secret scan is `NOT_CONFIGURED`, not a network call; the
+backup record reaches disk and reports `persisted: true` on a writable volume, and
+on an unwritable volume the route refuses and appends no phantom `VERIFIED` row;
+plus 3 source guards pinning the gate and the `recordDurableAuditRow` helper). The
+sibling `src/tests/restoreDurabilityTruth.test.ts` harness was fixed: it called
+`GET /api/backup` to build a restore payload *after* making the disk read-only, so
+it must now capture that payload while the disk is still writable. Negative-
+validated: `git stash` of `server.ts` fails 4 of 5 backup cases; restored → 5/5.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 2 files / 11
+tests passed. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous): 2026-10-09 18:36 UTC (2026-10-10 00:06 IST) — the GitHub
 nightly-run history reported a run it had not durably recorded. `recordNightlyRun()`
 (`server.ts`) appended a nightly-run entry and called a bare `persistMemory()`
 whose boolean nobody read, while `POST /api/github/nightly/run` answered with the

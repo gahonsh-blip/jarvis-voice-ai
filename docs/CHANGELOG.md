@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 00:36 IST (2026-10-09 19:12 UTC) — window slot 8: the memory-backup route no longer reports a backup it did not durably record
+
+### Fixed
+- **`GET /api/backup` (`server.ts`) appended a `VERIFIED` audit row and discarded `addAuditLog()`'s durability verdict, then called a bare `persistMemory()` whose boolean nobody read.** `persistMemory()` writes only when the memory file's bytes change, so on a read-only volume or a full disk the backup record never reached `jarvis_memory.json`, but the route still answered `success: true, verified: true` — a backup the next boot would not find. The route now captures `addAuditLog(...)`'s boolean and, when the row did not land, answers HTTP 500 `success:false, persisted:false, verified:false` instead of claiming it; the success reply now carries `persisted: true`.
+
+### Tests
+- New `src/tests/backupDurabilityTruth.test.ts` (5 tests) runs a real `tsx server.ts` process on port 4820 against a memory file made read-only after the first write (`GEMINI_API_KEY` blanked so the audit-secret scan is `NOT_CONFIGURED`, not a network call): the backup record reaches disk and reports `persisted: true` on a writable volume, and on an unwritable volume the route refuses and appends no phantom `VERIFIED` row. Three source guards pin the gate and the `recordDurableAuditRow` helper. Negative-validated: reverting `server.ts` (`git stash`) fails 4 of 5; restored → 5/5.
+- Fixed the `src/tests/restoreDurabilityTruth.test.ts` harness: it built its restore payload via `GET /api/backup` *after* making the disk read-only, so it now captures that payload while the disk is still writable.
+- Lint (`tsc --noEmit`) exit 0; targeted backup + restore suites 2 files / 11 tests passed.
+
 ## [Unreleased] - 2026-10-10 00:06 IST (2026-10-09 18:36 UTC) — window slot 5: the GitHub nightly-run history no longer reports a run it did not durably record
 
 ### Fixed
