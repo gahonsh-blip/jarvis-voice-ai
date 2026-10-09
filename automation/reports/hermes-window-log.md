@@ -14297,3 +14297,37 @@ window's commits (`42de885`, `6f9cd2c`) sit cleanly on top of merged `main`
 (branch 2 commits ahead, no conflicts). The only open PR now is #7 (a different
 branch). A fresh PR for this window will be opened at finalization. Corrected in
 `docs/COMPLETION_STATUS.md`.
+
+---
+
+## Slot 2026-10-09 22:06 IST — WORK SLOT 2 (window 2026-10-09)
+
+**Item #13 `Zero-fake-success for all tools` — one slice; stays `PARTIAL`.**
+
+`POST /api/tools/fs/write` and `POST /api/tools/fs/delete` (`server.ts`) appended
+a `VERIFIED` audit row with `pushAuditEntry()` and discarded `persistMemory()`'s
+boolean. `persistMemory()` writes only when the memory file's bytes change, so a
+dropped write still answered `success: true` while the audit row naming the file
+change never reached `jarvis_memory.json`.
+
+Fix: both routes now append through a new `recordDurableAuditRow(entry)` helper
+(server.ts, next to `diskHasAuditRow`), which reads the row back with
+`diskHasAuditRow(entry.id)`, rolls a phantom row out of the in-memory log on a
+non-durable write, and returns that verdict. Each route reports `auditRecorded` /
+`auditPersisted` honestly and, when not durable, states `'the file change
+succeeded but its audit record could not be persisted'`.
+
+Evidence: `src/tests/fsAuditDurabilityTruth.test.ts` — 6 tests against a real
+server process (port 4831, memory file made read-only after the first write),
+covering fs/write and fs/delete on both paths + 2 source guards.
+Negative-validated: pre-fix (`git stash`) 6/6 fail; restored 6/6 pass.
+
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full suite **197 files /
+2335 tests passed** (0 failed, 59.54 s); build exit 0 (`dist/server.cjs`
+1071080 bytes). Security: `.env` ignored, diff vs `origin/main` credential scan
+clean, `npm audit` 5 pre-existing transitive findings (NOT fixed).
+
+Commits: `15a2b62` (fix+tests), `48bdcdb` (docs). Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state` pushed
+at `be57dea` (slots_completed=2). PR: none opened (work slot). Deploy:
+NOT_CONFIGURED.
