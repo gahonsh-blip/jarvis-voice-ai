@@ -4,7 +4,26 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 22:35 UTC (2026-10-10 04:05 IST) — WORK SLOT 12 of the
+Last cycle: 2026-10-09 22:35 UTC (2026-10-10 04:05 IST) — WORK SLOT 13 of the
+2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) —
+the generic branch of `POST /api/chat` (`server.ts`) answered `Command
+acknowledged: … Logged to local memory.` while discarding the `persistMemory()`
+return value, so a transcript that never reached `jarvis_memory.json` (read-only
+volume, full disk) was still reported as saved — the same false-success class
+already fixed for `set_name` and `create_file`. The reply now carries a
+`{{MEMORY_SAVED}}` placeholder and swaps in the truthful wording once the write
+result is known; the Gemini-error path no longer says `Logged command` for a
+write it never performed. Guarded by
+`src/tests/chatGenericMemoryClaimTruth.test.ts` (3 cases, real server + real
+read-only memory file). Negative-validated — reverting `server.ts` fails 2 of 3.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file / 3
+tests passed; full `npx vitest run` 207 files / 2381 tests passed;
+`npm run build` exit 0 (`dist/server.cjs` 1074886 bytes). Security: no `.env`
+tracked (`git check-ignore` → `.gitignore:4:.env`), no credential pattern in the
+branch diff. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous): 2026-10-09 22:35 UTC (2026-10-10 04:05 IST) — WORK SLOT 12 of the
 2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) —
 the offline writers in `src/utils/offlineStorage.ts` returned `void` and
 swallowed the storage error, while the offline branch of the App command handler

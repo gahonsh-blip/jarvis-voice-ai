@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 04:35 IST (2026-10-09 23:05 UTC) — window slot 13: the generic chat reply no longer claims a local memory save that did not land
+
+### Fixed
+- **The generic branch of `POST /api/chat` (`server.ts`) answered `Command acknowledged: "…". Logged to local memory.` while discarding the `persistMemory()` return value.** When the durable write failed (read-only volume, full disk) the transcript lived only in process memory, yet the operator was told it was saved — the same zero-fake-success class already fixed for `set_name` and `create_file`. The reply now carries a `{{MEMORY_SAVED}}` placeholder and swaps in `Logged to local memory.` or `This conversation could not be written to durable storage, so it was not saved.` once the write result is known.
+- **The Gemini-error path of the same branch returned `Logged command: "…"` for a write it never performed.** It now states plainly that the command could not be processed and was not saved.
+- Fixed a `ReferenceError: isHi is not defined` (HTTP 500) introduced when the swap block referenced the branch-local `isHi`; the block now derives the reply language from the request.
+
+### Tests
+- `src/tests/chatGenericMemoryClaimTruth.test.ts` (new): boots the real server against a real memory file and asserts (1) a writable disk yields the save wording, (2) an unwritable disk yields the honest not-saved wording and never the save claim, (3) the reply never leaks the `{{MEMORY_SAVED}}` placeholder. Negative-validated: `git stash` of `server.ts` fails 2 of 3; restored → 3/3.
+- Lint (`tsc --noEmit`) exit 0; targeted 1 file / 3 tests passed; full `npx vitest run` 207 files / 2381 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1074886 bytes).
+
 ## [Unreleased] - 2026-10-10 04:05 IST (2026-10-09 22:35 UTC) — window slot 12: the offline status no longer claims a local save the browser refused
 
 ### Fixed
