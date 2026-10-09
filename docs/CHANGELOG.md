@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 22:06 IST (2026-10-09 16:36 UTC) — window slot 2: the filesystem tools no longer record a VERIFIED audit row without proving it reached disk
+
+### Fixed
+- **`POST /api/tools/fs/write` and `POST /api/tools/fs/delete` (`server.ts`) appended a `VERIFIED` audit row with `pushAuditEntry()` and discarded `persistMemory()`'s boolean.** `persistMemory()` writes only when the memory file's bytes change, so an unsuccessful write still returned `success: true` while the audit row naming the file change never reached `jarvis_memory.json` — the running process claimed history the next boot would not have. Both routes now append through a new `recordDurableAuditRow(entry)` helper, which verifies the row with `diskHasAuditRow(entry.id)` and rolls a phantom row out of the in-memory log when the write was not durable. Each route reports `auditRecorded` / `auditPersisted` honestly and, when the row is not durable, states `'the file change succeeded but its audit record could not be persisted'`.
+
+### Tests
+- New `src/tests/fsAuditDurabilityTruth.test.ts` (6 tests) runs a real server process on port 4831 against a memory file made read-only after the first write; it covers fs/write and fs/delete on both the durable and non-durable paths, and adds two source guards pinning `recordDurableAuditRow`'s disk readback and phantom-row rollback. Negative-validated: the suite against the pre-fix `server.ts` (`git stash`) fails **6 of 6**; restored → 6/6.
+- Lint (`tsc --noEmit`) exit 0. Targeted suite 1 file / 6 tests passed.
+
+---
+
 ## [Unreleased] - 2026-10-09 21:05 IST (2026-10-09 15:35 UTC) — window slot 1: the Telegram mobile perm handlers no longer report an approval/rejection as durable without reading it back from disk
 
 ### Fixed

@@ -4,7 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 21:05 IST — **WORK SLOT 1** of the fresh 2026-10-09 →
+Last cycle: 2026-10-09 22:06 IST — **WORK SLOT 2** of the 2026-10-09 →
+2026-10-10 window. **Item 13 (`Zero-fake-success for all tools`) — `/api/tools/fs/write`
+and `/api/tools/fs/delete` recorded a `VERIFIED` audit row without proving it
+reached disk.** Both routes appended the row with `pushAuditEntry()` and
+persisted with `persistMemory()`, whose return value they discarded. The memory
+file is written only when its bytes change, so a dropped write still answered
+`success: true` while the audit row naming the file change was never durable —
+the running process claimed history the next boot would not have. Both routes now
+append through a new `recordDurableAuditRow(entry)` helper (`server.ts`, next to
+`diskHasAuditRow`), which reads the row back with `diskHasAuditRow(entry.id)`,
+rolls a phantom row out of the in-memory log when the write was not durable, and
+returns that verdict. Each route reports `auditRecorded` / `auditPersisted`
+honestly and, when the row is not durable, adds
+`'the file change succeeded but its audit record could not be persisted'` rather
+than leaving a success claim standing. Guarded by
+`src/tests/fsAuditDurabilityTruth.test.ts` (6 cases, a real server process on
+port 4831 against a memory file made read-only after the first write; covers
+fs/write and fs/delete, the durable and non-durable paths, plus two source
+guards). Negative-validated: running the new suite against the pre-fix
+`server.ts` (stash) fails **6 of 6**; restored → 6/6. Gates (observed this fire):
+lint (`tsc --noEmit`) exit 0; targeted suite 1 file / 6 tests passed. Item 13
+stays `PARTIAL` — the sweep of remaining unclassified `success: true` /
+discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` is not
+exhausted. State branch `automation/hermes-state` had `slots_completed: 1` for
+this window before this fire. Deploy: `NOT_CONFIGURED`.
+
+Last cycle (previous): 2026-10-09 21:05 IST — **WORK SLOT 1** of the fresh 2026-10-09 →
 2026-10-10 window. **Item 13 (`Zero-fake-success for all tools`) — the Telegram
 mobile `approve_perm_` / `reject_perm_` branches reported an approval/rejection
 as durable without reading it back from disk.** Both branches of the
