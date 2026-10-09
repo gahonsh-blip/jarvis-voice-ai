@@ -7748,11 +7748,38 @@ function getNightlyRuns(): NightlyRunRecord[] {
   return anyState.nightlyGithubRuns ?? [];
 }
 
-function recordNightlyRun(record: NightlyRunRecord) {
+/**
+ * True only when the memory file on disk carries a nightly run with `runId`.
+ * `persistMemory()` can return true without writing when the file already holds
+ * the identical bytes, so the manual-run route must read the record back rather
+ * than trust the boolean before reporting the run as recorded.
+ */
+function nightlyRunOnDisk(runId: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const runs: NightlyRunRecord[] = Array.isArray(onDisk.nightlyGithubRuns)
+      ? onDisk.nightlyGithubRuns
+      : [];
+    return runs.some((r) => r?.runId === runId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Record a nightly-run history entry and report whether it reached disk. Like
+ * the audit log, `persistMemory()` can return true without writing, so the
+ * record is read back with `nightlyRunOnDisk`; when the write did not land the
+ * run is dropped from the in-memory history so the process never reports a run
+ * the next boot will not have.
+ */
+function recordNightlyRun(record: NightlyRunRecord): boolean {
   const anyState = memoryState as unknown as { nightlyGithubRuns?: NightlyRunRecord[] };
   const runs = [record, ...(anyState.nightlyGithubRuns ?? [])].slice(0, 30);
   anyState.nightlyGithubRuns = runs;
-  persistMemory();
+  if (persistMemory() && nightlyRunOnDisk(record.runId)) return true;
+  anyState.nightlyGithubRuns = runs.filter((r) => r.runId !== record.runId);
+  return false;
 }
 
 // Reports whether GitHub automation is usable, without making a network call.
@@ -8036,7 +8063,10 @@ app.get('/api/github/nightly', (_req: Request, res: Response) => {
 app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
   try {
     const result = await runNightlyCheck({ github: githubFetchOptions() });
-    recordNightlyRun(result.record);
+    // Consume the durability verdict: on a read-only volume or a full disk the
+    // run-history write never lands, so the caller must not be told the run was
+    // recorded when the next boot would not find it.
+    const runRecorded = recordNightlyRun(result.record);
 
     addAuditLog(
       `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
@@ -8048,6 +8078,7 @@ app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
     res.status(result.receipt.verified || result.record.outcome === 'COMPLETED' ? 200 : 502).json({
       success: result.record.outcome === 'COMPLETED',
       outcome: result.receipt.outcome,
+      recorded: runRecorded,
       record: result.record,
       plan: result.plan
         ? {
