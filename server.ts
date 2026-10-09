@@ -10607,6 +10607,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     // In-app voice-output level, mirroring the UI slider. Not a system mixer
     // value — `audioDispatchTruth` never reports the host output level as changed.
     let voiceOutputLevel = 1.0;
+    // Set true only when a branch actually ran persistMemory() AND it returned
+    // true. The generic reply's "logged to local memory" claim is gated on it, so
+    // a read-only volume or full disk cannot produce a false durability claim.
+    let replyPersisted = false;
 
     switch (intentData.intent) {
       case 'finance_blocked': {
@@ -11388,9 +11392,11 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
             spokenResponse = result.text?.trim() || (isHi ? 'आपकी सेवा में सदैव तत्पर, सर।' : 'At your service, Sir.');
           } catch (geminiErr: any) {
             console.error('Gemini error:', geminiErr);
+            // This branch has no durable-write call; the transcript persist below
+            // decides whether the "logged" wording is truthful.
             spokenResponse = isHi
-              ? `क्लाउड एआई सेवा में अस्थायी व्यवधान है। संदेश दर्ज कर लिया गया है: "${message}"।`
-              : `Cloud AI service encountered a temporary error. Logged command: "${message}".`;
+              ? `क्लाउड एआई सेवा में अस्थायी व्यवधान है। संदेश प्राप्त हुआ: "${message}"।`
+              : `Cloud AI service encountered a temporary error. Received command: "${message}".`;
           }
         } else {
           const userLower = message.toLowerCase().trim();
@@ -11421,9 +11427,12 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
               ? `आपकी सेवा में सदैव तत्पर, ${memoryState.name || 'सर'}।`
               : `Always a pleasure to assist, ${memoryState.name || 'Sir'}.`;
           } else {
+            // The "logged to local memory" claim is only true once the transcript
+            // persist below succeeds. The placeholder is swapped for the honest
+            // failure wording when it does not.
             spokenResponse = isHi
-              ? `कमांड प्राप्त हुई: "${message}"। डेटा स्थानीय मेमोरी में सुरक्षित है।`
-              : `Command acknowledged: "${message}". Logged to local memory. You can ask me to check projects, calculate equations, review weather, or manage social posts.`;
+              ? `कमांड प्राप्त हुई: "${message}"। {{MEMORY_SAVED}}`
+              : `Command acknowledged: "${message}". {{MEMORY_SAVED}} You can ask me to check projects, calculate equations, review weather, or manage social posts.`;
           }
         }
         break;
@@ -11443,7 +11452,25 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
       { role: 'jarvis' as const, content: spokenResponse, timestamp: new Date().toISOString() },
     ].slice(-40);
 
-    persistMemory();
+    replyPersisted = persistMemory();
+
+    // The generic branch left a placeholder where its durability claim belongs.
+    // Swap in the truthful wording now that the write result is known, so a
+    // failed write is never reported as a save.
+    if (spokenResponse.includes('{{MEMORY_SAVED}}')) {
+      const replyIsHi =
+        language.startsWith('hi') ||
+        /[\u0900-\u097F]/.test(message) ||
+        message.toLowerCase().includes('kya') ||
+        message.toLowerCase().includes('hai');
+      const savedText = replyIsHi
+        ? 'यह वार्तालाप स्थानीय मेमोरी में सुरक्षित है।'
+        : 'Logged to local memory.';
+      const notSavedText = replyIsHi
+        ? 'यह वार्तालाप स्थानीय मेमोरी में सुरक्षित नहीं हो सका, इसलिए इसे सहेजा नहीं गया है।'
+        : 'This conversation could not be written to durable storage, so it was not saved.';
+      spokenResponse = spokenResponse.replace('{{MEMORY_SAVED}}', replyPersisted ? savedText : notSavedText);
+    }
 
     res.json({
       reply: spokenResponse,
