@@ -14707,8 +14707,8 @@ SLOT: 2026-10-09 23:05 UTC (2026-10-10 04:35 IST) — WORK SLOT 13
 ========================================================================
 
 HERMES JARVIS — AUTONOMOUS WINDOW REPORT
-Slot:        WORK  |  IST time: 04:35 (fired 04:05, this run began 04:05)
-Window date: 2026-10-09 (window 2026-10-09 → 2026-10-10)   Window slots completed so far: 12
+Slot:        WORK  |  IST time: 04:05 (run began 04:05 IST = 22:35 UTC 2026-10-09)
+Window date: 2026-10-09 (window 2026-10-09 → 2026-10-10)   Window slots completed so far: 13
 
 Completed:
 - #13 Zero-fake-success for all tools (PARTIAL — slice advanced): the generic
