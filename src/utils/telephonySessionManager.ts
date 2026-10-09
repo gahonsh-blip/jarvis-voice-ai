@@ -684,6 +684,18 @@ export class TelephonySessionManager {
     const req = this.pendingOutboundRequests.get(id);
     if (!req) return { success: false, error: 'Request not found' };
 
+    // A decision is a one-time event. Re-deciding an already AUTHORIZED or
+    // REJECTED request previously reported success, so the route then dialed the
+    // carrier — placing a call a human had rejected, or duplicating an approved
+    // one. Refuse and leave the recorded decision untouched.
+    if (req.status !== 'PENDING_AUTHORIZATION') {
+      return {
+        success: false,
+        request: req,
+        error: `Request already decided (status ${req.status}); no new decision recorded.`,
+      };
+    }
+
     if (decision === 'APPROVE') {
       req.status = 'AUTHORIZED';
       req.authorizedAt = new Date().toISOString();
@@ -695,6 +707,26 @@ export class TelephonySessionManager {
       req.authorizedBy = approver;
       return { success: true, request: req };
     }
+  }
+
+  /**
+   * Undo an authorization decision that could not be persisted. The authorize
+   * route calls this only when the recorded decision did not reach disk: the
+   * request returns to PENDING_AUTHORIZATION so a reboot cannot keep a decision
+   * the operator was told had failed, and the call can be decided again. Only a
+   * request still carrying the decision just recorded is reverted; anything else
+   * is left untouched.
+   */
+  static revertOutboundAuthorization(
+    id: string,
+    recordedStatus: OutboundCallRequest['status']
+  ): boolean {
+    const req = this.pendingOutboundRequests.get(id);
+    if (!req || req.status !== recordedStatus) return false;
+    req.status = 'PENDING_AUTHORIZATION';
+    req.authorizedAt = undefined;
+    req.authorizedBy = undefined;
+    return true;
   }
 
   static getCallHistory(): TelephonySession[] {

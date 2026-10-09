@@ -46,6 +46,34 @@ const KNOWN_FIELDS = ['currentLevel', 'humanApprovalForExternal', 'maskSensitive
 const VALID_LEVELS: readonly number[] = [1, 2, 3, 4];
 
 /**
+ * The full set of gate values the route echoes back to the client. The route
+ * must answer with the matrix state *after* the classified fields are applied,
+ * not a snapshot taken before. Returning the pre-apply values alongside
+ * `success: true` told the client a toggle had changed while handing back the
+ * old value, so a UI that trusts the response rendered the un-applied state.
+ */
+export interface SecurityMatrixGateValues extends SecurityMatrixValues {
+  credentialLeakProtection?: boolean;
+}
+
+/**
+ * Project a matrix state with the accepted update applied. This is what the
+ * route must return so the echoed gates match what was really stored.
+ */
+export function applySecurityMatrixUpdate<T extends SecurityMatrixGateValues>(
+  current: T,
+  applied: SecurityMatrixValues
+): T {
+  const next: T = { ...current };
+  if (applied.currentLevel !== undefined) next.currentLevel = applied.currentLevel;
+  if (applied.humanApprovalForExternal !== undefined) {
+    next.humanApprovalForExternal = applied.humanApprovalForExternal;
+  }
+  if (applied.maskSensitiveData !== undefined) next.maskSensitiveData = applied.maskSensitiveData;
+  return next;
+}
+
+/**
  * Classify a security-matrix update body.
  *
  * Only known fields with a valid value are applied. An unknown field or an

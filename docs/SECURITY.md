@@ -14,6 +14,37 @@ HERMES JARVIS enforces a strict 4-level permission policy across all subsystems:
 ### Level 4 Invariant:
 No external write, upload, or broadcasting action can occur without explicit human approval ("YES / APPROVE").
 
+### Security Matrix durability
+The matrix that carries the Level-4 gates (`humanApprovalForExternal`,
+`maskSensitiveData`, `credentialLeakProtection`) must survive a restart, or a
+tightened gate silently reverts to its default. `POST /api/security/update`
+(`server.ts`) previously wrote the accepted fields onto the module-level
+`securityMatrixState` and answered `success: true` after a `persistMemory()`
+call whose result it discarded — but `securityMatrixState` is not part of
+`memoryState`, so nothing was written and the gates reset on the next boot.
+
+The gates are now persisted (`persistSecurityMatrixState()` copies them into
+`memoryState` before the durable write and returns its result), hydrated on boot
+from the memory file with per-field validation, and the route is gated: a failed
+write rolls the in-memory matrix back and answers HTTP 500 `success: false,
+persisted: false` without touching the file. Pinned by
+`src/tests/securityMatrixDurabilityTruth.test.ts` (negative-validated).
+
+### Telephony settings durability
+The telephony settings carry security-relevant configuration (the calling
+provider, the auto-answer policy, the agent persona). `POST /api/telephony/settings`
+(`server.ts`) previously wrote them onto a module-local `telephonySettingsState`
+that was not part of `memoryState` and answered `success: true` after a
+`persistMemory()` call whose result it discarded — so the settings never reached
+disk and silently reverted to the compile-time defaults on the next boot.
+
+The settings are now part of `memoryState` (`persistTelephonySettingsState()`),
+restored on boot from the memory file (per-key validated against
+`TELEPHONY_SETTING_KEYS`), and the route is gated: a failed write rolls the live
+settings back and answers HTTP 500 `success: false, persisted: false,
+outcome: 'NOT_PERSISTED'`. Pinned by
+`src/tests/telephonySettingsDurabilityTruth.test.ts` (negative-validated).
+
 ### Spoken-approval parsing (Android bridge)
 The approval gate is only as strong as the parser that reads the owner's reply.
 `evaluateOwnerApproval` in `src/utils/androidBridgeEngine.ts` previously returned
@@ -472,3 +503,19 @@ Tools Hub emergency badge (`src/utils/emergencyTruth.ts`): a security-relevant
 state that has not been observed is `UNKNOWN`, and `UNKNOWN` never enables an
 action. Guarded by `src/tests/telegramGatewayTruth.test.ts` (12 tests, including
 source guards that pin the absence of the hardcoded claims).
+
+**Update 2026-10-07 00:36 IST — the security-matrix save echoed a state it had not applied.**
+`POST /api/security/update` (`server.ts`) classified the body correctly — the slot-3
+`classifySecurityMatrixUpdate()` already rejects empty bodies, out-of-range levels and
+unknown fields — but captured `securityStateSnapshot` *before* assigning `verdict.applied`
+onto `securityMatrixState`, then answered `{ success: true, securityState: securityStateSnapshot }`.
+`SecurityMatrixModal.handleUpdateLevel` trusts that response instead of refetching, so a
+successful toggle of `humanApprovalForExternal` or `maskSensitiveData` rendered the
+pre-apply value: the operator saw the gate in a state it had not reached, while the status
+line said the change was saved. The matrix gates external actions and credential masking,
+so a response that contradicts the state it reports is a trust failure in its own right.
+`applySecurityMatrixUpdate()` (`src/utils/hardening/securityMatrixUpdateTruth.ts`) now
+returns the state with the classified fields applied and the route echoes that (keeping
+`levels`/`auditLogs` from live state) with `applied: true`. Guarded by
+`src/tests/securityMatrixUpdateTruth.test.ts` (23 tests); negative-validated
+(`1 failed | 22 passed` with the snapshot echo restored).

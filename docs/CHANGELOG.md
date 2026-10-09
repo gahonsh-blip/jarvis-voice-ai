@@ -4,6 +4,325 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 03:35 IST (2026-10-08 22:05 UTC) — window slot 9: the outbound-call authorization route no longer reports a decision as durable without reading it back from disk, and never dials on an unverified decision
+
+### Fixed
+- **`POST /api/telephony/outbound/authorize` (`server.ts`) reported both the REJECT and the APPROVE decision as durable (`success`/`persisted`) from `persistApprovalRegistry()`'s boolean, which is `true` whenever `persistMemory()` returns `true` — and `persistMemory()` returns `true` without writing when the memory file already holds identical bytes.** On the APPROVE branch the route then reached the carrier-dispatch branch and placed the call: an irreversible outbound call on a decision the next boot would resurrect as `PENDING_AUTHORIZATION`, inviting a duplicate dial. Both branches now read the request's terminal action status back from disk with `actionRequestStatusOnDisk(id, …)`; when it is absent the decision is refused with HTTP 500 `success: false, persisted: false, recorded: false, outcome: 'UNPERSISTED'`, the session request is reverted to `PENDING_AUTHORIZATION` through the new `TelephonySessionManager.revertOutboundAuthorization`, and the action is rolled back to `PENDING_APPROVAL`. The dial never runs unless the authorization is durable. Same defect class as the slot-4…8 fixes (restore, OAuth disconnect, security matrix, emergency toggle, kill switch, resume, approval resolve).
+
+### Tests
+- New `src/tests/outboundAuthorizeDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file made read-only after the first write): an unpersisted REJECT and an unpersisted APPROVE each return HTTP 500 with the action still readable as pending and no carrier dispatch reported; a writable REJECT is recorded; a writable APPROVE passes the durability gate to the honest dial-engine check; plus source guards on both branches. Negative-validated: the new suite against the pre-fix `server.ts` from HEAD fails 4 of 6 cases (HTTP 200 fake-success instead of 500); restored → 6/6.
+- Lint (`tsc --noEmit`) exit 0. Full suite **196 files / 2328 tests passed** (58.84 s, 0 failed). Build exit 0 (`dist/server.cjs` 1069266 bytes).
+
+---
+
+
+## [Unreleased] - 2026-10-09 03:05 IST (2026-10-08 21:35 UTC) — window slot 8: the approval resolve route no longer reports a decision as durable whose terminal status never reached disk
+
+### Fixed
+- **`POST /api/approvals/resolve` (`server.ts`) reported both the REJECT and the APPROVE decision as durable (`success`/`persisted`) from `persistApprovalRegistry()`'s boolean, which is `true` whenever `persistMemory()` returns `true` — and `persistMemory()` returns `true` without writing when the memory file already holds identical bytes.** A decision that never reached `jarvis_memory.json` could therefore answer `success: true, persisted: true` while the next boot resurrected the request as `PENDING_APPROVAL`. Both branches now read the request's terminal status back from disk with `actionRequestStatusOnDisk(id, …)`; when it is absent the decision is refused with HTTP 500 `success: false, persisted: false`, the request is rolled back to `PENDING_APPROVAL`, the phantom audit row is removed, and `memoryState.permissionRequests` is resynced so a later unrelated `persistMemory()` cannot write the phantom decision either. The APPROVE branch reports `outcome: 'UNPERSISTED'` / `recorded: false` so an execution result is never conflated with a durability claim. Same defect class as the slot-5/6/7 fixes (emergency toggle, kill switch, resume).
+
+### Tests
+- New `src/tests/approvalResolveDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file made read-only after the first write): an unpersisted REJECT and an unpersisted APPROVE each return HTTP 500 and leave the request readable as pending, a writable REJECT/APPROVE is recorded, a recorded rejection is not resurrected by a real restart, plus a source guard pinning the disk read-back on both branches. Negative-validated: running the suite against the pre-fix `server.ts` from HEAD fails 4 of 7 cases (HTTP 200 fake-success instead of 500); restored → 7/7.
+- Lint (`tsc --noEmit`) exit 0. Full suite **195 files / 2322 tests passed** (61.64 s, 0 failed). Build exit 0 (`dist/server.cjs` 1067091 bytes).
+
+---
+
+## [Unreleased] - 2026-10-09 02:35 IST (2026-10-08 21:05 UTC) — window slot 7: the resume route no longer reports a durable freeze release whose latch or audit row never reached disk
+
+### Fixed
+- **`POST /api/system/resume` (`server.ts`) reported the freeze release as durable (`persisted`) from the raw `persistEmergencyState()` boolean, which returns `true` without writing when the file already holds identical bytes, and never read the cleared latch or the appended `SYSTEM RESUMED … VERIFIED` row back from disk.** A release that never reached `jarvis_memory.json` could be reported — and the Telegram resumption notice sent — while the next boot still read the freeze as engaged; the phantom row was never rolled back. The route now derives one durability verdict by reading both back from disk: `emergencyStateOnDisk(false)` confirms the cleared latch, `diskHasAuditRow(auditRow.id)` confirms the appended row. A release whose writes did not land is refused with HTTP 500 `success: false, persisted: false`, the row is rolled back, and the notice is suppressed. Same defect class as the slot-5 (emergency toggle) and slot-6 (kill switch) fixes.
+
+### Tests
+- New `src/tests/resumeDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file): a durable release writes the cleared latch and the row to disk, a real restart boots from that disk state, plus a source guard. Negative-validated: reverting only `server.ts` to HEAD fails 4 of 6 new cases; restored → 6/6. The existing `emergencyStateDurabilityTruth` wiring assertion was aligned to pin the durable shape.
+- **Test harness:** five durability suites shared a listen port with another suite. Because vitest runs test files in parallel, the second binder's requests hit the first file's server and returned the wrong data — `telephonyCallDurabilityTruth` and `emergencyStateDurabilityTruth` both bound 4793 and reproducibly failed 3/4 assertions only when run together (4761/4791/4792/4794 had the same hazard). Reassigned the colliding ports to unused values (4813/4815/4816/4817/4818). No production code changed.
+- Lint (`tsc --noEmit`) exit 0. Targeted resume + state guards + kill-switch 3 files / 19 passed. Full suite **194 files / 2315 tests passed** (55.77 s, 0 failed) — up from 3 failed / 2312 passed before the port fix, with no production-code change. Build exit 0 (`dist/server.cjs` 1065295 bytes).
+
+---
+
+## [Unreleased] - 2026-10-09 02:05 IST (2026-10-08 20:35 UTC) — window slot 6: the global kill switch no longer reports a durable termination whose latch or audit row never reached disk
+
+### Fixed
+- **`POST /api/system/kill-switch` (`server.ts`) engaged the freeze and wrote its Level-4 `🚨 GLOBAL KILL SWITCH TRIGGERED … VERIFIED` audit row, but the row was only pushed to `memoryState.auditLogs` — never explicitly persisted — and the route trusted `persistEmergencyState()`'s boolean, which returns `true` without writing when the file already holds identical bytes.** So a termination could be reported (and a Telegram notice sent) while neither the `emergencyPaused` latch nor the row reached `jarvis_memory.json`; a restart then silently released the freeze. The route now derives one durability verdict by reading both back from disk: `emergencyStateOnDisk(true)` confirms the latch, `diskHasAuditRow(killAuditRow.id)` confirms the appended row, and `persisted = statePersisted && auditPersisted`. A real engagement whose writes did not land is refused with HTTP 500 `success: false, persisted: false`, the phantom row is rolled back, and the Telegram notice is suppressed; the latch is deliberately kept in memory so a disk error never silently un-freezes the system.
+
+### Tests
+- New `src/tests/killSwitchDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file): the latch *and* the termination row are present in the memory file on disk, both survive a real restart, a re-engagement of the already-frozen system is a no-op with no new row, a read-only volume is refused with the row rolled back, plus a source guard. Negative-validated: neutering the durability guard fails 2 of 8 new cases; restored → 8/8. The existing `emergencyStateDurabilityTruth` wiring assertion was aligned to pin `statePersisted && auditPersisted`. Lint (`tsc --noEmit`) exit 0. Full suite **193 files / 2309 tests passed** (53.83 s, 0 failed). Build exit 0 (`dist/server.cjs` 1064713 bytes).
+
+---
+
+## [Unreleased] - 2026-10-09 00:35 IST (2026-10-08 19:05 UTC) — window slot 5: the emergency stop no longer reports a durable, verified freeze whose latch or audit row never reached disk
+
+### Fixed
+- **`POST /api/emergency/toggle` (`server.ts`) reported the safety freeze as held (`persisted: true`) and wrote a Level-4 `EMERGENCY STOP ACTIVATED … VERIFIED` audit row while gating only on `persistMemory()`, which returns `true` without writing when the file already holds identical bytes — and `persisted` was computed from the flag flip, not from storage at all.** So a transition could be reported as a durable, audited freeze while neither the `emergencyPaused` latch nor the activation row reached `jarvis_memory.json`. The route now derives a single durability verdict by reading both back from disk: a new `emergencyStateOnDisk(expected)` helper parses the memory file and confirms the latch, and the existing `diskHasAuditRow(id)` confirms the appended row; `persisted` is `statePersisted && auditPersisted`. An engagement whose writes did not land is refused with HTTP 500 `success: false, persisted: false` and the row rolled back; the latch is deliberately kept in memory so a disk error never silently un-freezes the system.
+
+### Tests
+- New `src/tests/emergencyToggleDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file): the latch *and* the activation row are present in the memory file on disk, both survive a real restart, a read-only volume is refused with the row rolled back, plus a source guard. Negative-validated: reverting `server.ts` to HEAD fails 5 of 7 new cases; restored → 7/7. Targeted `emergencyToggleDurabilityTruth` + `emergencyToggleRouteTruth` 2 files / 16 passed. Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 1063892 bytes).
+
+---
+
+## [Unreleased] - 2026-10-09 00:05 IST (2026-10-08 18:35 UTC) — window slot 4: the social *draft-staging audit row* is now durable before success is reported
+
+### Fixed
+- **`POST /api/social/generate` (`server.ts`) appended its Level-2 staging audit row with `pushAuditEntry()` *after* calling `persistMemory()`, so the row was never serialized into `jarvis_memory.json` and vanished on the next boot — yet the route answered `{ success: true, persisted: true }`.** The existing durability test read the row back through the *same* process's `/api/security`, so an in-memory row satisfied it and the disk defect went unnoticed. The route now appends the row **before** the durable write and gates success on both the write result and a new `diskHasAuditRow(id)` helper that reads the memory file and confirms the row id is actually present. A write that never reaches disk rolls back the draft *and* the audit row and answers HTTP 500 `success: false, persisted: false`.
+
+### Tests
+- New `src/tests/socialDraftAuditDurabilityTruth.test.ts` (real `tsx server.ts` process on a temp memory file): the staging row is present in the memory file on disk, it survives a real restart, an unwritable volume is refused with the draft and the row rolled back, plus a source-order guard. The existing `socialDraftDurabilityTruth` source guard was strengthened to the new condition. Negative-validated: reverting `server.ts` to HEAD fails 2 of 4 new cases; restored → 4/4. Targeted `socialDraftAuditDurabilityTruth` + `socialDraftDurabilityTruth` + `socialGenerationTruth` 3 files / 17 passed. Lint (`tsc --noEmit`) exit 0. Full suite **191 files / 2294 tests passed** (49.13 s, 0 failed). Build exit 0 (`dist/server.cjs` 1063043 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 23:05 IST (2026-10-08 17:36 UTC) — window slot 3: the telephony *call-history* routes no longer report a saved call that never reached disk
+
+### Fixed
+- **`POST /api/telephony/calls`, `DELETE /api/telephony/calls` and `DELETE /api/telephony/calls/:id` (`server.ts`) mutated the module-local `telephonyCalls` array and answered `success: true` / a removed count, but the array was never part of `memoryState`.** `persistMemory()` serialized it not at all: every recorded call and every deletion silently reverted on the next boot while the UI was told it was saved. Same defect class as the slot-2 settings route, on the sibling array. `telephonyCallRecords` is now part of `MemoryData`, `persistTelephonyCalls()` copies the live array into `memoryState` before the durable write and returns the write result, and the boot path hydrates the history (adopting only plain-object entries with string ids). Each mutating route snapshots the previous array, runs the durable write, rolls back and answers HTTP 500 `success: false, persisted: false, outcome: 'NOT_PERSISTED'` when the write cannot reach disk, and reports the real removed count.
+
+### Tests
+- New `src/tests/telephonyCallDurabilityTruth.test.ts` (9 cases against a real `tsx server.ts` process on a temp memory file): a recorded call reports `persisted: true` and is present in the memory file on disk, it survives a real restart, a deletion reports the real removed count and is gone from disk, and a read-only-file write is refused with HTTP 500 and the live array rolled back. Negative-validated: with `persistTelephonyCalls()` stubbed to `return true`, 3 of 9 fail; restored → 9/9. Targeted `telephonyCallDurabilityTruth` + `telephonyCallDeleteTruth` + `telephonyCallRecordTruth` 3 files / 30 passed. Lint (`tsc --noEmit`) exit 0. Full suite **190 files / 2290 tests passed** (47.82 s, 0 failed). Build exit 0 (`dist/server.cjs` 1062574 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 22:35 IST (2026-10-08 17:06 UTC) — window slot 2: the telephony settings route no longer reports a `SAVED` that never reached disk
+
+### Fixed
+- **`POST /api/telephony/settings` (`server.ts`) copied the accepted fields onto the module-local `telephonySettingsState`, called `persistMemory()`, discarded its return value, and answered `success: true`.** `telephonySettingsState` was never part of `memoryState`, so `persistMemory()` serialized it not at all: every saved provider / greeting / voice rate silently reverted to the compile-time defaults on the next boot while the UI showed "SAVED". The route also spread the raw request body over the live settings (`...updates`), so unknown keys were "stored" and a malformed value corrupted live state, and an empty body reported a save with no change. `telephonySettings` is now part of `MemoryData`, `persistTelephonySettingsState()` copies the live state into `memoryState` before the durable write and returns the write result, the defaults are hydrated, and the boot path **restores the saved settings and engine selection** (adopting only real `TELEPHONY_SETTING_KEYS` with primitive values). The route snapshots the previous settings, runs the durable write, rolls back and answers HTTP 500 `success: false, persisted: false, outcome: 'NOT_PERSISTED'` when the write cannot reach disk, and reports `persisted` / `changed` honestly.
+
+### Tests
+- New `src/tests/telephonySettingsDurabilityTruth.test.ts` (7 cases against a real `tsx server.ts` process on a temp memory file): a save reports `persisted: true` / `changed: true`, the value is present in the memory file on disk, a repeat of the stored value reports `changed: false`, the value survives a real restart, and a read-only-file save is refused with HTTP 500 and the live value rolled back — plus 2 source guards pinning the persist call and boot hydration. Negative-validated: with `persistTelephonySettingsState()` stubbed to `return true`, 2 of 7 fail; restored → 7/7. Targeted `telephonySettingsDurabilityTruth` + `telephonySettingsTruth` 2 files / 18 passed. Lint (`tsc --noEmit`) exit 0. Full suite **189 files / 2281 tests passed** (46.25 s, 0 failed). Build exit 0 (`dist/server.cjs` 1060724 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 21:05 IST (2026-10-08 15:36 UTC) — window slot 1: the OAuth *connect* callbacks no longer announce a connection that did not persist
+
+### Fixed
+- **`GET /api/auth/linkedin/callback` and `GET /api/auth/youtube/callback` (`server.ts`) stored the freshly-received credential, discarded `persistMemory()`'s return value, rendered the green "Connected!" popup, and wrote a `VERIFIED` "… Connected via OAuth 2.0" audit row — unconditionally.** On a read-only volume or full disk the credential never reached `jarvis_memory.json`, so the popup and the audit row announced a connection the next boot does not have; the in-process `memoryState.linkedInConnection` / `youTubeConnection` stayed set as a phantom. Both callbacks now gate on the durable write: on failure they drop the unpersisted credential (`memoryState.linkedInConnection = undefined` / `youTubeConnection = undefined`), skip the audit row, and post `LINKEDIN_OAUTH_ERROR` / `YOUTUBE_OAUTH_ERROR` to the opener (`SocialMediaModal`'s existing handler) so the Social Media Hub is told the connection did not persist. This is the *connect* counterpart to the disconnect truth fix of the 2026-10-06 window.
+
+### Tests
+- New `src/tests/oauthConnectionDurabilityTruth.test.ts` (source-text assertions, the `oauthDisconnectTruth` convention). For each callback it pins that the `if (!persistMemory())` guard exists and precedes both the `addAuditLog(` row and the success popup, that the failure branch drops the credential and posts the provider `*_OAUTH_ERROR` type, and that the failure branch contains no success marker. Negative-validated: with `server.ts` reverted to its pre-fix shape all 4 tests fail (`persistCheckAt` → −1); restored → 4/4. Targeted `oauthConnectionDurabilityTruth` + `oauthDisconnectTruth` 2 files / 10 passed. Lint (`tsc --noEmit`) exit 0. Full suite **188 files / 2274 tests passed** (43.97 s, 0 failed). Build exit 0 (`dist/server.cjs` 1058989 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 03:35 IST (2026-10-07 22:35 UTC) — window slot 13 (continued): the duplicate-approval block is now a recorded decision, not a phantom audit id
+
+### Fixed
+- **The duplicate-approval idempotency branch of `executeApprovedAction` (`server.ts`) built a `Duplicate Approval Blocked` audit row, discarded it, and returned `persisted: true` with no disk write.** It is the branch taken when a human re-approves a post already `published` and `VERIFIED`. The returned `auditEntry.id` was echoed to callers — `POST /api/social/action` returns `auditEntry`, and the Telegram `approve_post_*` callback prints `result.auditEntry.id` as the confirmed "Audit Log ID" — so the reply named a row absent from the audit log, and the refusal vanished on restart. This was the last `persisted: true` in the helper without a `persistMemory()` guard (the source-guard test in `socialActionDurabilityTruth.test.ts` only checked three specific pre-fix strings and missed it). The branch now commits the row with `pushAuditEntry(existingAudit)` and guards the write: on failure it `rollbackAudit`s the row and returns `success:false`, `persisted:false` with an `errorReason` naming the unwritten block; on success it returns `persisted:true` and only quotes a share ID when `providerUrn` is actually present.
+
+### Tests
+- New `src/tests/duplicateApprovalDurabilityTruth.test.ts` (3 cases: a real `tsx server.ts` process against a memory file seeded with a published+VERIFIED post). A writable-disk case proves the block records and the returned audit id is really in `/api/security`'s audit log; a read-only case proves the block is refused (`success:false`, `persisted:false`) and its row is absent. Negative-validated: reverted to the pre-fix branch, all 3 fail (`expected true to be false` on `body.success`); restored → 3/3. Targeted 1 file / 3 passed. Lint (`tsc --noEmit`) exit 0. Full suite **187 files / 2270 tests passed** (42.95 s, 0 failed). Build exit 0 (`dist/server.cjs` 1056498 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 03:35 IST (2026-10-07 22:05 UTC) — window slot 12: the Level-3/4 approval registry is now durable across restarts
+
+### Fixed
+- **The approval queue (`pendingActionRequests` in `server_tools.ts`) lives outside `memoryState`, so it only reached disk through ad-hoc `persistMemory()` calls that discarded the boolean.** A staged approval, a rejected request, or a resolved decision therefore lived only in the process's memory: a reboot silently emptied the queue and the approval card the operator answered afterwards resolved nothing — a fake success on the approval path itself. `persistApprovalRegistry()` (`server.ts`) now copies the live registry into `memoryState.permissionRequests` and returns whether the durable write reached disk; `server_tools.ts` gained `persistedActionRequests()` / `hydrateActionRequests()` and the boot path restores the queue. Wired into `POST /api/approvals/create` (reports `persisted`; on a failed write it rolls back the live registry **and** `memoryState.permissionRequests`, so a later successful persist cannot resurrect a request reported as not staged), `POST /api/approvals/resolve` REJECT and APPROVE branches, `POST /api/telephony/outbound/stage` and `/authorize`, the YouTube `upload-draft` / `draft-test` staging routes, and the Telegram `approve_perm_` / `reject_perm_` callbacks.
+
+### Tests
+- New `src/tests/approvalDurabilityTruth.test.ts` (5 cases: a real server process against a memory file made read-only after the first write, a restart that keeps the durable request and drops the phantom one, plus source guards). The `youtubeDraftDurabilityTruth.test.ts` guard was broadened to accept the strictly-stronger `persistApprovalRegistry()` while still requiring the result to be checked. A bug in the first rollback attempt (restoring only the live registry, not `memoryState.permissionRequests`) was caught by the restart case and fixed; negative-validated. Targeted 6 files / 48 passed. Lint (`tsc --noEmit`) exit 0. Full suite **185 files / 2264 tests passed** (41.33 s, 0 failed). Build exit 0.
+
+---
+
+## [Unreleased] - 2026-10-08 03:05 IST (2026-10-07 21:35 UTC) — window slot 11: `/api/social/youtube/update-draft` no longer claims an update that never reached disk
+
+### Fixed
+- **`POST /api/social/youtube/update-draft` (`server.ts`) mutated the staged post's metadata, called `persistMemory()` and discarded its boolean, then answered `{ success: true, applied: true, persisted: true }`.** On an unwritable volume (read-only mount, full disk) the metadata change lived only in the process's memory while the caller was told the draft had been updated — the same durability class already fixed for `/api/chat`, `/api/memory`, the YouTube staging routes and `/api/social/generate`. The route now snapshots the fields it may touch (`videoTitle`, `topic`, `videoDescription`, `content`, `privacyStatus`, `hashtags`), writes durably, and on a failed write restores the snapshot and answers HTTP 500 `{ success: false, applied: false, persisted: false }`; a durable update answers `{ success: true, applied: true, persisted: true }`.
+
+### Tests
+- New `src/tests/youtubeDraftUpdateDurabilityTruth.test.ts` (3 cases: a real server process against a memory file made read-only after the first write, exercising the writable path, the failed-write rollback, and a source guard against the unguarded `persistMemory();` reply). Negative-validated — reverting the route to its pre-fix shape failed 3 of 3; restored → 3/3. Lint (`tsc --noEmit`) exit 0. Full suite **184 files / 2259 tests passed** (38.71 s, 0 failed). Build exit 0 (`dist/server.cjs` 1051066 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 02:05 IST (2026-10-07 20:35 UTC) — window slot 10: `/api/social/generate` no longer claims a draft that never reached disk
+
+### Fixed
+- **`POST /api/social/generate` (`server.ts`) staged a draft into `memoryState.socialPosts`, called `persistMemory()` and discarded its boolean, wrote a `PENDING` staging audit row, and answered `{ success: true, post: newPost }`.** On an unwritable volume (read-only mount, full disk) the draft lived only in the process's memory while the caller was told it had been created — the same durability class already fixed for `/api/chat`, `/api/memory`, `/api/restore`, the OAuth disconnect routes and the emergency kill switch. The route now checks the persist result, removes the just-added draft from the live array, and answers HTTP 500 `{ success: false, persisted: false }` **without** writing the staging audit row; a durable draft answers `{ success: true, persisted: true, post }`.
+
+### Tests
+- New `src/tests/socialDraftDurabilityTruth.test.ts` (3 cases: a real server process against a memory file made read-only after the first write, exercising the writable path, the failed-write path, and a source guard against the unconditional `success: true` reply). Negative-validated — `git stash` of `server.ts` failed 3 of 3; restored → 3/3. Targeted 6 files / 56 passed. Lint (`tsc --noEmit`) exit 0. Full suite **182 files / 2250 tests passed** (36.48 s, 0 failed). Build exit 0 (`dist/server.cjs` 1049148 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 00:37 IST (2026-10-07 19:07 UTC) — window slot 9: `/api/chat` no longer claims a memory write that never reached disk
+
+### Fixed
+- **`/api/chat` `set_name` and `create_file` cases (`server.ts`) called `persistMemory()` and discarded its boolean, then claimed a durable record.** `set_name` answered "Your identity has been recorded into my durable memory banks." and `create_file` answered "I have saved your note … this is stored." On an unwritable volume (read-only mount, full disk) the name or note lived only in the process's memory while the reply claimed a save — the same fake success the mobile `processMobileCommand` path and `POST /api/memory` already refuse. `set_name` now reports the failed write ("could not write it to durable storage, so it is not saved") and still records only a name that passes `judgeSetNameIntent`; `create_file` rolls the note back and reports the failure. A durable write still answers with the save confirmed.
+
+### Tests
+- New `src/tests/chatDurabilityTruth.test.ts` (4 cases: a real server process against a memory file made read-only after the first write, exercising the writable and failed-write paths for both cases). Negative-validated — `git stash` of `server.ts` failed 4 of 4; restored → 4/4.
+- Fixed a latent test-rot bug in `src/tests/identityTruth.test.ts`: the `case 'set_name'` guards sliced a fixed 1400 chars, which no longer reached the rejected branch once the case grew. It now slices to the next case label and asserts the new failed-write reply. Targeted 3 files / 22 passed. Lint (`tsc --noEmit`) exit 0. Full suite **181 files / 2247 tests passed** (37.31 s, 0 failed). Build exit 0 (`dist/server.cjs` 1048807 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 00:22 IST (2026-10-07 18:52 UTC) — window slot 8: the OAuth disconnect routes no longer report a credential removal that never reached disk
+
+### Fixed
+- **`POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect` (`server.ts`) cleared the credential in memory, called `persistMemory()` and discarded its boolean, wrote a `VERIFIED` "…Disconnected (…)" audit row, and answered `success: true`.** The routes already guarded on an existing connection (a no-op returns `NOT_CONNECTED`), but the durability of the removal was never checked. On an unwritable volume (read-only mount, full disk) the process held the disconnection while the next boot reloaded the connection from the pre-disconnect file — a credential removal that silently reverted on restart, recorded in the audit log as confirmed. Both routes now check the persist result, roll the connection back to its pre-disconnect value (so in-process state matches the durable file), and answer HTTP 500 `success: false, persisted: false` without writing the audit row. A durable disconnect still answers `success: true`.
+
+### Tests
+- Extended `src/tests/oauthDisconnectTruth.test.ts` (2 new cases: the persist check gates both the audit row and the success reply, the credential is rolled back, and the failure body is honest). Negative-validated — `git checkout` of `server.ts` failed 2 of 6 (`2 failed | 4 passed`); restored → 6/6. Targeted 1 file / 6 passed. Lint (`tsc --noEmit`) exit 0. Full suite **180 files / 2242 tests passed** (36.25 s, 0 failed). Build exit 0 (`dist/server.cjs` 1048205 bytes).
+
+---
+
+## [Unreleased] - 2026-10-08 00:06 IST (2026-10-07 18:36 UTC) — window slot 7: `POST /api/restore` no longer reports a restore that never reached disk
+
+### Fixed
+- **`POST /api/restore` (`server.ts`) merged a backup into `memoryState`, wrote a `VERIFIED` audit row and answered `success: true` without ever checking the durable write.** `restoreBackup` reassigns the top-level keys of the live state and the route then called `persistMemory()`, discarding its return value. On an unwritable volume (read-only mount, full disk) the process held the restored values while the next boot read the pre-restore file — a restore that silently reverted on restart, and an audit log that recorded it as `VERIFIED`. The route now snapshots the pre-merge state, rolls the merge back when `persistMemory()` returns false, and answers HTTP 500 `success: false, persisted: false` without writing the audit row. A durable restore answers `persisted: true`, matching `POST /api/memory` and `POST /api/memory/sync`.
+
+### Tests
+- New `src/tests/restoreDurabilityTruth.test.ts` (6 cases: a valid restore applies and reports `persisted: true`, a read-only-file restore is refused with the merge rolled back and the file left holding the last good value, a malformed backup is still rejected before any disk write, plus 3 source guards pinning the durability check, the rollback, and the ordering of the persist check before the `VERIFIED` audit row). Negative-validated — `git checkout` of `server.ts` failed 4 of 6 (`4 failed | 2 passed`); restored → 6/6. Targeted 1 file / 6 passed. Lint (`tsc --noEmit`) exit 0. Full suite **180 files / 2240 tests passed** (37.58 s, 0 failed). Build exit 0 (`dist/server.cjs` 1047575 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 23:06 IST (2026-10-07 17:36 UTC) — window slot 5: the Security Matrix update route no longer reports a saved gate with no durable store
+
+### Fixed
+- **`POST /api/security/update` (`server.ts`) wrote the accepted fields onto the module-level `securityMatrixState`, called `persistMemory()`, discarded its return value, and answered `success: true` / `applied: true`.** `securityMatrixState` is not part of `memoryState`, and `persistMemory()` serializes `memoryState` only — so the gates were never written to disk. The surface that gates external actions, credential masking and credential-leak protection silently reverted to the compile-time defaults on the next boot while the route claimed a durable save. `securityMatrix` is now part of `MemoryData` (seeded from a `SECURITY_MATRIX_DEFAULTS` literal), the live gates are persisted through `persistSecurityMatrixState()` (copies them into `memoryState` before the durable write and returns the write result), `securityMatrixState` is hydrated from the file on boot (per-field validated), and the route is gated: a failed write rolls the in-memory matrix back and answers HTTP 500 `success: false, persisted: false` without touching the file. A successful response carries `persisted: true`.
+- **Latent boot crash fixed in the same change.** The first `memoryState.securityMatrix` seed called `persistedSecurityMatrix()`, which reads `securityMatrixState` declared *after* `memoryState`; the module threw "Cannot access 'securityMatrixState' before initialization" on boot. The seed now uses the `SECURITY_MATRIX_DEFAULTS` literal.
+
+### Tests
+- New `src/tests/securityMatrixDurabilityTruth.test.ts` (8 cases: defaults on an empty file, a read-only-file write refused with rollback and the file left untouched, out-of-range/empty bodies still rejected, a successful save surviving a real server restart, and 4 source guards pinning the durability check and rollback). Negative-validated — disabling the durability guard failed 3 of 8 (`3 failed | 5 passed`); disabling the boot hydration failed the restart leg (`1 failed | 7 passed`); restored → 8/8. Targeted 1 file / 8 passed. Lint (`tsc --noEmit`) exit 0. Full suite **178 files / 2228 tests passed** (33.98 s, 0 failed). Build exit 0 (`dist/server.cjs` 1045615 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 22:36 IST (2026-10-07 17:06 UTC) — window slot 4: the Telegram set_name path no longer claims a durable save it never made
+
+### Fixed
+- **The Telegram `set_name` branch of `processMobileCommand` (`server.ts`) stored whatever text followed the name phrase as the owner's identity and replied that it had been "recorded into my durable memory banks".** A pasted sentence, a digit-only payload, or a `persistMemory()` write that never reached disk all read as a saved identity — the write's boolean was discarded and the `persisted` field was hardcoded `true`. The `/api/chat` case and the offline engine (`localJarvisEngine.ts`) already route through `judgeSetNameIntent`; this third path was missed. It now runs the same helper, records only a `kind === 'name'` verdict, answers `set_name_rejected` / `actionExecuted: false` for a non-name, and reports "could not write it to durable storage" instead of a fake save when the write fails.
+
+### Tests
+- `src/tests/identityTruth.test.ts` — 4 added source-guard cases pinning the Telegram branch's wiring (runs `judgeSetNameIntent`, rejects a non-name with `actionExecuted: false`, and reports a failed durable write). Negative-validated — `git stash` of `server.ts` failed exactly the 3 new assertions (`3 failed | 8 passed`); restored → 11/11 in the file. Targeted 1 file / 11 passed. Lint (`tsc --noEmit`) exit 0. Full suite **177 files / 2220 tests passed** (31.43 s, 0 failed). Build exit 0 (`dist/server.cjs` 1043626 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 22:06 IST (2026-10-07 16:36 UTC) — window slot 3: a freelance lead and status change that never reached disk are no longer reported as saved
+
+### Fixed
+- **`POST /api/freelance/create-lead` and `POST /api/freelance/update-status` (`server.ts`) answered `stored: true` / `applied: true` for a change that was only held in the process's memory.** Both routes applied the change to `memoryState`, called `persistMemory(): boolean`, and discarded its result. On a read-only volume or a full disk the write failed while the response still read as a saved lead or a completed pipeline transition. Both routes now gate on `persistMemory()` and roll back the in-memory change on failure — the lead snapshot for `create-lead`, the previous status for `update-status` — answering HTTP 500 `success: false, stored/applied: false, persisted: false, outcome: NOT_PERSISTED`. A successful response carries `persisted: true`.
+
+### Tests
+- New `src/tests/freelanceLeadDurabilityTruth.test.ts` (6 cases: a real `npx tsx server.ts` process against a memory file made read-only after the first write — proving the EACCES path returns 500 and that neither the unsaved lead nor the unsaved status change is readable — plus source guards on the wiring and the rollback). Negative-validated — disabling both `if (!persistMemory())` guards failed exactly 4 of 6 cases (`4 failed | 2 passed`); restored → 6/6. Targeted 3 files / 35 passed. Lint (`tsc --noEmit`) exit 0. Full suite **177 files / 2216 tests passed** (30.28 s, 0 failed). Build exit 0 (`dist/server.cjs` 1042996 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 21:35 IST (2026-10-07 16:05 UTC) — window slot 1: a memory save that never reached disk is no longer reported as success
+
+### Fixed
+- **`POST /api/memory` and `POST /api/memory/sync` (`server.ts`) answered `success: true` for a change that was only held in the process's memory.** `persistMemory(): boolean` is the only signal that the change is durable, and both routes discarded it. On a read-only volume or a full disk the write failed while the response still read as a completed save. Both routes now gate on `persistMemory()`, roll back the in-memory change to its pre-request snapshot, and answer HTTP 500 `success: false, stored: false, persisted: false` — matching `POST /api/autonomous/schedule` and `/api/blueprint/toggle-item`. A successful response carries `persisted: true`.
+
+### Tests
+- New `src/tests/memoryDurabilityTruth.test.ts` (6 cases: a real `npx tsx server.ts` process against a memory file made read-only after the first write — proving the EACCES path returns 500 and that the unsaved note is not readable — plus source guards on the wiring and the rollback). Negative-validated — disabling both `if (!persistMemory())` guards failed exactly 5 of 6 cases (`5 failed | 1 passed`); restored → 6/6. Targeted 3 files / 28 passed. Lint (`tsc --noEmit`) exit 0. Full suite **176 files / 2210 tests passed** (29.57 s, 0 failed). Build exit 0 (`dist/server.cjs` 1042286 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 03:35 IST (2026-10-06 22:05 UTC) — window slot 11: a fix-plan all-clear now requires the scan to have actually covered its scope
+
+### Fixed
+- **`POST /api/github/fix-plan` (`server.ts`) reported `nothingToDo: true` whenever `buildFixPlan` derived no steps — including when the scan returned no repositories, or returned every repository unreachable.** `buildFixPlan` (`src/utils/github/fixPlanner.ts`) sets `nothingToDo` from the steps it could build, so an empty account listing, an all-unreachable listing, or a local-health-only run all yielded zero steps and read as an "all clear" the plan never established. New `src/utils/hardening/fixPlanCoverage.ts` reconciles the flag with the real coverage of the inputs: `assessFixPlanCoverage` marks a scan covered only when it listed at least one repository, reached all of them, and every local check actually ran (`exitCode !== null`) and passed; `reconcileFixPlanWithCoverage` forces `nothingToDo: false` and appends a `MANUAL_REVIEW` step (`coverage::unscanned`) naming what was not covered, while returning a genuinely clean, fully covered plan unchanged. The route's response now also carries a `coverage` field.
+
+### Tests
+- New `src/tests/fixPlanCoverageTruth.test.ts` (10 cases: 6 unit on the predicate, 4 on the reconciliation — including a case that pins the raw planner's false all-clear on an empty scan, and a case proving a covered clean plan is returned by identity). Negative-validated — reverting the forced `nothingToDo: false` failed exactly 1 case (`1 failed | 9 passed`); restored → 10/10. Lint (`tsc --noEmit`) exit 0. Full suite **175 files / 2204 tests passed** (29.76 s, 0 failed). Build exit 0 (`dist/server.cjs` 1041085 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 03:05 IST (2026-10-06 21:35 UTC) — window slot 10: a decided approval request is terminal in the shared registry
+
+### Fixed
+- **`updateActionRequestStatus` (`server_tools.ts`) accepted any status transition, so an approval request a human had already decided could be re-stamped by a duplicate tap.** Two callers then reported a change that had not happened: the Telegram `reject_perm_` branch replied "Understood, Sir. Action … cancelled safely." for a **null** result (a re-tap on an already-run or already-rejected request read as a fresh withdrawal), and the web approve-and-execute branch of `POST /api/approvals/resolve` (`server.ts`) had no re-entry guard — a second POST re-ran the execution branches (a duplicate GitHub issue, a re-attempted publish) and reported a fresh success for work that had already happened. New `canTransitionActionStatus(current, next)` (`server_tools.ts`) makes a decision terminal: a request may only move out of `PENDING_APPROVAL`, never out of `REJECTED` / `EXECUTED` / `FAILED` / `BLOCKED_EMERGENCY_STOP`. The registry returns `null` for a refused transition (the same "no such pending action" path every caller already handles); the Telegram reject reply now reports "was already processed or expired; nothing was changed", and the approve route answers HTTP 409 `outcome: ALREADY_DECIDED` before any execution branch runs.
+
+### Tests
+- New `src/tests/approvalRegistryTerminalTruth.test.ts` (9 cases: 2 unit on the predicate, 4 on the registry, 3 source guards). Negative-validated — making `canTransitionActionStatus` return `true` unconditionally failed exactly the 3 behavioural cases (`3 failed | 6 passed`); restored → 9/9. Targeted 4 files / 40 passed. Lint (`tsc --noEmit`) exit 0. Full suite **174 files / 2194 tests passed** (28.72 s, 0 failed). Build exit 0 (`dist/server.cjs` 1038244 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 02:05 IST (2026-10-06 20:35 UTC) — window slot 9: a decided outbound-call request can no longer be decided again
+
+### Fixed
+- **`TelephonySessionManager.authorizeOutboundRequest` (`src/utils/telephonySessionManager.ts`) looked the request up by id but never checked its current status, and the route `POST /api/telephony/outbound/authorize` (`server.ts`) treated any `{ success: true }` from the manager as a fresh authorization.** A request a human had already `REJECTED` could be sent back with `decision: 'APPROVE'`; the manager flipped it to `AUTHORIZED` and reported success, `classifyOutboundAuthorization` returned `APPROVED`, and the route reached the carrier-dispatch branch — placing a call that had been explicitly rejected. An already-`AUTHORIZED` request could likewise be authorized again, a duplicate dial, and any recorded decision could be silently overwritten. The manager now refuses any request whose status is not `PENDING_AUTHORIZATION`, returning `{ success: false, request, error: 'Request already decided (status …)' }` and leaving the recorded decision untouched. The route's existing `if (!verdict.success)` guard already answers HTTP 404 and never reaches the carrier, so no route change was needed.
+
+### Tests
+- New `src/tests/outboundReauthorizationTruth.test.ts` (4 cases: re-approve refused, re-approve-after-reject refused with the record left `REJECTED`, first decision still recorded, route guard still present). Negative-validated — the new test failed `3 failed | 1 passed` against the pre-fix manager, restored → 4/4. Related suites re-run green: `outboundAuthorizationTruth` (9) and `actionExecutedRemainingSites` (6) → 3 files / 19 passed. Lint (`tsc --noEmit`) exit 0. Full suite **173 files / 2185 tests passed** (28.77 s, 0 failed). Build exit 0 (`dist/server.cjs` 1037525 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 01:36 IST (2026-10-06 20:06 UTC) — window slot 8: the blueprint deliverable toggle reports a saved tick only when it is durable
+
+### Fixed
+- **`POST /api/blueprint/toggle-item` (`server.ts`) flipped a deliverable's `done` flag on the module-level `BLUEPRINT_PHASES` constant and answered `{ success: true, phase }` unconditionally.** The tick was never persisted — a restart silently restored the archived checklist while the response had reported it saved — and a malformed body (a `phaseId` no phase has, or an `itemIndex` outside the deliverable list) either did nothing or indexed `undefined` yet still answered `success: true`. New `src/utils/hardening/blueprintToggleTruth.ts` (`applyBlueprintToggle` / `cloneBlueprintPhases` / `overlayPersistedPhases`) classifies the request; the live `blueprintPhases` is the design constant overlaid with any persisted operator tick state at boot; the route refuses a malformed toggle with `success: false` + HTTP 400, persists through `persistBlueprintPhases()` and rolls the tick back + answers HTTP 500 `persisted: false` when the write fails, answering `{ success: true, applied: true, persisted: true }` only for a durable change. `GET /api/blueprint` and the blueprint report now read the live list.
+
+### Tests
+- New `src/tests/blueprintToggleTruth.test.ts` (16 cases: 7 unit on `applyBlueprintToggle`, 5 on the persisted-state overlay, 4 source guards on the route). Negative-validated — the pre-fix route (`git show 87c489a:server.ts`) contains `BLUEPRINT_PHASES.find` and the unconditional success literal the guards forbid. Targeted 1 file / 16 passed. Lint (`tsc --noEmit`) exit 0. Full suite **172 files / 2181 tests passed** (28.51 s, 0 failed). Build exit 0 (`dist/server.cjs` 1037308 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 00:36 IST (2026-10-06 19:06 UTC) — window slot 7: the security-matrix route echoes the state it applied, not a pre-apply snapshot
+
+### Fixed
+- **`POST /api/security/update` (`server.ts`) captured `securityStateSnapshot` before assigning `verdict.applied` onto `securityMatrixState`, then answered `{ success: true, securityState: securityStateSnapshot }`.** A client that trusts the response instead of refetching — `SecurityMatrixModal.handleUpdateLevel` does exactly that — read back the pre-apply gate value, displaying a toggle that had not taken effect. New `applySecurityMatrixUpdate(state, applied)` (`src/utils/hardening/securityMatrixUpdateTruth.ts`) returns the state with the classified fields applied, and the route now echoes that (keeping `levels`/`auditLogs` from live state) with `applied: true`. The no-op path (`success: false, applied: false`) is unchanged.
+
+### Tests
+- New `applySecurityMatrixUpdate reports the value that was really stored` (`src/tests/securityMatrixUpdateTruth.test.ts`). Negative-validated — reverting the response to `securityStateSnapshot` failed exactly the new assertion (`1 failed | 22 passed`); restored → 23/23. Targeted `securityMatrixUpdateTruth` 23 passed. Lint (`tsc --noEmit`) exit 0. Full suite **171 files / 2165 tests passed** (28.38 s, 0 failed). Build exit 0 (`dist/server.cjs` 1034966 bytes).
+
+---
+
+## [Unreleased] - 2026-10-07 00:06 IST (2026-10-06 18:36 UTC) — window slot 6: scheduled-task routes report success only when the task is durable, and a genuine backup is no longer rejected
+
+### Fixed
+- **`POST /api/autonomous/schedule` and `DELETE /api/autonomous/schedule/:id` (`server.ts`) held the recurring-goal registry in a process-local `const scheduledGoals: ScheduledGoalSpec[] = []` and answered `{ success: true }` immediately.** A registered task vanished on restart, so the success was a lie about durability. The registry now lives in the persisted memory file (`schedulerState.scheduledGoals`): `loadScheduledGoals()` reconciles it on boot, `persistScheduledGoals()` writes it, and both routes return HTTP 500 with `persisted: false` and roll the registry back when the write fails — `persistMemory()` now returns a boolean instead of swallowing the error. Success responses carry `persisted: true`.
+- **`createBackup` (`src/utils/hardening/backupRestore.ts`) counted every own key of `memoryState`, including two whose value is `undefined` (`linkedInConnection`, `youTubeConnection`).** `JSON.stringify` drops undefined-valued keys, so `keyCount` said 12 while the serialized `data` held 10; `validateBackup` rejected a genuine backup ("Backup key count mismatch: header says 12, data has 10.") and `POST /api/restore` answered `success: false`. The loop now skips `undefined` values so the header matches the wire form.
+
+### Tests
+- New e2e `persists a registered task across a server restart` (`src/tests/autonomousGoals.e2e.test.ts`) — spawns the real `server.ts` process, registers a goal, restarts it, and asserts the goal and its `nextRunAt` survive. New unit `ignores undefined-valued keys so keyCount matches the serialized backup` (`src/tests/backupRestore.test.ts`). Negative-validated — deleting the `undefined` guard failed exactly the new unit test (`1 failed | 14 passed`); restored → 15/15. Targeted `backupRestore` 15 passed; `autonomousGoals.e2e` 25 passed. Lint (`tsc --noEmit`) exit 0. Full suite **171 files / 2160 tests passed** (29.03 s, 0 failed). Build exit 0 (`dist/server.cjs` 1034108 bytes).
+
+---
+
+
+## [Unreleased] - 2026-10-06 23:36 IST (2026-10-06 18:06 UTC) — window slot 5: the bridge disconnect route derives its verdict from the teardown it observed
+
+### Fixed
+- **`POST /api/mobile/bridge/disconnect` (`server.ts`) answered the hardcoded literal `{ success: true, outcome: 'VERIFIED', status: 'MOBILE_NOT_CONNECTED' }` on every request that passed the session guard.** The `status` literal was right in the common case, but the verdict was not measured: a repeated disconnect that tore down nothing still reported a `VERIFIED` teardown, and a caller could not distinguish a real disconnect from a no-op. New `src/utils/hardening/bridgeDisconnectTruth.ts` (`classifyBridgeDisconnect`) derives the verdict from `bridgeGateway.getDisconnectCount()` before and after `revoke()` plus the bridge status read immediately afterwards — `VERIFIED` only when the counter advanced and the bridge is no longer connected; a session that owned the link but dropped nothing is `PARTIAL`; a session that owned no link is `FAILED`.
+
+### Tests
+- New `src/tests/bridgeDisconnectTruth.test.ts` (6 cases: 4 unit verdicts — VERIFIED / no-op PARTIAL / still-connected PARTIAL / no-link FAILED — plus a source guard that the old literal is gone and `classifyBridgeDisconnect(` is called, and an e2e block that spawns the real `server.ts` process and drives pair → connect → disconnect over HTTP, asserting `verified: true` with the observed `MOBILE_NOT_CONNECTED`). Negative-validated — restoring the old literal failed exactly the source guard and the e2e assertion (`2 failed | 4 passed`); restored → 6/6. Targeted `bridgeDisconnectTruth` 1 file / 6 passed. Lint (`tsc --noEmit`) exit 0. Full suite **171 files / 2158 tests passed** (27.90 s, 0 failed). Build exit 0 (`dist/server.cjs` 1032287 bytes).
+
+---
+
+## [Unreleased] - 2026-10-06 23:06 IST (2026-10-06 17:36 UTC) — window slot 4: the YouTube panel no longer dresses an empty summariser result as a produced summary
+
+### Fixed
+- **`AutonomousToolsModal.tsx`'s `handleCopySummary` copied `ytResult.summary || ''` and the Key Takeaways tab claimed takeaways existed, even when the summariser produced nothing.** `buildYouTubeSummary` (`server_tools.ts`) returns `source: 'none'` with an **empty** `summary` when a video exposes no transcript and no description. The Telegram reply was taught to lead with the truth last window, but the in-app panel was not: "Copy Summary" placed an empty string on the clipboard while still toasting "Summary copied to clipboard!", and the empty takeaways tab read "Key takeaways are formatted inside the Executive Summary view above." New `src/utils/hardening/youtubePanelSummaryTruth.ts` (`hasRealYouTubeSummary` / `youtubeSummaryCopyText` / `youtubeTakeawaysEmptyLabel`) is now the panel's single source of truth — a summary is real only when non-empty and `source !== 'none'`; Copy Summary copies the explanatory notice (never an empty string) and its toast names the absence; the takeaways tab states plainly that no summary was produced.
+
+### Tests
+- New `src/tests/youtubePanelSummaryTruth.test.ts` (13 cases: 10 unit on the three helpers covering empty / whitespace / `source: 'none'`-with-stray-text / real extractive / real gemini results, plus 3 source guards that the modal passes `ytResult` — not a bare summary string — to `handleCopySummary`, routes through `youtubeSummaryCopyText`, and no longer emits the blanket takeaways claim). Negative-validated — reverting both modal wiring changes failed exactly the 2 wiring guards (`2 failed | 11 passed`); restored → 13/13. Targeted `youtubePanelSummaryTruth` 1 file / 13 passed. Lint (`tsc --noEmit`) exit 0. Full suite **170 files / 2152 tests passed** (27.13 s, 0 failed). Build exit 0 (`dist/server.cjs` 1030935 bytes — unchanged, as `server.ts` was not touched this slot).
+
+---
+
+## [Unreleased] - 2026-10-06 22:36 IST (2026-10-06 17:06 UTC) — window slot 3: the routine-trigger route reports the Telegram delivery it actually observed
+
+### Fixed
+- **`POST /api/routines/trigger` (`server.ts`) answered `{ success: true, triggered: true, routine }` for a briefing that was only composed in memory.** The route selected a stored routine and returned — nothing was pushed anywhere. On a daemon with no configured Telegram chat, a triggered slot still read as a delivered routine. The route now pushes through `deliverTelegramMessage` (the existing `telegramDelivery` / `interpretTelegramSend` path) and returns the observed outcome: `success` is true only when Telegram confirmed the send with a message id; an unconfigured chat yields `NOT_CONFIGURED`, a rejected send yields `FAILED`, and `triggered` names only the composition. The helper `routineTriggerDelivery` lives in `src/utils/hardening/routineTriggerTruth.ts` beside the existing `resolveRoutineTrigger` slot validation.
+
+### Tests
+- `src/tests/routineTriggerTruth.test.ts` (10 cases: unit coverage on `resolveRoutineTrigger` / `ROUTINE_SLOTS` plus source guards that the route awaits `routineTriggerDelivery(` and no longer emits an unconditional `triggered: true, routine`). Negative-validated — `git checkout -- server.ts` failed exactly 1 of 10 (`1 failed | 9 passed`); restored → 10/10. Targeted `routineTriggerTruth` 1 file / 10 passed. Lint (`tsc --noEmit`) exit 0. Full suite **169 files / 2139 tests passed** (26.89 s, 0 failed). Build exit 0 (`dist/server.cjs` 1030935 bytes).
+
+---
+
+## [Unreleased] - 2026-10-06 21:35 IST (2026-10-06 16:05 UTC) — window slot 2: the telephony test-suite route no longer reports a failing run as success
+
+### Fixed
+- **`GET /api/telephony/test-suite` (`server.ts`) answered `{ success: true, summary }` for every run that returned a summary.** A request that completed is not a suite that passed, so a run with failing cases was reported to the caller as `success: true` — a UI reading only that field would render a green telephony suite over red cases. The route now derives its verdict from the run via `classifyTelephonySuiteRun(summary)` (`src/utils/hardening/telephonySuiteTruth.ts`) → `PASSED` / `FAILED` / `EMPTY`. `success` is true only for a positive case count with zero failures; a missing, malformed, or empty summary is `EMPTY` and never a pass. The response also carries `outcome` and a naming `message`.
+
+### Tests
+- New `src/tests/telephonySuiteTruth.test.ts` (6 cases: 4 unit on the helper — a green run, a failing run, an empty run, and a malformed summary — plus 2 source guards that the route delegates to the helper and no longer emits the unconditional `res.json({ success: true, summary })` literal). Negative-validated — restoring the pre-fix route failed exactly 2 of 6 (`2 failed | 4 passed`); restored → 6/6. Targeted `telephonySuiteTruth` + `telephonyTestRunnerHonesty` 2 files / 7 passed. Lint (`tsc --noEmit`) exit 0. Full suite **169 files / 2135 tests passed** (27.19 s, 0 failed). Build exit 0 (`dist/server.cjs` 1030122 bytes).
+
+---
+
+## [Unreleased] - 2026-10-06 21:06 IST (2026-10-06 15:36 UTC) — window slot 1: an OAuth disconnect no longer names an account it never read
+
+### Fixed
+- **`POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect` (`server.ts`) logged a `VERIFIED` audit row naming a hardcoded account — `'LinkedIn User'` / `'YouTube Account'` — when the stored connection carried no name.** The credential removal is a real action, but the account *name* was invented and the audit row rendered it with a green "confirmed" badge. `src/utils/hardening/socialAccountIdTruth.ts` now exports `disconnectAccountLabel()`, which returns the recorded name or states plainly that no name was read; both placeholders were added to the invented-name set (`'YouTube Channel'` was already treated as an invented placeholder by `youtubeChannelTruth.ts`). Both routes call the helper, so the row stays `VERIFIED` for the real removal while the named account is the one actually recorded.
+
+### Tests
+- `src/tests/socialAccountIdTruth.test.ts` — new cases: `disconnectAccountLabel` returns the recorded label, never the placeholder; `server.ts` no longer contains either hardcoded fallback and does call `disconnectAccountLabel`. Negative-validated — restoring the two placeholder fallbacks failed exactly 1 of 11 (`1 failed | 10 passed`); restored → 11/11. Targeted `socialAccountIdTruth` + `oauthDisconnectTruth` 2 files / 15 passed. Full suite **168 files / 2129 tests passed** (27.54 s, 0 failed). Lint (`tsc --noEmit`) exit 0. Build exit 0 (`dist/server.cjs` 1029205 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-06 04:06 IST (2026-10-05 22:36 UTC) — window slot 11: a permission save is no longer reported with no durable store
 
 ### Fixed

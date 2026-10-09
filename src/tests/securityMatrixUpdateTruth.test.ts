@@ -9,7 +9,11 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { classifySecurityMatrixUpdate } from '../utils/hardening/securityMatrixUpdateTruth';
+import {
+  classifySecurityMatrixUpdate,
+  applySecurityMatrixUpdate,
+  type SecurityMatrixGateValues,
+} from '../utils/hardening/securityMatrixUpdateTruth';
 
 describe('classifySecurityMatrixUpdate applies only real, valid matrix fields', () => {
   it('applies a valid level', () => {
@@ -124,6 +128,44 @@ describe('the security/update route only reports a change it actually applied', 
     expect(body).toContain('verdict.applied.currentLevel');
     expect(body).toContain('verdict.applied.humanApprovalForExternal');
     expect(body).toContain('verdict.applied.maskSensitiveData');
+  });
+
+  it('echoes the state after the accepted fields are applied, not a pre-apply snapshot', () => {
+    expect(body).toContain('applySecurityMatrixUpdate(');
+    // The success response must send the applied state, never the stale snapshot.
+    const successTail = body.slice(body.indexOf('res.json({'));
+    expect(successTail).toContain('...appliedState');
+    expect(successTail).not.toContain('securityState: securityStateSnapshot');
+  });
+});
+
+describe('applySecurityMatrixUpdate reports the value that was really stored', () => {
+  const base: SecurityMatrixGateValues = {
+    currentLevel: 2,
+    humanApprovalForExternal: true,
+    maskSensitiveData: true,
+    credentialLeakProtection: true,
+  };
+
+  it('reflects an applied level change', () => {
+    const next = applySecurityMatrixUpdate(base, { currentLevel: 4 });
+    expect(next.currentLevel).toBe(4);
+    expect(next.humanApprovalForExternal).toBe(true);
+  });
+
+  it('reflects an applied human-approval toggle instead of the previous value', () => {
+    const next = applySecurityMatrixUpdate(base, { humanApprovalForExternal: false });
+    expect(next.humanApprovalForExternal).toBe(false);
+  });
+
+  it('leaves untouched gates at their current value', () => {
+    const next = applySecurityMatrixUpdate(base, {});
+    expect(next).toEqual(base);
+  });
+
+  it('does not mutate the input state', () => {
+    applySecurityMatrixUpdate(base, { currentLevel: 1 });
+    expect(base.currentLevel).toBe(2);
   });
 });
 

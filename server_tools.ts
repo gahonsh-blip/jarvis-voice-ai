@@ -36,6 +36,44 @@ export function getEmergencyState(): EmergencyState {
   return { ...emergencyState };
 }
 
+/**
+ * The durable subset of the emergency/kill-switch state. Persisted so a freeze
+ * an operator engaged survives a restart — a safety stop that evaporates on
+ * reboot is worse than no stop, because the operator still believes it holds.
+ */
+export interface EmergencyPersistedState {
+  emergencyPaused: boolean;
+  hardKillSwitchTriggered: boolean;
+  pausedAt?: string;
+  pausedBy?: string;
+  reason?: string;
+}
+
+export function persistedEmergencyState(): EmergencyPersistedState {
+  return {
+    emergencyPaused: emergencyState.emergencyPaused === true,
+    hardKillSwitchTriggered: emergencyState.hardKillSwitchTriggered === true,
+    ...(emergencyState.pausedAt ? { pausedAt: emergencyState.pausedAt } : {}),
+    ...(emergencyState.pausedBy ? { pausedBy: emergencyState.pausedBy } : {}),
+    ...(emergencyState.reason ? { reason: emergencyState.reason } : {}),
+  };
+}
+
+/**
+ * Replace the live emergency state with a previously persisted snapshot. Used
+ * on boot to restore a freeze, and to roll the freeze back when a write that
+ * was reported could not actually reach disk.
+ */
+export function hydrateEmergencyState(stored: EmergencyPersistedState | null | undefined): void {
+  emergencyState = {
+    emergencyPaused: stored?.emergencyPaused === true,
+    hardKillSwitchTriggered: stored?.hardKillSwitchTriggered === true,
+    ...(stored?.pausedAt ? { pausedAt: stored.pausedAt } : {}),
+    ...(stored?.pausedBy ? { pausedBy: stored.pausedBy } : {}),
+    ...(stored?.reason ? { reason: stored.reason } : {}),
+  };
+}
+
 export function toggleEmergencyStop(
   requestedBy: string = 'HUMAN_OPERATOR',
   reason: string = 'User triggered emergency safety stop'
@@ -142,6 +180,56 @@ export function getPendingApprovals(): PermissionActionRequest[] {
 
 export function getAllActionRequests(): PermissionActionRequest[] {
   return [...pendingActionRequests];
+}
+
+/**
+ * The registry snapshot that is persisted. Kept to the same 50-record cap the
+ * live array uses, and round-tripped through JSON so only serialisable data is
+ * written.
+ */
+export function persistedActionRequests(): PermissionActionRequest[] {
+  return JSON.parse(JSON.stringify(pendingActionRequests.slice(0, 50)));
+}
+
+/**
+ * Replace the live registry with a previously persisted snapshot. Used on boot
+ * to restore the approval queue and to roll the queue back when a write that
+ * was reported could not actually reach disk. A non-array (or a legacy file
+ * with no registry) leaves the registry empty rather than inventing requests.
+ */
+export function hydrateActionRequests(stored: unknown): void {
+  if (!Array.isArray(stored)) {
+    pendingActionRequests = [];
+    return;
+  }
+  pendingActionRequests = (stored as PermissionActionRequest[]).slice(0, 50);
+}
+
+/**
+ * Statuses a request can no longer move out of. A decision is a fact: once a
+ * request is REJECTED, EXECUTED, FAILED or blocked by the emergency stop, a
+ * later call must not rewrite it. Before this guard the shared helper accepted
+ * any transition, so re-approving an already-decided request re-stamped it and
+ * callers (e.g. the Telegram `approve_perm_` branch) reported a fresh approval
+ * for a decision the human had already made.
+ */
+const TERMINAL_ACTION_STATUSES: ReadonlySet<PermissionActionRequest['status']> = new Set([
+  'REJECTED',
+  'EXECUTED',
+  'FAILED',
+  'BLOCKED_EMERGENCY_STOP',
+]);
+
+/**
+ * Whether a request may move from `current` to `next`. Only a live
+ * PENDING_APPROVAL request can be decided, and only once: every decision is
+ * terminal, so no further transition is allowed out of a terminal status.
+ */
+export function canTransitionActionStatus(
+  current: PermissionActionRequest['status'],
+  _next: PermissionActionRequest['status']
+): boolean {
+  return !TERMINAL_ACTION_STATUSES.has(current);
 }
 
 export function createPendingActionRequest(params: {
@@ -256,6 +344,10 @@ export function updateActionRequestStatus(
 ): PermissionActionRequest | null {
   const req = pendingActionRequests.find((a) => a.id === id);
   if (!req) return null;
+  // A request that already carries a terminal decision is not re-decidable.
+  // Returning null lets every caller apply the same "no such pending action"
+  // handling, instead of re-stamping the request and reporting a fresh success.
+  if (!canTransitionActionStatus(req.status, status)) return null;
   req.status = status;
   req.resolvedAt = new Date().toISOString();
   if (details?.resultUrn) req.resultUrn = details.resultUrn;

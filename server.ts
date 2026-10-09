@@ -25,7 +25,7 @@ import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } f
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
 import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
-import { observedAccountName, describeVerifiedAccount } from './src/utils/hardening/socialAccountIdTruth';
+import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
@@ -36,17 +36,25 @@ import {
   applyPhonePermissionUpdate,
   type PhonePermissionStore,
 } from './src/utils/hardening/phonePermissionStoreTruth';
-import { classifyTelephonySettingsUpdate } from './src/utils/hardening/telephonySettingsTruth';
+import { classifyTelephonySettingsUpdate, TELEPHONY_SETTING_KEYS } from './src/utils/hardening/telephonySettingsTruth';
+import { classifyTelephonySuiteRun } from './src/utils/hardening/telephonySuiteTruth';
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
 import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
-import { classifySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
-import { resolveRoutineTrigger } from './src/utils/hardening/routineTriggerTruth';
+import { classifySecurityMatrixUpdate, applySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
+import {
+  applyBlueprintToggle,
+  cloneBlueprintPhases,
+  overlayPersistedPhases,
+  type BlueprintPhase,
+} from './src/utils/hardening/blueprintToggleTruth';
+import { resolveRoutineTrigger, routineTriggerDelivery } from './src/utils/hardening/routineTriggerTruth';
 import { classifyLeadStatusUpdate } from './src/utils/hardening/freelanceLeadStatusTruth';
 import { classifyTelephonyCallDeletion } from './src/utils/hardening/telephonyCallDeleteTruth';
 import { classifyTelephonyCallRecord } from './src/utils/hardening/telephonyCallRecordTruth';
 import { classifyOutboundAuthorization } from './src/utils/hardening/outboundAuthorizationTruth';
 import { classifyBridgeHeartbeat } from './src/utils/hardening/bridgeHeartbeatTruth';
+import { classifyBridgeDisconnect } from './src/utils/hardening/bridgeDisconnectTruth';
 import { classifyBridgeEvent } from './src/utils/hardening/bridgeEventTruth';
 import {
   getEmergencyState,
@@ -58,6 +66,7 @@ import {
   getAllActionRequests,
   createPendingActionRequest,
   updateActionRequestStatus,
+  canTransitionActionStatus,
   realFsList,
   realFsRead,
   realFsSearch,
@@ -79,6 +88,12 @@ import {
   YouTubeVideoInfo,
   YouTubeTranscriptSegment,
   runFinanceGuardSelfCheck,
+  persistedEmergencyState,
+  hydrateEmergencyState,
+  type EmergencyPersistedState,
+  persistedActionRequests,
+  hydrateActionRequests,
+  type PermissionActionRequest,
 } from './server_tools';
 import {
   TelephonySessionManager,
@@ -235,6 +250,7 @@ import {
 } from './src/utils/github/repoScanner';
 import { runHealthChecks, type CheckKind } from './src/utils/github/localHealth';
 import { buildFixPlan } from './src/utils/github/fixPlanner';
+import { assessFixPlanCoverage, reconcileFixPlanWithCoverage } from './src/utils/hardening/fixPlanCoverage';
 import {
   runNightlyCheck,
   nightlyHistory,
@@ -484,13 +500,71 @@ interface MemoryData {
     lastMiddayRunDate?: string;
     lastEveningRunDate?: string;
     lastNightRunDate?: string;
+    /**
+     * Operator-registered recurring goals. Persisted so a restart does not
+     * silently drop them — the register route may report success only once the
+     * task is durable.
+     */
+    scheduledGoals?: ScheduledGoalSpec[];
+    /** Last date each goal ran, keyed by goal id. */
+    lastAutonomousGoalRuns?: Record<string, string>;
   };
+  /**
+   * Operator-ticked blueprint deliverables. Persisted so the Master Blueprint
+   * modal's readiness checklist survives a restart instead of silently
+   * reverting to the archived design state.
+   */
+  blueprintPhases?: unknown[];
   /** Recent conversation turns, kept server-side so context survives a client reset. */
   conversationHistory?: {
     role: 'user' | 'jarvis';
     content: string;
     timestamp: string;
   }[];
+  /**
+   * The Security Matrix gates (level, human approval, masking, credential-leak
+   * protection). Persisted so an operator's toggle survives a restart — the
+   * update route may report a save only once the gate is durable.
+   */
+  securityMatrix?: SecurityMatrixPersistedState;
+  /**
+   * The emergency stop / global kill-switch freeze. Persisted so a safety stop
+   * an operator engaged survives a restart — a freeze that evaporates on reboot
+   * is worse than none, because the operator still believes it holds.
+   */
+  emergencyState?: EmergencyPersistedState;
+  /**
+   * The Level-3/4 approval queue. Persisted so a pending human approval (and its
+   * terminal decisions) survives a restart instead of silently emptying — an
+   * approval card the operator resolves after a reboot must act on the same
+   * request it was shown.
+   */
+  permissionRequests?: PermissionActionRequest[];
+  /**
+   * The telephony settings the operator saved (provider, greeting, voice rate,
+   * screening flags...). Persisted so a save survives a restart — the settings
+   * route may report a stored setting only once it is durable, or the operator
+   * is told "SAVED" for a change that silently reverts on the next boot.
+   */
+  telephonySettings?: Record<string, unknown>;
+  /**
+   * The telephony call history. Persisted so a recorded call (and a deletion)
+   * survives a restart — the call routes may report a stored or removed record
+   * only once it is durable, or a call the operator logged silently disappears
+   * on the next boot.
+   */
+  telephonyCallRecords?: unknown[];
+}
+
+/**
+ * The durable subset of the Security Matrix. Only the operator-settable gates
+ * are stored; the descriptive `levels` catalog is static and re-derived on boot.
+ */
+interface SecurityMatrixPersistedState {
+  currentLevel: 1 | 2 | 3 | 4;
+  humanApprovalForExternal: boolean;
+  maskSensitiveData: boolean;
+  credentialLeakProtection: boolean;
 }
 
 const defaultSocialPosts: ServerSocialPost[] = [
@@ -581,6 +655,32 @@ const defaultFreelanceLeads: ServerFreelanceLead[] = [
   },
 ];
 
+/**
+ * The compile-time Security Matrix gates. `securityMatrixState` is declared
+ * further down, so `memoryState` seeds from this literal and the boot hydration
+ * (below the declaration) overwrites it with whatever the file holds.
+ */
+const SECURITY_MATRIX_DEFAULTS: SecurityMatrixPersistedState = {
+  currentLevel: 2,
+  humanApprovalForExternal: true,
+  maskSensitiveData: true,
+  credentialLeakProtection: true,
+};
+
+/**
+ * The durable gate values, read straight from `memoryState`. This is the single
+ * source of truth for what `persistSecurityMatrixState` writes, so the writer and
+ * the in-memory matrix can never drift.
+ */
+function persistedSecurityMatrix(): SecurityMatrixPersistedState {
+  return {
+    currentLevel: securityMatrixState.currentLevel,
+    humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
+    maskSensitiveData: securityMatrixState.maskSensitiveData,
+    credentialLeakProtection: securityMatrixState.credentialLeakProtection,
+  };
+}
+
 let memoryState: MemoryData = {
   name: '',
   notes: [
@@ -607,6 +707,8 @@ let memoryState: MemoryData = {
   auditLogs: defaultAuditLogs,
   freelanceLeads: defaultFreelanceLeads,
   schedulerState: {},
+  securityMatrix: { ...SECURITY_MATRIX_DEFAULTS },
+  emergencyState: { emergencyPaused: false, hardKillSwitchTriggered: false },
 };
 
 // Load memory from disk on startup
@@ -639,6 +741,8 @@ try {
       freelanceLeads: coerceArray(parsed.freelanceLeads, memoryState.freelanceLeads),
       conversationHistory: coerceArray(parsed.conversationHistory, []),
       schedulerState: parsed.schedulerState || {},
+      securityMatrix: parsed.securityMatrix,
+      emergencyState: parsed.emergencyState,
       linkedInConnection: parsed.linkedInConnection ? {
         ...parsed.linkedInConnection,
         accessToken: parsed.linkedInConnection.accessTokenEncrypted
@@ -776,7 +880,8 @@ export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token
 }
 
 let lastPersistedTimestamp = new Date().toISOString();
-function persistMemory() {
+/** Write the in-memory state to disk. Returns whether the state is on disk. */
+function persistMemory(): boolean {
   try {
     // Keep max 200 processed updates to save space
     if (memoryState.processedTelegramUpdates.length > 200) {
@@ -816,7 +921,7 @@ function persistMemory() {
     try {
       if (fs.existsSync(MEMORY_FILE_PATH) && fs.readFileSync(MEMORY_FILE_PATH, 'utf-8') === serialized) {
         lastPersistedTimestamp = new Date().toISOString();
-        return;
+        return true;
       }
     } catch {
       // Fall through and write.
@@ -824,9 +929,120 @@ function persistMemory() {
 
     fs.writeFileSync(MEMORY_FILE_PATH, serialized, 'utf-8');
     lastPersistedTimestamp = new Date().toISOString();
+    return true;
   } catch (err: any) {
     console.warn('[Storage] Error writing to jarvis_memory.json:', err?.message);
+    return false;
   }
+}
+
+/**
+ * True only when the audit row with `id` is present in the memory file on disk.
+ * `persistMemory()` can return true without writing when the file already holds
+ * the identical bytes, so a route that appends a row and then persists needs a
+ * disk check to be sure the row is durable rather than trusting the boolean.
+ */
+function diskHasAuditRow(id: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const rows: AuditLogEntry[] = Array.isArray(onDisk.auditLogs) ? onDisk.auditLogs : [];
+    return rows.some((r) => r?.id === id);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True only when the memory file on disk carries the expected `emergencyPaused`
+ * latch. `persistMemory()` can return true without writing when the file already
+ * holds the identical bytes, so a safety route that reports the freeze as
+ * durable must read the latch back rather than trust the boolean.
+ */
+function emergencyStateOnDisk(expected: boolean): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    return onDisk?.emergencyState?.emergencyPaused === expected;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True only when the approval request `id` is present in the memory file on disk
+ * with the expected terminal status. `persistMemory()` can return true without
+ * writing when the file already holds the identical bytes, so a route that
+ * reports a decision as durable must read the request back rather than trust the
+ * boolean. A missing request is treated as not durable.
+ */
+function actionRequestStatusOnDisk(id: string, expected: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const rows: any[] = Array.isArray(onDisk.permissionRequests) ? onDisk.permissionRequests : [];
+    return rows.some((r) => r?.id === id && r?.status === expected);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Write the Security Matrix gates to disk. The matrix lives outside `memoryState`,
+ * so this first copies the live gates into `memoryState.securityMatrix` and then
+ * runs the durable write. Returns whether the gates are on disk — the update route
+ * may report a save only on `true`.
+ */
+function persistSecurityMatrixState(): boolean {
+  memoryState.securityMatrix = persistedSecurityMatrix();
+  return persistMemory();
+}
+
+/**
+ * Write the emergency/kill-switch freeze to disk. Like the Security Matrix, the
+ * emergency state lives outside `memoryState`, so this first copies the live
+ * state into `memoryState.emergencyState` and then runs the durable write.
+ * Returns whether the freeze is on disk — a route may report a held freeze only
+ * on `true`.
+ */
+function persistEmergencyState(): boolean {
+  memoryState.emergencyState = persistedEmergencyState();
+  return persistMemory();
+}
+
+/**
+ * Write the approval registry to disk. Like the Security Matrix and the
+ * emergency freeze, the registry lives outside `memoryState`, so this first
+ * copies the live requests into `memoryState.permissionRequests` and then runs
+ * the durable write. Returns whether the queue is on disk — a route may report a
+ * staged or resolved approval only on `true`.
+ */
+function persistApprovalRegistry(): boolean {
+  memoryState.permissionRequests = persistedActionRequests();
+  return persistMemory();
+}
+
+/**
+ * Write the live telephony settings to disk. Like the Security Matrix, the
+ * emergency freeze and the approval queue, the settings object lives outside
+ * `memoryState`, so this first copies the live values into
+ * `memoryState.telephonySettings` and then runs the durable write. Returns
+ * whether the settings are on disk — the settings route may report a save only
+ * on `true`, or the operator is told "SAVED" for values the next boot discards.
+ */
+function persistTelephonySettingsState(): boolean {
+  memoryState.telephonySettings = { ...telephonySettingsState };
+  return persistMemory();
+}
+
+/**
+ * Write the live telephony call history to disk. Like the settings object, the
+ * history lives outside `memoryState`, so this first copies the live array into
+ * `memoryState.telephonyCallRecords` and then runs the durable write. Returns
+ * whether the history is on disk — the call routes may report a stored or
+ * removed record only on `true`, or a recorded call is gone on the next boot
+ * while the caller was told it was saved.
+ */
+function persistTelephonyCalls(): boolean {
+  memoryState.telephonyCallRecords = telephonyCalls;
+  return persistMemory();
 }
 
 export function addAuditLog(
@@ -1459,7 +1675,22 @@ const BLUEPRINT_PHASES = [
     ],
     commandSample: 'JARVIS, कल सुबह 9 बजे मुझे report देना',
   },
-];
+] as BlueprintPhase[];
+
+// The live phase list is the design constant overlaid with any operator tick
+// state persisted on disk (memoryState is already loaded at this point).
+// Without this, a tick made through the modal was in-memory only and a restart
+// restored the archived checklist.
+let blueprintPhases: BlueprintPhase[] = overlayPersistedPhases(
+  BLUEPRINT_PHASES,
+  memoryState.blueprintPhases
+);
+
+/** Persist the operator's blueprint tick state. Returns whether it reached disk. */
+function persistBlueprintPhases(): boolean {
+  memoryState.blueprintPhases = blueprintPhases;
+  return persistMemory();
+}
 
 let oracleCloudState = {
   provider: 'Oracle Cloud Always Free' as const,
@@ -1630,6 +1861,50 @@ let securityMatrixState = {
     return memoryState.auditLogs;
   },
 };
+
+// Restore the persisted Security Matrix gates. Each field is validated before it
+// is adopted, so a hand-edited or legacy file cannot install an out-of-range
+// level or a non-boolean gate; anything invalid keeps the default. The matrix
+// then re-writes itself back into `memoryState` in lockstep, so a later persist
+// records exactly what the running matrix holds.
+{
+  const stored = memoryState.securityMatrix as Partial<SecurityMatrixPersistedState> | undefined;
+  if (stored && typeof stored === 'object') {
+    const level = stored.currentLevel;
+    if (level === 1 || level === 2 || level === 3 || level === 4) {
+      securityMatrixState.currentLevel = level;
+    }
+    const gates = ['humanApprovalForExternal', 'maskSensitiveData', 'credentialLeakProtection'] as const;
+    for (const gate of gates) {
+      if (typeof stored[gate] === 'boolean') securityMatrixState[gate] = stored[gate] as boolean;
+    }
+  }
+  memoryState.securityMatrix = persistedSecurityMatrix();
+}
+
+// Restore the persisted emergency stop / kill-switch freeze. A safety stop an
+// operator engaged must survive a restart; without this the freeze silently
+// reverted to the compile-time `false` on the next boot. A hand-edited or legacy
+// file can only restore a genuine boolean freeze, never invent one.
+{
+  const stored = memoryState.emergencyState as Partial<EmergencyPersistedState> | undefined;
+  hydrateEmergencyState({
+    emergencyPaused: stored?.emergencyPaused === true,
+    hardKillSwitchTriggered: stored?.hardKillSwitchTriggered === true,
+    ...(typeof stored?.pausedAt === 'string' ? { pausedAt: stored.pausedAt } : {}),
+    ...(typeof stored?.pausedBy === 'string' ? { pausedBy: stored.pausedBy } : {}),
+    ...(typeof stored?.reason === 'string' ? { reason: stored.reason } : {}),
+  });
+  memoryState.emergencyState = persistedEmergencyState();
+}
+
+// Restore the persisted approval registry. Without this the Level-3/4 queue
+// silently emptied on every restart, so a pending approval card the operator
+// acted on after a reboot resolved nothing. A legacy file with no registry
+// hydrates empty rather than inventing requests, and the registry then re-writes
+// itself into `memoryState` so a later persist records exactly what it holds.
+hydrateActionRequests(memoryState.permissionRequests);
+memoryState.permissionRequests = persistedActionRequests();
 
 // Proactive Daily Reports.
 //
@@ -2794,9 +3069,22 @@ async function executeApprovedAction(
   post?: ServerSocialPost;
   auditEntry: AuditLogEntry;
   userMessage: string;
+  persisted: boolean;
 }> {
   const post = memoryState.socialPosts.find((p) => p.id === postIdOrActionId);
   const actionLogId = `audit-${Date.now()}`;
+
+  // A Level-4 decision (an external publish or its rejection) is only real once
+  // its audit row and the post's new state are on disk. The helper previously
+  // called persistMemory() at each of these sites and discarded the boolean, so
+  // a read-only volume or full disk produced a "confirmed" publish in the reply
+  // for a decision the store never kept. Each site now checks the persist
+  // result, rolls its in-memory audit row back when the write fails, and reports
+  // `persisted: false` so a later persist cannot resurrect a decision that was
+  // reported as not recorded.
+  const rollbackAudit = (entry: AuditLogEntry) => {
+    memoryState.auditLogs = memoryState.auditLogs.filter((e) => e !== entry);
+  };
 
   if (!post) {
     const fallbackAudit: AuditLogEntry = {
@@ -2810,11 +3098,20 @@ async function executeApprovedAction(
       finalTruthState: 'FAILED',
     };
     pushAuditEntry(fallbackAudit);
-    persistMemory();
+    if (!persistMemory()) {
+      rollbackAudit(fallbackAudit);
+      return {
+        success: false,
+        auditEntry: fallbackAudit,
+        userMessage: 'Target post / action ID was not found, and the audit row could not be written to durable storage.',
+        persisted: false,
+      };
+    }
     return {
       success: false,
       auditEntry: fallbackAudit,
       userMessage: 'Target post / action ID was not found.',
+      persisted: true,
     };
   }
 
@@ -2832,15 +3129,45 @@ async function executeApprovedAction(
       finalTruthState: 'VERIFIED',
       errorReason: 'Action was already executed and verified previously.',
     };
+    // Refusing a duplicate is itself a decision and must reach disk like any
+    // other. This branch used to build the row, discard it, and still answer
+    // `persisted: true` — so `auditEntry.id` named a row absent from the audit
+    // log and the duplicate refusal was gone on reboot. Commit it and report the
+    // durable outcome honestly.
+    pushAuditEntry(existingAudit);
+    if (!persistMemory()) {
+      rollbackAudit(existingAudit);
+      return {
+        success: false,
+        post,
+        auditEntry: {
+          ...existingAudit,
+          errorReason:
+            'The duplicate-approval block could not be written to durable storage; it was not recorded.',
+        },
+        userMessage: `Post was already published and verified on ${post.platform}, but the duplicate-approval block could not be written to durable storage.`,
+        persisted: false,
+      };
+    }
     return {
       success: true,
       post,
       auditEntry: existingAudit,
-      userMessage: `Post was already published and verified on ${post.platform} (Share ID: ${post.providerUrn || 'verified'}).`,
+      userMessage: post.providerUrn
+        ? `Post was already published and verified on ${post.platform} (Share ID: ${post.providerUrn}).`
+        : `Post was already published and verified on ${post.platform}, but no provider share ID was recorded.`,
+      persisted: true,
     };
   }
 
   if (actionType === 'reject') {
+    const rejectedSnapshot = {
+      status: post.status,
+      executionStatus: post.executionStatus,
+      verificationStatus: post.verificationStatus,
+      finalTruthState: post.finalTruthState,
+      errorReason: post.errorReason,
+    };
     post.status = 'draft';
     post.executionStatus = 'DRAFT';
     post.verificationStatus = 'STANDBY';
@@ -2858,13 +3185,28 @@ async function executeApprovedAction(
       finalTruthState: 'REJECTED',
     };
     pushAuditEntry(rejectAudit);
-    persistMemory();
+    if (!persistMemory()) {
+      rollbackAudit(rejectAudit);
+      post.status = rejectedSnapshot.status;
+      post.executionStatus = rejectedSnapshot.executionStatus;
+      post.verificationStatus = rejectedSnapshot.verificationStatus;
+      post.finalTruthState = rejectedSnapshot.finalTruthState;
+      post.errorReason = rejectedSnapshot.errorReason;
+      return {
+        success: false,
+        post,
+        auditEntry: rejectAudit,
+        userMessage: 'The rejection could not be written to durable storage; the draft was not changed.',
+        persisted: false,
+      };
+    }
 
     return {
       success: true,
       post,
       auditEntry: rejectAudit,
       userMessage: 'Draft rejected. Post returned to offline draft status.',
+      persisted: true,
     };
   }
 
@@ -2883,12 +3225,22 @@ async function executeApprovedAction(
       errorReason: 'Operation blocked: Global Kill Switch / Emergency Stop is active.',
     };
     pushAuditEntry(killAudit);
-    persistMemory();
+    if (!persistMemory()) {
+      rollbackAudit(killAudit);
+      return {
+        success: false,
+        post,
+        auditEntry: killAudit,
+        userMessage: '🚨 Action blocked: Global Kill Switch / Emergency Stop is active. (The block audit row could not be written to durable storage.)',
+        persisted: false,
+      };
+    }
     return {
       success: false,
       post,
       auditEntry: killAudit,
       userMessage: '🚨 Action blocked: Global Kill Switch / Emergency Stop is active.',
+      persisted: true,
     };
   }
 
@@ -2919,6 +3271,13 @@ async function executeApprovedAction(
     // broadcast is recorded as dispatched, not verified: there is no platform
     // response to verify it with. Engagement counts are deliberately omitted
     // rather than generated, since invented numbers read as real metrics.
+    const internalSnapshot = {
+      status: post.status,
+      executionStatus: post.executionStatus,
+      verificationStatus: post.verificationStatus,
+      finalTruthState: post.finalTruthState,
+      verifiedAt: post.verifiedAt,
+    };
     post.status = 'not_published';
     post.executionStatus = 'NOT_PUBLISHED';
     post.verificationStatus = 'STANDBY';
@@ -2939,16 +3298,35 @@ async function executeApprovedAction(
         'No external provider is configured for this channel, so the broadcast could not be verified. No engagement metrics are reported.',
     };
     pushAuditEntry(internalAudit);
-    persistMemory();
+    if (!persistMemory()) {
+      rollbackAudit(internalAudit);
+      post.status = internalSnapshot.status;
+      post.executionStatus = internalSnapshot.executionStatus;
+      post.verificationStatus = internalSnapshot.verificationStatus;
+      post.finalTruthState = internalSnapshot.finalTruthState;
+      post.verifiedAt = internalSnapshot.verifiedAt;
+      return {
+        success: false,
+        post,
+        auditEntry: internalAudit,
+        userMessage: `⚠️ NOT_VERIFIED: ${post.platform} has no configured provider to confirm against, and the dispatch audit row could not be written to durable storage.`,
+        persisted: false,
+      };
+    }
 
     return {
       success: false,
       post,
       auditEntry: internalAudit,
       userMessage: `⚠️ NOT_VERIFIED: ${post.platform} has no configured provider to confirm against. Nothing was reported as published, and no engagement metrics are shown.`,
+      persisted: true,
     };
   }
 
+  // The post state reflects what the provider actually did and is never rolled
+  // back: a verified publish really happened even if the local record cannot be
+  // written. The durable-write result is reported separately so no caller reads
+  // the local record as confirmed when it is not on disk.
   post.status = result.finalTruthState === 'VERIFIED' ? 'published' : result.finalTruthState === 'FAILED' ? 'failed' : 'not_published';
   post.executionStatus = result.executionStatus;
   post.verificationStatus = result.verificationStatus;
@@ -2971,13 +3349,23 @@ async function executeApprovedAction(
     finalTruthState: result.finalTruthState,
   };
   pushAuditEntry(auditEntry);
-  persistMemory();
+  const persisted = persistMemory();
+  if (!persisted) {
+    // The publish already happened at the provider and is not undone. Drop the
+    // audit row that could not be written so the in-memory log does not claim a
+    // durable record, and tell the caller the local record is not on disk.
+    rollbackAudit(auditEntry);
+  }
 
+  const baseMessage = result.userMessage;
   return {
     success: result.success,
     post,
     auditEntry,
-    userMessage: result.userMessage,
+    userMessage: persisted
+      ? baseMessage
+      : `${baseMessage}\n⚠️ The publish outcome could not be written to durable storage; the local record may be lost on restart.`,
+    persisted,
   };
 }
 
@@ -3348,10 +3736,26 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
     botReplyText = `🛡️ *HERMES SECURITY MATRIX AUDIT*\n\n• *Active Level*: ${posture.levelLabel}\n• *Human Approval*: ${posture.humanApproval}\n• *Secret Masking*: ${posture.secretMasking}\n• *Credential Leak Protection*: ${posture.credentialLeakProtection}\n• *Audit Trail*: ${describeAuditTrail(memoryState.auditLogs)} (${auditTrailCounts(memoryState.auditLogs).total} total)`;
     actionData = { type: 'security_audit', level: securityMatrixState.currentLevel };
   } else if (intentData.intent === 'set_name') {
-    const detectedName = intentData.actionPayload?.name || clean.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
-    memoryState.name = detectedName;
-    persistMemory();
-    botReplyText = `Understood, ${detectedName}! Your identity has been recorded into my durable memory banks.`;
+    // Mirrors the /api/chat set_name case and the offline engine: the classifier's
+    // name group is greedy over a whitespace class, so a pasted sentence or a
+    // digit-only payload reaches here. Recording that as the identity and telling
+    // the user it was saved is a spoken fake success. Only a plausible name is
+    // written, and the reply reflects whether it actually reached disk.
+    const rawName = intentData.actionPayload?.name || clean.replace(/(?:my name is|mera naam|i am|call me)/i, '').trim();
+    const verdict = judgeSetNameIntent(rawName);
+    if (verdict.kind === 'name') {
+      memoryState.name = verdict.name;
+      const persisted = persistMemory();
+      if (persisted) {
+        botReplyText = `Understood, ${verdict.name}! Your identity has been recorded into my durable memory banks.`;
+      } else {
+        botReplyText = `I read your name as *${verdict.name}*, but I could not write it to durable storage, so it is not saved. Please try again.`;
+      }
+      actionData = { type: 'set_name', name: verdict.name, persisted };
+    } else {
+      botReplyText = `I could not read a usable name there (${verdict.reason}). Please say it plainly, for example "My name is [your name]".`;
+      actionData = { type: 'set_name_rejected', reason: verdict.reason, actionExecuted: false };
+    }
   } else if (intentData.intent === 'get_name') {
     if (memoryState.name) {
       botReplyText = `Your name is *${memoryState.name}*, as logged in our neural memory banks.`;
@@ -3469,9 +3873,12 @@ async function handleTelegramCallback(callbackQuery: any) {
     const postId = data.startsWith('approve_post_') ? data.replace('approve_post_', '') : 'post-1';
     const result = await executeApprovedAction(postId, 'approve_and_publish', 'HUMAN_CONFIRMATION_TELEGRAM_MOBILE');
 
+    const approveDurabilityNote = result.persisted
+      ? ''
+      : '\n\n⚠️ *DURABILITY WARNING*: this outcome could not be written to durable storage and may be lost on restart.';
     const confirmText = result.success
-      ? `✅ *LEVEL 4 AUTHORIZATION CONFIRMED*\n\n${result.userMessage}\n\n• *Audit Log ID*: \`${result.auditEntry.id}\`\n• *Verification Status*: ${result.auditEntry.verificationStatus}`
-      : `⚠️ *LEVEL 4 EXECUTION NOTICE*\n\n${result.userMessage}\n\n• *Audit Log ID*: \`${result.auditEntry.id}\`\n• *Truth State*: ${result.auditEntry.finalTruthState}`;
+      ? `✅ *LEVEL 4 AUTHORIZATION CONFIRMED*\n\n${result.userMessage}\n\n• *Audit Log ID*: \`${result.auditEntry.id}\`\n• *Verification Status*: ${result.auditEntry.verificationStatus}${approveDurabilityNote}`
+      : `⚠️ *LEVEL 4 EXECUTION NOTICE*\n\n${result.userMessage}\n\n• *Audit Log ID*: \`${result.auditEntry.id}\`\n• *Truth State*: ${result.auditEntry.finalTruthState}${approveDurabilityNote}`;
 
     const botMsg = {
       id: `tg-${Date.now()}`,
@@ -3486,7 +3893,9 @@ async function handleTelegramCallback(callbackQuery: any) {
     const postId = data.startsWith('reject_post_') ? data.replace('reject_post_', '') : 'post-1';
     const result = await executeApprovedAction(postId, 'reject', 'HUMAN_CONFIRMATION_TELEGRAM_MOBILE');
 
-    const cancelText = `❌ *ACTION REJECTED*\n\nUnderstood, Sir. The post remains saved as a local draft in memory with status: \`${result.post?.finalTruthState || 'REJECTED'}\`.`;
+    const cancelText = result.success
+      ? `❌ *ACTION REJECTED*\n\nUnderstood, Sir. The post remains saved as a local draft in memory with status: \`${result.post?.finalTruthState || 'REJECTED'}\`.${result.persisted ? '' : '\n\n⚠️ *DURABILITY WARNING*: the rejection could not be written to durable storage and may be lost on restart.'}`
+      : `⚠️ *REJECTION NOT RECORDED*\n\n${result.userMessage}`;
     const botMsg = {
       id: `tg-${Date.now()}`,
       sender: 'jarvis_bot' as const,
@@ -3499,6 +3908,9 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('approve_perm_')) {
     const permId = data.replace('approve_perm_', '');
     const updated = updateActionRequestStatus(permId, 'EXECUTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
+    // The mobile approval is durable so a restart cannot resurrect the request
+    // as pending and let it be approved a second time.
+    if (updated) persistApprovalRegistry();
     // This branch records the human approval only — no dispatcher runs here, so
     // no provider can confirm the external action. Never say "executed/verified".
     const confirmText = updated
@@ -3517,7 +3929,14 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('reject_perm_')) {
     const permId = data.replace('reject_perm_', '');
     const updated = updateActionRequestStatus(permId, 'REJECTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
-    const cancelText = `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated?.exactAction || permId}\` cancelled safely.`;
+    // Durable so a restart cannot resurrect the rejected request as pending.
+    if (updated) persistApprovalRegistry();
+    // A request that was already decided is not re-rejectable. Saying "cancelled
+    // safely" for a null result told the operator a re-tap had withdrawn an
+    // action that had in fact already run (or been rejected earlier).
+    const cancelText = updated
+      ? `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated.exactAction || permId}\` cancelled safely.`
+      : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired; nothing was changed.`;
     const botMsg = {
       id: `tg-${Date.now()}`,
       sender: 'jarvis_bot' as const,
@@ -4024,34 +4443,53 @@ app.get('/api/daemon/status', (req: Request, res: Response) => {
 
 // Master Blueprint APIs
 app.get('/api/blueprint', (req: Request, res: Response) => {
-  const completedDeliverables = BLUEPRINT_PHASES.reduce(
+  const completedDeliverables = blueprintPhases.reduce(
     (acc, p) => acc + p.deliverables.filter((d) => d.done).length,
     0
   );
-  const totalDeliverables = BLUEPRINT_PHASES.reduce((acc, p) => acc + p.deliverables.length, 0);
+  const totalDeliverables = blueprintPhases.reduce((acc, p) => acc + p.deliverables.length, 0);
   const completionPercentage = Math.round((completedDeliverables / totalDeliverables) * 100);
 
   res.json({
-    phases: BLUEPRINT_PHASES,
+    phases: blueprintPhases,
     stats: {
-      totalPhases: BLUEPRINT_PHASES.length,
-      completedPhases: BLUEPRINT_PHASES.filter((p) => p.status === 'completed').length,
-      inProgressPhases: BLUEPRINT_PHASES.filter((p) => p.status === 'in_progress').length,
+      totalPhases: blueprintPhases.length,
+      completedPhases: blueprintPhases.filter((p) => p.status === 'completed').length,
+      inProgressPhases: blueprintPhases.filter((p) => p.status === 'in_progress').length,
       completionPercentage,
     },
   });
 });
 
 app.post('/api/blueprint/toggle-item', (req: Request, res: Response) => {
-  const { phaseId, itemIndex } = req.body;
-  const phase = BLUEPRINT_PHASES.find((p) => p.id === phaseId);
-  if (phase && phase.deliverables[itemIndex]) {
-    phase.deliverables[itemIndex].done = !phase.deliverables[itemIndex].done;
-    const allDone = phase.deliverables.every((d) => d.done);
-    phase.status = allDone ? 'completed' : 'in_progress';
-    return res.json({ success: true, phase });
+  const { phaseId, itemIndex } = req.body ?? {};
+  const verdict = applyBlueprintToggle(blueprintPhases, phaseId, itemIndex);
+  if (!verdict.applied) {
+    // A malformed request used to answer `success: true` for a toggle that
+    // touched nothing. Refuse it and name the reason instead.
+    return res.status(400).json({ success: false, applied: false, error: verdict.message });
   }
-  res.status(400).json({ error: 'Invalid phase or deliverable index' });
+
+  // The toggle is only real once it is durable: the phases list is persisted
+  // with the rest of the memory state, so a restart keeps the operator's tick.
+  if (!persistBlueprintPhases()) {
+    // Roll the tick back rather than report a save that did not reach disk.
+    applyBlueprintToggle(blueprintPhases, phaseId, itemIndex);
+    return res.status(500).json({
+      success: false,
+      applied: false,
+      persisted: false,
+      error: 'Blueprint change could not be written to durable storage; it was not saved.',
+    });
+  }
+
+  res.json({
+    success: true,
+    applied: true,
+    persisted: true,
+    phase: verdict.phase,
+    done: verdict.done,
+  });
 });
 
 app.get('/api/blueprint/report', (req: Request, res: Response) => {
@@ -4104,7 +4542,7 @@ app.get('/api/blueprint/report', (req: Request, res: Response) => {
 
 ## 🗺️ 2. Comprehensive 10-Phase Roadmap (चरणबद्ध योजना)
 
-${BLUEPRINT_PHASES.map((p) => `### 📌 ${p.code}: ${p.titleEn}
+${blueprintPhases.map((p) => `### 📌 ${p.code}: ${p.titleEn}
 **हिन्दी**: ${p.titleHi}  
 **Status**: ${p.status.toUpperCase()} | **Cost**: ${p.cost}  
 **Overview**: ${p.description}  
@@ -4177,8 +4615,11 @@ app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
     } else if (update.callback_query) {
       await handleTelegramCallback(update.callback_query);
     }
-    persistMemory();
-    res.json({ ok: true });
+    // The receipt is acknowledged either way, but the caller is told whether the
+    // processed-update marker actually reached durable storage, so a read-only
+    // volume does not look like a clean, durable receipt.
+    const webhookPersisted = persistMemory();
+    res.json({ ok: true, persisted: webhookPersisted });
   } catch (err: any) {
     console.error('Webhook error:', err);
     res.status(500).json({ error: err.message });
@@ -4343,9 +4784,24 @@ app.post('/api/freelance/create-lead', (req: Request, res: Response) => {
     budget: budgetAmount,
     createdAt: new Date().toISOString(),
   }) as ServerFreelanceLead;
+  // The lead is only real once it is on disk. The route previously unshifted
+  // the record, discarded persistMemory()'s return value, and answered
+  // `stored: true` — so a read-only volume or full disk produced a "created
+  // lead" for a write that never reached storage. Gate on the durable write and
+  // roll the record back when it fails.
+  const leadSnapshot = memoryState.freelanceLeads.slice();
   memoryState.freelanceLeads.unshift(newLead);
-  persistMemory();
-  res.json({ success: true, stored: true, clientIdentified: intake.hasClientIdentity, lead: newLead, message: intake.message });
+  if (!persistMemory()) {
+    memoryState.freelanceLeads = leadSnapshot;
+    return res.status(500).json({
+      success: false,
+      stored: false,
+      persisted: false,
+      outcome: 'NOT_PERSISTED',
+      message: 'The lead could not be written to durable storage; it was not saved.',
+    });
+  }
+  res.json({ success: true, stored: true, persisted: true, clientIdentified: intake.hasClientIdentity, lead: newLead, message: intake.message });
 });
 
 app.post('/api/freelance/update-status', (req: Request, res: Response) => {
@@ -4367,9 +4823,23 @@ app.post('/api/freelance/update-status', (req: Request, res: Response) => {
       lead,
     });
   }
+  const previousStatus = lead.status;
   lead.status = verdict.status as string;
-  persistMemory();
-  res.json({ success: true, outcome: verdict.outcome, applied: true, message: verdict.message, lead });
+  // The status change is only real once it is on disk. The route previously
+  // discarded persistMemory()'s return value and reported `applied: true` for a
+  // write that could fail, so the pipeline showed a stage the store never kept.
+  if (!persistMemory()) {
+    lead.status = previousStatus;
+    return res.status(500).json({
+      success: false,
+      outcome: 'NOT_PERSISTED',
+      applied: false,
+      persisted: false,
+      message: 'The status change could not be written to durable storage; it was not applied.',
+      lead,
+    });
+  }
+  res.json({ success: true, outcome: verdict.outcome, applied: true, persisted: true, message: verdict.message, lead });
 });
 
 // Social Media Engine APIs
@@ -4437,7 +4907,13 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
     level: 2,
     gate: 'Level-2 draft review',
   });
-  pushAuditEntry({
+
+  // Append the staging audit row before the durable write, then verify the row
+  // itself reached disk. The row used to be pushed *after* `persistMemory()`,
+  // so it was never written to the memory file and a restart dropped it — yet
+  // the route still answered `persisted: true`. Persisting first, then checking
+  // the file, proves the row is durable instead of trusting the write boolean.
+  const auditRow = pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: stagingAudit.action,
@@ -4448,8 +4924,22 @@ Include a strong hook, 3 key actionable takeaways, and 5 hashtags. Keep it profe
     finalTruthState: stagingAudit.finalTruthState,
   });
 
-  persistMemory();
-  res.json({ success: true, post: newPost });
+  // A draft is only real once it — and its audit row — are durable. A write that
+  // never reaches disk (read-only volume, full disk) leaves this process holding
+  // a draft the next boot does not have, so do not answer success for it.
+  if (!persistMemory() || !diskHasAuditRow(auditRow.id)) {
+    const draftIndex = memoryState.socialPosts.indexOf(newPost);
+    if (draftIndex !== -1) memoryState.socialPosts.splice(draftIndex, 1);
+    const auditIndex = memoryState.auditLogs.indexOf(auditRow);
+    if (auditIndex !== -1) memoryState.auditLogs.splice(auditIndex, 1);
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The draft could not be written to durable storage; it was not created.',
+    });
+  }
+
+  res.json({ success: true, persisted: true, post: newPost });
 });
 
 // Level 4 Social Action Endpoint with Strict Verification
@@ -4467,6 +4957,7 @@ app.post('/api/social/action', async (req: Request, res: Response) => {
     success: result.success,
     post: result.post,
     auditEntry: result.auditEntry,
+    persisted: result.persisted,
     message: result.userMessage,
   });
 });
@@ -4539,7 +5030,7 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     level: 4,
     gate: uploadVerdict.success ? 'Level-4 authorization' : uploadVerdict.message,
   });
-  pushAuditEntry({
+  const uploadAuditRow = pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: stagingAudit.action,
@@ -4549,8 +5040,9 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-
-  persistMemory();
+  // Persist the registry alongside the post/audit rows so the staged Level-4
+  // request survives a restart too, not just the draft it refers to.
+  const uploadPersisted = persistApprovalRegistry();
 
   if (!uploadVerdict.success) {
     const code = uploadVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : uploadVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
@@ -4563,8 +5055,25 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     });
   }
 
+  // A staged upload is only real once it is durable. A write that never reached
+  // disk (read-only volume, full disk) leaves this process holding a staged
+  // upload the next boot does not have, so roll it back and do not claim it.
+  if (!uploadPersisted) {
+    const postIndex = memoryState.socialPosts.indexOf(newPost);
+    if (postIndex !== -1) memoryState.socialPosts.splice(postIndex, 1);
+    const auditIndex = memoryState.auditLogs.indexOf(uploadAuditRow);
+    if (auditIndex !== -1) memoryState.auditLogs.splice(auditIndex, 1);
+    return res.status(500).json({
+      success: false,
+      staged: false,
+      persisted: false,
+      error: 'The staged upload could not be written to durable storage; it was not staged.',
+    });
+  }
+
   res.json({
     success: true,
+    persisted: true,
     post: newPost,
     message: `YouTube video staged for Level-4 Authorization in ${validPrivacy.toUpperCase()} mode.`,
   });
@@ -4628,7 +5137,7 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     level: 4,
     gate: testVerdict.success ? 'Level-4 authorization' : testVerdict.message,
   });
-  pushAuditEntry({
+  const testAuditRow = pushAuditEntry({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: stagingAudit.action,
@@ -4638,8 +5147,9 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-
-  persistMemory();
+  // Persist the registry alongside the post/audit rows so the staged Level-4
+  // test request survives a restart too, not just the draft it refers to.
+  const testPersisted = persistApprovalRegistry();
 
   if (!testVerdict.success) {
     const code = testVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : testVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
@@ -4652,7 +5162,23 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     });
   }
 
-  res.json({ success: true, post: newPost, message: 'YouTube test video draft created with Level 4 approval gate.' });
+  // A staged test draft is only real once it is durable. A write that never
+  // reached disk leaves this process holding a staged draft the next boot does
+  // not have, so roll it back and do not claim it.
+  if (!testPersisted) {
+    const postIndex = memoryState.socialPosts.indexOf(newPost);
+    if (postIndex !== -1) memoryState.socialPosts.splice(postIndex, 1);
+    const auditIndex = memoryState.auditLogs.indexOf(testAuditRow);
+    if (auditIndex !== -1) memoryState.auditLogs.splice(auditIndex, 1);
+    return res.status(500).json({
+      success: false,
+      staged: false,
+      persisted: false,
+      error: 'The staged test draft could not be written to durable storage; it was not staged.',
+    });
+  }
+
+  res.json({ success: true, persisted: true, post: newPost, message: 'YouTube test video draft created with Level 4 approval gate.' });
 });
 
 // Update an existing draft (e.g. modify title, description, privacyStatus before approval)
@@ -4687,6 +5213,17 @@ app.post('/api/social/youtube/update-draft', (req: Request, res: Response) => {
   }
 
   const { changes } = verdict;
+  // Snapshot the fields this update may touch so a failed durable write can be
+  // rolled back. Without this the process holds a metadata change the next boot
+  // does not have, while the caller was told the draft was updated.
+  const before = {
+    videoTitle: post.videoTitle,
+    topic: post.topic,
+    videoDescription: post.videoDescription,
+    content: post.content,
+    privacyStatus: post.privacyStatus,
+    hashtags: post.hashtags,
+  };
   if (changes.videoTitle !== undefined) {
     post.videoTitle = changes.videoTitle;
     post.topic = changes.videoTitle;
@@ -4702,8 +5239,27 @@ app.post('/api/social/youtube/update-draft', (req: Request, res: Response) => {
     post.hashtags = changes.hashtags;
   }
 
-  persistMemory();
-  res.json({ success: true, outcome: verdict.outcome, applied: true, message: verdict.message, post });
+  // An update is only real once it is durable. Roll the draft back and refuse to
+  // claim the change when the write never reached disk.
+  if (!persistMemory()) {
+    post.videoTitle = before.videoTitle;
+    post.topic = before.topic;
+    post.videoDescription = before.videoDescription;
+    post.content = before.content;
+    post.privacyStatus = before.privacyStatus;
+    post.hashtags = before.hashtags;
+    return res.status(500).json({
+      success: false,
+      outcome: verdict.outcome,
+      applied: false,
+      persisted: false,
+      message: verdict.message,
+      error: 'The draft update could not be written to durable storage; it was not applied.',
+      post,
+    });
+  }
+
+  res.json({ success: true, outcome: verdict.outcome, applied: true, persisted: true, message: verdict.message, post });
 });
 
 /**
@@ -5122,7 +5678,34 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       scopes: grantedScopes,
       accessToken,
     };
-    persistMemory();
+    // A connection is real only once the credential is durable. A write that
+    // never reaches disk (read-only volume, full disk) leaves this process
+    // "connected" while the next boot has no account — so the route used to
+    // discard persistMemory()'s return value and always render the "Connected!"
+    // popup for a grant that was silently lost on restart. Gate on the durable
+    // write, drop the unpersisted credential, and render the failure popup so
+    // the UI is told the connection did not persist.
+    if (!persistMemory()) {
+      memoryState.linkedInConnection = undefined;
+      const persistErr = 'The LinkedIn connection could not be written to durable storage; it was not saved.';
+      res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>LinkedIn Not Saved</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 480px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">❌ LinkedIn Not Saved</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${persistErr}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'LINKEDIN_OAUTH_ERROR', error: ${JSON.stringify(persistErr)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+      return;
+    }
 
     // Log security audit entry
     addAuditLog(
@@ -5267,9 +5850,25 @@ app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  const prevMember = memoryState.linkedInConnection.name || 'LinkedIn User';
+  // The NAME must be the one that was recorded, never the `'LinkedIn User'`
+  // placeholder the route used to print when memory held no name.
+  const prevMember = disconnectAccountLabel(memoryState.linkedInConnection.name);
+  const connectionBefore = memoryState.linkedInConnection;
   memoryState.linkedInConnection = undefined;
-  persistMemory();
+
+  // The disconnect is only real once the credential removal is durable. A write
+  // that never reaches disk leaves this process "disconnected" while the next
+  // boot reloads the connection — so the route used to log a VERIFIED
+  // "Disconnected" row and answer success:true for a removal that reverted on
+  // restart. Restore the connection and report the failure honestly instead.
+  if (!persistMemory()) {
+    memoryState.linkedInConnection = connectionBefore;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The disconnect could not be written to durable storage; the account is still connected.',
+    });
+  }
 
   addAuditLog(
     `LinkedIn Personal Profile Disconnected (${prevMember})`,
@@ -5477,7 +6076,34 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       accessToken,
       refreshToken,
     };
-    persistMemory();
+    // A connection is real only once the credential is durable. A write that
+    // never reaches disk (read-only volume, full disk) leaves this process
+    // "connected" while the next boot has no channel — so the route used to
+    // discard persistMemory()'s return value and always render the "Connected!"
+    // popup for a grant that was silently lost on restart. Gate on the durable
+    // write, drop the unpersisted credential, and render the failure popup so
+    // the UI is told the connection did not persist.
+    if (!persistMemory()) {
+      memoryState.youTubeConnection = undefined;
+      const persistErr = 'The YouTube connection could not be written to durable storage; it was not saved.';
+      res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>YouTube Not Saved</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+  <div style="max-width: 480px; text-align: center; padding: 28px; border: 1px solid #7f1d1d; border-radius: 16px; background: #450a0a;">
+    <h3 style="color: #fca5a5; margin: 0 0 10px 0; font-size: 18px;">❌ YouTube Not Saved</h3>
+    <p style="color: #fecaca; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">${persistErr}</p>
+    <button onclick="window.close()" style="background: #991b1b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">Close Window</button>
+  </div>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'YOUTUBE_OAUTH_ERROR', error: ${JSON.stringify(persistErr)} }, '*');
+    }
+  </script>
+</body>
+</html>`);
+      return;
+    }
 
     addAuditLog(
       `YouTube Channel Connected via OAuth 2.0 (${channelDisplay} - ${channelId || 'Authenticated'})`,
@@ -5719,9 +6345,23 @@ app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  const prevChannel = memoryState.youTubeConnection.channelTitle || 'YouTube Account';
+  // The NAME must be the recorded channel title, never the `'YouTube Account'`
+  // placeholder the route used to print when the channel was unnamed.
+  const prevChannel = disconnectAccountLabel(memoryState.youTubeConnection.channelTitle);
+  const connectionBefore = memoryState.youTubeConnection;
   memoryState.youTubeConnection = undefined;
-  persistMemory();
+
+  // Same durability rule as LinkedIn: the removal is only real once it reaches
+  // disk. A dropped write reverted on the next boot while the audit log already
+  // claimed a VERIFIED disconnection. Restore and report failure honestly.
+  if (!persistMemory()) {
+    memoryState.youTubeConnection = connectionBefore;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The disconnect could not be written to durable storage; the channel is still connected.',
+    });
+  }
 
   addAuditLog(
     `YouTube Channel Disconnected (${prevChannel})`,
@@ -5753,7 +6393,7 @@ app.get('/api/routines', (req: Request, res: Response) => {
   res.json({ routines: proactiveReports });
 });
 
-app.post('/api/routines/trigger', (req: Request, res: Response) => {
+app.post('/api/routines/trigger', async (req: Request, res: Response) => {
   const { timeSlot } = req.body || {};
   // The store is rebuilt on read so a trigger matches the current reports. An
   // unknown slot used to fall back to the first report in the store, and an
@@ -5772,7 +6412,24 @@ app.post('/api/routines/trigger', (req: Request, res: Response) => {
       triggered: false,
     });
   }
-  res.json({ success: true, triggered: true, routine });
+  // Compose and actually push the briefing, then report what Telegram observed.
+  // The route used to answer `triggered: true` for a briefing that was only
+  // built in memory, so a server with no configured chat still read as a
+  // delivered routine.
+  const delivery = await routineTriggerDelivery(
+    activeTelegramChatId,
+    routine.titleEn,
+    routine.contentEn,
+    deliverTelegramMessage
+  );
+  res.json({
+    success: delivery.delivered,
+    triggered: delivery.triggered,
+    delivered: delivery.delivered,
+    outcome: delivery.outcome,
+    message: delivery.message,
+    routine,
+  });
 });
 
 // ==============================================================================
@@ -5892,6 +6549,9 @@ app.get('/api/backup', (req: Request, res: Response) => {
 
 /** Restore a previously created backup. */
 app.post('/api/restore', (req: Request, res: Response) => {
+  // Snapshot before the merge: restoreBackup only reassigns top-level keys, so a
+  // shallow copy of the previous references is enough to undo it on failure.
+  const before = { ...memoryState };
   const result = restoreBackup(
     memoryState as unknown as Record<string, unknown>,
     req.body?.backup ?? req.body
@@ -5901,14 +6561,28 @@ app.post('/api/restore', (req: Request, res: Response) => {
     return res.status(400).json({ success: false, errors: result.errors });
   }
 
+  // A restore that cannot reach disk has not happened: the running process holds
+  // the restored values but the next boot reads the pre-restore file. The route
+  // used to answer success:true and write a VERIFIED audit row regardless, so an
+  // unwritable volume produced a restore that silently reverted on restart.
+  // Match /api/memory: roll the merge back and report the failure honestly.
+  if (!persistMemory()) {
+    memoryState = before as MemoryData;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      ...result,
+      error: 'The restore could not be written to durable storage; it was not applied.',
+    });
+  }
+
   addAuditLog(
     `Memory restored from backup: ${result.restoredKeys.length} keys replaced, ${result.preservedKeys.length} preserved`,
     4,
     'HUMAN_OPERATOR',
     'VERIFIED'
   );
-  persistMemory();
-  res.json({ success: true, ...result });
+  res.json({ success: true, persisted: true, ...result });
 });
 
 /** Deployment readiness check. Observes this process's real configuration. */
@@ -5994,16 +6668,63 @@ app.post('/api/security/update', (req: Request, res: Response) => {
     });
   }
 
+  // The matrix gates live outside `memoryState`, so `persistMemory()` alone never
+  // wrote them. `persistSecurityMatrixState()` copies the live gates into the
+  // persisted snapshot and writes it; only a durable write may read as a save.
+  const preGates = persistedSecurityMatrix();
+
   if (verdict.applied.currentLevel !== undefined) securityMatrixState.currentLevel = verdict.applied.currentLevel;
   if (verdict.applied.humanApprovalForExternal !== undefined) securityMatrixState.humanApprovalForExternal = verdict.applied.humanApprovalForExternal;
   if (verdict.applied.maskSensitiveData !== undefined) securityMatrixState.maskSensitiveData = verdict.applied.maskSensitiveData;
-  persistMemory();
+
+  if (!persistSecurityMatrixState()) {
+    // The write did not reach disk. Roll the in-memory matrix back to the
+    // pre-request gates so the running matrix and the durable file agree, and
+    // refuse to report a save the disk never received.
+    securityMatrixState.currentLevel = preGates.currentLevel;
+    securityMatrixState.humanApprovalForExternal = preGates.humanApprovalForExternal;
+    securityMatrixState.maskSensitiveData = preGates.maskSensitiveData;
+    memoryState.securityMatrix = persistedSecurityMatrix();
+    return res.status(500).json({
+      success: false,
+      applied: false,
+      persisted: false,
+      rejected: verdict.rejected,
+      message: 'The security-matrix change could not be written to durable storage; it was not applied.',
+      securityState: {
+        ...preGates,
+        levels: securityMatrixState.levels,
+        auditLogs: memoryState.auditLogs,
+      },
+    });
+  }
+
+  // Echo the state *after* the classified fields are applied. The previous
+  // snapshot was captured before the assignments above, so a successful toggle
+  // handed the client the value it had just replaced — success:true next to a
+  // stale gate. A UI that trusts the response (rather than refetching) rendered
+  // the un-applied value and reported a change that had not taken effect.
+  const appliedState = applySecurityMatrixUpdate(
+    {
+      currentLevel: securityMatrixState.currentLevel,
+      humanApprovalForExternal: securityMatrixState.humanApprovalForExternal,
+      maskSensitiveData: securityMatrixState.maskSensitiveData,
+      credentialLeakProtection: securityMatrixState.credentialLeakProtection,
+    },
+    verdict.applied
+  );
+
   res.json({
     success: true,
     applied: true,
+    persisted: true,
     rejected: verdict.rejected,
     message: verdict.message,
-    securityState: securityStateSnapshot,
+    securityState: {
+      ...appliedState,
+      levels: securityMatrixState.levels,
+      auditLogs: memoryState.auditLogs,
+    },
   });
 });
 
@@ -6114,7 +6835,7 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
   const verdict = emergencyToggleVerdict(resolvedAction, { ...pre });
 
   if (!verdict.actionExecuted) {
-    persistMemory();
+    persistEmergencyState();
     return res.json({
       success: false,
       actionExecuted: false,
@@ -6131,7 +6852,19 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
   const updated = getEmergencyState();
   const engaged = updated.emergencyPaused === true;
 
-  pushAuditEntry({
+  // The freeze must be durable: a safety stop that evaporates on reboot is worse
+  // than none, because the operator still believes it holds. The write result is
+  // honored — a transition that cannot reach disk is reported as persisted:false
+  // rather than a durable success. The transitioned state is kept in memory (a
+  // disk error must never silently un-freeze the system); the response names the
+  // durability gap so the operator can act.
+  const statePersisted = persistEmergencyState() && emergencyStateOnDisk(engaged);
+
+  // The engagement claim and its audit row share one durability verdict: the
+  // row is appended, then persisted, then read back from disk with
+  // `diskHasAuditRow` — `persistMemory()` can return true without writing. A
+  // freeze reported as held whose row is not durable is refused.
+  const auditRow: AuditLogEntry = {
     id: `log-emerg-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: engaged
@@ -6142,7 +6875,27 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
     status: 'EXECUTED',
     verificationStatus: 'VERIFIED',
     finalTruthState: 'VERIFIED',
-  });
+  };
+  pushAuditEntry(auditRow);
+  const auditPersisted = persistMemory() && diskHasAuditRow(auditRow.id);
+  const persisted = statePersisted && auditPersisted;
+
+  if (engaged && !persisted) {
+    // A hard stop that is reported held but is not on disk would silently
+    // release on the next boot. Roll the row back and report the durability gap
+    // instead of a clean success. (The release direction keeps reporting the
+    // gap through `persisted: false` without a spurious 500.)
+    memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== auditRow.id);
+    return res.status(500).json({
+      success: false,
+      actionExecuted: true,
+      action: resolvedAction,
+      title: verdict.title,
+      persisted: false,
+      emergencyState: getEmergencyState(),
+      error: 'Emergency freeze could not be written to durable storage.',
+    });
+  }
 
   // Notify Telegram Admin if connected
   if (activeTelegramChatId && getCleanTelegramToken()) {
@@ -6152,8 +6905,7 @@ app.post('/api/emergency/toggle', async (req: Request, res: Response) => {
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
 
-  persistMemory();
-  res.json({ success: true, actionExecuted: true, action: resolvedAction, title: verdict.title, ...updated });
+  res.json({ success: true, actionExecuted: true, action: resolvedAction, title: verdict.title, persisted, ...updated });
 });
 
 // Global Kill Switch API (HUD & System Level)
@@ -6177,32 +6929,67 @@ app.post('/api/system/kill-switch', async (req: Request, res: Response) => {
 
   // 3. Log the Level 4 audit event only when the engagement actually did the
   // work it claims; an already-engaged (or unobserved) kill switch must not
-  // write a "terminated all background tasks" row.
-  if (killVerdict.actionExecuted) {
-    pushAuditEntry({
-      id: `log-killswitch-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killVerdict.clearedTasksCount} pending PermissionGateway item(s).`,
-      levelRequired: 4,
-      approvedBy: requestedBy,
-      status: 'EXECUTED',
-      verificationStatus: 'VERIFIED',
-      finalTruthState: 'VERIFIED',
+  // write a "terminated all background tasks" row. The row is appended before
+  // the durable write below so it is serialized with the latch, then read back
+  // from disk to confirm it landed.
+  const killAuditRow: AuditLogEntry | null = killVerdict.actionExecuted
+    ? pushAuditEntry({
+        id: `log-killswitch-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: `🚨 GLOBAL KILL SWITCH TRIGGERED by ${requestedBy}: Terminated all background tasks, paused polling, and cleared ${killVerdict.clearedTasksCount} pending PermissionGateway item(s).`,
+        levelRequired: 4,
+        approvedBy: requestedBy,
+        status: 'EXECUTED',
+        verificationStatus: 'VERIFIED',
+        finalTruthState: 'VERIFIED',
+      })
+    : null;
+
+  // 4. Durably hold the latch and its audit row. A kill switch that is reported
+  // engaged but is not on disk would silently release on the next boot — the
+  // most dangerous kind of false success. `persistEmergencyState()` returns the
+  // `persistMemory()` boolean, which can be true without writing when the file
+  // already holds the identical bytes, so the latch is read back from disk
+  // (`emergencyStateOnDisk`) and the appended row is confirmed present
+  // (`diskHasAuditRow`). `persisted` is the conjunction, not the write boolean.
+  const statePersisted = persistEmergencyState() && emergencyStateOnDisk(true);
+  const auditPersisted =
+    killAuditRow === null ? true : persistMemory() && diskHasAuditRow(killAuditRow.id);
+  const persisted = statePersisted && auditPersisted;
+
+  // A real engagement whose latch or row is not durable must not be reported as
+  // held. Roll the phantom row back and answer honestly; the latch is kept in
+  // memory so a disk error never silently un-freezes the system.
+  if (killVerdict.actionExecuted && !persisted) {
+    if (killAuditRow) {
+      memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== killAuditRow.id);
+    }
+    return res.status(500).json({
+      success: false,
+      outcome: killVerdict.outcome,
+      actionExecuted: true,
+      persisted: false,
+      headline: killVerdict.headline,
+      message: killVerdict.message,
+      clearedTasksCount: killVerdict.clearedTasksCount,
+      wasTelegramPolling,
+      emergencyState: killResult.emergencyState,
+      error: 'The kill switch freeze could not be written to durable storage.',
     });
   }
 
-  // 4. Send Emergency Telegram Notice only for a real engagement.
-  if (killVerdict.actionExecuted && activeTelegramChatId && getCleanTelegramToken()) {
+  // 5. Send the Emergency Telegram Notice only for a real, durably held
+  // engagement — never for a freeze that did not reach disk.
+  if (killVerdict.actionExecuted && persisted && activeTelegramChatId && getCleanTelegramToken()) {
     const alertMsg = `🚨 *HERMES JARVIS: GLOBAL KILL SWITCH EXECUTED*\n\nAll active background processes have been terminated, active polling loops suspended, and ${killVerdict.clearedTasksCount} pending queue task(s) cancelled.\n\n• *Triggered By*: ${requestedBy}\n• *Timestamp*: ${new Date().toLocaleTimeString()}\n• *Status*: HARD PAUSE ACTIVE`;
     sendRealTelegramMessage(activeTelegramChatId, alertMsg).catch(() => {});
   }
-
-  persistMemory();
 
   res.status(killVerdict.outcome === 'UNKNOWN' ? 503 : 200).json({
     success: killVerdict.actionExecuted,
     outcome: killVerdict.outcome,
     actionExecuted: killVerdict.actionExecuted,
+    persisted,
     headline: killVerdict.headline,
     message: killVerdict.message,
     clearedTasksCount: killVerdict.clearedTasksCount,
@@ -6221,7 +7008,7 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
   const verdict = emergencyResumeVerdict(getEmergencyState());
 
   if (!verdict.actionExecuted) {
-    persistMemory();
+    persistEmergencyState();
     return res.json({
       success: false,
       released: false,
@@ -6233,14 +7020,19 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
 
   const resumedState = resumeSystemOperation(requestedBy);
 
-  // Re-enable telegram live polling if token is valid
-  if (getCleanTelegramToken() && !telegramPollingActive) {
-    startTelegramPolling().catch((err: any) => {
-      console.warn('[Telegram Bot] Resumption notice:', err.message);
-    });
-  }
+  // The release must be durable too: a "resumed" report that is not on disk
+  // would re-freeze on the next boot, so the cleared latch is read back from
+  // disk (`emergencyStateOnDisk(false)`) rather than trusting
+  // `persistEmergencyState()`'s boolean, which can return true without writing
+  // when the file already holds the identical bytes.
+  const statePersisted = persistEmergencyState() && emergencyStateOnDisk(false);
 
-  pushAuditEntry({
+  // The release claim and its audit row share one durability verdict: the row
+  // is appended, then persisted, then read back from disk with
+  // `diskHasAuditRow`. A release reported as durable whose row never landed is
+  // refused and the phantom row rolled back. The release itself is kept in
+  // memory so a disk error does not leave the system looking frozen.
+  const auditRow: AuditLogEntry = {
     id: `log-resume-${Date.now()}`,
     timestamp: new Date().toISOString(),
     action: `🟢 SYSTEM RESUMED by ${requestedBy}: Subsystems returned to standard Level 1-4 permission mode.`,
@@ -6249,13 +7041,35 @@ app.post('/api/system/resume', async (req: Request, res: Response) => {
     status: 'EXECUTED',
     verificationStatus: 'VERIFIED',
     finalTruthState: 'VERIFIED',
-  });
+  };
+  pushAuditEntry(auditRow);
+  const auditPersisted = persistMemory() && diskHasAuditRow(auditRow.id);
+  const persisted = statePersisted && auditPersisted;
 
-  persistMemory();
+  if (!persisted) {
+    memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== auditRow.id);
+    return res.status(500).json({
+      success: false,
+      released: false,
+      persisted: false,
+      outcome: verdict.outcome,
+      message: verdict.message,
+      emergencyState: resumedState,
+      error: 'The resume could not be written to durable storage.',
+    });
+  }
+
+  // Re-enable telegram live polling only for a durable release
+  if (getCleanTelegramToken() && !telegramPollingActive) {
+    startTelegramPolling().catch((err: any) => {
+      console.warn('[Telegram Bot] Resumption notice:', err.message);
+    });
+  }
 
   res.json({
     success: true,
     released: true,
+    persisted,
     outcome: verdict.outcome,
     message: verdict.message,
     emergencyState: resumedState,
@@ -6277,6 +7091,8 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
   if (!exactAction || !target) {
     return res.status(400).json({ error: 'exactAction and target are required' });
   }
+
+  const registryBefore = getAllActionRequests();
 
   const result = createPendingActionRequest({
     exactAction,
@@ -6325,6 +7141,30 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     });
   }
 
+  // The staged approval must be durable: the queue lives outside `memoryState`,
+  // so a discarded write silently emptied it on the next restart and the
+  // operator's later decision resolved nothing. The write result is honored — a
+  // request that cannot reach disk is not reported as a staged approval.
+  const persisted = persistApprovalRegistry();
+  if (!persisted) {
+    // The write failed, so roll the live registry back to what it held before
+    // this request. `persistApprovalRegistry` copies the request into
+    // `memoryState.permissionRequests` before writing, so both that field and
+    // the live registry must be restored — otherwise a later successful persist
+    // (for any other reason) writes the phantom request to disk and the next
+    // boot resurrects an approval that was reported as not staged.
+    hydrateActionRequests(registryBefore);
+    memoryState.permissionRequests = registryBefore;
+    return res.status(500).json({
+      success: false,
+      staged: false,
+      persisted: false,
+      outcome: 'NOT_DURABLE',
+      reason: 'Approval request could not be written to durable storage; it was not reported as staged.',
+      request: result.request,
+    });
+  }
+
   // If source is Telegram or requested with notification, send approval card to Telegram
   if (activeTelegramChatId && getCleanTelegramToken()) {
     const cardText = `⚠️ *PERMISSION LEVEL ${level} ACTION REQUEST*\n\n• *EXACT ACTION*: ${exactAction}\n• *TARGET*: \`${target}\`\n• *CHANGES / PAYLOAD*: ${contentChanges}\n• *REQUIRED PERMISSION*: LEVEL ${level} (Human Confirmation)\n\nReply with *YES / APPROVE* or *NO / REJECT*.`;
@@ -6339,7 +7179,7 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
     sendRealTelegramMessage(activeTelegramChatId, cardText, keyboard).catch(() => {});
   }
 
-  res.json({ success: true, staged: true, outcome: verdict.outcome, request: result.request });
+  res.json({ success: true, staged: true, persisted, outcome: verdict.outcome, request: result.request });
 });
 
 app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
@@ -6363,7 +7203,7 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       // audit entry or answer success for a resolution that never happened.
       return res.status(404).json({ success: false, error: `No pending action request with id ${id}.` });
     }
-    pushAuditEntry({
+    const rejectAuditRow: AuditLogEntry = {
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `REJECTED Action "${updated?.exactAction || id}" by ${approver}`,
@@ -6372,9 +7212,40 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       status: 'REJECTED',
       verificationStatus: 'STANDBY',
       finalTruthState: 'REJECTED',
+    };
+    pushAuditEntry(rejectAuditRow);
+    // The decision must survive a restart, or a reboot would resurrect the
+    // rejected request as pending again. The registry lives outside `memoryState`,
+    // and `persistMemory()` can return true without writing when the file already
+    // holds identical bytes, so the REJECTED status is read back from disk rather
+    // than trusting the write boolean. A decision that cannot reach disk is
+    // refused (HTTP 500) and rolled back — the request is restored to
+    // PENDING_APPROVAL and the phantom audit row removed, so a later successful
+    // persist (for any other reason) cannot write a rejection that was reported
+    // as failed to disk.
+    const persisted = persistApprovalRegistry() && actionRequestStatusOnDisk(id, 'REJECTED');
+    if (!persisted) {
+      const liveReq = getAllActionRequests().find((r) => r.id === id);
+      if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+      // `persistApprovalRegistry` copied the rejected snapshot into
+      // `memoryState.permissionRequests` before the write failed, so resync it
+      // from the restored live registry — otherwise a later unrelated
+      // `persistMemory()` would write the phantom rejection to disk.
+      memoryState.permissionRequests = persistedActionRequests();
+      memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== rejectAuditRow.id);
+      return res.status(500).json({
+        success: false,
+        persisted: false,
+        request: updated,
+        error: 'The rejection could not be written to durable storage; it was not recorded.',
+      });
+    }
+    return res.json({
+      success: true,
+      persisted: true,
+      request: updated,
+      message: 'Action rejected and cancelled safely.',
     });
-    persistMemory();
-    return res.json({ success: true, request: updated, message: 'Action rejected and cancelled safely.' });
   }
 
   // APPROVE & EXECUTE
@@ -6382,6 +7253,19 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
   const targetReq = allReqs.find((r) => r.id === id);
   if (!targetReq) {
     return res.status(404).json({ error: 'Action request not found' });
+  }
+
+  // A request that already carries a terminal decision must not be dispatched
+  // again. Re-running the execution branches for an already-approved request
+  // could create a duplicate GitHub issue or re-attempt a publish, and the
+  // response would report a fresh success for work that had already happened.
+  if (!canTransitionActionStatus(targetReq.status, 'EXECUTED')) {
+    return res.status(409).json({
+      success: false,
+      outcome: 'ALREADY_DECIDED',
+      request: targetReq,
+      error: `Action request ${id} was already decided (${targetReq.status}); it was not executed again.`,
+    });
   }
 
   // Finance check
@@ -6430,7 +7314,7 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       resolvedBy: approver,
     });
 
-    pushAuditEntry({
+    const auditRow = pushAuditEntry({
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: `${resolution.executed ? 'EXECUTED' : 'UNCONFIRMED'} Approved Action: ${targetReq.exactAction} on ${targetReq.target}`,
@@ -6443,9 +7327,39 @@ app.post('/api/approvals/resolve', async (req: Request, res: Response) => {
       finalTruthState: resolution.outcome,
     });
 
-    persistMemory();
+    // The terminal decision must be durable; an unpersisted approval would let a
+    // reboot re-offer the same request for execution. As with the REJECT branch,
+    // the registry lives outside `memoryState` and `persistMemory()` can return
+    // true without writing, so the request's terminal status is read back from
+    // disk rather than trusting the write boolean. If the terminal decision
+    // cannot be confirmed on disk, the response must not present it as recorded:
+    // the status reverts to PENDING_APPROVAL (the pre-decision state), the
+    // phantom audit row is removed, and the outcome is reported as UNPERSISTED
+    // with HTTP 500 — so the operator is never told a decision landed that the
+    // next boot would discard. The external action itself, if any, already ran
+    // and is reported by `executionResult`; only the durability claim is refused.
+    const terminalStatus = resolution.executed ? 'EXECUTED' : 'FAILED';
+    const persisted = persistApprovalRegistry() && actionRequestStatusOnDisk(id, terminalStatus);
+    if (!persisted) {
+      const liveReq = getAllActionRequests().find((r) => r.id === id);
+      if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+      // Resync the persisted copy, which `persistApprovalRegistry` set to the
+      // terminal snapshot before the failed write.
+      memoryState.permissionRequests = persistedActionRequests();
+      memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== auditRow.id);
+      return res.status(500).json({
+        success: false,
+        persisted: false,
+        recorded: false,
+        request: getAllActionRequests().find((r) => r.id === id) ?? updated,
+        executionResult,
+        outcome: 'UNPERSISTED',
+        error: 'The decision could not be written to durable storage; it was not recorded as a terminal decision.',
+      });
+    }
     res.json({
       success: resolution.executed,
+      persisted: true,
       request: updated,
       executionResult,
       outcome: resolution.outcome,
@@ -6931,7 +7845,15 @@ app.post('/api/github/fix-plan', async (req: Request, res: Response) => {
       ? await runHealthChecks({ workspace: process.cwd(), checks: ['lint', 'test'] })
       : undefined;
 
-    const plan = buildFixPlan({ multiRepoScan, localHealth });
+    // `nothingToDo` from the planner only knows about the steps it could build.
+    // A scan that returned no repositories — or returned every repository
+    // unreachable — produces zero steps and would be reported as an all-clear
+    // the plan never established. Reconcile the flag with the real coverage.
+    const coverage = assessFixPlanCoverage({ multiRepoScan, localHealth });
+    const { plan } = reconcileFixPlanWithCoverage(
+      buildFixPlan({ multiRepoScan, localHealth }),
+      coverage
+    );
 
     res.json({
       success: true,
@@ -6940,6 +7862,7 @@ app.post('/api/github/fix-plan', async (req: Request, res: Response) => {
       highestRisk: plan.highestRisk,
       requiresCodeChange: plan.requiresCodeChange,
       steps: plan.steps,
+      coverage,
       receipt: plan.receipt,
     });
   } catch (err: any) {
@@ -7274,16 +8197,39 @@ app.post('/api/memory/sync', (req: Request, res: Response) => {
     // silently applied over the authoritative server copy.
     const verdict = classifyMemorySync(result, remote);
 
+    // Snapshot the pre-change values so a failed disk write can be rolled back
+    // rather than reported as a completed sync.
+    const before = {
+      name: memoryState.name,
+      notes: memoryState.notes,
+      customKeyValues: memoryState.customKeyValues,
+    };
+
     memoryState.notes = result.merged.notes;
     // A name that differs on both sides is a flagged conflict, not a value to
     // write. Applying it here overwrote the authoritative name while the
     // response still reported it as merged — a silent overwrite read as success.
     if (verdict.nameApplied) memoryState.name = result.merged.name as string;
     memoryState.customKeyValues = result.merged.customKeyValues;
-    persistMemory();
+
+    // The merge is only real once it is on disk; a write failure must not read
+    // as a completed sync.
+    if (!persistMemory()) {
+      memoryState.name = before.name;
+      memoryState.notes = before.notes;
+      memoryState.customKeyValues = before.customKeyValues;
+      return res.status(500).json({
+        success: false,
+        stored: false,
+        persisted: false,
+        outcome: verdict.outcome,
+        error: 'Memory sync could not be written to durable storage; the merge was not saved.',
+      });
+    }
 
     res.json({
       success: true,
+      persisted: true,
       stored: verdict.stored,
       nameApplied: verdict.nameApplied,
       outcome: verdict.outcome,
@@ -7315,12 +8261,50 @@ export interface ScheduledGoalSpec {
 }
 
 /**
- * Recurring autonomous goals. Empty by default: nothing runs on a schedule
- * until the operator registers something, so the system never acts on its own
- * initiative without a deliberate choice.
+ * Recurring autonomous goals. Restored from the persisted memory file at
+ * startup: an operator-registered task must survive a restart, otherwise the
+ * register route would be reporting success for a task the process drops.
+ * Nothing runs on a schedule until the operator registers something.
  */
-const scheduledGoals: ScheduledGoalSpec[] = [];
+let scheduledGoals: ScheduledGoalSpec[] = [];
 const scheduledGoalRuns: ScheduledGoalRecord[] = [];
+
+/** Minimal shape check for a persisted goal, so a corrupt file cannot crash boot. */
+function isPersistedGoal(value: unknown): value is ScheduledGoalSpec {
+  if (!value || typeof value !== 'object') return false;
+  const g = value as Record<string, unknown>;
+  return (
+    typeof g.id === 'string' &&
+    typeof g.name === 'string' &&
+    typeof g.atMinuteOfDay === 'number' &&
+    Array.isArray(g.steps)
+  );
+}
+
+/**
+ * Reconcile the in-memory registry with what is on disk. Called after the
+ * memory file is loaded. Goals present in memory but absent on disk are pushed
+ * to disk, so a task registered before this feature existed is persisted too.
+ */
+function loadScheduledGoals(): void {
+  const persisted = memoryState.schedulerState?.scheduledGoals;
+  const restored = Array.isArray(persisted) ? persisted.filter(isPersistedGoal) : [];
+  const byId = new Map<string, ScheduledGoalSpec>();
+  for (const goal of restored) byId.set(goal.id, goal);
+  for (const goal of scheduledGoals) byId.set(goal.id, goal);
+  scheduledGoals = Array.from(byId.values());
+  memoryState.schedulerState.scheduledGoals = scheduledGoals;
+}
+
+/** Persist the current registry. Returns whether the state actually reached disk. */
+function persistScheduledGoals(): boolean {
+  memoryState.schedulerState.scheduledGoals = scheduledGoals;
+  return persistMemory();
+}
+
+// memoryState is already loaded by this point; restore the operator's schedule
+// so a restart does not silently drop registered tasks.
+loadScheduledGoals();
 
 /** Bounded in-memory audit trail of autonomous runs, newest first. */
 const goalRunHistory: Array<{
@@ -7497,8 +8481,23 @@ app.post('/api/autonomous/schedule', (req: Request, res: Response) => {
   };
 
   const existing = scheduledGoals.findIndex((g) => g.id === id);
+  const previous = existing >= 0 ? scheduledGoals[existing] : undefined;
   if (existing >= 0) scheduledGoals[existing] = spec;
   else scheduledGoals.push(spec);
+
+  // Success must mean the task is durable, not merely held in this process's
+  // memory. Report failure (and roll back) when the registry cannot be written.
+  const persisted = persistScheduledGoals();
+  if (!persisted) {
+    if (existing >= 0 && previous) scheduledGoals[existing] = previous;
+    else if (existing < 0) scheduledGoals.pop();
+    memoryState.schedulerState.scheduledGoals = scheduledGoals;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'Scheduled task could not be written to durable storage; it was not registered.',
+    });
+  }
 
   addAuditLog(
     `Scheduled autonomous task "${name}" (${id}) ${existing >= 0 ? 'updated' : 'registered'} to run daily at minute ${atMinuteOfDay}`,
@@ -7508,7 +8507,7 @@ app.post('/api/autonomous/schedule', (req: Request, res: Response) => {
   );
   persistMemory();
 
-  res.status(existing >= 0 ? 200 : 201).json({ success: true, goal: spec });
+  res.status(existing >= 0 ? 200 : 201).json({ success: true, persisted: true, goal: spec });
 });
 
 app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
@@ -7517,9 +8516,21 @@ app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
     return res.status(404).json({ success: false, error: 'No such scheduled task.' });
   }
   const [removed] = scheduledGoals.splice(index, 1);
+  // The removal is only real once it is durable. Restore the task and fail if
+  // the registry cannot be written.
+  const persisted = persistScheduledGoals();
+  if (!persisted) {
+    scheduledGoals.splice(index, 0, removed);
+    memoryState.schedulerState.scheduledGoals = scheduledGoals;
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'Scheduled task could not be removed from durable storage; it is still registered.',
+    });
+  }
   addAuditLog(`Scheduled autonomous task "${removed.name}" (${removed.id}) removed`, 3, 'HUMAN_OPERATOR', 'VERIFIED');
   persistMemory();
-  res.json({ success: true, removed: removed.id });
+  res.json({ success: true, persisted: true, removed: removed.id });
 });
 
 // Mobile Personal Status & Morning Briefing Telemetry Endpoints
@@ -8274,8 +9285,22 @@ app.post('/api/mobile/bridge/disconnect', (req: Request, res: Response) => {
     return res.status(409).json({ success: false, outcome: 'FAILED', error: 'This session does not own the device link.' });
   }
 
+  const disconnectsBefore = bridgeGateway.getDisconnectCount();
   bridgeGateway.revoke(auth.sessionId, req.body?.reason || 'Device requested disconnect');
-  return res.json({ success: true, outcome: 'VERIFIED', status: 'MOBILE_NOT_CONNECTED' });
+  const verdict = classifyBridgeDisconnect({
+    deviceWasLinked: true,
+    disconnectsBefore,
+    disconnectsAfter: bridgeGateway.getDisconnectCount(),
+    bridgeStatus: bridgeGateway.getStatus(),
+    reason: req.body?.reason || 'Device requested disconnect',
+  });
+  return res.json({
+    success: verdict.success,
+    verified: verdict.verified,
+    outcome: verdict.outcome,
+    status: verdict.status,
+    message: verdict.message,
+  });
 });
 
 // ---- 9. Diagnostics --------------------------------------------------------
@@ -8325,6 +9350,15 @@ app.post('/api/memory', (req: Request, res: Response) => {
       customKeyValues: memoryState.customKeyValues,
     });
 
+    // A save is only real once it is on disk. Snapshot the pre-change values so
+    // a failed write can be rolled back rather than reported as a completed save.
+    const before = {
+      name: memoryState.name,
+      notes: memoryState.notes,
+      customKeyValues: memoryState.customKeyValues,
+      stats: { ...memoryState.stats },
+    };
+
     if (verdict.applied.name !== undefined) memoryState.name = verdict.applied.name;
     if (verdict.applied.notes !== undefined) memoryState.notes = verdict.applied.notes as any;
     if (verdict.applied.customKeyValues !== undefined) {
@@ -8365,9 +9399,26 @@ app.post('/api/memory', (req: Request, res: Response) => {
       memoryState.stats.lastActive = new Date().toISOString();
     }
 
-    persistMemory();
+    // Success must mean the change is durable, not merely held in this process's
+    // memory. The route used to answer `success: true` for a save that never
+    // reached disk; report failure (and roll back) instead.
+    if (!persistMemory()) {
+      memoryState.name = before.name;
+      memoryState.notes = before.notes;
+      memoryState.customKeyValues = before.customKeyValues;
+      memoryState.stats = before.stats;
+      return res.status(500).json({
+        success: false,
+        stored: false,
+        persisted: false,
+        outcome: verdict.outcome,
+        error: 'Memory could not be written to durable storage; the change was not saved.',
+      });
+    }
+
     res.json({
       success: true,
+      persisted: true,
       outcome: verdict.outcome,
       message: verdict.message,
       memory: {
@@ -8409,6 +9460,47 @@ let telephonySettingsState: any = {
   voiceRate: 1.05,
 };
 
+// Restore the settings the operator saved. Without this the module-local state
+// above silently reverted to the compile-time defaults on every boot, so a
+// provider or greeting the settings route reported "SAVED" was gone the next
+// time the process started. Only keys that are real settings and carry a
+// primitive value are adopted, so a hand-edited or legacy file cannot inject an
+// unknown key or a malformed value into the live settings.
+{
+  const stored = memoryState.telephonySettings;
+  if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+    const known = new Set<string>(TELEPHONY_SETTING_KEYS);
+    for (const [key, value] of Object.entries(stored)) {
+      if (!known.has(key)) continue;
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        telephonySettingsState[key] = value;
+      }
+    }
+    // Re-apply the saved engine selection to the live registry, mirroring the
+    // settings route, so a restart serves the engine the operator last chose.
+    if (typeof stored.provider === 'string') {
+      const providerId = telephonyEngineProviderId(stored.provider);
+      if (providerId !== null) TelephonyProviderRegistry.setActiveProvider(providerId);
+    }
+  }
+  memoryState.telephonySettings = { ...telephonySettingsState };
+}
+
+// Restore the recorded call history. The array above is module-local and was
+// never read back, so every call the operator logged vanished on restart while
+// the route had reported it saved. Only plain objects are adopted, so a
+// hand-edited or legacy file cannot inject a malformed row into the history.
+{
+  const storedCalls = memoryState.telephonyCallRecords;
+  if (Array.isArray(storedCalls)) {
+    telephonyCalls = storedCalls.filter(
+      (row): row is Record<string, unknown> =>
+        !!row && typeof row === 'object' && !Array.isArray(row)
+    );
+  }
+  memoryState.telephonyCallRecords = telephonyCalls;
+}
+
 // 1. Get Telephony Calls
 app.get('/api/telephony/calls', (req: Request, res: Response) => {
   res.json({ success: true, calls: telephonyCalls });
@@ -8437,6 +9529,10 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
     const stored = existing
       ? { ...existing, ...verdict.changes }
       : { ...verdict.changes, id: verdict.id };
+    // A recorded call is only real once it is on disk. Snapshot the history so a
+    // failed durable write can be rolled back rather than answered `success:
+    // true` for a record the next boot does not have.
+    const callsSnapshot = telephonyCalls.slice();
     if (existingIdx >= 0) {
       telephonyCalls[existingIdx] = stored;
     } else {
@@ -8448,8 +9544,22 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
       telephonyCalls = telephonyCalls.slice(0, 100);
     }
 
+    if (!persistTelephonyCalls()) {
+      telephonyCalls = callsSnapshot;
+      memoryState.telephonyCallRecords = telephonyCalls;
+      return res.status(500).json({
+        success: false,
+        persisted: false,
+        action: verdict.action,
+        call: null,
+        outcome: 'NOT_PERSISTED',
+        message: 'The call record could not be written to durable storage; it was not saved.',
+      });
+    }
+
     res.json({
       success: true,
+      persisted: true,
       action: verdict.action,
       call: stored,
       message: verdict.message,
@@ -8462,21 +9572,54 @@ app.post('/api/telephony/calls', (req: Request, res: Response) => {
 
 // 3. Delete / Clear Telephony Calls
 app.delete('/api/telephony/calls', (req: Request, res: Response) => {
-  const before = telephonyCalls.length;
+  const beforeCalls = telephonyCalls.slice();
+  const before = beforeCalls.length;
   telephonyCalls = [];
   // Clearing an already-empty history removes nothing; report the real count
   // rather than asserting a deletion that never happened.
   const verdict = classifyTelephonyCallDeletion(before);
+  if (verdict.success) {
+    // A deletion is only real once the emptied history is durable: a write that
+    // never reaches disk leaves the next boot believing every call still
+    // exists. Refuse the claim and restore the history in memory.
+    if (!persistTelephonyCalls()) {
+      telephonyCalls = beforeCalls;
+      memoryState.telephonyCallRecords = telephonyCalls;
+      return res.status(500).json({
+        success: false,
+        removed: 0,
+        outcome: 'NOT_PERSISTED',
+        persisted: false,
+        message: 'The call history could not be cleared in durable storage; nothing was deleted.',
+      });
+    }
+    return res.json({ ...verdict, persisted: true });
+  }
   res.json({ ...verdict });
 });
 
 app.delete('/api/telephony/calls/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const before = telephonyCalls.length;
+  const before = telephonyCalls.slice();
   telephonyCalls = telephonyCalls.filter((c) => c.id !== id);
   // Deleting an id that was never recorded removes nothing; the old route
   // still answered success: true and named the call as deleted.
-  const verdict = classifyTelephonyCallDeletion(before - telephonyCalls.length, id);
+  const verdict = classifyTelephonyCallDeletion(before.length - telephonyCalls.length, id);
+  if (verdict.success) {
+    // As above, the removal must reach disk before it is reported as deleted.
+    if (!persistTelephonyCalls()) {
+      telephonyCalls = before;
+      memoryState.telephonyCallRecords = telephonyCalls;
+      return res.status(500).json({
+        success: false,
+        removed: 0,
+        outcome: 'NOT_PERSISTED',
+        persisted: false,
+        message: `Call "${id}" could not be deleted from durable storage; nothing was deleted.`,
+      });
+    }
+    return res.json({ ...verdict, persisted: true });
+  }
   res.json({ ...verdict });
 });
 
@@ -8493,6 +9636,8 @@ app.get('/api/telephony/settings', (req: Request, res: Response) => {
 
 app.post('/api/telephony/settings', (req: Request, res: Response) => {
   try {
+    // Snapshot the live settings so a failed durable write can be rolled back.
+    const previousSettings = { ...telephonySettingsState };
     // The route used to spread any caller-supplied object over the live
     // settings and answer `success: true` unconditionally: an unknown or
     // misspelled key was "stored", a malformed value corrupted state, and a
@@ -8518,6 +9663,33 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
       ...verdict.applied,
     };
 
+    // A stored setting must survive a restart. The live state used to be a
+    // module-local object that was never written to disk, so every "SAVED"
+    // setting (provider, greeting, voice rate...) silently reverted on the next
+    // boot. Write it, and if the write cannot reach disk, roll the change back
+    // and refuse the save rather than announce one that cannot be kept.
+    const persisted = persistTelephonySettingsState();
+    if (!persisted) {
+      telephonySettingsState = {
+        ...telephonySettingsState,
+        ...previousSettings,
+      };
+      memoryState.telephonySettings = { ...telephonySettingsState };
+      return res.status(500).json({
+        success: false,
+        persisted: false,
+        outcome: 'NOT_PERSISTED',
+        applied: false,
+        changed: false,
+        rejected: verdict.rejected,
+        message: 'Telephony settings could not be written to durable storage; they were not saved.',
+        settings: {
+          ...telephonySettingsState,
+          twilioAuthToken: telephonySettingsState.twilioAuthToken ? '••••••••••••••••' : '',
+        },
+      });
+    }
+
     // Apply the selected engine to the live registry. Without this the
     // selector was decorative: the status endpoint kept reporting whatever
     // TELEPHONY_PROVIDER had set at boot. The result is reported honestly so
@@ -8537,6 +9709,7 @@ app.post('/api/telephony/settings', (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      persisted: true,
       outcome: verdict.changed ? 'APPLIED' : 'UNCHANGED',
       applied: verdict.changed,
       changed: verdict.changed,
@@ -8903,9 +10076,15 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
       ? `सर, मैं इस नंबर पर कॉल करने वाला हूँ: ${request.destinationMasked}। क्या आप अनुमति देते हैं?`
       : `Sir, I am about to place an outbound call to: ${request.destinationMasked}. Do you authorize this?`;
 
+    // The staged Level-4 action must be durable; otherwise the approval card the
+    // operator later acts on has no matching request after a restart. A write
+    // that cannot reach disk is named in `persisted`.
+    const persisted = persistApprovalRegistry();
+
     res.json({
       success: true,
       staged: true,
+      persisted,
       outcome: verdict.outcome,
       request,
       actionId: actionReq.request.id,
@@ -8942,16 +10121,70 @@ app.post('/api/telephony/outbound/authorize', async (req: Request, res: Response
     }
 
     if (requestedDecision === 'REJECT') {
-      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', approverName);
+      if (actionId) updateActionRequestStatus(actionId, 'REJECTED', { resolvedBy: approverName });
+      // Durable so a restart cannot resurrect the rejected dial as pending. As on
+      // the web decision routes, `persistApprovalRegistry()` can return true
+      // without writing when the file already holds identical bytes, so the
+      // terminal status is read back from disk rather than trusting the boolean.
+      // A rejection that never reached disk is refused and the session request
+      // reverted, so a reboot cannot re-offer a call the operator was told was
+      // cancelled.
+      const persisted =
+        persistApprovalRegistry() &&
+        (!actionId || actionRequestStatusOnDisk(actionId, 'REJECTED'));
+      if (!persisted) {
+        TelephonySessionManager.revertOutboundAuthorization(requestId, 'REJECTED');
+        if (actionId) {
+          const liveReq = getAllActionRequests().find((r) => r.id === actionId);
+          if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+          memoryState.permissionRequests = persistedActionRequests();
+        }
+        return res.status(500).json({
+          success: false,
+          authorized: false,
+          persisted: false,
+          recorded: false,
+          outcome: 'UNPERSISTED',
+          message: 'The decision could not be written to durable storage; it was not recorded.',
+        });
+      }
       return res.json({
         success: true,
         authorized: false,
+        persisted: true,
         outcome: verdict.outcome,
         message: verdict.message,
       });
     }
 
-    if (actionId) updateActionRequestStatus(actionId, 'APPROVED', approverName);
+    if (actionId) updateActionRequestStatus(actionId, 'APPROVED', { resolvedBy: approverName });
+    // The authorization decision is durable independently of whether the carrier
+    // later confirms the dial; persist it before any dispatch attempt so a
+    // reboot cannot re-offer an already-approved call. The write is verified on
+    // disk (the boolean alone is true without writing on identical bytes). A
+    // decision that did not reach disk must not be dialled: the carrier call
+    // would be irreversible while the next boot re-offers the same request for a
+    // duplicate dial. Refuse, revert the session request, and roll the action
+    // back to pending so the operator can decide again.
+    const persisted =
+      persistApprovalRegistry() && (!actionId || actionRequestStatusOnDisk(actionId, 'APPROVED'));
+    if (!persisted) {
+      TelephonySessionManager.revertOutboundAuthorization(requestId, 'AUTHORIZED');
+      if (actionId) {
+        const liveReq = getAllActionRequests().find((r) => r.id === actionId);
+        if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+        memoryState.permissionRequests = persistedActionRequests();
+      }
+      return res.status(500).json({
+        success: false,
+        authorized: false,
+        persisted: false,
+        recorded: false,
+        outcome: 'UNPERSISTED',
+        message:
+          'The authorization could not be written to durable storage; the call was not placed.',
+      });
+    }
 
     // Verify the active engine can actually place a PSTN call before
     // connecting (Section V). The raw `isConfigured()` boolean is not enough:
@@ -9085,7 +10318,16 @@ app.post('/api/telephony/permissions', (req: Request, res: Response) => {
 app.get('/api/telephony/test-suite', async (req: Request, res: Response) => {
   try {
     const summary = await runTelephonyTestSuite();
-    res.json({ success: true, summary });
+    // The route used to answer `success: true` for every run, so a suite with
+    // failing cases was reported to the caller as a passing suite. The verdict
+    // is derived from the run: a completed request is not a suite that passed.
+    const verdict = classifyTelephonySuiteRun(summary);
+    res.json({
+      success: verdict.success,
+      outcome: verdict.outcome,
+      message: verdict.message,
+      summary,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -9529,10 +10771,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         // name updates memory and counts.
         if (verdict.kind === 'name') {
           memoryState.name = verdict.name;
-          persistMemory();
-          spokenResponse = `I will remember that, ${verdict.name}. Your identity has been recorded into my primary memory banks.`;
+          // The reply claims a durable record, so it must follow the real write.
+          // A failed persistMemory() (read-only volume, full disk) leaves the name
+          // only in this process's memory; claiming a save there is the same fake
+          // success the Telegram path already refuses. Mirrors that branch.
+          const persisted = persistMemory();
+          if (persisted) {
+            spokenResponse = `I will remember that, ${verdict.name}. Your identity has been recorded into my durable memory banks.`;
+          } else {
+            spokenResponse = `I read your name as ${verdict.name}, but I could not write it to durable storage, so it is not saved. Please try again.`;
+          }
           actionExecuted = true;
-          actionDetail = { type: 'set_name', title: 'Memory Updated', payload: { name: verdict.name } };
+          actionDetail = { type: 'set_name', title: persisted ? 'Memory Updated' : 'Memory Write Failed', payload: { name: verdict.name, persisted } };
         } else {
           spokenResponse = language.startsWith('hi')
             ? 'क्षमा करें, मैं आपका नाम नहीं समझ सका। कृपया ऐसे कहें: "मेरा नाम [नाम] है"।'
@@ -9735,10 +10985,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           createdAt: new Date().toISOString(),
         };
         memoryState.notes.unshift(newNote);
-        persistMemory();
-        spokenResponse = `I have saved your note to Jarvis_Notes in memory. There is no download endpoint, so this is stored, not exported.`;
+        // "saved your note ... stored" is a durability claim. If the write cannot
+        // reach disk, roll the note back and say so instead of reporting a save
+        // that never happened. Mirrors POST /api/memory's rollback-on-failure.
+        const persisted = persistMemory();
+        if (persisted) {
+          spokenResponse = `I have saved your note to Jarvis_Notes in memory. There is no download endpoint, so this is stored, not exported.`;
+        } else {
+          memoryState.notes = memoryState.notes.filter((n) => n.id !== newNote.id);
+          spokenResponse = `I could not write your note to durable storage, so it was not saved. Please try again.`;
+        }
         actionExecuted = true;
-        actionDetail = { type: 'create_file', title: 'Saved Note', payload: newNote };
+        actionDetail = { type: 'create_file', title: persisted ? 'Saved Note' : 'Note Write Failed', payload: { ...newNote, persisted } };
         break;
       }
       case 'system_diagnostic': {

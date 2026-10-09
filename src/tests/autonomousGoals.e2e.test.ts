@@ -30,10 +30,8 @@ async function waitForServer(url: string, timeoutMs = 30_000): Promise<void> {
   throw new Error(`Server at ${url} did not start within ${timeoutMs}ms`);
 }
 
-beforeAll(async () => {
-  workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-goal-'));
-  memoryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-goal-mem-'));
-  jarvis = spawn('npx', ['tsx', 'server.ts'], {
+async function startJarvis() {
+  const proc = spawn('npx', ['tsx', 'server.ts'], {
     cwd: process.cwd(),
     detached: true,
     env: {
@@ -45,22 +43,32 @@ beforeAll(async () => {
     stdio: 'ignore',
   });
   await waitForServer(`http://127.0.0.1:${JARVIS_PORT}/api/health`);
+  return proc;
+}
+
+async function stopJarvis(proc: ChildProcess | undefined) {
+  if (!proc?.pid) return;
+  try {
+    process.kill(-proc.pid, 'SIGTERM');
+  } catch {
+    proc.kill('SIGTERM');
+  }
+  await new Promise((r) => setTimeout(r, 1000));
+  try {
+    process.kill(-proc.pid, 'SIGKILL');
+  } catch {
+    // already gone
+  }
+}
+
+beforeAll(async () => {
+  workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-goal-'));
+  memoryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-goal-mem-'));
+  jarvis = await startJarvis();
 }, 60_000);
 
 afterAll(async () => {
-  if (jarvis?.pid) {
-    try {
-      process.kill(-jarvis.pid, 'SIGTERM');
-    } catch {
-      jarvis.kill('SIGTERM');
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-    try {
-      process.kill(-jarvis.pid, 'SIGKILL');
-    } catch {
-      // already gone
-    }
-  }
+  await stopJarvis(jarvis);
   fs.rmSync(workDir, { recursive: true, force: true });
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
@@ -235,6 +243,37 @@ describe('scheduled autonomous tasks', () => {
 
     const after = await fetch(`${base()}/api/autonomous/schedule`).then((r) => r.json());
     expect(after.goals.map((g: any) => g.id)).not.toContain('e2e-tidy');
+  });
+
+  it('persists a registered task across a server restart', async () => {
+    const create = await fetch(`${base()}/api/autonomous/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 'e2e-durable',
+        name: 'E2E durable',
+        atMinuteOfDay: 10 * 60,
+        steps: [{ kind: 'fs.mkdir', path: path.join(workDir, 'durable') }],
+      }),
+    });
+    expect(create.status).toBe(201);
+    expect((await create.json()).persisted).toBe(true);
+
+    // The claim is only real if the task is on disk: read the memory file the
+    // server was pointed at and assert the goal is actually there.
+    const memory = JSON.parse(fs.readFileSync(path.join(memoryDir, 'memory.json'), 'utf-8'));
+    const stored = memory.schedulerState?.scheduledGoals ?? [];
+    expect(stored.map((g: any) => g.id)).toContain('e2e-durable');
+
+    // A fresh process must still list it. Before the fix the registry was
+    // in-memory only, so a restart silently dropped the task while the register
+    // route had reported success.
+    await stopJarvis(jarvis);
+    jarvis = await startJarvis();
+    const after = await (await fetch(`${base()}/api/autonomous/schedule`)).json();
+    expect(after.goals.map((g: any) => g.id)).toContain('e2e-durable');
+
+    await fetch(`${base()}/api/autonomous/schedule/e2e-durable`, { method: 'DELETE' });
   });
 
   it('rejects a task with an out-of-range time or no steps', async () => {

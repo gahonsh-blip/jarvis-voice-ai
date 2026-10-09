@@ -475,7 +475,18 @@
     }
   ],
   "schedulerState": {
-    "lastNightRunDate": "2026-09-02"
+    "lastNightRunDate": "2026-09-02",
+    "scheduledGoals": []
+  },
+  "securityMatrix": {
+    "currentLevel": 2,
+    "humanApprovalForExternal": true,
+    "maskSensitiveData": true,
+    "credentialLeakProtection": true
+  },
+  "emergencyState": {
+    "emergencyPaused": false,
+    "hardKillSwitchTriggered": false
   },
   "youTubeConnection": {
     "connected": true,

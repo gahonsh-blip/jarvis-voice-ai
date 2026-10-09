@@ -52,6 +52,11 @@ import {
   transcriptBadgeLabel,
   transcriptTabLabel,
 } from '../utils/hardening/youtubeTranscriptLabelTruth';
+import {
+  hasRealYouTubeSummary,
+  youtubeSummaryCopyText,
+  youtubeTakeawaysEmptyLabel,
+} from '../utils/hardening/youtubePanelSummaryTruth';
 
 interface AutonomousToolsModalProps {
   isOpen: boolean;
@@ -485,11 +490,18 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   };
 
-  const handleCopySummary = (text: string) => {
-    if (!text) return;
+  const handleCopySummary = (result: any) => {
+    // Never announce a copy that carried no summary. When the summariser
+    // produced nothing, the clipboard gets the explanatory notice so the
+    // "Summary copied" toast is never a claim the result cannot back.
+    const text = youtubeSummaryCopyText(result || {});
     navigator.clipboard.writeText(text);
     setYtCopied(true);
-    showFeedback('Summary copied to clipboard!');
+    showFeedback(
+      hasRealYouTubeSummary(result || {})
+        ? 'Summary copied to clipboard!'
+        : 'No summary was produced — the explanation was copied instead.'
+    );
     setTimeout(() => setYtCopied(false), 3000);
   };
 
@@ -937,7 +949,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                         <span>Watch on YouTube</span>
                       </a>
                       <button
-                        onClick={() => handleCopySummary(ytResult.summary || '')}
+                        onClick={() => handleCopySummary(ytResult)}
                         className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-mono text-cyan-300 flex items-center gap-1.5 transition-colors"
                       >
                         {ytCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1013,7 +1025,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                           </div>
                         ))
                       ) : (
-                        <p className="text-slate-500">Key takeaways are formatted inside the Executive Summary view above.</p>
+                        <p className="text-slate-500">{youtubeTakeawaysEmptyLabel(ytResult)}</p>
                       )}
                     </div>
                   )}
