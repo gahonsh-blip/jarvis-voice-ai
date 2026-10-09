@@ -14560,3 +14560,26 @@ a verified, saved profile the next boot would not have.
 
 **Next slot:** #13 continued — the YouTube OAuth branch of `testPlatformConnection`
 (`memoryState.youTubeConnection` cached then `persistMemory()` discarded).
+
+---
+
+## Slot 10 — WORK — 2026-10-10 02:35 IST (2026-10-09 21:09 UTC) — window 2026-10-09
+
+Item #13 Zero-fake-success (slice: YouTube OAuth verify). `testPlatformConnection()`
+YouTube branch in `server.ts` cached the verified channel onto
+`memoryState.youTubeConnection`, called `persistMemory()` with its result discarded,
+and returned `{ success: true, status: 'VERIFIED' }`; `/api/social/platforms/test`
+relayed `success:true` even when the cache never reached `jarvis_memory.json`.
+Now the write result is captured (`profilePersisted = persistMemory();`, default
+`true` when no connection object is held, matching the LinkedIn branch), carried on
+the verified return, and the shared route gate surfaces `persisted:false` with a
+durability warning. Guard `src/tests/youtubePlatformVerifyPersistenceTruth.test.ts`
+(3 cases). Negative-validated: `git stash` of server.ts fails 2 of 3; restore -> 3/3.
+
+Observed gates: lint `tsc --noEmit` exit 0; targeted 2 files / 7 passed; full
+`npx vitest run` 204 files / 2369 passed; `npm run build` exit 0 (`dist/server.cjs`
+1.0mb). E2E NOT RUN. Deploy NOT_CONFIGURED. Security: `.env` ignored, tree clean,
+credential scan clean.
+
+Commits: `7b141fc` (fix+test), `fb5740c` (docs) on `feature/hermes-full-completion`;
+state `7a55fa6` on `automation/hermes-state`. Item #13 stays PARTIAL.
