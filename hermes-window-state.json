@@ -1,23 +1,16 @@
 {
   "window_date": "2026-10-09",
   "window_started_at": "2026-10-09T15:35:00Z",
-  "last_slot_at": "2026-10-09T18:14:00Z",
-  "slots_completed": 4,
+  "last_slot_at": "2026-10-09T18:36:00Z",
+  "slots_completed": 5,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "1da0b57",
+  "last_commit": "caa604d",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [
-    1,
-    2,
-    50,
-    51,
-    54,
-    55
-  ],
+  "blocked_items": [1, 2, 50, 51, 54, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 4 (23:36 IST) of the 2026-10-09 window. POST /api/github/approvals/:id/decision now consumes addAuditLog()'s durable verdict and answers HTTP 500 persisted:false when the audit row is not durable (read-only volume/full disk), instead of always answering success:true, recorded:true. Guarded by src/tests/approvalDecisionTruth.test.ts (new route-wiring guard; block now 3 cases). Negative-validated: revert server.ts fails exactly that guard (1 failed | 8 passed), restored -> 9/9. Gates observed this fire: lint (tsc --noEmit) exit 0; full suite 198 files / 2340 tests passed (0 failed, 60.46s); build exit 0 (dist/server.cjs 1071887 bytes). E2E NOT RUN. Deploy NOT_CONFIGURED. PR not opened this slot. Item 13 stays PARTIAL (sweep not exhausted; next: server_tools.ts)."
+  "note": "Slot 5 (00:06 IST 2026-10-10 = 18:36 UTC 2026-10-09) of the 2026-10-09 window. recordNightlyRun() in server.ts now returns boolean, reads the nightly-run record back from disk via new nightlyRunOnDisk(), drops the phantom in-memory row on a non-durable write, and POST /api/github/nightly/run reports it as recorded. Guarded by src/tests/nightlyRunRecordDurabilityTruth.test.ts (4 cases). Negative-validated: git stash revert -> 4/4 fail, restored -> 4/4. Gates observed: lint exit 0; full suite 201 files / 2355 tests passed (0 failed, 62.01s); build exit 0 (dist/server.cjs ~1.0mb). E2E NOT RUN. Deploy NOT_CONFIGURED. PR not opened (work slot). Item 13 stays PARTIAL; next: server_tools.ts sweep."
 }
