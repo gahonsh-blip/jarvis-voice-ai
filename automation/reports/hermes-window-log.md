@@ -14468,3 +14468,39 @@ slots_completed updated (6). PR: none (work slot). Main merge: NOT MERGED.
 
 **Next slot:** #13 continued — audit `server_tools.ts` for discarded
 `persistMemory()` / bare `success: true` sites (no pass of this kind yet).
+
+---
+
+## Slot 7 — WORK — 2026-10-10 01:05 IST (2026-10-09 19:41 UTC)
+
+**Item #13 (`Zero-fake-success for all tools`) — the YouTube summarizer reported
+`success: true` for a video it never summarised.** `buildYouTubeSummary()`
+(`server_tools.ts`) set `success: true` as soon as the video metadata was
+fetched, even when the video exposed no transcript and no description and the
+resulting summary was empty (`source: `none``). Callers that branched on
+`success` treated that as work: the Telegram summarize reply rendered a
+"YOUTUBE VIDEO SUMMARY" heading over a blank body, and the `/api/chat`
+`summarize_youtube_video` voice case could advance the "Autonomous Actions
+Executed" counter for a summary that produced nothing. `success` now tracks
+whether a summary was produced (`true` on the gemini/extractive branches,
+`false` on `source: `none``, which still returns `videoInfo`). Both reply
+builders in `server.ts` gate on the presence of `videoInfo` (an `in` check on the
+union, which also restores TypeScript narrowing).
+
+**Tests:** `src/tests/remainingFakeSuccess.test.ts` no-content case now asserts
+`success: false` (was `true`); new positive extractive case asserts `success:
+true` / `verificationStatus: VERIFIED`; source guard pins `actionExecuted =
+hasSummary;`. Negative-validated: restoring `success: true` on the `none` branch
+fails the new assertion (1 failed / 53 passed); restored -> 54/54.
+
+**Gates (observed):** lint (`tsc --noEmit`) exit 0; targeted 4 files / 81 tests
+passed; full `npx vitest run` **202 files / 2361 tests passed** (0 failed, 63.36
+s); `npm run build` exit 0 (`dist/server.cjs` ~1.0 mb). E2E: NOT RUN. Deploy:
+`NOT_CONFIGURED`.
+
+**Commits:** `2c84731` (fix+tests), `ac8a7bf` (docs). Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed updated (7). PR: none (work slot). Main merge: NOT MERGED.
+
+**Next slot:** #13 continued — per-site sweep of `server.ts` / `server_tools.ts`
+for bare `success: true` / discarded `persistMemory()` verdicts.
