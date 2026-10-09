@@ -8488,13 +8488,18 @@ app.post('/api/autonomous/goals/run', async (req: Request, res: Response) => {
   });
   if (goalRunHistory.length > 50) goalRunHistory.length = 50;
 
-  addAuditLog(
+  // The completion audit row is the durable record of the run. `addAuditLog`
+  // routes through the durable writer and returns whether the row reached disk;
+  // this route used to append the row, discard that verdict, and call a bare
+  // `persistMemory()` whose boolean nobody read — so a write that never landed
+  // (read-only volume, full disk) was still reported to the caller as recorded.
+  // Surface the durability of the audit row instead of hiding it.
+  const auditPersisted = addAuditLog(
     `Autonomous goal "${goal}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
     2,
     req.body?.approver ? `HUMAN:${String(req.body.approver).slice(0, 40)}` : 'AUTONOMOUS',
     result.outcome === 'VERIFIED' ? 'VERIFIED' : result.outcome === 'FAILED' ? 'FAILED' : 'PENDING'
   );
-  persistMemory();
 
   return res.json({
     success: result.verified,
@@ -8502,6 +8507,7 @@ app.post('/api/autonomous/goals/run', async (req: Request, res: Response) => {
     outcome: result.outcome,
     verified: result.verified,
     awaitingApproval: result.awaitingApproval ?? false,
+    persisted: auditPersisted,
     steps: result.steps,
     audit: result.audit,
     receipt: result.receipt,
