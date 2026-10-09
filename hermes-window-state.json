@@ -1,16 +1,23 @@
 {
   "window_date": "2026-10-09",
   "window_started_at": "2026-10-09T15:35:00Z",
-  "last_slot_at": "2026-10-09T17:36:00Z",
-  "slots_completed": 3,
+  "last_slot_at": "2026-10-09T18:14:00Z",
+  "slots_completed": 4,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "58b34a1",
+  "last_commit": "1da0b57",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [1, 2, 50, 51, 54, 55],
+  "blocked_items": [
+    1,
+    2,
+    50,
+    51,
+    54,
+    55
+  ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 3 (23:06 IST) of the 2026-10-09 window. Made exported addAuditLog() durability-aware: it now routes through recordDurableAuditRow() (disk read-back + phantom-row rollback) and returns the verdict. POST /api/autonomous/schedule rolls back + 500s on a non-durable audit row; DELETE reports auditRecorded. Guarded by src/tests/auditLogDurabilityTruth.test.ts (4 source guards). Negative-validated: revert to persistMemory() fails 1/4, restored -> 4/4. Gates observed this fire: lint exit 0; full suite 198 files / 2339 tests passed (0 failed, 60.66s); build exit 0 (dist/server.cjs 1071562 bytes). npm audit NOT RUN (no dependency change). E2E NOT RUN. Item 13 stays PARTIAL (sweep not exhausted). Deploy NOT_CONFIGURED. PR not opened this slot."
+  "note": "Slot 4 (23:36 IST) of the 2026-10-09 window. POST /api/github/approvals/:id/decision now consumes addAuditLog()'s durable verdict and answers HTTP 500 persisted:false when the audit row is not durable (read-only volume/full disk), instead of always answering success:true, recorded:true. Guarded by src/tests/approvalDecisionTruth.test.ts (new route-wiring guard; block now 3 cases). Negative-validated: revert server.ts fails exactly that guard (1 failed | 8 passed), restored -> 9/9. Gates observed this fire: lint (tsc --noEmit) exit 0; full suite 198 files / 2340 tests passed (0 failed, 60.46s); build exit 0 (dist/server.cjs 1071887 bytes). E2E NOT RUN. Deploy NOT_CONFIGURED. PR not opened this slot. Item 13 stays PARTIAL (sweep not exhausted; next: server_tools.ts)."
 }
