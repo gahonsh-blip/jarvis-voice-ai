@@ -7989,14 +7989,33 @@ app.post('/api/github/approvals/:id/decision', (req: Request, res: Response) => 
     });
   }
 
-  addAuditLog(
+  // The decision is only real once its audit row is durable. `addAuditLog`
+  // routes through the durable writer, which reads the row back from disk
+  // (`persistMemory()` can return true without writing when the file already
+  // holds identical bytes) and drops a phantom row on a non-durable write. The
+  // route previously discarded that verdict and always answered
+  // `{ success: true, recorded: true }`, so a read-only volume or full disk
+  // reported a recorded human approval the next boot would not have. Gate the
+  // success reply on the durable write.
+  const auditRecorded = addAuditLog(
     `${approved ? 'APPROVED' : 'REJECTED'} GitHub automation action "${updated!.summary}" (${updated!.id}) by ${decidedBy}`,
     4,
     decidedBy.trim(),
     approved ? 'VERIFIED' : 'BLOCKED'
   );
 
-  res.json({ success: true, recorded: true, outcome: verdict.outcome, approval: updated });
+  if (!auditRecorded) {
+    return res.status(500).json({
+      success: false,
+      recorded: false,
+      outcome: verdict.outcome,
+      persisted: false,
+      approval: updated,
+      error: 'The decision could not be written to durable storage; it was not recorded.',
+    });
+  }
+
+  res.json({ success: true, recorded: true, persisted: true, outcome: verdict.outcome, approval: updated });
 });
 
 // Reports the nightly schedule and recent runs.

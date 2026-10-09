@@ -103,4 +103,19 @@ describe('POST /api/github/approvals/:id/decision wiring (source guard)', () => 
     // The audit write sits after the recorded guard, so a no-op returns first.
     expect(route.indexOf('if (!verdict.recorded)')).toBeLessThan(route.indexOf('addAuditLog('));
   });
+
+  it('gates the success reply on the durable audit write', () => {
+    const route = decisionRouteSource();
+    // The durable verdict from `addAuditLog` must be captured, not discarded.
+    expect(route).toContain('const auditRecorded = addAuditLog(');
+    expect(route).toContain('if (!auditRecorded)');
+    // The success reply sits after the durability guard in source order, so a
+    // non-durable write returns the 500 first.
+    expect(route.indexOf('if (!auditRecorded)')).toBeLessThan(
+      route.indexOf('res.json({ success: true, recorded: true')
+    );
+    // A non-durable write must be answered with an explicit failure.
+    expect(route).toContain('persisted: false');
+    expect(route).toContain('it was not recorded.');
+  });
 });
