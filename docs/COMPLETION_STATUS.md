@@ -4,7 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 19:41 UTC (2026-10-10 01:05 IST) — WORK SLOT 7 of the
+Last cycle: 2026-10-09 20:33 UTC (2026-10-10 01:36 IST) — WORK SLOT 9 of the
+2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) — the
+`/api/chat` `create_file` case credited a save that had been rolled back. The case
+unshifts a note into `memoryState.notes`, then calls `persistMemory()`. On failure
+it already rolled the note back and replied "I could not write your note to durable
+storage, so it was not saved", but it still set `actionExecuted = true` — advancing
+the user-visible "Autonomous Actions Executed" counter for a save that never
+happened, contradicting its own spoken reply. `actionExecuted` now follows the
+durable outcome (`actionExecuted = persisted;`), matching the spoken reply and the
+rollback. The existing item-13 sweep registry
+(`src/tests/actionExecutedSweepAudit.test.ts`) enumerated this case as a literal
+`actionExecuted = true` site; the stale entry was removed so the registry stays
+truthful. Guarded by `src/tests/remainingFakeSuccess.test.ts` (source guard pins
+`actionExecuted = persisted;` and forbids the unconditional `true` in the
+`create_file` body, plus the rollback line). Negative-validated: restoring
+`actionExecuted = true` fails the new assertion (1 failed / 54 skipped);
+restored → 55/55. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted 2 files / 59 tests passed; full `npx vitest run` 202 files / 2362 tests
+passed; `npm run build` exit 0 (`dist/server.cjs` 1.0mb). Item 13 stays `PARTIAL`
+— the long tail of unclassified `success: true` / discarded-`persistMemory()`
+sites remains.
+
+Last cycle (previous): 2026-10-09 19:41 UTC (2026-10-10 01:05 IST) — WORK SLOT 7 of the
 2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) — the
 YouTube summarizer reported `success: true` for a video it never summarised.
 `buildYouTubeSummary()` (`server_tools.ts`) set `success: true` as soon as the

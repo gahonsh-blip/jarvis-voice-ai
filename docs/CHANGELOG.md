@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 01:36 IST (2026-10-09 20:33 UTC) — window slot 9: the chat create_file case no longer credits a note save that was rolled back
+
+### Fixed
+- **The `/api/chat` `create_file` case (`server.ts`) set `actionExecuted = true` even when the note write failed and was rolled back.** The case unshifts the note into `memoryState.notes`, calls `persistMemory()`, and on failure already rolls the note back and replies "I could not write your note to durable storage, so it was not saved" — but the executed flag still advanced the user-visible "Autonomous Actions Executed" counter for a save that never happened, contradicting its own spoken reply. `actionExecuted` now follows the durable outcome (`actionExecuted = persisted;`).
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts`: source guard pins `actionExecuted = persisted;` and forbids the unconditional `true` in the `create_file` body, plus the rollback line. Negative-validated: restoring `actionExecuted = true` fails the new assertion (1 failed / 54 skipped); restored → 55/55.
+- `src/tests/actionExecutedSweepAudit.test.ts`: removed the now-stale `create_file` entry from `AUDITED_TRUE_SITES`, which enumerates only literal `actionExecuted = true` sites. Sweep + guard 59/59.
+- Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 202 files / 2362 tests passed; `npm run build` exit 0.
+
 ## [Unreleased] - 2026-10-10 01:05 IST (2026-10-09 19:41 UTC) — window slot 7: the YouTube summarizer no longer reports success for a video it never summarised
 
 ### Fixed

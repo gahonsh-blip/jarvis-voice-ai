@@ -14504,3 +14504,31 @@ slots_completed updated (7). PR: none (work slot). Main merge: NOT MERGED.
 
 **Next slot:** #13 continued — per-site sweep of `server.ts` / `server_tools.ts`
 for bare `success: true` / discarded `persistMemory()` verdicts.
+
+---
+
+## Slot 9 — 2026-10-10 01:36 IST (WORK SLOT)
+
+Item 13 (`Zero-fake-success for all tools`) — the `/api/chat` `create_file` case
+credited a save that had been rolled back. The case unshifts a note into
+`memoryState.notes`, calls `persistMemory()`, and on failure already rolls the
+note back and replies "I could not write your note to durable storage, so it was
+not saved" — but it still set `actionExecuted = true`, advancing the user-visible
+"Autonomous Actions Executed" counter for a save that never happened.
+`actionExecuted` now follows the durable outcome (`actionExecuted = persisted;`).
+The item-13 sweep registry (`src/tests/actionExecutedSweepAudit.test.ts`), which
+enumerates literal `actionExecuted = true` sites, had this case listed; the stale
+entry was removed.
+
+- Guard: `src/tests/remainingFakeSuccess.test.ts` (55/55).
+- Registry: `src/tests/actionExecutedSweepAudit.test.ts` (59/59 with the guard).
+- Negative validation: restoring `actionExecuted = true` fails the guard
+  (1 failed / 54 skipped); restored → 55/55.
+- Gates (observed this fire): lint `tsc --noEmit` exit 0; full `npx vitest run`
+  202 files / 2362 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1.0mb).
+- Commits: `4babbcb` (fix + guard), `fe3afab` (registry). Branch
+  `feature/hermes-full-completion` pushed. Main merge: NOT MERGED (awaiting human
+  approval). Deploy: NOT_CONFIGURED. Item 13 stays PARTIAL.
+
+**Next slot:** #13 continued — sweep remaining `success: true` / discarded
+`persistMemory()` sites in `server.ts` / `server_tools.ts`.
