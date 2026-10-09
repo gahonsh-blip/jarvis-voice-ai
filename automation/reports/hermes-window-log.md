@@ -14649,3 +14649,55 @@ Next Slot:
 - #13 — continue the sweep for the next unclassified `success: true` /
   discarded-`persistMemory()` site (e.g. the OAuth callback near server.ts:6285).
 
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:05
+Window date: 2026-10-09 (window runs 2026-10-09 21:00 → 2026-10-10 05:00 IST)   Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools (frontend mirror) — the offline execution status no longer claims a local save the browser refused.
+  Evidence: src/utils/offlineStorage.ts (writers now return boolean whether the write landed); src/App.tsx (offline branch captures the chat-history + memory write results before touching React state and branches the status line: 'PERSISTED TO LOCAL STORAGE' vs 'NOT SAVED LOCALLY (STORAGE UNAVAILABLE)'); src/tests/offlinePersistenceTruth.test.ts (6 cases) passed. Negative-validated: `git stash push src/utils/offlineStorage.ts` -> 3 failed | 3 passed; `git stash push src/App.tsx` -> 3 failed | 3 passed; restored -> 6/6.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. The long tail of unclassified `success: true` / discarded-`persistMemory()` sites in server.ts remains; the sweep is not exhausted.
+
+Remaining:
+- #1, #2 (Android bridge / real Android E2E), #50, #51, #54, #55 — BLOCKED, require hardware or credentials absent from this sandbox.
+- The balance of the 60-item backlog beyond #13's tail was not re-audited this slot.
+
+Bugs Found:
+- src/utils/offlineStorage.ts: `saveLocalChatHistory`, `saveLocalMemory`, `saveLocalVoiceSettings`, `queuePendingSync`, `clearLocalChatHistory` declared `void` and swallowed the storage error in their `catch`, so a refused or quota-exceeded write was indistinguishable from a landed one. Found by grepping the writers' signatures and reading their catch blocks.
+- src/App.tsx: the offline command branch set `'LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE'` unconditionally, so a change that never reached `localStorage` (full disk, private mode, storage refused) read to the operator as a completed save the next reload would not find.
+
+Bugs Fixed:
+- The writers now return whether the write landed; the App offline branch computes the real verdict before touching React state (the state updater callback may run during the next render, so it is not used to compute the verdict) and branches the status line. Verified by src/tests/offlinePersistenceTruth.test.ts (6 cases) and by the two independent reverts described above.
+
+Tests:    206 files / 2378 tests passed (0 failed) — `npx vitest run` observed this fire. Targeted: 2 files / 14 passed.
+Lint:     exit 0 — `npm run lint` (`tsc --noEmit`) observed this fire.
+Build:    exit 0 — `npm run build`; `dist/server.cjs` 1073865 bytes observed.
+E2E:      NOT RUN — no browser or handset in this sandbox.
+Security: no `.env` tracked (`git check-ignore -v .env` -> `.gitignore:4:.env`); credential-pattern scan of the branch diff matched nothing; working tree clean after reverting the suite's hydration of `jarvis_memory.json`.
+
+Documentation: docs/COMPLETION_STATUS.md (item #13 evidence row + Last cycle block), docs/CHANGELOG.md (slot 12 entry).
+Branch:  feature/hermes-full-completion
+Commit:  a8c85f3 (code c51925a, docs a8c85f3)
+Push:    succeeded -> origin/feature/hermes-full-completion (54180e4..a8c85f3)
+
+PR:         NONE this slot (no PR opened/refreshed in a work slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present; the verified artifact `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- #1, #2 Android bridge / real Android E2E — require a physical handset (hardware) not present in this sandbox.
+- #50, #51, #54, #55 — require credentials/hardware absent from this environment.
+
+Human Approval Required:
+- None this slot. The offline fix is local-only and needs no external action.
+
+Next Slot:
+- Continue #13: audit the next unclassified `success: true` / discarded-`persistMemory()` site in server.ts (e.g. another route that reports a persisted change without reading the write result back).
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में #13 के तहत ऑफ़लाइन सेव की झूठी सफलता हटाई गई — अब सेव विफल होने पर UI ईमानदारी से "NOT SAVED LOCALLY" दिखाता है; 2378 टेस्ट पास, lint/build हरा।
