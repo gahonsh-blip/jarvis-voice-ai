@@ -1235,7 +1235,11 @@ export function heuristicTranscriptSummarize(
 export type YouTubeSummarySource = 'gemini' | 'extractive' | 'none';
 
 export interface YouTubeSummaryResult {
-  success: true;
+  // `success` means a summary was actually produced, not merely that the video
+  // metadata was fetched. A video with no transcript and no description is
+  // returned with `source: 'none'`, an empty summary and `success: false`, so a
+  // caller cannot credit a summarization that never happened.
+  success: boolean;
   videoInfo: YouTubeVideoInfo;
   summary: string;
   executiveOverview: string;
@@ -1259,13 +1263,14 @@ export function buildYouTubeSummary(params: {
   geminiFailed?: boolean;
 }): YouTubeSummaryResult {
   const { videoInfo, segments, transcript, description, geminiRawSummary, geminiFailed } = params;
-  const base = { success: true as const, videoInfo, segments, transcript };
+  const base = { videoInfo, segments, transcript };
 
   if (geminiRawSummary && geminiRawSummary.trim()) {
     const rawSummary = geminiRawSummary.trim();
     const extractedTakeaways = (rawSummary.match(/^[•\-\*]\s+(.+)$/gm) || []).map((t) => t.trim());
     return {
       ...base,
+      success: true,
       summary: rawSummary,
       executiveOverview: rawSummary,
       keyTakeaways: extractedTakeaways,
@@ -1287,6 +1292,7 @@ export function buildYouTubeSummary(params: {
     const summary = `### 📌 Extractive Overview\n${heuristic.executiveSummary}\n\n### ⏱️ Quoted Key Lines\n${heuristic.keyTakeaways.join('\n')}\n\n### 💡 Quoted Insights\n${heuristic.actionableInsights.map((i) => `• ${i}`).join('\n')}`;
     return {
       ...base,
+      success: true,
       summary,
       executiveOverview: heuristic.executiveSummary,
       keyTakeaways: heuristic.keyTakeaways,
@@ -1300,9 +1306,12 @@ export function buildYouTubeSummary(params: {
   }
 
   // No transcript and no description: there is nothing real to summarize.
+  // `success` is false because no summary was produced — only the video's
+  // metadata is available. The `videoInfo` is still returned so a caller can
+  // show the title and link, but it may not credit a summarization.
   return {
     ...base,
-    success: true,
+    success: false,
     summary: '',
     executiveOverview: '',
     keyTakeaways: [],

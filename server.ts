@@ -3648,13 +3648,16 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       botReplyText = `⏳ *HERMES JARVIS*: Analyzing YouTube video and extracting transcript...\n\nProcessing link: \`${rawUrl || vidId}\``;
       // Fetch and summarize
       const summaryResult = await summarizeYouTubeVideoCore({ url: rawUrl, videoId: vidId || undefined });
-      if (summaryResult.success && summaryResult.videoInfo) {
+      // Gate on `videoInfo`, not `success`: a result with `source: 'none'` now
+      // carries `success: false` but still has real metadata worth showing. The
+      // `formatYouTubeSummaryNotice` check below leads with the fact that no
+      // summary was produced.
+      if ('videoInfo' in summaryResult) {
         const info = summaryResult.videoInfo;
-        // A summariser result can carry `success: true` and a video with an EMPTY
-        // summary (`source: 'none'` — no transcript and no description). The old
-        // reply rendered the "YOUTUBE VIDEO SUMMARY" heading with a blank body in
-        // that case, reading as a summary that was never produced. Lead with the
-        // truth instead.
+        // A video with no transcript and no description comes back with an EMPTY
+        // summary (`source: 'none'`). The old reply rendered the "YOUTUBE VIDEO
+        // SUMMARY" heading with a blank body in that case, reading as a summary
+        // that was never produced. Lead with the truth instead.
         const noSummaryNotice = formatYouTubeSummaryNotice(summaryResult);
         if (noSummaryNotice) {
           botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})\n\n⚠️ _${noSummaryNotice}_`;
@@ -10722,14 +10725,16 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const targetUrl = intentData.actionPayload?.url || message;
         const videoId = intentData.actionPayload?.videoId || extractYouTubeVideoId(targetUrl);
         const summaryRes = await summarizeYouTubeVideoCore({ url: targetUrl, videoId: videoId || undefined });
-        if (summaryRes.success && summaryRes.videoInfo) {
+        // Gate on real metadata, not `success`. A result with `source: 'none'`
+        // carries `success: false` but still has the video title and link; the
+        // `hasSummary` check below decides whether any work is credited.
+        if ('videoInfo' in summaryRes) {
           const notice = summaryRes.notice ? `\n\n${summaryRes.notice}` : '';
-          // `success` only proves the video metadata was fetched — not that a
-          // summary was produced. A video that exposes no transcript and no
-          // description comes back `success: true` with an empty summary
-          // (`source: 'none'`), so crediting it advanced the user-visible
-          // "Autonomous Actions Executed" counter for a summarization that
-          // never happened. Only a non-empty summary is executed work.
+          // A video that exposes no transcript and no description comes back
+          // with an empty summary (`source: 'none'`, `success: false`), so
+          // crediting it advanced the user-visible "Autonomous Actions
+          // Executed" counter for a summarization that never happened. Only a
+          // non-empty summary is executed work.
           const hasSummary = Boolean(summaryRes.summary && summaryRes.summary.trim());
           spokenResponse = hasSummary
             ? `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel} (${summaryRes.videoInfo.durationFormatted}).${notice}\n\n${summaryRes.summary}`

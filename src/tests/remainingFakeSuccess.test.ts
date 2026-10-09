@@ -493,10 +493,42 @@ describe('a fetch-only YouTube summarization is not credited as executed work', 
       geminiRawSummary: null,
       geminiFailed: false,
     });
-    expect(result.success).toBe(true);
+    // `success` must track whether a summary was produced, not whether the
+    // video metadata was fetched. A `source: 'none'` result summarised
+    // nothing, so it reports `success: false` while still returning the
+    // metadata a caller needs to show the title and link.
+    expect(result.success).toBe(false);
     expect(result.summary.trim()).toBe('');
     expect(result.source).toBe('none');
     expect(result.verificationStatus).toBe('PARTIAL');
+    expect(result.videoInfo.title).toBe('No Content Video');
+  });
+
+  it('buildYouTubeSummary reports success for a real extractive summary', () => {
+    const result = buildYouTubeSummary({
+      videoInfo: {
+        videoId: 'hasContent1',
+        url: 'https://www.youtube.com/watch?v=hasContent1',
+        title: 'Real Video',
+        channel: 'Test Channel',
+        durationSeconds: 120,
+        durationFormatted: '2:00',
+        description: '',
+        thumbnailUrl: '',
+        hasTranscript: true,
+        transcriptLength: 40,
+        availableLanguages: [],
+      },
+      segments: [{ start: 0, duration: 5, timestamp: '0:00', text: 'A real quoted line from the transcript.' }],
+      transcript: 'A real quoted line from the transcript.',
+      description: '',
+      geminiRawSummary: null,
+      geminiFailed: false,
+    });
+    expect(result.success).toBe(true);
+    expect(result.summary.trim().length).toBeGreaterThan(0);
+    expect(result.source).toBe('extractive');
+    expect(result.verificationStatus).toBe('VERIFIED');
   });
 });
 
