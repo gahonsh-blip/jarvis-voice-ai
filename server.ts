@@ -2807,6 +2807,7 @@ async function testPlatformConnection(platformKey: string): Promise<{
   accountName?: string;
   accountIdentifier?: string;
   message: string;
+  profilePersisted?: boolean;
 }> {
   const p = platformKey.toLowerCase();
 
@@ -2836,13 +2837,30 @@ async function testPlatformConnection(platformKey: string): Promise<{
           if (data?.picture) conn.picture = data.picture;
           if (data?.email) conn.email = data.email;
           if (memberUrn) conn.authorUrn = memberUrn;
-          persistMemory();
+          // The profile fields are cached above; the verify reply used to report
+          // a verified connection regardless of whether that cache reached disk.
+          // Honor the write: on failure the caller names the durability gap
+          // instead of reporting the profile as stored.
+          const profilePersisted = persistMemory();
+          return {
+            success: true,
+            status: 'VERIFIED',
+            accountName: memberName ?? undefined,
+            accountIdentifier: memberUrn,
+            profilePersisted,
+            message: memberName
+              ? `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`
+              : `Live Verified: Connected to Personal Member Profile (${memberUrn}). The provider did not return an account name.`,
+          };
         }
+        // The token authenticated, but no connection object is held to cache the
+        // profile onto, so no local write is expected.
         return {
           success: true,
           status: 'VERIFIED',
           accountName: memberName ?? undefined,
           accountIdentifier: memberUrn,
+          profilePersisted: true,
           message: memberName
             ? `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`
             : `Live Verified: Connected to Personal Member Profile (${memberUrn}). The provider did not return an account name.`,
@@ -6436,7 +6454,17 @@ app.post('/api/social/platforms/test', async (req: Request, res: Response) => {
   if (!platform) return res.status(400).json({ error: 'Platform identifier is required' });
 
   const result = await testPlatformConnection(platform);
-  res.json(result);
+  // `persisted` is true only when the probe verified the account AND, when a
+  // profile cache write was expected, that write reached durable storage. The
+  // UI must not report a verified-and-saved profile for a write that failed.
+  if (result.profilePersisted === false) {
+    return res.json({
+      ...result,
+      persisted: false,
+      message: `${result.message} The profile details could not be written to durable storage, so the verified account has not been cached.`,
+    });
+  }
+  res.json({ ...result, persisted: true });
 });
 
 // Proactive Routines APIs
