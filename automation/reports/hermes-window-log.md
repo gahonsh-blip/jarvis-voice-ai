@@ -14331,3 +14331,29 @@ Commits: `15a2b62` (fix+tests), `48bdcdb` (docs). Pushed to
 `feature/hermes-full-completion`. State branch `automation/hermes-state` pushed
 at `be57dea` (slots_completed=2). PR: none opened (work slot). Deploy:
 NOT_CONFIGURED.
+
+---
+
+## Slot 2026-10-09 23:06 IST (WORK SLOT 3) — Item 13: `addAuditLog()` durability
+
+**Completed:** Item 13 (PARTIAL slice). `addAuditLog()` (`server.ts`, 18 call
+sites) built an audit row, pushed it and called `persistMemory()`, discarding the
+boolean. `persistMemory()` returns true without writing when the memory file
+already holds identical bytes, so a route could report a `VERIFIED` audit row the
+next boot would not have. It now routes through the existing
+`recordDurableAuditRow(entry)` helper (disk read-back + phantom-row rollback) and
+returns the verdict (`: boolean`). `POST /api/autonomous/schedule` now rolls the
+registry entry back and answers HTTP 500 when the registration's audit row is not
+durable; `DELETE /api/autonomous/schedule/:id` returns `auditRecorded` instead of
+dropping the boolean.
+
+**Tests:** new `src/tests/auditLogDurabilityTruth.test.ts` (4 source guards).
+Negative-validated: reverting `addAuditLog` to `persistMemory()` fails 1 of 4;
+restored -> 4/4. Full suite 198 files / 2339 tests passed (0 failed, 60.66 s).
+Lint (`tsc --noEmit`) exit 0. Build exit 0 - `dist/server.cjs` 1071562 bytes.
+E2E: NOT RUN (no live providers/hardware). Security: npm audit NOT RUN (no
+dependency change). Deploy: NOT_CONFIGURED.
+
+**Commits:** `0d73aa7` (fix+tests), docs/report commit. Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed=3. PR: none opened (work slot). Main merge: NOT MERGED.

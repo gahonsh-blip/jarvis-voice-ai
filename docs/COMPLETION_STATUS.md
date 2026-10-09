@@ -4,7 +4,30 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 22:06 IST — **WORK SLOT 2** of the 2026-10-09 →
+Last cycle: 2026-10-09 23:06 IST — **WORK SLOT 3** of the 2026-10-09 →
+2026-10-10 window. **Item 13 (`Zero-fake-success for all tools`) — the exported
+`addAuditLog()` helper recorded a `VERIFIED` audit row and discarded
+`persistMemory()`'s boolean.** Because the memory file is written only when its
+bytes change, `persistMemory()` can return `true` without writing, so any of the
+18 `addAuditLog()` call sites could report a row the next boot would not have.
+`addAuditLog()` now routes through the existing `recordDurableAuditRow(entry)`
+helper (`server.ts`, next to `diskHasAuditRow`) — which reads the row back with
+`diskHasAuditRow(entry.id)` and drops a phantom row from the in-memory log on a
+non-durable write — and returns that verdict (`: boolean`). The autonomous
+schedule routes now consume it: `POST /api/autonomous/schedule` rolls the
+registry entry back and answers HTTP 500 when the registration's audit row is
+not durable; `DELETE /api/autonomous/schedule/:id` reports `auditRecorded`
+instead of dropping the boolean. Guarded by
+`src/tests/auditLogDurabilityTruth.test.ts` (4 source guards pinning the durable
+wiring, the boolean return type, and both route callers). Negative-validated:
+reverting `addAuditLog` to `persistMemory()` fails 1 of 4 cases; restored → 4/4.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full suite **198 files
+/ 2339 tests passed** (0 failed, 60.66 s); `npm run build` exit 0
+(`dist/server.cjs` 1071562 bytes). E2E: NOT RUN (no live providers/hardware).
+Deploy: `NOT_CONFIGURED`. Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous): 2026-10-09 22:06 IST — **WORK SLOT 2** of the 2026-10-09 →
 2026-10-10 window. **Item 13 (`Zero-fake-success for all tools`) — `/api/tools/fs/write`
 and `/api/tools/fs/delete` recorded a `VERIFIED` audit row without proving it
 reached disk.** Both routes appended the row with `pushAuditEntry()` and

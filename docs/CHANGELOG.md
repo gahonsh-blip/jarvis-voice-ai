@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-09 23:06 IST (2026-10-09 17:36 UTC) — window slot 3: `addAuditLog()` writes the audit row durably and reports it
+
+### Fixed
+- **`addAuditLog()` (`server.ts`) built an audit row, pushed it and called `persistMemory()`, discarding the boolean.** The memory file is written only when its bytes change, so `persistMemory()` returns `true` without writing when `jarvis_memory.json` already holds identical bytes — any of the 18 call sites could then report a `VERIFIED` audit row the next boot would not have. `addAuditLog()` now routes through the existing `recordDurableAuditRow(entry)` helper, which reads the row back with `diskHasAuditRow(entry.id)` and drops a phantom row from the in-memory log when the write was not durable, and returns that verdict (`: boolean`).
+- **`POST /api/autonomous/schedule` (`server.ts`) reported a registration whose audit trail was not durable.** The route now consumes `addAuditLog()`'s verdict; when the row is not durable it restores the previous registry entry, re-persists the registry, and answers HTTP 500 instead of `success: true`.
+- **`DELETE /api/autonomous/schedule/:id` (`server.ts`) dropped the audit verdict.** It now returns `auditRecorded` alongside the (already-verified) removal result, so a non-durable audit row is visible to the caller rather than implied as written.
+
+### Tests
+- New `src/tests/auditLogDurabilityTruth.test.ts` (4 tests) pins the durable wiring (`return recordDurableAuditRow(entry)` and no bare `persistMemory()` in `addAuditLog`), the boolean return type, and both schedule route callers (`auditPersisted` rollback + HTTP 500; `auditRecorded` in the delete reply). Negative-validated: reverting `addAuditLog` to `persistMemory()` fails 1 of 4; restored → 4/4.
+- Lint (`tsc --noEmit`) exit 0; full suite **198 files / 2339 tests passed** (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1071562 bytes).
+
 ## [Unreleased] - 2026-10-09 22:06 IST (2026-10-09 16:36 UTC) — window slot 2: the filesystem tools no longer record a VERIFIED audit row without proving it reached disk
 
 ### Fixed
