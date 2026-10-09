@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 02:39 IST (2026-10-09 21:09 UTC) — window slot 10: the YouTube platform verify no longer reports a verified channel it failed to cache
+
+### Fixed
+- **The YouTube OAuth branch of `testPlatformConnection()` (`server.ts`) cached the verified channel fields onto `memoryState.youTubeConnection` and then called `persistMemory()` with its result discarded.** On a read-only volume or a full disk the cache never reached `jarvis_memory.json`, yet the branch still returned `{ success: true, status: 'VERIFIED' }`, and the `/api/social/platforms/test` route relayed it verbatim as `success: true` — the UI reported a verified, saved channel that the next boot would not have (and could show a stale or absent channel). The write result is now captured (`profilePersisted = persistMemory();`, defaulting to `true` when no connection object is held, matching the LinkedIn branch), carried on the verified return, and the shared route gate surfaces `persisted: false` with a durability warning when the cache did not reach disk.
+
+### Tests
+- `src/tests/youtubePlatformVerifyPersistenceTruth.test.ts` (new): source guard bounds the YouTube branch, pins the captured write and the carried `profilePersisted`, pins the no-connection `true` default, and pins the shared route durability gate. Negative-validated: `git stash` of `server.ts` fails 2 of 3; restored → 3/3.
+- Lint (`tsc --noEmit`) exit 0; targeted 2 files / 7 tests passed; full `npx vitest run` 204 files / 2369 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1.0mb).
+
 ## [Unreleased] - 2026-10-10 01:36 IST (2026-10-09 20:33 UTC) — window slot 8: the chat create_file case no longer credits a note save that was rolled back
 
 ### Fixed
