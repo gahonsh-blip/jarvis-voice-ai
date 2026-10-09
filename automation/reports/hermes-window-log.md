@@ -14429,3 +14429,42 @@ slots_completed updated. PR: none (work slot). Main merge: NOT MERGED.
 
 **Next slot:** #13 continued — audit `server_tools.ts` for discarded
 `persistMemory()` / bare `success: true` sites (no pass of this kind yet).
+
+---
+
+## Slot 6 — 2026-10-10 00:36 IST (2026-10-09 19:12 UTC) — WORK
+
+**Item:** #13 `Zero-fake-success for all tools` (stays `PARTIAL`).
+
+**Advanced:** The memory-backup route reported a backup it had not durably
+recorded. `GET /api/backup` (`server.ts`) validated the body, appended a
+`VERIFIED` audit row through `addAuditLog()` — which already returns whether the
+row is durable — discarded that verdict, then called a bare `persistMemory()`
+whose boolean nobody read. `persistMemory()` writes only when the memory file's
+bytes change, so on a read-only volume or a full disk the record never reached
+`jarvis_memory.json`, yet the caller received `success: true, verified: true` with
+no survival signal. The route now gates on `addAuditLog()`'s boolean and answers
+HTTP 500 `success:false, persisted:false, verified:false` when the row did not
+land; success now carries `persisted: true`.
+
+**Evidence:** `server.ts` (`app.get('/api/backup')`, gated on the
+`addAuditLog()`/`recordDurableAuditRow` verdict);
+`src/tests/backupDurabilityTruth.test.ts` (5 cases, real `tsx server.ts` process
+on a temp memory file made read-only after the first write, `GEMINI_API_KEY`
+blanked so the audit-secret scan is `NOT_CONFIGURED`). Negative-validated with
+`git stash`: reverting `server.ts` fails 4 of 5; restored -> 5/5. The sibling
+`src/tests/restoreDurabilityTruth.test.ts` harness was fixed: it built its restore
+payload via `GET /api/backup` *after* making the disk read-only, so it now
+captures that payload while the disk is writable (6/6).
+
+**Gates (observed):** lint (`tsc --noEmit`) exit 0; targeted backup + restore
+suites **2 files / 11 tests passed**. Full suite: NOT RUN this fire (budget — tree
+pushed green first). Build: NOT RUN this fire. E2E: NOT RUN. Deploy:
+`NOT_CONFIGURED`.
+
+**Commits:** `2f63081` (fix+tests), `6331e58` (docs). Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed updated (6). PR: none (work slot). Main merge: NOT MERGED.
+
+**Next slot:** #13 continued — audit `server_tools.ts` for discarded
+`persistMemory()` / bare `success: true` sites (no pass of this kind yet).
