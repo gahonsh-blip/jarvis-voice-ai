@@ -2984,11 +2984,15 @@ async function testPlatformConnection(platformKey: string): Promise<{
           const avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url;
 
           // Update memoryState with verified channel data
+          let profilePersisted = true;
           if (memoryState.youTubeConnection) {
             if (title) memoryState.youTubeConnection.channelTitle = title;
             memoryState.youTubeConnection.channelId = chId;
             if (avatarUrl) memoryState.youTubeConnection.avatarUrl = avatarUrl;
-            persistMemory();
+            // The verified channel fields are cached above; the verify reply used
+            // to report a verified connection regardless of whether that cache
+            // reached disk. Honor the write so the caller names the durability gap.
+            profilePersisted = persistMemory();
           }
 
           return {
@@ -2996,6 +3000,7 @@ async function testPlatformConnection(platformKey: string): Promise<{
             status: 'VERIFIED',
             accountName: title ?? chId ?? undefined,
             accountIdentifier: chId,
+            profilePersisted,
             message: title
               ? `Connected & Verified to YouTube Channel "${title}" (${chId}) via OAuth 2.0.`
               : `Connected & Verified to YouTube Channel ${chId} via OAuth 2.0. The provider did not return a channel name.`,
