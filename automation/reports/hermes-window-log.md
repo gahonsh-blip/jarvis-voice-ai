@@ -14458,9 +14458,9 @@ payload via `GET /api/backup` *after* making the disk read-only, so it now
 captures that payload while the disk is writable (6/6).
 
 **Gates (observed):** lint (`tsc --noEmit`) exit 0; targeted backup + restore
-suites **2 files / 11 tests passed**. Full suite: NOT RUN this fire (budget — tree
-pushed green first). Build: NOT RUN this fire. E2E: NOT RUN. Deploy:
-`NOT_CONFIGURED`.
+suites **2 files / 11 tests passed**; full suite **202 files / 2360 tests passed**
+(0 failed, 63.43 s); `npm run build` exit 0 (`dist/server.cjs` 1072676 bytes,
+~1.0 mb). E2E: NOT RUN. Deploy: `NOT_CONFIGURED`.
 
 **Commits:** `2f63081` (fix+tests), `6331e58` (docs). Pushed to
 `feature/hermes-full-completion`. State branch `automation/hermes-state`
