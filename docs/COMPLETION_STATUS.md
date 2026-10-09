@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 23:06 IST — **WORK SLOT 3** of the 2026-10-09 →
+Last cycle: 2026-10-09 23:36 IST — **WORK SLOT 4** of the 2026-10-09 →
+2026-10-10 window. **Item 13 (`Zero-fake-success for all tools`) —
+`POST /api/github/approvals/:id/decision` recorded a GitHub approval decision and
+discarded `addAuditLog()`'s boolean.** `addAuditLog()` routes through the durable
+writer `recordDurableAuditRow`, which reads the row back from disk with
+`diskHasAuditRow` (`persistMemory()` can return true without writing when the
+file already holds identical bytes) and drops a phantom row on a non-durable
+write. The route ignored that verdict and always answered
+`{ success: true, recorded: true }`, so a read-only volume or a full disk
+reported a recorded human approval the next boot would not have. The route now
+captures the durable verdict (`const auditRecorded = addAuditLog(...)`) and
+answers HTTP 500 with `persisted: false` and
+`'The decision could not be written to durable storage; it was not recorded.'`
+when the row is not durable; a durable write answers `persisted: true`. Guarded
+by `src/tests/approvalDecisionTruth.test.ts` (one new source guard in the
+existing route-wiring block, now 3 cases, pinning the captured verdict, the
+durability guard ordering, and the refusal payload). Negative-validated:
+reverting `server.ts` to the discarded-boolean reply fails exactly that guard
+(`1 failed | 8 passed`); restored → `9/9`. Gates (observed this fire): lint
+(`tsc --noEmit`) exit 0; full suite **198 files / 2340 tests passed** (0 failed,
+60.46 s); `npm run build` exit 0 (`dist/server.cjs` 1071887 bytes). E2E: NOT RUN
+(no live providers/hardware). Deploy: `NOT_CONFIGURED`. Item 13 stays `PARTIAL`
+— the long tail of unclassified `success: true` / discarded-`persistMemory()`
+sites remains (next candidates: `server_tools.ts`, which has had no pass of this
+kind, and the `persistMemory()` sites still cited in the known-limitations
+note).
+
+Last cycle (previous): 2026-10-09 23:06 IST — **WORK SLOT 3** of the 2026-10-09 →
 2026-10-10 window. **Item 13 (`Zero-fake-success for all tools`) — the exported
 `addAuditLog()` helper recorded a `VERIFIED` audit row and discarded
 `persistMemory()`'s boolean.** Because the memory file is written only when its

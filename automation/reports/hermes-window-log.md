@@ -14357,3 +14357,37 @@ dependency change). Deploy: NOT_CONFIGURED.
 **Commits:** `0d73aa7` (fix+tests), docs/report commit. Pushed to
 `feature/hermes-full-completion`. State branch `automation/hermes-state`
 slots_completed=3. PR: none opened (work slot). Main merge: NOT MERGED.
+
+---
+
+## 2026-10-09 23:36 IST — WORK SLOT 4
+
+**Item 13 (`Zero-fake-success for all tools`) — `POST /api/github/approvals/:id/decision`
+discarded `addAuditLog()`'s durable verdict and always answered
+`{ success: true, recorded: true }`.** `addAuditLog()` routes through
+`recordDurableAuditRow`, which reads the row back from disk with
+`diskHasAuditRow` (`persistMemory()` can return true without writing when the
+file already holds identical bytes) and drops a phantom row on a non-durable
+write. The route ignored that verdict, so a read-only volume or a full disk
+reported a recorded human approval the next boot would not have. The route now
+captures `const auditRecorded = addAuditLog(...)` and answers HTTP 500 with
+`persisted: false` / `'The decision could not be written to durable storage; it
+was not recorded.'` when the row is not durable; a durable write answers
+`persisted: true`.
+
+**Evidence:** `server.ts` (route `app.post('/api/github/approvals/:id/decision')`,
+~lines 7992-8018); `src/tests/approvalDecisionTruth.test.ts` new guard
+`gates the success reply on the durable audit write` (route-wiring block now 3
+cases). Negative-validated: reverting `server.ts` fails exactly that guard
+(`1 failed | 8 passed`); restored -> `9/9`.
+
+**Gates (observed):** lint (`tsc --noEmit`) exit 0; full suite **198 files /
+2340 tests passed** (0 failed, 60.46 s); `npm run build` exit 0
+(`dist/server.cjs` 1071887 bytes). E2E: NOT RUN. Deploy: `NOT_CONFIGURED`.
+
+**Commits:** `e6101d5` (fix+tests), docs/report commit. Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed updated. PR: none (work slot). Main merge: NOT MERGED.
+
+**Next slot:** #13 continued -- audit `server_tools.ts` for discarded
+`persistMemory()` / bare `success: true` sites (no pass of this kind yet).
