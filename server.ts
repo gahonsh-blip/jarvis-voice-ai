@@ -6587,14 +6587,27 @@ app.get('/api/backup', (req: Request, res: Response) => {
       errors: integrity.errors,
     });
   }
-  addAuditLog(
+  // The backup body is validated, but recording it is a durable write. This
+  // route appended a `VERIFIED` audit row and discarded the write result, so on
+  // a read-only volume it still answered `success: true, verified: true` while
+  // the record never reached `jarvis_memory.json` — the claim reverted on the
+  // next boot. `addAuditLog` now confirms the row on disk and returns false when
+  // it did not land; refuse to claim the backup instead of trusting the write.
+  const recorded = addAuditLog(
     `Memory backup created and round-trip verified (${backup.keyCount} keys)`,
     3,
     'HUMAN_OPERATOR',
     'VERIFIED'
   );
-  persistMemory();
-  res.json({ success: true, verified: true, backup });
+  if (!recorded) {
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      verified: false,
+      error: 'The backup record could not be written to durable storage; the backup was not recorded.',
+    });
+  }
+  res.json({ success: true, verified: true, persisted: true, backup });
 });
 
 /** Restore a previously created backup. */
