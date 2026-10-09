@@ -953,6 +953,22 @@ function diskHasAuditRow(id: string): boolean {
 }
 
 /**
+ * Append `entry` to the audit log and report whether it is durable.
+ *
+ * `persistMemory()` returns true without writing when the file already holds
+ * identical bytes, so a route that only trusts that boolean can record a
+ * `VERIFIED` audit row the next boot does not have. When the write does not
+ * reach disk the phantom row is removed from the in-memory log so the running
+ * process never claims history it cannot keep.
+ */
+function recordDurableAuditRow(entry: AuditLogEntry): boolean {
+  pushAuditEntry(entry);
+  if (persistMemory() && diskHasAuditRow(entry.id)) return true;
+  memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== entry.id);
+  return false;
+}
+
+/**
  * True only when the memory file on disk carries the expected `emergencyPaused`
  * latch. `persistMemory()` can return true without writing when the file already
  * holds the identical bytes, so a safety route that reports the freeze as
@@ -7433,8 +7449,14 @@ app.post('/api/tools/fs/write', (req: Request, res: Response) => {
   }
   const result = realFsWrite(filePath, content);
   if (result.success) {
-    pushAuditEntry({
-      id: `log-fs-${Date.now()}`,
+    // The file write already happened; the audit row that records it as VERIFIED
+    // is only trustworthy once it is durable. Push it, persist, and read the row
+    // back from disk rather than trusting `persistMemory()`'s boolean, which is
+    // true even when the file already held identical bytes. A row that does not
+    // reach storage is rolled back and the response states the record is not on
+    // disk instead of claiming a durable write.
+    const auditPersisted = recordDurableAuditRow({
+      id: `log-fs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: new Date().toISOString(),
       action: `Modified Workspace File: "${filePath}" (${result.bytesWritten} bytes)`,
       levelRequired: 3,
@@ -7443,7 +7465,17 @@ app.post('/api/tools/fs/write', (req: Request, res: Response) => {
       verificationStatus: 'VERIFIED',
       finalTruthState: 'VERIFIED',
     });
-    persistMemory();
+    return res.json({
+      ...result,
+      auditPersisted,
+      auditRecorded: auditPersisted,
+      ...(auditPersisted
+        ? {}
+        : {
+            error:
+              'The file was written, but the audit record could not be persisted to durable storage.',
+          }),
+    });
   }
   res.json(result);
 });
@@ -7453,8 +7485,11 @@ app.post('/api/tools/fs/delete', (req: Request, res: Response) => {
   if (!filePath) return res.status(400).json({ error: 'path is required' });
   const result = realFsDelete(filePath);
   if (result.success) {
-    pushAuditEntry({
-      id: `log-fs-${Date.now()}`,
+    // Same durability rule as the write route: the deletion happened, but the
+    // VERIFIED audit row is only real once it is on disk. Read it back and roll
+    // a phantom row back instead of trusting `persistMemory()`'s boolean.
+    const auditPersisted = recordDurableAuditRow({
+      id: `log-fs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: new Date().toISOString(),
       action: `Deleted Workspace Resource: "${filePath}"`,
       levelRequired: 3,
@@ -7463,7 +7498,17 @@ app.post('/api/tools/fs/delete', (req: Request, res: Response) => {
       verificationStatus: 'VERIFIED',
       finalTruthState: 'VERIFIED',
     });
-    persistMemory();
+    return res.json({
+      ...result,
+      auditPersisted,
+      auditRecorded: auditPersisted,
+      ...(auditPersisted
+        ? {}
+        : {
+            error:
+              'The resource was deleted, but the audit record could not be persisted to durable storage.',
+          }),
+    });
   }
   res.json(result);
 });
