@@ -67,23 +67,32 @@ export function loadLocalChatHistory(): ChatMessage[] {
   return defaultInitialMessages;
 }
 
-export function saveLocalChatHistory(messages: ChatMessage[]): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Every writer returns whether the write actually landed. A caller that reports
+ * "persisted" to the operator must be able to read this — the previous `void`
+ * signature let a swallowed quota/storage error read as a completed save.
+ */
+export function saveLocalChatHistory(messages: ChatMessage[]): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     // Keep last 120 messages to prevent exceeding browser storage quota
     const trimmed = messages.slice(-120);
     localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(trimmed));
+    return true;
   } catch (err) {
     console.warn('[OfflineStorage] Error saving chat history to localStorage:', err);
+    return false;
   }
 }
 
-export function clearLocalChatHistory(): void {
-  if (typeof window === 'undefined') return;
+export function clearLocalChatHistory(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.removeItem(CHAT_HISTORY_KEY);
+    return true;
   } catch (err) {
     console.warn('[OfflineStorage] Error clearing chat history:', err);
+    return false;
   }
 }
 
@@ -116,12 +125,14 @@ export function loadLocalMemory(): MemoryStore {
   return defaultInitialMemory;
 }
 
-export function saveLocalMemory(memory: MemoryStore): void {
-  if (typeof window === 'undefined') return;
+export function saveLocalMemory(memory: MemoryStore): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(MEMORY_STORE_KEY, JSON.stringify(memory));
+    return true;
   } catch (err) {
     console.warn('[OfflineStorage] Error saving memory store to localStorage:', err);
+    return false;
   }
 }
 
@@ -137,18 +148,20 @@ export function loadLocalVoiceSettings(): VoiceSettings | null {
   }
 }
 
-export function saveLocalVoiceSettings(settings: VoiceSettings): void {
-  if (typeof window === 'undefined') return;
+export function saveLocalVoiceSettings(settings: VoiceSettings): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings));
+    return true;
   } catch (err) {
     console.warn('[OfflineStorage] Error saving voice settings to localStorage:', err);
+    return false;
   }
 }
 
 // Sync queue for offline mutations
-export function queuePendingSync(type: PendingSyncItem['type'], payload: any): void {
-  if (typeof window === 'undefined') return;
+export function queuePendingSync(type: PendingSyncItem['type'], payload: any): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     const existing = getPendingSyncQueue();
     const item: PendingSyncItem = {
@@ -158,8 +171,10 @@ export function queuePendingSync(type: PendingSyncItem['type'], payload: any): v
       timestamp: new Date().toISOString(),
     };
     localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify([...existing, item]));
+    return true;
   } catch (err) {
     console.warn('[OfflineStorage] Error queueing pending sync:', err);
+    return false;
   }
 }
 

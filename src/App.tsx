@@ -1362,16 +1362,24 @@ export default function App() {
           actionDetail: localResult.actionDetail,
         };
 
-        setMessages((prev) => {
-          const next = [...prev, offlineJarvisMsg];
-          saveLocalChatHistory(next);
-          return next;
-        });
+        // Capture the real write results before touching state. The status line
+        // below used to assert "PERSISTED TO LOCAL STORAGE" unconditionally, so
+        // a swallowed quota or private-mode error read as a completed save the
+        // next reload would not find. Only a landed write may be announced.
+        const nextOfflineMessages = [...messages, offlineJarvisMsg];
+        let localWriteLanded = saveLocalChatHistory(nextOfflineMessages);
+        setMessages(nextOfflineMessages);
 
         if (localResult.updatedMemory) {
           setMemory(localResult.updatedMemory);
-          saveLocalMemory(localResult.updatedMemory);
-          queuePendingSync('memory_sync', localResult.updatedMemory);
+          const memorySaved = saveLocalMemory(localResult.updatedMemory);
+          const queued = queuePendingSync('memory_sync', localResult.updatedMemory);
+          localWriteLanded = memorySaved && localWriteLanded;
+          if (!memorySaved) {
+            console.warn('[Hermes Jarvis] Offline memory change could not be written to local storage.');
+          } else if (!queued) {
+            console.warn('[Hermes Jarvis] Offline memory change was saved but not queued for server sync.');
+          }
         }
 
         if (localResult.actionExecuted && localResult.intent) {
@@ -1385,7 +1393,11 @@ export default function App() {
         }
 
         speakText(localResult.reply, offlineTargetLang);
-        setStatusText('LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE');
+        setStatusText(
+          localWriteLanded
+            ? 'LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE'
+            : 'LOCAL OFFLINE ENGINE EXECUTED • NOT SAVED LOCALLY (STORAGE UNAVAILABLE)'
+        );
       } finally {
         setIsProcessing(false);
       }
