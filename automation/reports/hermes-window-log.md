@@ -14532,3 +14532,31 @@ entry was removed.
 
 **Next slot:** #13 continued — sweep remaining `success: true` / discarded
 `persistMemory()` sites in `server.ts` / `server_tools.ts`.
+
+---
+
+## Slot 9 — 2026-10-10 02:06 IST (WORK)
+
+Item #13 `Zero-fake-success for all tools` (slice). The LinkedIn branch of
+`testPlatformConnection()` cached the verified member profile onto
+`memoryState.linkedInConnection` and then called `persistMemory()` with the result
+discarded. On a read-only volume or full disk the cache never reached disk, yet the
+branch still returned `{ success: true, status: "VERIFIED" }`, and
+`/api/social/platforms/test` relayed it verbatim as `success: true` — the UI reported
+a verified, saved profile the next boot would not have.
+
+- Fix: `const profilePersisted = persistMemory();` is captured, returned on the
+  verified result, and the route returns `persisted: false` with a durability
+  warning when the cache did not reach disk.
+- Guard: `src/tests/socialPlatformVerifyPersistenceTruth.test.ts` (4/4).
+- Negative validation: restoring the discarded `persistMemory();` fails the guard
+  (1 failed / 3 passed); restored → 4/4.
+- Gates (observed this fire): lint `tsc --noEmit` exit 0; targeted 5 files / 98
+  tests passed; full `npx vitest run` 203 files / 2366 tests passed; `npm run build`
+  exit 0 (`dist/server.cjs` 1.0mb).
+- Commit `3dc2aef` (fix + guard). Branch `feature/hermes-full-completion` pushed
+  (3000bac..3dc2aef). Main merge: NOT MERGED (awaiting human approval).
+  Deploy: NOT_CONFIGURED. Item 13 stays PARTIAL.
+
+**Next slot:** #13 continued — the YouTube OAuth branch of `testPlatformConnection`
+(`memoryState.youTubeConnection` cached then `persistMemory()` discarded).
