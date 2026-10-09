@@ -4,7 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 18:15 UTC (23:45 IST) — the `POST /api/autonomous/goals/run`
+Last cycle: 2026-10-09 18:36 UTC (2026-10-10 00:06 IST) — the GitHub
+nightly-run history reported a run it had not durably recorded. `recordNightlyRun()`
+(`server.ts`) appended a nightly-run entry and called a bare `persistMemory()`
+whose boolean nobody read, while `POST /api/github/nightly/run` answered with the
+run record and no survival signal. `persistMemory()` writes only when the memory
+file's bytes change, so on a read-only volume or a full disk the row never
+reached `jarvis_memory.json` — the operator saw a nightly run the next boot would
+not have, and `getNightlyRuns()` (which feeds `/api/github/nightly`) would then
+silently under-report the runs that actually happened. `recordNightlyRun()` now
+returns `: boolean`, reads the record back from disk with the new
+`nightlyRunOnDisk(record.runId)` helper (guarding against the identical-bytes
+false positive), drops the phantom in-memory row when the write did not land, and
+the route reports the verdict as `recorded`. Guarded by
+`src/tests/nightlyRunRecordDurabilityTruth.test.ts` (4 cases: a real `tsx
+server.ts` process on a temp memory file made read-only after the first write —
+the token is blanked so the scan is deterministically `NOT_CONFIGURED`, not a
+network call; the run record reaches disk on a writable volume, and on an
+unwritable volume the durable history is unchanged and `recorded` is `false`; plus
+2 source guards pinning the read-back and the route's consumption of the
+verdict). Negative-validated: reverting `server.ts` (`git stash`) fails 4 of 4;
+restored → 4/4. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted 1 file / 4 passed plus the related GitHub suites 2 files / 38 passed. E2E:
+NOT RUN (no live providers/hardware). Deploy: `NOT_CONFIGURED`. Item 13 stays
+`PARTIAL` — the long tail of unclassified `success: true` /
+discarded-`persistMemory()` sites remains.
+
+Last cycle (previous): 2026-10-09 18:15 UTC (23:45 IST) — the `POST /api/autonomous/goals/run`
 route reported an autonomous run with no indication that its completion audit row
 never reached disk. The route appended the row through `addAuditLog()` — which
 already returns whether the row is durable — discarded that verdict, then called

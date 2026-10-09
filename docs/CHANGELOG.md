@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 00:06 IST (2026-10-09 18:36 UTC) — window slot 5: the GitHub nightly-run history no longer reports a run it did not durably record
+
+### Fixed
+- **`recordNightlyRun()` (`server.ts`) appended a nightly-run history entry and called a bare `persistMemory()`, discarding the boolean.** `persistMemory()` writes only when the memory file's bytes change, so it returns `true` without writing when `jarvis_memory.json` already holds identical bytes. On a read-only volume or a full disk the nightly-run row never reached storage, but `POST /api/github/nightly/run` answered with the run record and no survival signal — a nightly run the next boot would not have. `recordNightlyRun()` now returns a `boolean`, reads the record back from disk with the new `nightlyRunOnDisk(record.runId)` helper (which guards against the identical-bytes false positive), and drops the phantom in-memory row when the write did not land so `getNightlyRuns()` (which feeds `/api/github/nightly`) cannot under-report the runs that actually happened.
+- **`POST /api/github/nightly/run` (`server.ts`) dropped the durability verdict.** It now captures `recordNightlyRun(...)`'s result as `runRecorded` and returns it as `recorded` in the reply.
+
+### Tests
+- New `src/tests/nightlyRunRecordDurabilityTruth.test.ts` (4 tests) runs a real `tsx server.ts` process on port 4768 against a memory file made read-only after the first write (the token is blanked so the scan is deterministically `NOT_CONFIGURED`, not a network call): the run record reaches disk on a writable volume, and on an unwritable volume the durable history is unchanged and `recorded` is `false`. Two source guards pin the disk read-back and the route's consumption of the verdict. Negative-validated: reverting `server.ts` (`git stash`) fails 4 of 4; restored → 4/4.
+- Lint (`tsc --noEmit`) exit 0; related GitHub suites `githubAutomationWorkflow` + `githubNightlyChecker` 38/38 passed.
+
 ## [Unreleased] - 2026-10-09 23:06 IST (2026-10-09 17:36 UTC) — window slot 3: `addAuditLog()` writes the audit row durably and reports it
 
 ### Fixed
