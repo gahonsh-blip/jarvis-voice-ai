@@ -43,7 +43,6 @@ const AUDITED_TRUE_SITES: Record<string, 'view' | 'tool' | 'memory'> = {
   open_paint: 'view',
   open_chrome: 'view',
   open_chatgpt: 'view',
-  create_file: 'view', // also writes a note into memory
   morning_briefing: 'view',
   language_switch: 'view',
   math_computation: 'view', // also evaluates the expression
