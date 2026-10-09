@@ -4,7 +4,28 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 21:09 UTC (2026-10-10 02:39 IST) — WORK SLOT 10 of the
+Last cycle: 2026-10-09 21:37 UTC (2026-10-10 03:07 IST) — WORK SLOT 12 of the
+2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) —
+the live probe branch of `/api/auth/youtube/status` refreshed the cached channel
+fields onto `memoryState.youTubeConnection` and then called `persistMemory()`
+with its result discarded. On a read-only volume or a full disk the refreshed
+cache never reached `jarvis_memory.json`, yet the route still answered
+`connected: true, status: 'API_VERIFIED'` with no hint the cache was lost — a
+persisted-cache success the next boot would contradict. The write result is now
+captured (`profilePersisted = persistMemory();`, defaulting to `true` when no
+connection object is held), carried on the reply, and named in the `message`
+when it failed. Guarded by `src/tests/youtubeStatusProbePersistenceTruth.test.ts`
+(3 cases: pins the captured write and the carried `profilePersisted`; the
+default when nothing is cached; the durability message). Negative-validated —
+`git checkout` of `server.ts` fails all 3 (`3 failed | 0 passed`); restored →
+3/3. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 2 files
+/ 6 tests passed; full `npx vitest run` 205 files / 2372 tests passed;
+`npm run build` exit 0 (`dist/server.cjs` 1.0 mb). Security: no `.env` tracked
+(`git check-ignore` → `.gitignore:4:.env`), working tree clean after reverting
+the suite's hydration of `jarvis_memory.json`. Item 13 stays `PARTIAL` — the long
+tail of unclassified `success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous): 2026-10-09 21:09 UTC (2026-10-10 02:39 IST) — WORK SLOT 10 of the
 2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) —
 the YouTube OAuth branch of `testPlatformConnection()` cached the verified
 channel fields onto `memoryState.youTubeConnection` and then called

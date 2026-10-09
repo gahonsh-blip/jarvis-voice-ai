@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 03:07 IST (2026-10-09 21:37 UTC) — window slot 12: the YouTube status probe no longer reports a refreshed cache that failed to persist
+
+### Fixed
+- **The live probe branch of `/api/auth/youtube/status` (`server.ts`) refreshed the cached channel fields onto `memoryState.youTubeConnection` and then called `persistMemory()` with its result discarded.** On a read-only volume or a full disk the refreshed cache never reached `jarvis_memory.json`, yet the route still answered `connected: true, status: 'API_VERIFIED'` with no hint the cache was lost — a persisted-cache success the next boot would contradict. The write result is now captured (`profilePersisted = persistMemory();`, defaulting to `true` when no connection object is held), carried on the reply, and named in the `message` when the write did not reach disk.
+
+### Tests
+- `src/tests/youtubeStatusProbePersistenceTruth.test.ts` (new): source guard bounds the probe branch, pins the captured write and the carried `profilePersisted`, pins the no-connection `true` default, and pins the durability message. Negative-validated: `git checkout` of `server.ts` fails all 3 (`3 failed | 0 passed`); restored → 3/3.
+- Lint (`tsc --noEmit`) exit 0; targeted 2 files / 6 tests passed; full `npx vitest run` 205 files / 2372 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1.0mb).
+
 ## [Unreleased] - 2026-10-10 02:39 IST (2026-10-09 21:09 UTC) — window slot 10: the YouTube platform verify no longer reports a verified channel it failed to cache
 
 ### Fixed
