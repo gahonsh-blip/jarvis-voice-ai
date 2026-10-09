@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 01:05 IST (2026-10-09 19:41 UTC) — window slot 7: the YouTube summarizer no longer reports success for a video it never summarised
+
+### Fixed
+- **`buildYouTubeSummary()` (`server_tools.ts`) set `success: true` as soon as the video metadata was fetched, even when the video exposed no transcript and no description and the resulting summary was empty (`source: 'none'`).** Callers that branched on `success` treated a summarization that never happened as work: the Telegram summarize reply rendered a "YOUTUBE VIDEO SUMMARY" heading over a blank body, and the `/api/chat` `summarize_youtube_video` voice case could advance the "Autonomous Actions Executed" counter for a summary that produced nothing. `success` now tracks whether a summary was produced — `true` on the gemini and extractive branches, `false` on the `source: 'none'` branch, which still returns `videoInfo` so the title and link can be shown.
+- **Both summarize reply builders in `server.ts` branched on the old `success` semantics.** They now gate on the presence of `videoInfo` (an `'in'` check on the union, which also restores correct TypeScript narrowing), so real metadata is still displayed while `formatYouTubeSummaryNotice` and the `hasSummary` check withhold the summary framing and the executed-work credit.
+
+### Tests
+- `src/tests/remainingFakeSuccess.test.ts`: the no-content case now asserts `success: false` (was `true`); a new positive case proves `success: true` and `verificationStatus: 'VERIFIED'` for a real extractive summary. Source guards pin `actionExecuted = hasSummary;` in the voice path. Negative-validated: restoring `success: true` on the `source: 'none'` branch fails the new assertion (1 failed / 53 passed); restored → 54/54.
+- Lint (`tsc --noEmit`) exit 0; targeted 4 files / 81 tests passed; full `npx vitest run` 202 files / 2361 tests passed; `npm run build` exit 0.
+
 ## [Unreleased] - 2026-10-10 00:36 IST (2026-10-09 19:12 UTC) — window slot 8: the memory-backup route no longer reports a backup it did not durably record
 
 ### Fixed

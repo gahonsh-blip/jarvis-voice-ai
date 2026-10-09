@@ -4,7 +4,39 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-09 19:12 UTC (2026-10-10 00:36 IST) — WORK SLOT 8 of the
+Last cycle: 2026-10-09 19:41 UTC (2026-10-10 01:05 IST) — WORK SLOT 7 of the
+2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) — the
+YouTube summarizer reported `success: true` for a video it never summarised.
+`buildYouTubeSummary()` (`server_tools.ts`) set `success: true` as soon as the
+video metadata was fetched, even when the video exposed no transcript and no
+description and the resulting summary was empty (`source: 'none'`,
+`verificationStatus: 'PARTIAL'`). Every caller that branched on `success`
+therefore treated a summarization that never happened as work: the Telegram
+summarize reply rendered a "YOUTUBE VIDEO SUMMARY" heading over a blank body, and
+the `/api/chat` `summarize_youtube_video` voice case could advance the
+user-visible "Autonomous Actions Executed" counter for a summarization that
+produced nothing. `buildYouTubeSummary()` now reports `success: true` only on the
+gemini and extractive branches where a summary actually exists, and `success:
+false` on the `source: 'none'` branch (the result still carries `videoInfo` so the
+title and link can be shown). Both call sites in `server.ts` now gate on the
+presence of `videoInfo` (an `'in'` check on the union, which also fixes the
+TypeScript narrowing), so the real metadata is still displayed while
+`formatYouTubeSummaryNotice` and the `hasSummary` check withhold the summary
+framing and the executed-work credit. Guarded by
+`src/tests/remainingFakeSuccess.test.ts` (the no-content case now asserts
+`success: false`; a new positive case proves `success: true` and
+`verificationStatus: 'VERIFIED'` for a real extractive summary; source guards pin
+`actionExecuted = hasSummary;` in the voice path). Negative-validated: restoring
+`success: true` on the `source: 'none'` branch fails the new assertion (1 failed /
+53 passed); restored → 54/54. Gates (observed this fire): lint (`tsc --noEmit`)
+exit 0; targeted 4 files / 81 tests passed; full `npx vitest run` 202 files / 2361
+tests passed; `npm run build` exit 0 (`dist/server.cjs` 1.0mb). Security: no
+`.env` tracked (`git check-ignore` → `.gitignore:4:.env`), working tree clean
+after reverting the suite's hydration of `jarvis_memory.json`, credential-pattern
+scan of the branch diff matched nothing. Item 13 stays `PARTIAL` — the long tail
+of unclassified `success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous): 2026-10-09 19:12 UTC (2026-10-10 00:36 IST) — WORK SLOT 8 of the
 2026-10-09 → 2026-10-10 window. Item 13 (`Zero-fake-success for all tools`) — the
 memory-backup route (`GET /api/backup`, `server.ts`) reported a backup it had not
 durably recorded. The route validated the backup body, appended a `VERIFIED` audit
