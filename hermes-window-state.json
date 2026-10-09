@@ -1,16 +1,16 @@
 {
   "window_date": "2026-10-09",
   "window_started_at": "2026-10-09T15:35:00Z",
-  "last_slot_at": "2026-10-09T15:53:00Z",
-  "slots_completed": 1,
+  "last_slot_at": "2026-10-09T16:44:00Z",
+  "slots_completed": 2,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "3ad790a",
+  "last_commit": "48bdcdb",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [1, 2, 50, 51, 54, 55],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "note": "Slot 1 (21:05 IST) of the fresh 2026-10-09 window. Fixed Telegram mobile approve_perm_/reject_perm_ durability truth in server.ts; guarded by approvalRegistryTerminalTruth.test.ts (10 tests). Full suite 196 files / 2329 tests passed; lint exit 0; build exit 0. Item 13 stays PARTIAL. PR #6 (window 2026-10-07/08) was MERGED by a human at 2026-10-09T11:09:25Z; feature branch is 2 commits ahead of merged main, no conflicts. A fresh window PR will open at finalization. Correction: an earlier state record this same slot wrongly said PR #6 was open."
+  "note": "Slot 2 (22:05 IST) of the 2026-10-09 window. Fixed fs/write + fs/delete audit-row durability truth in server.ts via new recordDurableAuditRow helper; guarded by src/tests/fsAuditDurabilityTruth.test.ts (6 tests, real server process on port 4831, read-only memory file). Negative-validated: 6/6 fail pre-fix, 6/6 pass post-fix. Gates observed this fire: lint exit 0; full suite 197 files / 2335 tests passed (0 failed, 59.54s); build exit 0 (dist/server.cjs 1071080 bytes). npm audit 5 pre-existing transitive findings, NOT fixed. Item 13 stays PARTIAL (sweep not exhausted). Deploy NOT_CONFIGURED. No new PR opened yet (finalization slot opens it)."
 }
