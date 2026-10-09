@@ -3908,13 +3908,29 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('approve_perm_')) {
     const permId = data.replace('approve_perm_', '');
     const updated = updateActionRequestStatus(permId, 'EXECUTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
-    // The mobile approval is durable so a restart cannot resurrect the request
-    // as pending and let it be approved a second time.
-    if (updated) persistApprovalRegistry();
+    // The mobile approval must survive a restart, or a reboot resurrects the
+    // request as pending and it can be approved again (a duplicate external
+    // action). The registry lives outside `memoryState` and `persistMemory()`
+    // can return true without writing when the file already holds identical
+    // bytes, so EXECUTED is read back from disk rather than trusting the write
+    // boolean. A decision that cannot be confirmed on disk is refused: the
+    // request is reverted to PENDING_APPROVAL so a later successful persist
+    // cannot write a phantom approval, and the reply does not claim it was
+    // recorded.
+    const persisted = updated
+      ? persistApprovalRegistry() && actionRequestStatusOnDisk(permId, 'EXECUTED')
+      : false;
+    if (updated && !persisted) {
+      const liveReq = getAllActionRequests().find((r) => r.id === permId);
+      if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+      memoryState.permissionRequests = persistedActionRequests();
+    }
     // This branch records the human approval only — no dispatcher runs here, so
     // no provider can confirm the external action. Never say "executed/verified".
     const confirmText = updated
-      ? formatUnconfirmedMobileApprovalReply(updated)
+      ? persisted
+        ? formatUnconfirmedMobileApprovalReply(updated)
+        : `⚠️ *APPROVAL NOT RECORDED*\n\nRequest \`${permId}\` could not be written to durable storage; the approval was not recorded and the request remains pending.`
       : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired.`;
 
     const botMsg = {
@@ -3929,13 +3945,26 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('reject_perm_')) {
     const permId = data.replace('reject_perm_', '');
     const updated = updateActionRequestStatus(permId, 'REJECTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
-    // Durable so a restart cannot resurrect the rejected request as pending.
-    if (updated) persistApprovalRegistry();
+    // As on the approve branch, the rejection must be confirmed on disk rather
+    // than trusted from `persistApprovalRegistry()`'s boolean, or a restart
+    // resurrects the rejected request as pending. A rejection that cannot be
+    // confirmed is reverted so the operator is not told it was recorded.
+    const persisted = updated
+      ? persistApprovalRegistry() && actionRequestStatusOnDisk(permId, 'REJECTED')
+      : false;
+    if (updated && !persisted) {
+      const liveReq = getAllActionRequests().find((r) => r.id === permId);
+      if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+      memoryState.permissionRequests = persistedActionRequests();
+    }
     // A request that was already decided is not re-rejectable. Saying "cancelled
     // safely" for a null result told the operator a re-tap had withdrawn an
-    // action that had in fact already run (or been rejected earlier).
+    // action that had in fact already run (or been rejected earlier). A
+    // rejection that could not be written to disk is likewise not reported.
     const cancelText = updated
-      ? `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated.exactAction || permId}\` cancelled safely.`
+      ? persisted
+        ? `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated.exactAction || permId}\` cancelled safely.`
+        : `⚠️ *REJECTION NOT RECORDED*\n\nRequest \`${permId}\` could not be written to durable storage; the rejection was not recorded and the request remains pending.`
       : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired; nothing was changed.`;
     const botMsg = {
       id: `tg-${Date.now()}`,
