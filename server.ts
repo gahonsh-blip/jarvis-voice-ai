@@ -1066,7 +1066,7 @@ export function addAuditLog(
   levelRequired: 1 | 2 | 3 | 4 = 1,
   approvedBy: string = 'HUMAN_CONFIRMATION',
   status: string = 'VERIFIED'
-) {
+): boolean {
   const entry: AuditLogEntry = {
     id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     timestamp: new Date().toISOString(),
@@ -1080,8 +1080,13 @@ export function addAuditLog(
     verificationStatus: deriveAuditVerificationStatus(status),
     finalTruthState: deriveAuditFinalTruthState(status),
   };
-  pushAuditEntry(entry);
-  persistMemory();
+  // Route through the durable writer: `persistMemory()` can return true without
+  // writing when the file already holds identical bytes, so trusting its boolean
+  // alone can record a VERIFIED row the next boot does not have. The helper
+  // reads the row back from disk and drops the phantom row on failure, and its
+  // boolean is returned so a caller that reports the audit as written can gate
+  // on it.
+  return recordDurableAuditRow(entry);
 }
 
 // Shortcuts for convenience
@@ -8573,13 +8578,27 @@ app.post('/api/autonomous/schedule', (req: Request, res: Response) => {
     });
   }
 
-  addAuditLog(
+  // The audit row is part of the registration's durable record. A row that
+  // never reached disk means the task's provenance is gone on the next boot, so
+  // report failure and roll the registry entry back rather than claiming a
+  // registration whose audit trail cannot be kept.
+  const auditPersisted = addAuditLog(
     `Scheduled autonomous task "${name}" (${id}) ${existing >= 0 ? 'updated' : 'registered'} to run daily at minute ${atMinuteOfDay}`,
     3,
     'HUMAN_OPERATOR',
     'VERIFIED'
   );
-  persistMemory();
+  if (!auditPersisted) {
+    if (existing >= 0 && previous) scheduledGoals[existing] = previous;
+    else if (existing < 0) scheduledGoals.pop();
+    memoryState.schedulerState.scheduledGoals = scheduledGoals;
+    persistScheduledGoals();
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The registration audit trail could not be written to durable storage; the task was not registered.',
+    });
+  }
 
   res.status(existing >= 0 ? 200 : 201).json({ success: true, persisted: true, goal: spec });
 });
@@ -8602,9 +8621,17 @@ app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
       error: 'Scheduled task could not be removed from durable storage; it is still registered.',
     });
   }
-  addAuditLog(`Scheduled autonomous task "${removed.name}" (${removed.id}) removed`, 3, 'HUMAN_OPERATOR', 'VERIFIED');
-  persistMemory();
-  res.json({ success: true, persisted: true, removed: removed.id });
+  // The removal itself is already durable (checked above). The audit row is the
+  // provenance for it; when that row cannot reach disk the removal still holds,
+  // so report `auditRecorded` truthfully rather than dropping the boolean and
+  // implying the trail was written.
+  const auditRecorded = addAuditLog(
+    `Scheduled autonomous task "${removed.name}" (${removed.id}) removed`,
+    3,
+    'HUMAN_OPERATOR',
+    'VERIFIED'
+  );
+  res.json({ success: true, persisted: true, auditRecorded, removed: removed.id });
 });
 
 // Mobile Personal Status & Morning Briefing Telemetry Endpoints
