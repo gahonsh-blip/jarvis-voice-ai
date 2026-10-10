@@ -4,6 +4,14 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 22:35 IST (2026-10-10 17:00 UTC) — window slot 4: the nightly check reports a start only once its per-day marker is durable
+
+### Fixed
+- **`checkAndRunSchedulerJobs()` (`server.ts`) — the scheduled nightly GitHub check stamped `lastGithubNightlyRunDate`, logged `Started Nightly Repository Check`, and called a bare `persistMemory()` whose boolean nobody read before launching the scan.** `persistMemory()` returns true without writing when the memory file already holds the identical bytes, so on a read-only volume or a full disk the per-day marker (and the start log line) existed only in memory. The next boot would find no marker and re-run a check this process had already recorded as started. The branch now reads the marker back from disk with `nightlyMarkerOnDisk(date)` before starting the scan; when it did not land the scan is skipped and the gap is recorded as a `FAILED` audit row instead of a start that will not be kept.
+
+### Tests
+- `src/tests/nightlyMarkerDurabilityTruth.test.ts`: new source guards pinning the read-back gate, the NOT-started outcome, and the helper. Lint (`tsc --noEmit`) exit 0; targeted 2 files / 8 tests passed; full `npx vitest run` 210 files / 2394 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1076501 bytes). Negative-validated: reverting `server.ts` fails 4 of 4; restored → 4/4.
+
 ## [Unreleased] - 2026-10-10 22:05 IST (2026-10-10 16:35 UTC) — window slot 3: the YouTube token refresh no longer reports a refresh that failed to persist
 
 ### Fixed

@@ -45,6 +45,12 @@ Format per slot:
 - Item worked: none (setup only)
 - Status: NOT_STARTED
 - Tests: NOT RUN
+
+---
+
+**Slot: WORK | IST 2026-10-10 22:35 (17:00 UTC) | window 2026-10-10 -> 2026-10-11, slot 4**
+
+Item 13 (Zero-fake-success for all tools) - slice advanced. The scheduled nightly GitHub check reported a start whose per-day marker never reached disk: checkAndRunSchedulerJobs() (server.ts) stamped lastGithubNightlyRunDate, logged "Started Nightly Repository Check", and called a bare persistMemory() whose boolean nobody read before launching the scan. persistMemory() returns true without writing when the memory file already holds the identical bytes, so on a read-only volume or a full disk the marker existed only in memory and the next boot would find no marker and re-run a check this process had already recorded as started. The branch now reads the marker back from disk with nightlyMarkerOnDisk(date) before starting; when it did not land the scan is skipped and the gap is recorded as a FAILED audit row instead of a start that will not be kept. Guard: new src/tests/nightlyMarkerDurabilityTruth.test.ts (4 source guards). Negative-validated: reverting server.ts fails 4 of 4; restored 4/4. Gates: lint exit 0; targeted 2 files / 8 passed; full suite 210 files / 2394 tests passed (66.06 s, 0 failed); build exit 0 (dist/server.cjs 1076501 bytes). Commit b725463. Item 13 stays PARTIAL - the long tail of unclassified success:true / discarded-persistMemory() sites remains. Main merge NOT MERGED - awaiting human approval. Deploy NOT_CONFIGURED.
 - Commit: ŌĆö  Push: ŌĆö
 
 ## 2026-09-20T05:55Z ŌĆö HUMAN POLICY CORRECTION (not a scheduled slot)
