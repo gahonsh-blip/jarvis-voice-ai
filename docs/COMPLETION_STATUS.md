@@ -4,6 +4,25 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-10 16:35 UTC (22:05 IST) — WORK SLOT 3 of the
+2026-10-10 → 2026-10-11 window. Item 13 (`Zero-fake-success for all tools`) —
+**the YouTube token refresh reported a refresh that never reached disk.**
+`ensureValidYouTubeToken()` (`server.ts`) refreshed the access token, wrote it
+onto `memoryState.youTubeConnection`, then called `persistMemory()` with the
+boolean discarded. On a read-only volume or a full disk the minted token never
+reached `jarvis_memory.json`, yet the helper returned `valid: true` and every
+caller used a request validity that would be gone on the next boot — the same
+discarded-result class already fixed for the status probe and the summarizer.
+The refresh branch now captures the write into `refreshPersisted` (and a
+`refreshPersistenceError` message naming the gap) and carries both on the
+return contract. Guard: new `src/tests/youtubeTokenRefreshDurabilityTruth.test.ts`
+(3 source guards). Negative-validated — reverting `server.ts` fails 3 of 3;
+restored → 3/3. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted 1 file / 3 passed; full `npx vitest run` 209 files / 2390 tests passed
+(66.53 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1075664 bytes).
+E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` / discarded-`persistMemory()` sites remains.
+
 Last cycle: 2026-10-10 16:05 UTC (21:35 IST) — WORK SLOT 2 of the
 2026-10-10 → 2026-10-11 window. Item 13 (`Zero-fake-success for all tools`) —
 **a blocked action request was left in the live registry to resurrect.** The

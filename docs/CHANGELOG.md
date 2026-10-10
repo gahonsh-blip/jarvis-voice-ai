@@ -4,6 +4,14 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 22:05 IST (2026-10-10 16:35 UTC) — window slot 3: the YouTube token refresh no longer reports a refresh that failed to persist
+
+### Fixed
+- **`ensureValidYouTubeToken()` (`server.ts`) refreshed the YouTube access token, wrote it onto `memoryState.youTubeConnection`, then called `persistMemory()` and discarded its boolean.** On a read-only volume or a full disk the minted token never reached `jarvis_memory.json`, yet the helper returned `valid: true` — every caller (`verifyAndPublishToYouTube`, the platform verify probe, the status probe, the publish entrypoint) then used a request validity that would be gone on the next boot. The refresh branch now captures the write into `refreshPersisted` and returns it, with a `refreshPersistenceError` message naming the durability gap on the contract.
+
+### Tests
+- `src/tests/youtubeTokenRefreshDurabilityTruth.test.ts`: new source guards pinning the captured write, the returned durability fields, and the helper signature. Lint (`tsc --noEmit`) exit 0; targeted 1 file / 3 tests passed; full `npx vitest run` 209 files / 2390 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1075664 bytes). Negative-validated: reverting `server.ts` fails 3 of 3; restored → 3/3.
+
 ## [Unreleased] - 2026-10-10 21:35 IST (2026-10-10 16:05 UTC) — window slot 2: a blocked action request is dropped from the live registry, not left to resurrect
 
 ### Fixed
