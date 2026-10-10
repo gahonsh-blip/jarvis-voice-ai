@@ -4,7 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 00:05 IST — **WORK SLOT 7 of the
+Last cycle: 2026-10-11 00:36 IST — **WORK SLOT 8 of the
+2026-10-10 → 2026-10-11 window (00:35 IST fire), continuation.** Item 13
+(`Zero-fake-success for all tools`) — **the two YouTube staging routes
+(`POST /api/social/youtube/upload-draft`, `POST /api/social/youtube/draft-test`)
+could answer `success: true` / `persisted: true` with a `pending_approval` draft
+while the staged Level-4 gate never reached disk.** Both routes gated their reply
+on `persistApprovalRegistry()`, which returns `persistMemory()`'s boolean — `true`
+whenever the in-memory snapshot serializes to bytes identical to
+`jarvis_memory.json`, even when no write is attempted (read-only volume, full
+disk). The operator was handed an approval card for a gate the next boot would not
+know existed, and a financial/emergency-blocked gate was persisted anyway and
+resurrected on boot. Both routes now (a) drop a blocked/terminal gate from the live
+registry before answering, and (b) read the staged gate back from disk via
+`actionRequestStatusOnDisk(gate.request.id, 'PENDING_APPROVAL')`; when it did not
+land they roll the post and audit row back and answer `persisted: false` with no
+phantom gate. This mirrors the slot-7 telephony fix and the permission-route
+pattern. Guarded by `src/tests/youtubeDraftDurabilityTruth.test.ts` (source-scan
+guard over both routes) — 8/8. Negative-validated — reverting only `server.ts`
+fails the two new guard cases exactly (`2 failed | 6 passed`); restored → 8/8.
+Gates (observed this fire, 00:36 IST): lint (`tsc --noEmit`) exit 0; targeted 1
+file / 8 passed; full suite **214 files / 2418 tests passed** (65.76 s, 0
+failed); `npm run build` exit 0 (`dist/server.cjs` 1.0mb). E2E: NOT RUN (no
+handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — remaining surfaces
+include telephony-stage non-success variants and the YouTube summarizer audit
+rows.
+
+Last cycle (previous): 2026-10-11 00:05 IST — **WORK SLOT 7 of the
 2026-10-10 → 2026-10-11 window (00:05 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **`POST /api/telephony/outbound/stage`
 could answer `success: true` / `staged: true` with an actionable `actionId`

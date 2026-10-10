@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 00:36 IST (2026-10-10 19:06 UTC) — window slot 8: the YouTube staging routes read the staged gate back from disk before claiming success
+
+### Fixed
+- **`server.ts` — `POST /api/social/youtube/upload-draft` and `POST /api/social/youtube/draft-test` could answer `success: true` / `persisted: true` with a `pending_approval` draft while the staged Level-4 gate never reached disk.** Both routes gated their reply on `persistApprovalRegistry()`, which returns `persistMemory()`'s boolean — `true` whenever the in-memory snapshot serializes to bytes identical to `jarvis_memory.json`, even when no write is attempted (read-only volume, full disk). The operator was handed an approval card for a gate the next boot would not know existed, and a financial/emergency-blocked gate was persisted anyway and resurrected on boot (backlog item 13, zero fake success). Both routes now drop a blocked/terminal gate from the live registry before answering, then verify the staged gate on disk via `actionRequestStatusOnDisk(gate.request.id, 'PENDING_APPROVAL')`; when it did not land they roll the post and audit row back and answer `persisted: false` with no phantom gate. Mirrors the slot-7 telephony fix and the permission-route pattern.
+
+### Tests
+- `src/tests/youtubeDraftDurabilityTruth.test.ts`: source-scan guard pinning the read-back ordering (`actionRequestStatusOnDisk`) and the blocked-gate drop in both routes. Lint (`tsc --noEmit`) exit 0; targeted 1 file / 8 tests passed; full `npx vitest run` 214 files / 2418 tests passed (65.76 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1.0mb). Negative-validated: reverting only `server.ts` fails exactly the two new guard cases (`2 failed | 6 passed`); restored → 8/8.
+
+---
+
 ## [Unreleased] - 2026-10-10 23:46 IST (2026-10-10 18:16 UTC) — window slot 6: the nightly check's audit badge follows the receipt, not the run record
 
 ### Fixed
