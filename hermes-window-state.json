@@ -1,19 +1,26 @@
 {
   "window_date": "2026-10-10",
   "window_started_at": "2026-10-10T15:35:00Z",
-  "last_slot_at": "2026-10-10T19:15:00Z",
-  "slots_completed": 8,
+  "last_slot_at": "2026-10-10T19:49:06Z",
+  "slots_completed": 9,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "2a333df",
+  "last_commit": "58ac30f5145bf4195c82a881aa6db6bb4ebeca54",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [1, 2, 50, 51, 54, 55],
+  "blocked_items": [
+    1,
+    2,
+    50,
+    51,
+    54,
+    55
+  ],
   "last_report_path": "/tmp/hermes-window-report.md",
   "pr": "https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8",
   "main_merge": "NOT_MERGED_AWAITING_HUMAN",
   "deploy": "NOT_CONFIGURED",
-  "note": "Work slot 8 of window 2026-10-10 -> 2026-10-11 (00:35 IST fire). Item 13 slice: the two YouTube staging routes (POST /api/social/youtube/upload-draft, POST /api/social/youtube/draft-test) no longer answer success:true/persisted:true when the staged Level-4 gate did not reach disk. Both gated success on persistApprovalRegistry(), which returns persistMemory()'s boolean (true without a write when bytes are identical / on a read-only volume). Routes now drop blocked/terminal gates from the live registry before answering and read the staged gate back with actionRequestStatusOnDisk(id,'PENDING_APPROVAL'); on miss they roll the post and audit row back and answer persisted:false. Guard: src/tests/youtubeDraftDurabilityTruth.test.ts, negative-validated (revert server.ts -> 2 failed | 6 passed; restore -> 8/8). Gates observed this fire: lint exit 0; targeted 1 file / 8 passed; full suite 214 files / 2418 tests passed (65.76s, 0 failed); build exit 0 (dist/server.cjs 1.0mb). Commits dfd3e0e (fix), 45680fb (docs), 2a333df (report). Next: continue the discarded-persistMemory()/success:true sweep - telephony-stage non-success variants, YouTube summarizer audit rows, memory-persistence claims."
+  "note": "Work slot 9 of window 2026-10-10 -> 2026-10-11 (01:05 IST fire). Item 13 slice: POST /api/approvals/create no longer answers staged:true with an actionId when the staged Level-4 approval did not reach disk. The route gated success on persistApprovalRegistry(), which returns persistMemory()'s boolean (true without a write when bytes are identical / on a read-only volume). It now reads the staged row back with actionRequestStatusOnDisk(id,'PENDING_APPROVAL'); on miss it rolls the live registry back to the pre-request snapshot and answers persisted:false/NOT_DURABLE. Guards: new case in src/tests/approvalCreateTruth.test.ts; the stale guard in src/tests/approvalDurabilityTruth.test.ts updated to require the read-back gate. Negative-validated (revert server.ts read-back -> 1 failed | 8 passed; restore -> 9/9). Gates observed this fire: lint exit 0; targeted 2 files / 14 passed; full suite 214 files / 2419 tests passed (64.65s, 0 failed); build exit 0 (dist/server.cjs 1081932 bytes). Commits feb1ec6 (fix), db15974 (test), 58ac30f (docs). Next: continue the discarded-persistMemory()/success:true sweep - telephony-stage non-success variants, YouTube summarizer audit rows."
 }
