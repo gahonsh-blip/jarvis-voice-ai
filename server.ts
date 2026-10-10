@@ -813,7 +813,7 @@ export function getDecryptedYouTubeRefreshToken(): string {
   return envToken;
 }
 
-export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token: string; error?: string }> {
+export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token: string; error?: string; refreshPersisted?: boolean; refreshPersistenceError?: string }> {
   const conn = memoryState.youTubeConnection;
   const currentToken = getDecryptedYouTubeAccessToken();
   const refreshToken = getDecryptedYouTubeRefreshToken();
@@ -862,8 +862,18 @@ export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token
             connectedAt: new Date().toISOString(),
           };
         }
-        persistMemory();
-        return { valid: true, token: newAccessToken };
+        const refreshPersisted = persistMemory();
+        // A minted access token that never reached disk is a request validity
+        // that expires on the next boot; name the durability gap so a caller
+        // can report it instead of a refresh it cannot keep.
+        return {
+          valid: true,
+          token: newAccessToken,
+          refreshPersisted,
+          refreshPersistenceError: refreshPersisted
+            ? undefined
+            : 'The refreshed YouTube access token could not be written to durable storage, so it is not cached and will be lost on the next boot.',
+        };
       } else {
         const errDetail = tokenData?.error_description || tokenData?.error || `HTTP status ${resp.status}`;
         return { valid: false, token: '', error: `Token refresh failed: ${errDetail}` };
