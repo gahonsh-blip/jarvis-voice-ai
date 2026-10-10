@@ -5220,11 +5220,13 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-  // Persist the registry alongside the post/audit rows so the staged Level-4
-  // request survives a restart too, not just the draft it refers to.
-  const uploadPersisted = persistApprovalRegistry();
-
   if (!uploadVerdict.success) {
+    // The gateway registered a terminal (finance/emergency-blocked) request for
+    // this posting. Leaving it in the queue means a later persist for any other
+    // reason writes it to disk and the next boot re-offers it as pending. Drop
+    // it before answering, as the block-branch permission routes do.
+    removeActionRequest(uploadGate.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     const code = uploadVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : uploadVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
     return res.status(code).json({
       success: false,
@@ -5235,10 +5237,26 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     });
   }
 
-  // A staged upload is only real once it is durable. A write that never reached
-  // disk (read-only volume, full disk) leaves this process holding a staged
-  // upload the next boot does not have, so roll it back and do not claim it.
+  // Persist the registry alongside the post/audit rows so the staged Level-4
+  // request survives a restart too, not just the draft it refers to.
+  //
+  // A staged upload is only real once it is durable. `persistApprovalRegistry()`
+  // returns `persistMemory()`'s boolean, which is true when the file already
+  // holds byte-identical state even though no write was attempted (read-only
+  // volume, full disk); the pending gate is therefore read back from disk before
+  // the route claims a staged upload, so it never hands out an approval card a
+  // restart would forget. Mirrors the telephony stage route.
+  const uploadPersisted =
+    persistApprovalRegistry() &&
+    actionRequestStatusOnDisk(uploadGate.request.id, 'PENDING_APPROVAL');
+
+  // A write that never reached disk (read-only volume, full disk) leaves this
+  // process holding a staged upload the next boot does not have, so roll it back
+  // and do not claim it. The phantom gate is dropped from both the live registry
+  // and the persisted snapshot so a later persist cannot resurrect it.
   if (!uploadPersisted) {
+    removeActionRequest(uploadGate.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     const postIndex = memoryState.socialPosts.indexOf(newPost);
     if (postIndex !== -1) memoryState.socialPosts.splice(postIndex, 1);
     const auditIndex = memoryState.auditLogs.indexOf(uploadAuditRow);
@@ -5327,11 +5345,13 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-  // Persist the registry alongside the post/audit rows so the staged Level-4
-  // test request survives a restart too, not just the draft it refers to.
-  const testPersisted = persistApprovalRegistry();
-
   if (!testVerdict.success) {
+    // The gateway registered a terminal (finance/emergency-blocked) request for
+    // this staged posting. Drop it before answering so a later persist for any
+    // other reason cannot write it to disk and the next boot cannot re-offer it
+    // as pending — the same phantom-request guard as the upload route.
+    removeActionRequest(testGate.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     const code = testVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : testVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
     return res.status(code).json({
       success: false,
@@ -5342,10 +5362,23 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     });
   }
 
+  // Persist the registry alongside the post/audit rows so the staged Level-4
+  // test request survives a restart too, not just the draft it refers to.
+  //
+  // As on the upload route, `persistApprovalRegistry()` can report true without
+  // writing, so the pending gate is read back from disk before the route claims
+  // a staged test draft — never a success a restart would forget.
+  const testPersisted =
+    persistApprovalRegistry() &&
+    actionRequestStatusOnDisk(testGate.request.id, 'PENDING_APPROVAL');
+
   // A staged test draft is only real once it is durable. A write that never
   // reached disk leaves this process holding a staged draft the next boot does
-  // not have, so roll it back and do not claim it.
+  // not have, so roll it back and do not claim it. The phantom gate is dropped
+  // from both the live registry and the persisted snapshot.
   if (!testPersisted) {
+    removeActionRequest(testGate.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     const postIndex = memoryState.socialPosts.indexOf(newPost);
     if (postIndex !== -1) memoryState.socialPosts.splice(postIndex, 1);
     const auditIndex = memoryState.auditLogs.indexOf(testAuditRow);
