@@ -57,6 +57,10 @@ import {
   youtubeSummaryCopyText,
   youtubeTakeawaysEmptyLabel,
 } from '../utils/hardening/youtubePanelSummaryTruth';
+import {
+  webFetchDisplayTitle,
+  webFetchSuccessNotice,
+} from '../utils/hardening/webFetchDisplayTruth';
 
 interface AutonomousToolsModalProps {
   isOpen: boolean;
@@ -438,7 +442,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       const data = await res.json();
       if (data.success) {
         setWebResult(data);
-        showFeedback(`Successfully fetched and cleaned "${data.title}"`);
+        showFeedback(webFetchSuccessNotice(data.title));
       } else {
         showFeedback(data.error || 'Failed to fetch web content', 'error');
       }
@@ -1459,7 +1463,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
               {webResult && (
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-white font-bold text-sm truncate">{webResult.title}</span>
+                    <span className="text-white font-bold text-sm truncate">{webFetchDisplayTitle(webResult.title)}</span>
                     <span className="text-[10px] text-cyan-400">{webResult.url}</span>
                   </div>
                   <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 whitespace-pre-wrap max-h-64 overflow-y-auto">
