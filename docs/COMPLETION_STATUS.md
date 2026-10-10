@@ -4,7 +4,38 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 03:06 IST — **WORK SLOT 12 of the
+Last cycle: 2026-10-11 03:35 IST — **WORK SLOT 13 of the
+2026-10-10 → 2026-10-11 window (03:35 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **`POST /api/github/nightly/run` discarded
+the durability verdict of its own audit row.** The route already consumed
+`recordNightlyRun()`'s read-back verdict as `recorded`, but the following
+`addAuditLog(...)` — the durable evidence that the nightly check ran — had its
+`boolean` return value dropped. `addAuditLog()` routes through
+`recordDurableAuditRow()`, which reads the row back from disk and drops a
+phantom row when the write did not land (`persistMemory()` can return `true`
+without writing when the file already holds identical bytes). On a read-only
+volume or a full disk the row never reached `jarvis_memory.json`, yet the
+response presented the run as logged, so a later Security Matrix read would show
+no trace of it while the operator believed the run had been recorded. The route
+now captures the verdict as `auditRecorded` and reports it alongside `recorded`.
+Guarded by the extended `src/tests/nightlyRunRecordDurabilityTruth.test.ts` (5
+cases: the durable-run record leg now also asserts `auditRecorded: true`; the
+read-only-file leg asserts `auditRecorded: false` with the run record likewise
+not persisted; plus 3 source guards, one of them new, pinning both the capture
+and the reported field). Negative-validated — `git stash push server.ts` fails
+exactly the 2 new assertions (`2 failed | 3 passed`); restored → 5/5. Gates
+(observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file / 5 passed;
+`npm run build` NOT RUN (slot budget); full suite NOT RUN (slot budget). E2E:
+NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the
+long tail of unclassified `success: true` / discarded-verdict sites remains
+(the sweep this slot confirmed the highest-priority remaining sites in
+`server.ts` — the telephony stage/authorize routes, the YouTube draft routes,
+the emergency/kill-switch/resume routes, `/api/restore`, `/api/approvals/*`,
+`/api/memory*`, `/api/social/*`, `/api/computer-operator/*`, `/api/mobile/*` —
+already honour their durability verdicts; the GitHub nightly audit row was the
+remaining discarded one in that region).
+
+Last cycle (slot 12): 2026-10-11 03:06 IST — **WORK SLOT 12 of the
 2026-10-10 → 2026-10-11 window (03:05 IST fire), continuation.** Item 13
 (`Zero-fake-success for all tools`) — **`POST /api/github/fix-plan` returned a
 `receipt` stamped `outcome: VERIFIED` even when the scan reached nothing.** The
