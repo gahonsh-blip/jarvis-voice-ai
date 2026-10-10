@@ -11252,7 +11252,13 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           } else {
             spokenResponse = `I read your name as ${verdict.name}, but I could not write it to durable storage, so it is not saved. Please try again.`;
           }
-          actionExecuted = true;
+          // The reply already follows the durable outcome; the executed flag must
+          // match it. A name only held in this process's memory (a failed
+          // persistMemory()) was not recorded, so crediting `true` advanced the
+          // user-visible "Autonomous Actions Executed" counter for a write that
+          // never happened. Mirrors the `create_file` case (`actionExecuted =
+          // persisted`).
+          actionExecuted = persisted;
           actionDetail = { type: 'set_name', title: persisted ? 'Memory Updated' : 'Memory Write Failed', payload: { name: verdict.name, persisted } };
         } else {
           spokenResponse = language.startsWith('hi')

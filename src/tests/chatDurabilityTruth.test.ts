@@ -121,6 +121,10 @@ describe('POST /api/chat set_name reports a durable record honestly', () => {
     expect(body.actionDetail.payload.persisted).toBe(false);
     expect(body.reply).toContain('could not write it to durable storage');
     expect(body.reply).not.toContain('recorded into my durable memory banks');
+    // The executed flag must follow the same durable outcome as the reply: a
+    // name held only in this process's memory was not recorded, so the case must
+    // not advance the user-visible "Autonomous Actions Executed" counter.
+    expect(body.actionExecuted).toBe(false);
   });
 });
 
