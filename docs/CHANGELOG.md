@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 03:06 IST (2026-10-10 21:36 UTC) — window slot 12: the fix-plan route stops stamping VERIFIED over an unscanned scope
+
+### Fixed
+- **`src/utils/hardening/fixPlanCoverage.ts` — `POST /api/github/fix-plan` returned a `receipt` stamped `outcome: VERIFIED` even when the scan reached nothing.** The route already reconciled the planner's `nothingToDo` flag with real coverage, but `reconcileFixPlanWithCoverage` only overwrote `nothingToDo` and the derived steps — it spread the incoming `buildFixPlan` receipt unchanged. `buildFixPlan` stamps `outcome: 'VERIFIED'` unconditionally, so an empty account scan (`scans: []`) or a scan where every repository was unreachable still produced a VERIFIED receipt and a `verified: true` field, distinct from `nothingToDo` and read by callers as "the plan took effect". The receipt is now derived from the same coverage verdict: a fully covered run stays VERIFIED (re-recorded against the real source), an uncovered run reports `UNVERIFIED` with a detail that names the coverage gap (backlog item 13, zero fake success).
+
+### Tests
+- `src/tests/fixPlanCoverageTruth.test.ts`: new `reconcileFixPlanWithCoverage — receipt honesty` cases (raw planner VERIFIED over an empty scan is downgraded; unreachable repo => UNVERIFIED; clean covered plan => VERIFIED). Negative-validated: reverting only the receipt line fails exactly the two new guards (`2 failed | 11 passed`); restored → `fixPlanCoverageTruth` 13/13. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 214 files / 2423 tests passed (65.55 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1082975 bytes).
+
+
 ## [Unreleased] - 2026-10-11 01:36 IST (2026-10-10 20:06 UTC) — window slot 10: `/api/chat` set_name stops crediting execution when the durable write fails
 
 ### Fixed
