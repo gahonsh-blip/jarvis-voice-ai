@@ -7,6 +7,8 @@ import {
   activateEmergencyKillSwitch,
   resumeSystemOperation,
   getEmergencyState,
+  getAllActionRequests,
+  removeActionRequest,
 } from '../../server_tools';
 
 // Zero-fake-success guard for `POST /api/telephony/outbound/stage`.
@@ -151,5 +153,38 @@ describe('POST /api/telephony/outbound/stage wiring (source guard)', () => {
   it('no longer answers a blanket success:true for the staged request', () => {
     const route = outboundStageRouteSource();
     expect(route).not.toContain('success: true,\n      request,\n      actionId: actionReq.request.id,');
+  });
+
+  it('rolls the blocked request out of the registry before answering', () => {
+    const route = outboundStageRouteSource();
+    // The blocked branch must drop the terminal request the gateway registered,
+    // so it can never be persisted later and re-offered after a restart.
+    expect(route).toContain('removeActionRequest(actionReq.request.id)');
+    expect(route).toContain('memoryState.permissionRequests = persistedActionRequests()');
+  });
+});
+
+describe('blocked gateway requests are dropped from the live registry', () => {
+  afterEach(() => {
+    resumeSystemOperation('TEST_CLEANUP');
+  });
+
+  it('removeActionRequest drops exactly the registered (emergency-blocked) request', () => {
+    activateEmergencyKillSwitch('TEST', 'unit test');
+    const before = getAllActionRequests().length;
+    const blocked = createPendingActionRequest({
+      exactAction: 'Outbound PSTN Call to +91 ••••• •3210',
+      target: '+91 ••••• •3210',
+      contentChanges: 'Purpose: confirm a dentist appointment',
+      level: 4,
+      source: 'Telephony Gateway',
+    });
+    expect(blocked.blockedByEmergency).toBe(true);
+    // The emergency branch unshifts the blocked request into the registry.
+    expect(getAllActionRequests().some((r) => r.id === blocked.request.id)).toBe(true);
+
+    removeActionRequest(blocked.request.id);
+    expect(getAllActionRequests().some((r) => r.id === blocked.request.id)).toBe(false);
+    expect(getAllActionRequests().length).toBe(before);
   });
 });

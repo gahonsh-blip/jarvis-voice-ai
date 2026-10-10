@@ -93,6 +93,7 @@ import {
   type EmergencyPersistedState,
   persistedActionRequests,
   hydrateActionRequests,
+  removeActionRequest,
   type PermissionActionRequest,
 } from './server_tools';
 import {
@@ -7221,6 +7222,11 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
   const verdict = classifyApprovalCreate(result);
 
   if (result.blockedByFinance) {
+    // The gateway registered the blocked request in the queue. Leaving it there
+    // means any later persist writes it to disk and the next boot resurrects a
+    // request the route reported as blocked. Drop it before answering.
+    removeActionRequest(result.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     return res.status(403).json({
       success: false,
       blocked: true,
@@ -7231,6 +7237,8 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
   }
 
   if (result.blockedByEmergency) {
+    removeActionRequest(result.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     return res.status(423).json({
       success: false,
       blocked: true,
@@ -10277,6 +10285,12 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
     });
     const verdict = classifyOutboundStage(actionReq);
     if (!verdict.success) {
+      // The gateway still registered the request (finance/emergency blocks
+      // unshift a terminal entry). A blocked dial must not linger in the queue:
+      // a later persist for any other reason writes it to disk and the next boot
+      // re-offers it as pending. Drop the phantom request before answering.
+      removeActionRequest(actionReq.request.id);
+      memoryState.permissionRequests = persistedActionRequests();
       return res.status(409).json({
         success: false,
         staged: false,

@@ -206,6 +206,15 @@ export function hydrateActionRequests(stored: unknown): void {
 }
 
 /**
+ * Drop `id` from the live registry. Used to roll back a request the gateway
+ * registered but whose blocked/no-op verdict must not leave a phantom entry in
+ * the approval queue that later persists and resurrects on the next boot.
+ */
+export function removeActionRequest(id: string): void {
+  pendingActionRequests = pendingActionRequests.filter((a) => a.id !== id);
+}
+
+/**
  * Statuses a request can no longer move out of. A decision is a fact: once a
  * request is REJECTED, EXECUTED, FAILED or blocked by the emergency stop, a
  * later call must not rewrite it. Before this guard the shared helper accepted

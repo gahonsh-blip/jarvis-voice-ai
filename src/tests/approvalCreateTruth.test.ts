@@ -75,4 +75,13 @@ describe('POST /api/approvals/create wiring (source guard)', () => {
     expect(route).toContain('if (!verdict.staged)');
     expect(route).toContain('success: true, staged: true');
   });
+
+  it('drops a blocked request from the registry before answering', () => {
+    // A finance/emergency block registers a terminal entry the route must not
+    // leave in the queue: a later persist writes it and the next boot re-offers
+    // a request the route reported as blocked.
+    const route = approvalCreateRouteSource();
+    expect(route).toContain('removeActionRequest(result.request.id)');
+    expect(route).toContain('memoryState.permissionRequests = persistedActionRequests()');
+  });
 });
