@@ -15076,3 +15076,74 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में YouTube स्टेजिंग रूट्स को डिस्क-रीड-बैक गार्ड दिया गया ताकि बिना लिखे गए गेट को सफलता न बताया जाए।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:06 (fire 01:05)
+Window date: 2026-10-10 (window 2026-10-10 -> 2026-10-11)   Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools (continuing PARTIAL slice) — POST /api/approvals/create
+  no longer answers `staged: true` with an actionable `actionId` when the staged Level-4
+  approval did not reach disk. The route gated its reply on `persistApprovalRegistry()`,
+  which returns `persistMemory()`'s boolean — `true` even when no write is attempted
+  (read-only volume / full disk). It now reads the staged row back from disk with
+  `actionRequestStatusOnDisk(result.request.id, 'PENDING_APPROVAL')`; on a miss it rolls
+  the live registry back to the pre-request snapshot and answers `persisted: false` /
+  `NOT_DURABLE`. Evidence: server.ts (POST /api/approvals/create);
+  src/tests/approvalCreateTruth.test.ts (new guard); src/tests/approvalDurabilityTruth.test.ts
+  (stale guard refreshed). Negative-validated: reverting only the read-back clause fails
+  exactly the new case (1 failed | 8 passed); restore -> approvalCreateTruth 9/9.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the long tail of discarded-`persistMemory()` /
+  unconditional `success: true` sites remains; telephony-stage non-success variants and
+  the YouTube summarizer audit rows are the next named surfaces.
+
+Remaining:
+- #13 tail; then the rest of the 60-item backlog per docs/COMPLETION_STATUS.md order
+  (Android Bridge -> E2E -> Screenshot -> Computer Operator -> ... ). Items 1, 2, 50, 51,
+  54, 55 remain blocked on hardware/credentials not present in this sandbox.
+
+Bugs Found:
+- A missing durability gate was found by reading POST /api/approvals/create: the success
+  reply trusted a boolean that does not prove a write occurred. This is the same defect
+  class previously fixed for the telephony-stage, YouTube-draft and approvals-resolve routes.
+
+Bugs Fixed:
+- POST /api/approvals/create false-success / phantom Level-4 gate — fixed by read-back;
+  proven by the new source guard failing when the fix is reverted.
+
+Tests:    2419 passed / 0 failed — 214 files (npx vitest run, 64.65 s)
+Lint:     PASS (tsc --noEmit exit 0)
+Build:    PASS (npm run build exit 0; dist/server.cjs 1081932 bytes)
+E2E:      NOT RUN
+Security: git check-ignore .env -> matched (.gitignore:4); no .env staged; credential
+          pattern scan of the diff found only prose mentions, no real secret.
+
+Documentation: docs/COMPLETION_STATUS.md (Known limitations slot-9 entry),
+               docs/CHANGELOG.md (slot-9 Fixed/Tests entry)
+Branch:  feature/hermes-full-completion
+Commit:  58ac30f5145bf4195c82a881aa6db6bb4ebeca54
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this sandbox;
+            dist/server.cjs is the verified artifact
+
+Blocked:
+- #1, #2, #50, #51, #54, #55 — require real Android hardware / live credentials absent here.
+
+Human Approval Required:
+- Ongoing merge of the accumulated feature/hermes-full-completion changes into main
+  (PR #8). No automated merge is performed.
+
+Next Slot:
+- #13 tail: the telephony-stage non-success variants and the YouTube summarizer audit rows,
+  applying the same read-back-before-claim-success pattern.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में approvals/create रूट को डिस्क-रीड-बैक गार्ड दिया गया ताकि बिना लिखे गए Level-4 गेट को सफलता न बताया जाए।
