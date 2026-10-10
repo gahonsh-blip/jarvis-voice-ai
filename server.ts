@@ -8236,8 +8236,13 @@ app.post('/api/github/fix-plan', async (req: Request, res: Response) => {
       coverage
     );
 
+    // `success` must follow the plan's own receipt. `reconcileFixPlanWithCoverage`
+    // downgrades the receipt to UNVERIFIED when the scan never covered the scope,
+    // but this route used to answer `success: true` regardless — so an unscanned
+    // scope read as a successful plan while the receipt inside the same body said
+    // otherwise. Report the receipt's verdict so the two cannot disagree.
     res.json({
-      success: true,
+      success: plan.receipt.verified,
       outcome: plan.receipt.outcome,
       nothingToDo: plan.nothingToDo,
       highestRisk: plan.highestRisk,
