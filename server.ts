@@ -10477,8 +10477,30 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
 
     // The staged Level-4 action must be durable; otherwise the approval card the
     // operator later acts on has no matching request after a restart. A write
-    // that cannot reach disk is named in `persisted`.
-    const persisted = persistApprovalRegistry();
+    // that cannot reach disk is named in `persisted`. A registry write can report
+    // true without writing when the memory file already holds the identical
+    // bytes, so this cannot be trusted alone: the approval row is read back from
+    // disk with `actionRequestStatusOnDisk`. When it did not land the pending
+    // request is withdrawn from the session manager and the gateway registry, and
+    // the route answers `staged: false` — never a staged call that a restart
+    // would forget, and never an approval card for a request that is not on disk.
+    const persisted =
+      persistApprovalRegistry() &&
+      actionRequestStatusOnDisk(actionReq.request.id, 'PENDING_APPROVAL');
+    if (!persisted) {
+      TelephonySessionManager.cancelOutboundRequest(request.id);
+      removeActionRequest(actionReq.request.id);
+      memoryState.permissionRequests = persistedActionRequests();
+      return res.status(500).json({
+        success: false,
+        staged: false,
+        persisted: false,
+        outcome: 'NOT_DURABLE',
+        actionId: null,
+        message:
+          'The outbound call request could not be written to durable storage; it was not staged.',
+      });
+    }
 
     res.json({
       success: true,

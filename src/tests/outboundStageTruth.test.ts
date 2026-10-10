@@ -10,6 +10,7 @@ import {
   getAllActionRequests,
   removeActionRequest,
 } from '../../server_tools';
+import { TelephonySessionManager } from '../utils/telephonySessionManager';
 
 // Zero-fake-success guard for `POST /api/telephony/outbound/stage`.
 //
@@ -161,6 +162,47 @@ describe('POST /api/telephony/outbound/stage wiring (source guard)', () => {
     // so it can never be persisted later and re-offered after a restart.
     expect(route).toContain('removeActionRequest(actionReq.request.id)');
     expect(route).toContain('memoryState.permissionRequests = persistedActionRequests()');
+  });
+
+  it('honours the durable write instead of trusting the registry boolean', () => {
+    const route = outboundStageRouteSource();
+    // The staged request is real only once its approval row is on disk; the
+    // registry boolean alone is true without writing on identical bytes.
+    expect(route).toContain(
+      "persistApprovalRegistry() &&\n      actionRequestStatusOnDisk(actionReq.request.id, 'PENDING_APPROVAL')"
+    );
+    expect(route).toContain('if (!persisted)');
+    expect(route).toContain('TelephonySessionManager.cancelOutboundRequest(request.id)');
+    expect(route).toContain("outcome: 'NOT_DURABLE'");
+  });
+});
+
+describe('TelephonySessionManager.cancelOutboundRequest withdraws only a pending request', () => {
+  it('removes a request still awaiting authorization', () => {
+    const staged = TelephonySessionManager.stageOutboundRequest({
+      destinationNumber: '+919876543210',
+      purpose: 'unit test cancel',
+    });
+    expect(
+      TelephonySessionManager.getPendingOutboundRequests().some((r) => r.id === staged.id)
+    ).toBe(true);
+    expect(TelephonySessionManager.cancelOutboundRequest(staged.id)).toBe(true);
+    expect(
+      TelephonySessionManager.getPendingOutboundRequests().some((r) => r.id === staged.id)
+    ).toBe(false);
+  });
+
+  it('leaves a decided request untouched', () => {
+    const staged = TelephonySessionManager.stageOutboundRequest({
+      destinationNumber: '+919876543211',
+      purpose: 'unit test cancel decided',
+    });
+    TelephonySessionManager.authorizeOutboundRequest(staged.id, 'APPROVE', 'TEST');
+    expect(TelephonySessionManager.cancelOutboundRequest(staged.id)).toBe(false);
+  });
+
+  it('returns false for an unknown id', () => {
+    expect(TelephonySessionManager.cancelOutboundRequest('req_does_not_exist')).toBe(false);
   });
 });
 
