@@ -4,6 +4,27 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
+Last cycle: 2026-10-10 16:05 UTC (21:35 IST) — WORK SLOT 2 of the
+2026-10-10 → 2026-10-11 window. Item 13 (`Zero-fake-success for all tools`) —
+**a blocked action request was left in the live registry to resurrect.** The
+permission gateway's `createPendingActionRequest` `unshift`s a terminal entry
+onto `pendingActionRequests` for a finance or emergency block, and both outer
+routes (`POST /api/approvals/create` → 403/423, `POST /api/telephony/outbound/stage`
+→ 409) classed the verdict correctly but never removed it. Any later
+`persistMemory()` for another reason wrote the phantom to `jarvis_memory.json`,
+and `hydrateActionRequests` re-offered it on the next boot — a request the route
+had already told the operator was refused. Added `removeActionRequest(id)`
+(`server_tools.ts`); both routes now drop the entry and re-snapshot
+`memoryState.permissionRequests` before answering. Guards: new source guard in
+`approvalCreateTruth.test.ts`, new source guard + behavioural case in
+`outboundStageTruth.test.ts`. Negative-validated — reverting the 409 rollback
+fails 1 of 14; restored → 14/14. Gates (observed this fire): lint (`tsc
+--noEmit`) exit 0; targeted 2 files / 22 passed; full `npx vitest run` 208 files
+/ 2387 tests passed (66.90 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1075386 bytes). E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13
+stays `PARTIAL` — the long tail of unclassified `success: true` /
+discarded-`persistMemory()` sites remains.
+
 Last cycle (finalization): 2026-10-09 23:05 UTC (2026-10-10 04:35 IST) —
 FINALIZATION SLOT, window 2026-10-09 → 2026-10-10. No new development. Verified
 the frozen tip `8adbc9d` end-to-end on `feature/hermes-full-completion`: lint

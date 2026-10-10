@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 21:35 IST (2026-10-10 16:05 UTC) — window slot 2: a blocked action request is dropped from the live registry, not left to resurrect
+
+### Fixed
+- **`POST /api/approvals/create` (403 finance / 423 emergency) and `POST /api/telephony/outbound/stage` (409) answered a blocked verdict but left the block-registered `PermissionActionRequest` in the live registry.** `createPendingActionRequest` still `unshift`es the terminal entry onto `pendingActionRequests` for a finance or emergency block. The routes classed the verdict correctly but never removed that entry, so any later `persistMemory()` for another reason wrote the phantom request to `jarvis_memory.json`; on the next boot `hydrateActionRequests` re-hydrated it and re-offered a request the route had told the operator was blocked — a phantom the running process had already refused to act on. Both routes now call a new `removeActionRequest(id)` (`server_tools.ts`) and re-snapshot `memoryState.permissionRequests = persistedActionRequests()` before answering, so a refused request never reaches the queue.
+
+### Tests
+- `src/tests/outboundStageTruth.test.ts`: new source guard pinning the rollback in the 409 branch, plus a behavioural case that an emergency-blocked request is in the live registry and `removeActionRequest` drops exactly it.
+- `src/tests/approvalCreateTruth.test.ts`: new source guard pinning the rollback in the 403/423 branches.
+- Lint (`tsc --noEmit`) exit 0; targeted 2 files / 22 tests passed; full `npx vitest run` 208 files / 2387 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1075386 bytes). Negative-validated: reverting the 409 rollback fails 1 of 14.
+
 ## [Unreleased] - 2026-10-10 04:35 IST (2026-10-09 23:05 UTC) — window slot 13: the generic chat reply no longer claims a local memory save that did not land
 
 ### Fixed
