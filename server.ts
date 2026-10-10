@@ -8249,8 +8249,11 @@ ${transcript.slice(0, 35000)}
         throw new Error('Gemini returned an empty summary');
       }
 
-      pushAuditEntry({
-        id: `log-yt-${Date.now()}`,
+      // The VERIFIED audit row is only real once it is on disk. Route it
+      // through the durable writer, which reads the row back and drops a phantom
+      // row rather than trusting `persistMemory()`'s boolean alone.
+      recordDurableAuditRow({
+        id: `log-yt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         timestamp: new Date().toISOString(),
         action: `🎥 Summarized YouTube Video: "${videoInfo.title}" (${videoInfo.channel}) via Gemini 2.5 Flash`,
         levelRequired: 2,
@@ -8259,7 +8262,6 @@ ${transcript.slice(0, 35000)}
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
       });
-      persistMemory();
 
       return result;
     } catch (geminiErr: any) {
@@ -8280,8 +8282,12 @@ ${transcript.slice(0, 35000)}
     geminiFailed: geminiConfigured,
   });
 
-  pushAuditEntry({
-    id: `log-yt-${Date.now()}`,
+  // The audit row is only real once it is on disk. The extractive fallback used
+  // to append the row and then discard the persist result, so a dropped write
+  // left the running process holding a VERIFIED row the next boot did not have.
+  // The durable writer reads the row back and drops the phantom.
+  recordDurableAuditRow({
+    id: `log-yt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     timestamp: new Date().toISOString(),
     action: result.source === 'extractive'
       ? `🎥 Extracted key lines for YouTube video: "${videoInfo.title}" (no AI synthesis applied)`
@@ -8296,7 +8302,6 @@ ${transcript.slice(0, 35000)}
         : 'MISSING_CREDENTIALS',
     finalTruthState: result.verificationStatus === 'VERIFIED' ? 'VERIFIED' : 'PARTIAL',
   });
-  persistMemory();
 
   return result;
 }
