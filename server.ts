@@ -4267,28 +4267,48 @@ async function checkAndRunSchedulerJobs() {
       const logEntry = `[${new Date().toISOString()}] Started Nightly Repository Check (03:00 AM IST)`;
       schedulerRunLog.unshift(logEntry);
       console.log('[Scheduler]', logEntry);
-      persistMemory();
 
-      runNightlyCheck({ github: githubFetchOptions() })
-        .then((result) => {
-          recordNightlyRun(result.record);
-          addAuditLog(
-            `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
-            1,
-            'AUTOMATED_SCHEDULE',
-            result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
-          );
-          console.log('[Scheduler] Nightly repository check:', result.record.outcome);
-        })
-        .catch((err: any) => {
-          console.warn('[Scheduler] Nightly repository check failed:', err?.message);
-          addAuditLog(
-            `GitHub nightly check FAILED: ${err?.message || 'unknown error'}`,
-            1,
-            'AUTOMATED_SCHEDULE',
-            'FAILED'
-          );
-        });
+      // The per-day marker that stops this 15-minute window from re-running the
+      // scan is stamped above, but the scan only proceeds once that marker is on
+      // disk. `persistMemory()` returns true without writing when the file
+      // already holds the identical bytes, so on a read-only volume the marker
+      // and the "Started Nightly Repository Check" log line would be held in
+      // memory only — the next boot would find no marker and re-run the check,
+      // and the log line would claim a run the durable record lacks. Read the
+      // marker back before starting; skip the scan when it did not land and say
+      // so, rather than recording a start that will not be kept.
+      if (!persistMemory() || !nightlyMarkerOnDisk(todayIST)) {
+        const failEntry = `[${new Date().toISOString()}] Nightly Repository Check NOT started: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        addAuditLog(
+          'GitHub nightly check NOT started: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+      } else {
+        runNightlyCheck({ github: githubFetchOptions() })
+          .then((result) => {
+            recordNightlyRun(result.record);
+            addAuditLog(
+              `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+              1,
+              'AUTOMATED_SCHEDULE',
+              result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
+            );
+            console.log('[Scheduler] Nightly repository check:', result.record.outcome);
+          })
+          .catch((err: any) => {
+            console.warn('[Scheduler] Nightly repository check failed:', err?.message);
+            addAuditLog(
+              `GitHub nightly check FAILED: ${err?.message || 'unknown error'}`,
+              1,
+              'AUTOMATED_SCHEDULE',
+              'FAILED'
+            );
+          });
+      }
     }
   }
 
@@ -7840,6 +7860,23 @@ function nightlyRunOnDisk(runId: string): boolean {
       ? onDisk.nightlyGithubRuns
       : [];
     return runs.some((r) => r?.runId === runId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the per-day marker that gates the nightly GitHub check reached disk.
+ * `persistMemory()` reports true without writing when the file already holds the
+ * identical bytes, so the marker is read back before the scan proceeds; a marker
+ * that never landed would let the next boot re-run a check this process already
+ * logged as started (item 13).
+ */
+function nightlyMarkerOnDisk(date: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const state = onDisk?.schedulerState as { lastGithubNightlyRunDate?: string } | undefined;
+    return state?.lastGithubNightlyRunDate === date;
   } catch {
     return false;
   }
