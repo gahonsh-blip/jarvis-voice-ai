@@ -45,6 +45,12 @@ Format per slot:
 - Item worked: none (setup only)
 - Status: NOT_STARTED
 - Tests: NOT RUN
+
+---
+
+**Slot: WORK | IST 2026-10-10 22:35 (17:00 UTC) | window 2026-10-10 -> 2026-10-11, slot 4**
+
+Item 13 (Zero-fake-success for all tools) - slice advanced. The scheduled nightly GitHub check reported a start whose per-day marker never reached disk: checkAndRunSchedulerJobs() (server.ts) stamped lastGithubNightlyRunDate, logged "Started Nightly Repository Check", and called a bare persistMemory() whose boolean nobody read before launching the scan. persistMemory() returns true without writing when the memory file already holds the identical bytes, so on a read-only volume or a full disk the marker existed only in memory and the next boot would find no marker and re-run a check this process had already recorded as started. The branch now reads the marker back from disk with nightlyMarkerOnDisk(date) before starting; when it did not land the scan is skipped and the gap is recorded as a FAILED audit row instead of a start that will not be kept. Guard: new src/tests/nightlyMarkerDurabilityTruth.test.ts (4 source guards). Negative-validated: reverting server.ts fails 4 of 4; restored 4/4. Gates: lint exit 0; targeted 2 files / 8 passed; full suite 210 files / 2394 tests passed (66.06 s, 0 failed); build exit 0 (dist/server.cjs 1076501 bytes). Commit b725463. Item 13 stays PARTIAL - the long tail of unclassified success:true / discarded-persistMemory() sites remains. Main merge NOT MERGED - awaiting human approval. Deploy NOT_CONFIGURED.
 - Commit: ŌĆö  Push: ŌĆö
 
 ## 2026-09-20T05:55Z ŌĆö HUMAN POLICY CORRECTION (not a scheduled slot)
@@ -14217,3 +14223,1279 @@ Next Slot:
 - अंतिम स्लॉट में पूरा टेस्ट-सूट लाल मिला (पोर्ट 4795 का टकराव); approvalResolve सूट
   को पोर्ट 4819 पर ले जाकर ठीक किया — अब 196 फ़ाइलें / 2328 टेस्ट पास, lint 0, build 0;
   PR #6 खुला और conflict-free है, मर्ज मानव-अनुमोदन की प्रतीक्षा में; deploy NOT_CONFIGURED।
+
+---
+
+## Slot 2026-10-09 21:05 IST — WORK SLOT 1 (window 2026-10-09 → 2026-10-10)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:05
+Window date: 2026-10-09   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — Telegram mobile `approve_perm_` /
+  `reject_perm_` branches (`handleTelegramCallback`, `server.ts`) reported an
+  approval/rejection as durable while discarding `persistApprovalRegistry()`'s
+  boolean. Both now confirm the terminal status on disk with
+  `actionRequestStatusOnDisk(permId, 'EXECUTED' | 'REJECTED')`; on failure the
+  in-memory request is reverted to `PENDING_APPROVAL` and `memoryState.permissionRequests`
+  resynced, and the admin gets an honest `APPROVAL NOT RECORDED` /
+  `REJECTION NOT RECORDED` notice. Evidence: `src/tests/approvalRegistryTerminalTruth.test.ts`
+  (10 tests; new guard) — observed 10/10 pass.
+
+In Progress:
+- #13 — sweep not exhausted; the tail of unclassified `success:true` /
+  discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` remains.
+
+Remaining:
+- #1/#2/#50/#51/#54/#55 hardware/credential-blocked (NOT_AVAILABLE / PARTIAL);
+  the rest of the 60-item backlog is tracked in `docs/COMPLETION_STATUS.md`.
+
+Bugs Found:
+- `approve_perm_` / `reject_perm_` (`server.ts`): the comment claimed the
+  decision was durable but the code called `if (updated) persistApprovalRegistry();`
+  and discarded the boolean; the registry lives outside `memoryState`, so
+  `persistMemory()` can return true without writing on identical bytes. Found by
+  auditing mutating routes for a discarded durability boolean.
+
+Bugs Fixed:
+- Both branches now gate on an on-disk read-back (see Completed). Negative-
+  validated: the new guard against the pre-fix `server.ts` (`git stash`) fails
+  `1 failed | 9 passed`; restored → 10/10.
+
+Tests:    196 files / 2329 tests passed (0 failed, 59.27 s) — observed
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 — observed
+Build:    exit 0, `dist/server.cjs` 1070244 bytes — observed
+E2E:      NOT RUN (Telegram callback requires a live bot token + handset)
+Security: no secrets printed/committed; .env not touched; full audit in finalization
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, this log
+Branch:  feature/hermes-full-completion
+Commit:  42de885 (code+test), docs commit follows
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #6 (existing) — open, non-draft
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this environment
+
+Blocked:
+- #1/#2 Android bridge/E2E — requires a real Android handset/emulator
+- #50 Voice — requires a handset/mic session
+- #54/#55 — provider credentials / hardware
+
+Human Approval Required:
+- Merge of PR #6 to `main` (human review of the final verification report)
+- npm audit 5 transitive findings — dependency-upgrade decision
+
+Next Slot:
+- #13 — audit the next mutating route with a discarded `persistMemory()` boolean
+  or an ungated `success:true` (recommended: `POST /api/computer-operator/execute`,
+  `POST /api/security/evaluate`, or the `/api/github/*` mutating routes).
+
+हिंदी सारांश (एक पंक्ति):
+- Telegram मोबाइल approve/reject बटन अब डिस्क पर पुष्टि के बिना सफलता का दावा नहीं
+  करते; 196 फ़ाइलें / 2329 टेस्ट पास, lint 0, build 0; PR #6 मानव-अनुमोदन की प्रतीक्षा में।
+
+CORRECTION (same slot, 21:05 IST): the line above reading "PR: #6 (existing) —
+open, non-draft" was WRONG. A live GitHub API check during this slot shows PR #6
+was **closed and merged by a human at 2026-10-09T11:09:25Z** to `main`. This
+window's commits (`42de885`, `6f9cd2c`) sit cleanly on top of merged `main`
+(branch 2 commits ahead, no conflicts). The only open PR now is #7 (a different
+branch). A fresh PR for this window will be opened at finalization. Corrected in
+`docs/COMPLETION_STATUS.md`.
+
+---
+
+## Slot 2026-10-09 22:06 IST — WORK SLOT 2 (window 2026-10-09)
+
+**Item #13 `Zero-fake-success for all tools` — one slice; stays `PARTIAL`.**
+
+`POST /api/tools/fs/write` and `POST /api/tools/fs/delete` (`server.ts`) appended
+a `VERIFIED` audit row with `pushAuditEntry()` and discarded `persistMemory()`'s
+boolean. `persistMemory()` writes only when the memory file's bytes change, so a
+dropped write still answered `success: true` while the audit row naming the file
+change never reached `jarvis_memory.json`.
+
+Fix: both routes now append through a new `recordDurableAuditRow(entry)` helper
+(server.ts, next to `diskHasAuditRow`), which reads the row back with
+`diskHasAuditRow(entry.id)`, rolls a phantom row out of the in-memory log on a
+non-durable write, and returns that verdict. Each route reports `auditRecorded` /
+`auditPersisted` honestly and, when not durable, states `'the file change
+succeeded but its audit record could not be persisted'`.
+
+Evidence: `src/tests/fsAuditDurabilityTruth.test.ts` — 6 tests against a real
+server process (port 4831, memory file made read-only after the first write),
+covering fs/write and fs/delete on both paths + 2 source guards.
+Negative-validated: pre-fix (`git stash`) 6/6 fail; restored 6/6 pass.
+
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full suite **197 files /
+2335 tests passed** (0 failed, 59.54 s); build exit 0 (`dist/server.cjs`
+1071080 bytes). Security: `.env` ignored, diff vs `origin/main` credential scan
+clean, `npm audit` 5 pre-existing transitive findings (NOT fixed).
+
+Commits: `15a2b62` (fix+tests), `48bdcdb` (docs). Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state` pushed
+at `be57dea` (slots_completed=2). PR: none opened (work slot). Deploy:
+NOT_CONFIGURED.
+
+---
+
+## Slot 2026-10-09 23:06 IST (WORK SLOT 3) — Item 13: `addAuditLog()` durability
+
+**Completed:** Item 13 (PARTIAL slice). `addAuditLog()` (`server.ts`, 18 call
+sites) built an audit row, pushed it and called `persistMemory()`, discarding the
+boolean. `persistMemory()` returns true without writing when the memory file
+already holds identical bytes, so a route could report a `VERIFIED` audit row the
+next boot would not have. It now routes through the existing
+`recordDurableAuditRow(entry)` helper (disk read-back + phantom-row rollback) and
+returns the verdict (`: boolean`). `POST /api/autonomous/schedule` now rolls the
+registry entry back and answers HTTP 500 when the registration's audit row is not
+durable; `DELETE /api/autonomous/schedule/:id` returns `auditRecorded` instead of
+dropping the boolean.
+
+**Tests:** new `src/tests/auditLogDurabilityTruth.test.ts` (4 source guards).
+Negative-validated: reverting `addAuditLog` to `persistMemory()` fails 1 of 4;
+restored -> 4/4. Full suite 198 files / 2339 tests passed (0 failed, 60.66 s).
+Lint (`tsc --noEmit`) exit 0. Build exit 0 - `dist/server.cjs` 1071562 bytes.
+E2E: NOT RUN (no live providers/hardware). Security: npm audit NOT RUN (no
+dependency change). Deploy: NOT_CONFIGURED.
+
+**Commits:** `0d73aa7` (fix+tests), docs/report commit. Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed=3. PR: none opened (work slot). Main merge: NOT MERGED.
+
+---
+
+## 2026-10-09 23:36 IST — WORK SLOT 4
+
+**Item 13 (`Zero-fake-success for all tools`) — `POST /api/github/approvals/:id/decision`
+discarded `addAuditLog()`'s durable verdict and always answered
+`{ success: true, recorded: true }`.** `addAuditLog()` routes through
+`recordDurableAuditRow`, which reads the row back from disk with
+`diskHasAuditRow` (`persistMemory()` can return true without writing when the
+file already holds identical bytes) and drops a phantom row on a non-durable
+write. The route ignored that verdict, so a read-only volume or a full disk
+reported a recorded human approval the next boot would not have. The route now
+captures `const auditRecorded = addAuditLog(...)` and answers HTTP 500 with
+`persisted: false` / `'The decision could not be written to durable storage; it
+was not recorded.'` when the row is not durable; a durable write answers
+`persisted: true`.
+
+**Evidence:** `server.ts` (route `app.post('/api/github/approvals/:id/decision')`,
+~lines 7992-8018); `src/tests/approvalDecisionTruth.test.ts` new guard
+`gates the success reply on the durable audit write` (route-wiring block now 3
+cases). Negative-validated: reverting `server.ts` fails exactly that guard
+(`1 failed | 8 passed`); restored -> `9/9`.
+
+**Gates (observed):** lint (`tsc --noEmit`) exit 0; full suite **198 files /
+2340 tests passed** (0 failed, 60.46 s); `npm run build` exit 0
+(`dist/server.cjs` 1071887 bytes). E2E: NOT RUN. Deploy: `NOT_CONFIGURED`.
+
+**Commits:** `e6101d5` (fix+tests), docs/report commit. Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed updated. PR: none (work slot). Main merge: NOT MERGED.
+
+**Next slot:** #13 continued -- audit `server_tools.ts` for discarded
+`persistMemory()` / bare `success: true` sites (no pass of this kind yet).
+
+---
+
+## Slot 5 — 2026-10-10 00:06 IST (2026-10-09 18:36 UTC) — WORK
+
+**Item:** #13 `Zero-fake-success for all tools` (stays `PARTIAL`).
+
+**Advanced:** The GitHub nightly-run history reported a run it had not durably
+recorded. `recordNightlyRun()` (`server.ts`) appended a nightly-run entry and
+called a bare `persistMemory()` whose boolean nobody read, while
+`POST /api/github/nightly/run` answered with the run record and no survival
+signal. `persistMemory()` writes only when the memory file's bytes change, so on
+a read-only volume or a full disk the row never reached `jarvis_memory.json` —
+the operator saw a nightly run the next boot would not have, and
+`getNightlyRuns()` (feeding `/api/github/nightly`) would then silently
+under-report the runs that actually happened. `recordNightlyRun()` now returns
+`: boolean`, reads the record back from disk with the new
+`nightlyRunOnDisk(record.runId)` helper (guarding the identical-bytes false
+positive), drops the phantom in-memory row when the write did not land, and the
+route reports the verdict as `recorded`.
+
+**Evidence:** `server.ts` (`nightlyRunOnDisk`, `recordNightlyRun` ~lines
+7751-7783; route `app.post('/api/github/nightly/run')` ~line 8063);
+`src/tests/nightlyRunRecordDurabilityTruth.test.ts` (4 cases). Negative-validated
+with `git stash`: reverting `server.ts` fails 4 of 4; restored -> 4/4.
+
+**Gates (observed):** lint (`tsc --noEmit`) exit 0; full suite **201 files /
+2355 tests passed** (0 failed, 62.01 s); `npm run build` exit 0
+(`dist/server.cjs` ~1.0 mb). Targeted file 4/4; related GitHub suites
+(`githubAutomationWorkflow`, `githubNightlyChecker`) 38/38. E2E: NOT RUN.
+Deploy: `NOT_CONFIGURED`.
+
+**Commits:** `7adb1de` (fix+tests), `733171b` (docs). Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed updated. PR: none (work slot). Main merge: NOT MERGED.
+
+**Next slot:** #13 continued — audit `server_tools.ts` for discarded
+`persistMemory()` / bare `success: true` sites (no pass of this kind yet).
+
+---
+
+## Slot 6 — 2026-10-10 00:36 IST (2026-10-09 19:12 UTC) — WORK
+
+**Item:** #13 `Zero-fake-success for all tools` (stays `PARTIAL`).
+
+**Advanced:** The memory-backup route reported a backup it had not durably
+recorded. `GET /api/backup` (`server.ts`) validated the body, appended a
+`VERIFIED` audit row through `addAuditLog()` — which already returns whether the
+row is durable — discarded that verdict, then called a bare `persistMemory()`
+whose boolean nobody read. `persistMemory()` writes only when the memory file's
+bytes change, so on a read-only volume or a full disk the record never reached
+`jarvis_memory.json`, yet the caller received `success: true, verified: true` with
+no survival signal. The route now gates on `addAuditLog()`'s boolean and answers
+HTTP 500 `success:false, persisted:false, verified:false` when the row did not
+land; success now carries `persisted: true`.
+
+**Evidence:** `server.ts` (`app.get('/api/backup')`, gated on the
+`addAuditLog()`/`recordDurableAuditRow` verdict);
+`src/tests/backupDurabilityTruth.test.ts` (5 cases, real `tsx server.ts` process
+on a temp memory file made read-only after the first write, `GEMINI_API_KEY`
+blanked so the audit-secret scan is `NOT_CONFIGURED`). Negative-validated with
+`git stash`: reverting `server.ts` fails 4 of 5; restored -> 5/5. The sibling
+`src/tests/restoreDurabilityTruth.test.ts` harness was fixed: it built its restore
+payload via `GET /api/backup` *after* making the disk read-only, so it now
+captures that payload while the disk is writable (6/6).
+
+**Gates (observed):** lint (`tsc --noEmit`) exit 0; targeted backup + restore
+suites **2 files / 11 tests passed**; full suite **202 files / 2360 tests passed**
+(0 failed, 63.43 s); `npm run build` exit 0 (`dist/server.cjs` 1072676 bytes,
+~1.0 mb). E2E: NOT RUN. Deploy: `NOT_CONFIGURED`.
+
+**Commits:** `2f63081` (fix+tests), `6331e58` (docs). Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed updated (6). PR: none (work slot). Main merge: NOT MERGED.
+
+**Next slot:** #13 continued — audit `server_tools.ts` for discarded
+`persistMemory()` / bare `success: true` sites (no pass of this kind yet).
+
+---
+
+## Slot 7 — WORK — 2026-10-10 01:05 IST (2026-10-09 19:41 UTC)
+
+**Item #13 (`Zero-fake-success for all tools`) — the YouTube summarizer reported
+`success: true` for a video it never summarised.** `buildYouTubeSummary()`
+(`server_tools.ts`) set `success: true` as soon as the video metadata was
+fetched, even when the video exposed no transcript and no description and the
+resulting summary was empty (`source: `none``). Callers that branched on
+`success` treated that as work: the Telegram summarize reply rendered a
+"YOUTUBE VIDEO SUMMARY" heading over a blank body, and the `/api/chat`
+`summarize_youtube_video` voice case could advance the "Autonomous Actions
+Executed" counter for a summary that produced nothing. `success` now tracks
+whether a summary was produced (`true` on the gemini/extractive branches,
+`false` on `source: `none``, which still returns `videoInfo`). Both reply
+builders in `server.ts` gate on the presence of `videoInfo` (an `in` check on the
+union, which also restores TypeScript narrowing).
+
+**Tests:** `src/tests/remainingFakeSuccess.test.ts` no-content case now asserts
+`success: false` (was `true`); new positive extractive case asserts `success:
+true` / `verificationStatus: VERIFIED`; source guard pins `actionExecuted =
+hasSummary;`. Negative-validated: restoring `success: true` on the `none` branch
+fails the new assertion (1 failed / 53 passed); restored -> 54/54.
+
+**Gates (observed):** lint (`tsc --noEmit`) exit 0; targeted 4 files / 81 tests
+passed; full `npx vitest run` **202 files / 2361 tests passed** (0 failed, 63.36
+s); `npm run build` exit 0 (`dist/server.cjs` ~1.0 mb). E2E: NOT RUN. Deploy:
+`NOT_CONFIGURED`.
+
+**Commits:** `2c84731` (fix+tests), `ac8a7bf` (docs). Pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+slots_completed updated (7). PR: none (work slot). Main merge: NOT MERGED.
+
+**Next slot:** #13 continued — per-site sweep of `server.ts` / `server_tools.ts`
+for bare `success: true` / discarded `persistMemory()` verdicts.
+
+---
+
+## Slot 8 — 2026-10-10 01:36 IST (WORK SLOT)
+
+Item 13 (`Zero-fake-success for all tools`) — the `/api/chat` `create_file` case
+credited a save that had been rolled back. The case unshifts a note into
+`memoryState.notes`, calls `persistMemory()`, and on failure already rolls the
+note back and replies "I could not write your note to durable storage, so it was
+not saved" — but it still set `actionExecuted = true`, advancing the user-visible
+"Autonomous Actions Executed" counter for a save that never happened.
+`actionExecuted` now follows the durable outcome (`actionExecuted = persisted;`).
+The item-13 sweep registry (`src/tests/actionExecutedSweepAudit.test.ts`), which
+enumerates literal `actionExecuted = true` sites, had this case listed; the stale
+entry was removed.
+
+- Guard: `src/tests/remainingFakeSuccess.test.ts` (55/55).
+- Registry: `src/tests/actionExecutedSweepAudit.test.ts` (59/59 with the guard).
+- Negative validation: restoring `actionExecuted = true` fails the guard
+  (1 failed / 54 skipped); restored → 55/55.
+- Gates (observed this fire): lint `tsc --noEmit` exit 0; full `npx vitest run`
+  202 files / 2362 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1.0mb).
+- Commits: `4babbcb` (fix + guard), `fe3afab` (registry). Branch
+  `feature/hermes-full-completion` pushed. Main merge: NOT MERGED (awaiting human
+  approval). Deploy: NOT_CONFIGURED. Item 13 stays PARTIAL.
+
+**Next slot:** #13 continued — sweep remaining `success: true` / discarded
+`persistMemory()` sites in `server.ts` / `server_tools.ts`.
+
+---
+
+## Slot 9 — 2026-10-10 02:06 IST (WORK)
+
+Item #13 `Zero-fake-success for all tools` (slice). The LinkedIn branch of
+`testPlatformConnection()` cached the verified member profile onto
+`memoryState.linkedInConnection` and then called `persistMemory()` with the result
+discarded. On a read-only volume or full disk the cache never reached disk, yet the
+branch still returned `{ success: true, status: "VERIFIED" }`, and
+`/api/social/platforms/test` relayed it verbatim as `success: true` — the UI reported
+a verified, saved profile the next boot would not have.
+
+- Fix: `const profilePersisted = persistMemory();` is captured, returned on the
+  verified result, and the route returns `persisted: false` with a durability
+  warning when the cache did not reach disk.
+- Guard: `src/tests/socialPlatformVerifyPersistenceTruth.test.ts` (4/4).
+- Negative validation: restoring the discarded `persistMemory();` fails the guard
+  (1 failed / 3 passed); restored → 4/4.
+- Gates (observed this fire): lint `tsc --noEmit` exit 0; targeted 5 files / 98
+  tests passed; full `npx vitest run` 203 files / 2366 tests passed; `npm run build`
+  exit 0 (`dist/server.cjs` 1.0mb).
+- Commit `3dc2aef` (fix + guard). Branch `feature/hermes-full-completion` pushed
+  (3000bac..3dc2aef). Main merge: NOT MERGED (awaiting human approval).
+  Deploy: NOT_CONFIGURED. Item 13 stays PARTIAL.
+
+**Next slot:** #13 continued — the YouTube OAuth branch of `testPlatformConnection`
+(`memoryState.youTubeConnection` cached then `persistMemory()` discarded).
+
+---
+
+## Slot 10 — WORK — 2026-10-10 02:35 IST (2026-10-09 21:09 UTC) — window 2026-10-09
+
+Item #13 Zero-fake-success (slice: YouTube OAuth verify). `testPlatformConnection()`
+YouTube branch in `server.ts` cached the verified channel onto
+`memoryState.youTubeConnection`, called `persistMemory()` with its result discarded,
+and returned `{ success: true, status: 'VERIFIED' }`; `/api/social/platforms/test`
+relayed `success:true` even when the cache never reached `jarvis_memory.json`.
+Now the write result is captured (`profilePersisted = persistMemory();`, default
+`true` when no connection object is held, matching the LinkedIn branch), carried on
+the verified return, and the shared route gate surfaces `persisted:false` with a
+durability warning. Guard `src/tests/youtubePlatformVerifyPersistenceTruth.test.ts`
+(3 cases). Negative-validated: `git stash` of server.ts fails 2 of 3; restore -> 3/3.
+
+Observed gates: lint `tsc --noEmit` exit 0; targeted 2 files / 7 passed; full
+`npx vitest run` 204 files / 2369 passed; `npm run build` exit 0 (`dist/server.cjs`
+1.0mb). E2E NOT RUN. Deploy NOT_CONFIGURED. Security: `.env` ignored, tree clean,
+credential scan clean.
+
+Commits: `7b141fc` (fix+test), `fb5740c` (docs) on `feature/hermes-full-completion`;
+state `7a55fa6` on `automation/hermes-state`. Item #13 stays PARTIAL.
+
+---
+
+## Slot 11 - 2026-10-10 03:05 IST (2026-10-09 21:35 UTC) - WORK
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:07
+Window date: 2026-10-09 (IST)   Window slots completed so far: 11 (this run; state read below)
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL slice advanced. `/api/auth/youtube/status`
+  live probe branch now honors the `persistMemory()` result and surfaces the durability
+  gap. Evidence: `server.ts` (captured `profilePersisted = persistMemory();`, carried on
+  the reply, named in `message`); `src/tests/youtubeStatusProbePersistenceTruth.test.ts`
+  (3 cases). Negative-validated: `git checkout` of `server.ts` -> 3 failed / 0 passed;
+  restored -> 3/3 passed.
+
+In Progress:
+- #13 — the long tail of unclassified `success: true` / discarded-`persistMemory()` sites.
+
+Remaining:
+- #13 tail; then the mandated order (Android Bridge, Real Android E2E, Real Screenshot,
+  Computer Operator, GitHub/Social/Communication/AI-Memory/Tasks/Voice/Wake Word,
+  Production Hardening) — many blocked by hardware/credentials.
+
+Bugs Found:
+- `/api/auth/youtube/status`: the live probe refreshed `memoryState.youTubeConnection`
+  and called `persistMemory()` with the result discarded, then answered
+  `connected: true, status: 'API_VERIFIED'`. On an unwritable volume the refreshed cache
+  never reached disk, so the answer claimed a saved cache the next boot would contradict.
+
+Bugs Fixed:
+- Same: the write result is now captured into `profilePersisted`, carried on the reply,
+  and named in the `message` when it failed. Proved by the new test failing 3/3 against
+  the reverted source and passing 3/3 restored.
+
+Tests:    205 files / 2372 tests passed (npx vitest run, observed). Targeted: 2 files / 6 passed.
+Lint:     PASS — `tsc --noEmit` exit 0 (observed).
+Build:    PASS — `npm run build` exit 0; `dist/server.cjs` 1073865 bytes (observed).
+E2E:      NOT RUN — no live Google OAuth grant / no hardware in this sandbox.
+Security: `.env` ignored (`git check-ignore` -> `.gitignore:4:.env`); no `.env` tracked;
+          working tree clean after reverting the suite's hydration of `jarvis_memory.json`.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md.
+Branch:  feature/hermes-full-completion
+Commit:  4c8021a (code 6c4ad4b)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE this slot (bare-clone workspace; no PR created)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present in this
+            environment; the verified artifact (`dist/server.cjs`) is the deployment unit.
+
+Blocked:
+- Real Android E2E / Real Screenshot / Computer Operator hardware legs — require a real
+  Android handset connected to the bridge.
+- Live provider / carrier legs (YouTube upload, telephony dial, social publish) — require
+  credentials and live accounts.
+
+Human Approval Required:
+- None for this slot (no external publish, no main merge).
+
+Next Slot:
+- #13 — continue the sweep for the next unclassified `success: true` /
+  discarded-`persistMemory()` site (e.g. the OAuth callback near server.ts:6285).
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:05
+Window date: 2026-10-09 (window runs 2026-10-09 21:00 → 2026-10-10 05:00 IST)   Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools (frontend mirror) — the offline execution status no longer claims a local save the browser refused.
+  Evidence: src/utils/offlineStorage.ts (writers now return boolean whether the write landed); src/App.tsx (offline branch captures the chat-history + memory write results before touching React state and branches the status line: 'PERSISTED TO LOCAL STORAGE' vs 'NOT SAVED LOCALLY (STORAGE UNAVAILABLE)'); src/tests/offlinePersistenceTruth.test.ts (6 cases) passed. Negative-validated: `git stash push src/utils/offlineStorage.ts` -> 3 failed | 3 passed; `git stash push src/App.tsx` -> 3 failed | 3 passed; restored -> 6/6.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. The long tail of unclassified `success: true` / discarded-`persistMemory()` sites in server.ts remains; the sweep is not exhausted.
+
+Remaining:
+- #1, #2 (Android bridge / real Android E2E), #50, #51, #54, #55 — BLOCKED, require hardware or credentials absent from this sandbox.
+- The balance of the 60-item backlog beyond #13's tail was not re-audited this slot.
+
+Bugs Found:
+- src/utils/offlineStorage.ts: `saveLocalChatHistory`, `saveLocalMemory`, `saveLocalVoiceSettings`, `queuePendingSync`, `clearLocalChatHistory` declared `void` and swallowed the storage error in their `catch`, so a refused or quota-exceeded write was indistinguishable from a landed one. Found by grepping the writers' signatures and reading their catch blocks.
+- src/App.tsx: the offline command branch set `'LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE'` unconditionally, so a change that never reached `localStorage` (full disk, private mode, storage refused) read to the operator as a completed save the next reload would not find.
+
+Bugs Fixed:
+- The writers now return whether the write landed; the App offline branch computes the real verdict before touching React state (the state updater callback may run during the next render, so it is not used to compute the verdict) and branches the status line. Verified by src/tests/offlinePersistenceTruth.test.ts (6 cases) and by the two independent reverts described above.
+
+Tests:    206 files / 2378 tests passed (0 failed) — `npx vitest run` observed this fire. Targeted: 2 files / 14 passed.
+Lint:     exit 0 — `npm run lint` (`tsc --noEmit`) observed this fire.
+Build:    exit 0 — `npm run build`; `dist/server.cjs` 1073865 bytes observed.
+E2E:      NOT RUN — no browser or handset in this sandbox.
+Security: no `.env` tracked (`git check-ignore -v .env` -> `.gitignore:4:.env`); credential-pattern scan of the branch diff matched nothing; working tree clean after reverting the suite's hydration of `jarvis_memory.json`.
+
+Documentation: docs/COMPLETION_STATUS.md (item #13 evidence row + Last cycle block), docs/CHANGELOG.md (slot 12 entry).
+Branch:  feature/hermes-full-completion
+Commit:  a8c85f3 (code c51925a, docs a8c85f3)
+Push:    succeeded -> origin/feature/hermes-full-completion (54180e4..a8c85f3)
+
+PR:         NONE this slot (no PR opened/refreshed in a work slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present; the verified artifact `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- #1, #2 Android bridge / real Android E2E — require a physical handset (hardware) not present in this sandbox.
+- #50, #51, #54, #55 — require credentials/hardware absent from this environment.
+
+Human Approval Required:
+- None this slot. The offline fix is local-only and needs no external action.
+
+Next Slot:
+- Continue #13: audit the next unclassified `success: true` / discarded-`persistMemory()` site in server.ts (e.g. another route that reports a persisted change without reading the write result back).
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में #13 के तहत ऑफ़लाइन सेव की झूठी सफलता हटाई गई — अब सेव विफल होने पर UI ईमानदारी से "NOT SAVED LOCALLY" दिखाता है; 2378 टेस्ट पास, lint/build हरा।
+
+========================================================================
+SLOT: 2026-10-09 23:05 UTC (2026-10-10 04:35 IST) — WORK SLOT 13
+========================================================================
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:05 (run began 04:05 IST = 22:35 UTC 2026-10-09)
+Window date: 2026-10-09 (window 2026-10-09 → 2026-10-10)   Window slots completed so far: 13
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL — slice advanced): the generic
+  branch of POST /api/chat in server.ts answered "Logged to local memory" while
+  discarding the persistMemory() return value. A transcript that never reached
+  jarvis_memory.json (read-only volume / full disk) was reported as saved. The
+  reply now carries a {{MEMORY_SAVED}} placeholder and swaps in the truthful
+  wording once the write result is known; the Gemini-error path no longer says
+  "Logged command" for a write it never performed. Evidence:
+  server.ts (chat branch + swap block, ~L11380-11472);
+  src/tests/chatGenericMemoryClaimTruth.test.ts (3 tests, real server + real
+  read-only memory file) — 3/3 passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the long tail of unclassified
+  `success: true` / discarded-`persistMemory()` sites across server.ts and
+  server_tools.ts remains; still PARTIAL.
+
+Remaining:
+- Items blocked by hardware/credentials: #1, #2, #50, #51, #54, #55
+  (Android device bridge, real device E2E, real screenshot, real telephony,
+  wake-word hardware) — BLOCKED, no hardware in this sandbox.
+- The rest of the 60-item backlog is tracked in docs/COMPLETION_STATUS.md;
+  item 13 remains the highest-priority non-VERIFIED item.
+
+Bugs Found:
+- A false-success: the generic /api/chat reply claimed a durable memory save it
+  never confirmed (found by reading the branch while extending the existing
+  zero-fake-success work).
+- A ReferenceError: isHi is not defined (HTTP 500 on every generic chat message)
+  introduced when the swap block referenced the branch-local isHi. Found by
+  booting the real server and POSTing a neutral message.
+
+Bugs Fixed:
+- Both above. Verification: src/tests/chatGenericMemoryClaimTruth.test.ts 3/3
+  passed after the fix; negative-validated by `git stash push -- server.ts`,
+  which fails 2 of 3, then restored → 3/3.
+
+Tests:    Targeted: 1 file / 3 tests passed. Full `npx vitest run`: 207 files /
+          2381 tests passed.
+Lint:     `npm run lint` (tsc --noEmit) exit 0.
+Build:    `npm run build` exit 0; dist/server.cjs 1074886 bytes.
+E2E:      NOT RUN (no device/emulator; hardware-blocked items unchanged).
+Security: `git check-ignore -v .env` → .gitignore:4:.env (not tracked);
+          `git status --short` clean of .env/node_modules/dist; no credential
+          pattern in the branch diff. No token printed or committed.
+
+Documentation: docs/COMPLETION_STATUS.md (slot 13 section + Last cycle line),
+               docs/CHANGELOG.md (slot 13 entry).
+Branch:  feature/hermes-full-completion
+Commit:  ce3defc (fix) ; 0100a1e (docs)
+Push:    succeeded → origin/feature/hermes-full-completion (rebased onto 093f8cc,
+         no force-push)
+
+PR:         NONE (not the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this
+            environment; dist/server.cjs is the verified artifact.
+
+Blocked:
+- #1/#2 Android bridge + real device E2E — requires a physical Android device.
+- #50/#51 real screenshot + computer operator on real desktop — requires a
+  desktop session.
+- #54/#55 telephony + wake-word — requires telephony credentials / microphone
+  hardware.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- Continue item 13: audit the next unclassified `success: true` /
+  discarded-`persistMemory()` site (candidates: other /api/chat sub-branches and
+  server_tools.ts writers) and add a targeted truthfulness test.
+
+हिंदी सारांश (एक पंक्ति):
+- सामान्य चैट उत्तर अब झूठा "local memory में सुरक्षित" दावा नहीं करता; असली
+  लेखन परिणाम के अनुसार सच्चा संदेश दिखाता है — 3 नए टेस्ट पास, पूरा सूट 2381
+  टेस्ट पास।
+
+---
+
+## 2026-10-10 04:35 IST — FINALIZATION SLOT (window 2026-10-09 → 2026-10-10)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        FINALIZATION  |  IST time: 04:35 (run began 04:35 IST = 23:05 UTC 2026-10-09)
+Window date: 2026-10-09 (window 2026-10-09 21:00 → 2026-10-10 05:00 IST)   Window slots completed so far: 14 (13 work + this finalization)
+
+Completed:
+- No new development started (finalization). Verified the frozen tip
+  `8adbc9d` on `feature/hermes-full-completion` end-to-end. Item 13
+  (`Zero-fake-success for all tools`) remains the active item and stays
+  `PARTIAL`; its slot-13 slice (generic `/api/chat` no longer claims a memory
+  save that did not land) is on the tip and is covered by
+  `src/tests/chatGenericMemoryClaimTruth.test.ts`.
+
+In Progress:
+- #13 Zero-fake-success for all tools — `PARTIAL`. The long tail of unclassified
+  `success: true` / discarded-`persistMemory()` sites in `server.ts` /
+  `server_tools.ts` remains (truthfulness `UNKNOWN`).
+
+Remaining:
+- #13 (tail), plus hardware/credential-blocked items #1/#2/#50/#51/#54/#55.
+
+Bugs Found:
+- No new bug found this slot. (Orientation only; no source changed.)
+- Correction to the durable record: the previous slots' reports asserted
+  "PR #6 to `main` is open, non-draft, mergeable: true". That is no longer true
+  and was already false when those lines were written. Observed this slot via
+  the GitHub API: **PR #6 is `closed` and was merged 2026-10-09T11:09:25Z**
+  (16:39 IST) from head `409b9cb`. The merge-base of `main` and the branch is
+  `409b9cb`, so `feature/hermes-full-completion` carries **40 commits after the
+  merge** (slots 8–13) that no PR covers. The stale "open" claim is corrected
+  below.
+
+Bugs Fixed:
+- None this slot (no source change). Documentation/record corrected instead.
+
+Tests:    207 files / 2381 tests passed, 0 failed — `npx vitest run` (64.97 s)
+Lint:     pass — `npm run lint` (`tsc --noEmit`) exit 0
+Build:    pass — exit 0; artifact dist/server.cjs 1074886 bytes
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox
+Security: `git check-ignore -v .env` → `.gitignore:4:.env`; working tree clean
+          after reverting the suite's `jarvis_memory.json` hydration;
+          `git ls-files` shows no `.env`, no `node_modules/`, no `dist/` tracked;
+          credential-pattern scan of the PR-style diff (`main...feature`,
+          23 files, +2876/-93) matched nothing; `npm audit` → 5 vulnerabilities
+          (3 moderate `qs` via express/body-parser, 1 high `source-map-js`,
+          1 critical `proxy-addr`) — pre-existing transitive, **NOT fixed**
+          (dependency upgrades out of scope for finalization; human decision).
+
+Documentation: automation/reports/hermes-window-log.md (this section);
+               docs/COMPLETION_STATUS.md (finalization note)
+Branch:  feature/hermes-full-completion
+Commit:  8adbc9d (verified tip) + this report commit
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8  https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+            (open, non-draft, mergeable=true, 41 commits, 23 files).
+            Opened this slot because none existed: PR #6 (head 409b9cb) was
+            already merged 2026-10-09T11:09:25Z, so the 40 commits after that
+            merge (slots 8–13) were on the branch but in no PR.
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target / hosting integration present
+            (no DEPLOY_URL, no vercel/netlify/render/railway/fly config); the
+            verified dist/server.cjs is the deployment unit.
+
+Blocked:
+- #1 / #2 Android bridge real-device leg — requires a paired physical handset.
+- #50 Hands-free Android control — requires an Android device.
+- #55 Real-device E2E suite — requires an Android device / Windows host.
+- #51 live credential rotation, #54 external pentest — require provider
+  credentials.
+- CI workflow — the repository's `ci.yml` lives only on `main`; the feature
+  branch predates it. The owner's account was previously reported locked for a
+  billing issue (not re-tested this slot; UNKNOWN whether still locked).
+
+Human Approval Required:
+- Merge of the PR for `feature/hermes-full-completion` into `main`.
+- Resolution of the owner-account billing lock that blocks CI (if still present).
+- Decision on the 5 `npm audit` findings (all pre-existing transitive).
+
+Next Slot:
+- No next slot — window 2026-10-09 → 2026-10-10 is closed. The next window
+  resumes item 13 with the per-site `success: true` audit in
+  `server.ts` / `server_tools.ts`.
+
+हिंदी सारांश (एक पंक्ति):
+- अंतिम स्लॉट में नए फ़ीचर काम के बिना टिप `8adbc9d` को दोबारा सत्यापित किया — lint 0,
+  207 फ़ाइलें / 2381 टेस्ट पास, build 0; पता चला कि PR #6 पहले ही मर्ज हो चुका था और
+  ब्रांच के 40 नए कमिट किसी PR में नहीं थे, इसलिए नया PR खोला; मर्ज मानव-अनुमोदन की
+  प्रतीक्षा में; deploy NOT_CONFIGURED।
+
+---
+
+**Slot: WORK | IST 2026-10-10 21:05 (15:35 UTC) | window 2026-10-10 -> 2026-10-11, slot 1**
+
+Item 13 (Zero-fake-success for all tools) - slice advanced. `summarizeYouTubeVideoCore` (server.ts) wrote both audit rows via `pushAuditEntry(...)` and discarded `persistMemory()`; both now route through `recordDurableAuditRow(...)` (read-back + phantom-row rollback), ids collision-resistant. Test `src/tests/youtubeSummarizeAuditDurabilityTruth.test.ts` (3 cases) - negative-validated 3/3 fail pre-fix, 3/3 pass post-fix. Gates: lint exit 0; full suite 208 files / 2384 tests passed (65.95 s); build exit 0 (dist/server.cjs 1074942 bytes). Commits 3e19c63 (fix+test), 59cbea9 (docs). Item 13 stays PARTIAL. PR #8 open. Main merge NOT MERGED - awaiting human approval. Deploy NOT_CONFIGURED.
+
+---
+
+**Slot: WORK | IST 2026-10-10 21:35 (16:05 UTC) | window 2026-10-10 -> 2026-10-11, slot 2**
+
+Item 13 (Zero-fake-success for all tools) - slice advanced. A blocked action request was left in the live registry to resurrect: createPendingActionRequest (server_tools.ts) unshifts a terminal entry onto pendingActionRequests for a finance/emergency block, and both outer routes (POST /api/approvals/create 403/423, POST /api/telephony/outbound/stage 409) classed the verdict correctly but never removed it - so any later persist wrote the phantom to jarvis_memory.json and hydrateActionRequests re-offered a refused request on boot. Added removeActionRequest(id) (server_tools.ts); both routes now drop the entry and re-snapshot memoryState.permissionRequests before answering. Guards: new source guard in approvalCreateTruth.test.ts, new source guard + behavioural case in outboundStageTruth.test.ts. Negative-validated: reverting the 409 rollback fails 1 of 14; restored 14/14. Gates: lint exit 0; targeted 2 files / 22 passed; full suite 208 files / 2387 tests passed (66.90 s, 0 failed); build exit 0 (dist/server.cjs 1075386 bytes). Commit 889ab41. Item 13 stays PARTIAL. Main merge NOT MERGED - awaiting human approval. Deploy NOT_CONFIGURED.
+
+---
+
+**Slot: WORK | IST 2026-10-10 22:05 (16:35 UTC) | window 2026-10-10 -> 2026-10-11, slot 3**
+
+Item 13 (Zero-fake-success for all tools) - slice advanced. The YouTube token refresh reported a refresh that never reached disk: ensureValidYouTubeToken() (server.ts) minted a fresh access token, wrote it onto memoryState.youTubeConnection, then called persistMemory() with the boolean discarded, so on a read-only volume or a full disk the minted token never reached jarvis_memory.json yet the helper returned valid:true and every caller (verifyAndPublishToYouTube, platform verify probe, status probe, publish entrypoint) used a request validity that would be gone on the next boot. The refresh branch now captures the write into refreshPersisted and returns it, with a refreshPersistenceError message naming the gap. Guard: new src/tests/youtubeTokenRefreshDurabilityTruth.test.ts (3 source guards). Negative-validated: reverting server.ts fails 3 of 3; restored 3/3. Gates: lint exit 0; targeted 1 file / 3 passed; full suite 209 files / 2390 tests passed (66.53 s, 0 failed); build exit 0 (dist/server.cjs 1075664 bytes). Commit 5bb30a7. Item 13 stays PARTIAL - the long tail of unclassified success:true / discarded-persistMemory() sites remains. Main merge NOT MERGED - awaiting human approval. Deploy NOT_CONFIGURED.
+
+---
+
+**Slot: WORK | IST 2026-10-10 22:35 (17:05 UTC) | window 2026-10-10 -> 2026-10-11, slot 4**
+
+Item 13 (Zero-fake-success for all tools) - slice advanced. The scheduled nightly GitHub check reported a start that never reached disk. `checkAndRunSchedulerJobs()` (server.ts) stamped `memoryState.lastGithubNightlyRunDate`, logged "Started Nightly Repository Check", then called a bare `persistMemory()` whose boolean nobody read before launching the scan. `persistMemory()` returns true without writing when the memory file already holds the identical bytes, so on a read-only volume or a full disk the per-day marker existed only in memory: the process logged the check as started, and the next boot found no marker and re-ran a check the prior process had already recorded as started. The nightly branch now reads the marker back from disk with `nightlyMarkerOnDisk(date)` before starting; when it did not land the scan is skipped and the gap is recorded as a `FAILED` audit row rather than a start that will not survive a reboot. Guard: new src/tests/nightlyMarkerDurabilityTruth.test.ts (4 source guards). Negative-validated: reverting server.ts fails 4 of 4; restored 4/4. Gates: lint exit 0; targeted 2 files / 8 passed; full suite 210 files / 2394 tests passed (66.06 s, 0 failed); build exit 0 (dist/server.cjs 1076501 bytes). Commits b725463 (fix+test), 26c0370 (docs). Item 13 stays PARTIAL - the long tail of unclassified success:true / discarded-persistMemory() sites remains. Main merge NOT MERGED - awaiting human approval. Deploy NOT_CONFIGURED.
+
+---
+
+**Slot: WORK | IST 2026-10-10 23:05 (17:35 UTC) | window 2026-10-10 -> 2026-10-11, slot 5**
+
+Item 13 (Zero-fake-success for all tools) — slice advanced. The scheduled-autonomous-goal loop reported a run that never reached disk. In `checkAndRunSchedulerJobs()` (server.ts, ~line 4325) the dueGoals loop stamped `schedulerState.lastAutonomousGoalRuns[goal.id]` and then ran the goal, with a bare `persistMemory()` (its boolean discarded) as the only durability step; the approval-gate and unsupported-step branches each added another bare `persistMemory()`. `persistMemory()` returns true without writing when the memory file already holds the identical bytes, and fails outright on a read-only volume or a full disk — either way the per-day marker lived only in memory, so the next boot could re-run a goal this process had recorded as run (and, when the goal is destructive, repeat side effects). The loop now gate-runs each goal on `if (!persistMemory() || !autonomousGoalMarkerOnDisk(goal.id, today))`: the marker is read back from disk via the new `autonomousGoalMarkerOnDisk(goalId, date)` helper (mirrors the existing `nightlyMarkerOnDisk` read-back pattern); when it did not land the in-memory stamp is cleared and the gap is recorded as a `FAILED` audit row instead of a run that will not survive a reboot. Two redundant bare persists dropped. Guard: new `src/tests/autonomousGoalMarkerDurabilityTruth.test.ts` (4 source guards). Negative-validated: reverting server.ts fails 4 of 4; restored 4/4. Gates: lint exit 0; targeted 1 file / 4 passed; full suite 211 files / 2398 tests passed (66.64 s, 0 failed); build exit 0 (dist/server.cjs 1077135 bytes). Commits 1851a54 (fix+test), a248b6b (docs). Item 13 stays PARTIAL — the long tail of unclassified success:true / discarded-persistMemory() sites remains. Main merge NOT MERGED — awaiting human approval. Deploy NOT_CONFIGURED.
+
+---
+
+**Slot: WORK | IST 2026-10-10 23:05 (17:35 UTC) | window 2026-10-10 -> 2026-10-11, slot 5 (continuation, same fire)**
+
+Item 13 (Zero-fake-success for all tools) — further slice advanced. The four routine scheduler ticks carried an external push on an unverified marker. In `checkAndRunSchedulerJobs()` (server.ts) the Morning Briefing (09:00), Midday Health Audit (14:00), Evening Social Pulse (18:30) and Nightly Work Summary (22:30) branches each stamped a per-day marker and then — for Morning/Night — delivered a Telegram message (or, for Midday/Evening, wrote a run-log line), ending on a bare `persistMemory()` whose boolean nobody read. `persistMemory()` returns true without writing when the memory file already holds identical bytes, and fails outright on a read-only volume or full disk; an unverified marker therefore lived only in memory, so the next boot would re-run the tick and a "delivered" log line could claim a run the durable store lacks. Each tick now reads its marker back with the new `routineMarkerOnDisk(marker, date)` helper before the push; when it did not land the in-memory stamp is deleted and a `FAILED` audit row is recorded instead of a run that will not be kept. Guard: new `src/tests/routineSchedulerMarkerDurabilityTruth.test.ts` (4 source guards). Negative-validated: reverting server.ts fails 4 of 4; restored 4/4. Gates: lint exit 0; targeted 1 file / 4 passed; full suite 212 files / 2402 tests passed on the two clean runs (the first run of the fire reported 1 transient failure, 212 files / 2402 tests — output not captured, not reproduced on three later runs, root cause UNKNOWN); build exit 0 (dist/server.cjs 1079958 bytes). Commits 6f6f948 (fix+test), a478c94 (docs). Item 13 stays PARTIAL — the long tail of unclassified success:true / discarded-persistMemory() sites remains. Main merge NOT MERGED — awaiting human approval. Deploy NOT_CONFIGURED.
+
+
+---
+
+**Slot: WORK | IST 2026-10-10 23:35 (18:16 UTC) | window 2026-10-10 -> 2026-10-11, slot 6**
+
+Item 13 (Zero-fake-success for all tools) — further slice advanced. The nightly GitHub check's audit row reported a partial sweep as a confirmed `VERIFIED` check. `runNightlyCheck()` marks the run record `COMPLETED` even when the sweep could not reach every repository, while the receipt stays `DISPATCHED` in that case and reserves `VERIFIED` for a fully clean, remote-confirmed scan. The scheduler's audit row and the manual `POST /api/github/nightly/run` route both derived the badge from `result.record.outcome` (`=== 'COMPLETED' ? 'VERIFIED' : 'FAILED'`), so a partial sweep drew a green confirmed badge — a superset of what the scan's own receipt admitted. New `src/utils/github/nightlyAuditTruth.ts` (`nightlyAuditBadge`) maps `receipt.outcome` -> `VERIFIED` (remote-confirmed clean only) / `FAILED` (on `FAILED`/`BLOCKED`) / `UNVERIFIED` otherwise; both call sites route through it (the inline helper is replaced by the import), and the manual route's success code now rests on `receipt.verified` alone — the redundant `record.outcome` OR is dropped. Guard: new `src/tests/nightlyAuditTruth.test.ts` (6 cases: pure mapping + two `server.ts` source guards). Negative-validated: reintroducing `DISPATCHED -> VERIFIED` fails exactly the regression case (`1 failed | 5 passed`); restored 6/6. Gates observed this fire: lint (`tsc --noEmit`) exit 0; targeted 1 file / 6 passed; full suite **214 files / 2412 tests passed** (66.29 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1080103 bytes). Commits 86043ad (fix+test, rebased onto live head 4382641), eaa7540 (docs). Item 13 stays PARTIAL — the long tail of unclassified `success:true` / discarded-`persistMemory()` sites remains. Main merge NOT MERGED — awaiting human approval. Deploy NOT_CONFIGURED.
+
+
+----- SLOT 7 | WORK | 2026-10-11 00:05 IST | window 2026-10-10 -----
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:05 (Sun 2026-10-11)
+Window date: 2026-10-10   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools — slice: POST /api/telephony/outbound/stage
+  no longer reports a staged request as durable when the approval row did not
+  reach disk. Evidence: server.ts route now gates on
+  actionRequestStatusOnDisk(id,'PENDING_APPROVAL') read-back; new
+  TelephonySessionManager.cancelOutboundRequest(id) withdraws the pending
+  request on miss and drops the gateway registry entry; route answers
+  staged:false/outcome:'NOT_DURABLE'. Test src/tests/outboundStageTruth.test.ts:
+  1 file / 18 passed (was 15 cases, +1 source guard, +3 behavioral).
+  Negative-validated: reverting only the read-back gate fails the source guard
+  (1 failed | 17 passed); restored -> 18/18.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the long tail of unclassified
+  success:true / discarded-persistMemory() sites remains. Routes audited
+  this slot: /api/routines/trigger (already covered by a truth test),
+  server_tools.ts real* functions (realGitStatus/Log/Diff, realGithubRepos/
+  CreateIssue, realWebFetch, fetchYouTubeTranscriptData).
+
+Remaining:
+- #13 continues next slot: sweep remaining success:true sites in server.ts /
+  server_tools.ts for unverified durability.
+- Items 1, 2, 50, 51, 54, 55 remain blocked (hardware/credential).
+
+Bugs Found:
+- server.ts POST /api/telephony/outbound/stage: persistApprovalRegistry()
+  returns persistMemory()'s boolean, which is true whenever the in-memory
+  snapshot serializes to bytes identical to jarvis_memory.json — even when no
+  write is attempted (read-only volume, full disk). The route therefore handed
+  the operator an approval card and an actionId for a request the next boot
+  would not know existed.
+
+Bugs Fixed:
+- The stage route now reads the approval row back from disk. On a miss it
+  withdraws the pending request (cancelOutboundRequest), removes the gateway
+  registry entry, and returns no actionable id. Proven by the negative-validated
+  source guard plus the 3 behavioral cancel cases (18/18).
+
+Tests:    214 files / 2416 tests passed (65.56 s, 0 failed) — full npx vitest run
+          targeted: src/tests/outboundStageTruth.test.ts 1 file / 18 passed
+Lint:     npm run lint (tsc --noEmit) exit 0
+Build:    npm run build exit 0 — dist/server.cjs 1081278 bytes
+E2E:      NOT RUN (no handset attached)
+Security: git check-ignore -v .env -> matched .gitignore:4:.env (ignored, not staged);
+          git status clean of tokens/keys/node_modules/dist; no .env staged
+
+Documentation: docs/COMPLETION_STATUS.md updated (slot 7 entry)
+Branch:  feature/hermes-full-completion
+Commit:  76fd723 (fix), 5d7e8c9 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion (76fd723..5d7e8c9)
+
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; the verified artifact
+            is the deployment unit available.
+
+Blocked:
+- #1/#2 Android Bridge / Real Android E2E — requires a real Android device
+- #50/#51/#54/#55 — require hardware/credentials not present in this sandbox
+
+Human Approval Required:
+- Merge of PR #8 into main (owner reads final verification report first).
+- PR CI may still be blocked by the owner account billing lock (unverified here).
+
+Next Slot:
+- #13 (Zero-fake-success) — continue the success:true / discarded-persistMemory()
+  durability sweep; next candidate: remaining action/approval registry routes.
+
+Hindi summary (one line):
+- Iss slot mein telephony outbound stage route theek kiya — ab sirf tabhi
+  success:true/staged:true milega jab approval row sach mein disk par likhi gayi ho;
+  poori suite 214 files / 2416 tests pass.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:36
+Window date: 2026-10-11   Window slots completed so far: 8
+
+Completed:
+- #13 Zero-fake-success for all tools (slice: YouTube staging routes) — both
+  `POST /api/social/youtube/upload-draft` and `POST /api/social/youtube/draft-test`
+  gated success on `persistApprovalRegistry()`, which returns `persistMemory()`'s
+  boolean (true without a write when the memory file already holds identical
+  bytes). Routes now drop blocked/terminal gates from the live registry and read
+  the staged gate back from disk via `actionRequestStatusOnDisk(..., 'PENDING_APPROVAL')`,
+  rolling back post + audit row and answering `persisted:false` when it did not land.
+  Evidence: server.ts; src/tests/youtubeDraftDurabilityTruth.test.ts — 8/8 passed;
+  negative-validated (reverting server.ts → 2 failed | 6 passed).
+
+In Progress:
+- #13 Zero-fake-success for all tools — remaining surfaces: telephony-stage
+  non-success variants, YouTube summarizer audit rows, memory-persistence claims.
+
+Remaining:
+- #13 long tail of unclassified `success:true` / discarded-`persistMemory()` sites
+  across tools; higher backlog items downstream of item 13 unstarted.
+
+Bugs Found:
+- `persistMemory()` / `persistApprovalRegistry()` boolean trusted by both YouTube
+  staging routes; a gate that never reached disk was reported as staged, and a
+  finance/emergency-blocked gate was persisted and resurrected on boot.
+
+Bugs Fixed:
+- Both YouTube staging routes now verify the staged gate on disk before claiming
+  success and drop blocked gates before answering. Verification: new source-scan
+  guard in `src/tests/youtubeDraftDurabilityTruth.test.ts` fails exactly when the
+  fix is reverted (2 failed | 6 passed) and passes with it (8/8).
+
+Tests:    214 files / 2418 tests passed (65.76 s, 0 failed) — full `npx vitest run`
+Lint:     passed — `tsc --noEmit` exit 0
+Build:    passed — `npm run build` exit 0 (`dist/server.cjs` 1.0mb)
+E2E:      NOT RUN — no Android handset in this sandbox
+Security: `git check-ignore -v .env` → .gitignore:4:.env (ignored); no token/key in
+          diff; no node_modules/dist staged. Restored `jarvis_memory.json` mutated
+          by the test run before committing.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  dfd3e0e (fix) · 45680fb (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE opened this slot (not a finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified artifact is `dist/server.cjs`.
+
+Blocked:
+- Real Android E2E / screenshot / telephony — require a physical handset.
+- Production deploy — no DEPLOY_URL or hosting integration configured.
+
+Human Approval Required:
+- Merge of feature/hermes-full-completion to main (human gate, never automated).
+
+Next Slot:
+- #13 — telephony-stage non-success variants and the YouTube summarizer audit
+  rows, continuing the read-back-before-claim-success pattern.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में YouTube स्टेजिंग रूट्स को डिस्क-रीड-बैक गार्ड दिया गया ताकि बिना लिखे गए गेट को सफलता न बताया जाए।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:06 (fire 01:05)
+Window date: 2026-10-10 (window 2026-10-10 -> 2026-10-11)   Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools (continuing PARTIAL slice) — POST /api/approvals/create
+  no longer answers `staged: true` with an actionable `actionId` when the staged Level-4
+  approval did not reach disk. The route gated its reply on `persistApprovalRegistry()`,
+  which returns `persistMemory()`'s boolean — `true` even when no write is attempted
+  (read-only volume / full disk). It now reads the staged row back from disk with
+  `actionRequestStatusOnDisk(result.request.id, 'PENDING_APPROVAL')`; on a miss it rolls
+  the live registry back to the pre-request snapshot and answers `persisted: false` /
+  `NOT_DURABLE`. Evidence: server.ts (POST /api/approvals/create);
+  src/tests/approvalCreateTruth.test.ts (new guard); src/tests/approvalDurabilityTruth.test.ts
+  (stale guard refreshed). Negative-validated: reverting only the read-back clause fails
+  exactly the new case (1 failed | 8 passed); restore -> approvalCreateTruth 9/9.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the long tail of discarded-`persistMemory()` /
+  unconditional `success: true` sites remains; telephony-stage non-success variants and
+  the YouTube summarizer audit rows are the next named surfaces.
+
+Remaining:
+- #13 tail; then the rest of the 60-item backlog per docs/COMPLETION_STATUS.md order
+  (Android Bridge -> E2E -> Screenshot -> Computer Operator -> ... ). Items 1, 2, 50, 51,
+  54, 55 remain blocked on hardware/credentials not present in this sandbox.
+
+Bugs Found:
+- A missing durability gate was found by reading POST /api/approvals/create: the success
+  reply trusted a boolean that does not prove a write occurred. This is the same defect
+  class previously fixed for the telephony-stage, YouTube-draft and approvals-resolve routes.
+
+Bugs Fixed:
+- POST /api/approvals/create false-success / phantom Level-4 gate — fixed by read-back;
+  proven by the new source guard failing when the fix is reverted.
+
+Tests:    2419 passed / 0 failed — 214 files (npx vitest run, 64.65 s)
+Lint:     PASS (tsc --noEmit exit 0)
+Build:    PASS (npm run build exit 0; dist/server.cjs 1081932 bytes)
+E2E:      NOT RUN
+Security: git check-ignore .env -> matched (.gitignore:4); no .env staged; credential
+          pattern scan of the diff found only prose mentions, no real secret.
+
+Documentation: docs/COMPLETION_STATUS.md (Known limitations slot-9 entry),
+               docs/CHANGELOG.md (slot-9 Fixed/Tests entry)
+Branch:  feature/hermes-full-completion
+Commit:  58ac30f5145bf4195c82a881aa6db6bb4ebeca54
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this sandbox;
+            dist/server.cjs is the verified artifact
+
+Blocked:
+- #1, #2, #50, #51, #54, #55 — require real Android hardware / live credentials absent here.
+
+Human Approval Required:
+- Ongoing merge of the accumulated feature/hermes-full-completion changes into main
+  (PR #8). No automated merge is performed.
+
+Next Slot:
+- #13 tail: the telephony-stage non-success variants and the YouTube summarizer audit rows,
+  applying the same read-back-before-claim-success pattern.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में approvals/create रूट को डिस्क-रीड-बैक गार्ड दिया गया ताकि बिना लिखे गए Level-4 गेट को सफलता न बताया जाए।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:36
+Window date: 2026-10-11   Window slots completed so far: 10
+
+Completed:
+- #13 Zero-fake-success for all tools — `/api/chat` `case 'set_name'` set
+  `actionExecuted = true` unconditionally. The spoken reply already followed the
+  durable outcome and `actionDetail.payload.persisted` was already `false`, but
+  the `actionExecuted` flag stayed `true` — so the user-visible "Autonomous
+  Actions Executed" counter advanced on a read-only volume / full disk for a name
+  held only in memory. `App.tsx` routes `data.actionExecuted && data.intent` to
+  `handleExecuteAction()`, so the client recorded executed work for a write that
+  never happened. Fixed: `actionExecuted = persisted`, mirroring the adjacent
+  `create_file` case. Evidence: server.ts (~line 11249, `case 'set_name'`);
+  src/tests/chatDurabilityTruth.test.ts read-only-disk case asserts
+  `body.actionExecuted === false`; src/tests/actionExecutedSweepAudit.test.ts
+  no longer counts set_name as a literal-true site and pins its conditional form.
+  Targeted 5 files / 42 passed.
+
+In Progress:
+- #13 remains `PARTIAL` — remaining surfaces: telephony-stage non-success variants
+  and the YouTube summarizer audit rows.
+
+Bugs Found:
+- `/api/chat` set_name `actionExecuted` was unconditional true even when
+  `persistMemory()` returned false (found by sweeping hard-coded true sites).
+
+Bugs Fixed:
+- server.ts set_name now `actionExecuted = persisted`. Negative-validated:
+  reverting only the fix line fails exactly the new assertion (`1 failed | 3
+  passed`); restored -> chatDurabilityTruth 4/4.
+
+Tests:    214 files / 2420 tests passed (66.44 s, 0 failed) — npx vitest run
+Lint:     PASS (tsc --noEmit exit 0)
+Build:    PASS (npm run build exit 0; dist/server.cjs 1081937 bytes)
+E2E:      NOT RUN (no handset)
+Security: git check-ignore .env -> matched (.gitignore:4); no .env staged;
+          dist/ and node_modules/ ignored; diff vs origin/main carries no secret;
+          test-run side effect on jarvis_memory.json reverted before commit.
+
+Documentation: docs/COMPLETION_STATUS.md (slot-10 Last cycle), docs/CHANGELOG.md
+               (slot-10 Fixed/Tests entry)
+Branch:  feature/hermes-full-completion
+Commit:  b94064f
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (existing; unchanged this slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this sandbox;
+            dist/server.cjs is the verified artifact
+
+Blocked:
+- #1, #2, #50, #51, #54, #55 — require real Android hardware / live credentials absent here.
+
+Human Approval Required:
+- Ongoing merge of feature/hermes-full-completion into main (PR #8).
+
+Next Slot:
+- #13 tail: the telephony-stage non-success variants and the YouTube summarizer audit rows,
+  applying the same read-back-before-claim-success pattern.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में /api/chat के set_name को ठीक किया गया ताकि डिस्क-राइट विफल होने पर executed काउंटर झूठा न बढ़े।
+
+## 2026-10-11 02:05 IST (2026-10-10 20:35 UTC) — WORK (window 2026-10-10 → 2026-10-11)
+- Item worked: #13 Zero-fake-success for all tools
+- Status: PARTIAL (no code change; audit only)
+- Scope: continued the route sweep named by slot 10 — telephony-stage non-success variants
+  and YouTube summarizer audit rows.
+- Result: every concrete fake-success site examined is ALREADY gated on a durable write +
+  disk read-back. No new genuine fake-success site found. NO CODE CHANGE made.
+- Routes read (evidence = file reads, no writes): /api/social/generate (5030),
+  /api/social/youtube/upload-draft (5146), /api/social/youtube/draft-test (5281),
+  /api/telephony/outbound/stage (10474), /api/approvals/resolve (7451),
+  /api/autonomous/schedule (8871), /api/blueprint/toggle-item (4644),
+  /api/telegram/{webhook,test-live,send,broadcast} (4775-4897), /api/security/update (6892),
+  /api/restore (6799), /api/emergency/toggle (7071), /api/tools/fs/{write,delete} (7666,7704),
+  /api/telephony/{calls,settings,permissions} (9947,10074,10751),
+  /api/mobile/bridge/{call/answer,message/reply,app/open,disconnect}.
+- Observation (not a bug in this class): /api/security/evaluate (6695) calls
+  getEmergencyState() on a read path, which persists to jarvis_memory.json — a side effect,
+  not a fake success. Left untouched (out of item-13 scope, speculative under the cap).
+- Tests: NOT RUN   Lint: NOT RUN   Build: NOT RUN   E2E: NOT RUN (no handset)   Security: NOT RUN
+- Commit: (report commit)   Push: ok -> origin/feature/hermes-full-completion
+- Blockers: #1,#2,#50,#51,#54,#55 require hardware/credentials.
+- Next: read still-unread routes (computer-operator execute/observe, github/*, memory/sync,
+  tools/github, tools/web, freelance/*); else declare those surfaces exhausted.
+
+हिंदी सारांश: इस स्लॉट में बाकी POST रूट्स का ऑडिट किया; कोई नया नकली-सफलता बग नहीं मिला, कोई कोड बदलाव नहीं किया।
+
+<!-- ===== WORK SLOT 12 — 2026-10-11 03:06 IST ===== -->
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:06
+Window date: 2026-10-11   Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools (slice: fix-plan receipt honesty) —
+  `src/utils/hardening/fixPlanCoverage.ts`; test `src/tests/fixPlanCoverageTruth.test.ts`
+  (13 passed); observed fix-plan receipt now UNVERIFIED when coverage is not
+  established, VERIFIED when fully covered.
+
+In Progress:
+- #13 Item 13 route sweep — remaining routes after ~L8324 of `server.ts` are
+  still uninspected.
+
+Remaining:
+- #13 telephony-stage non-success variants, YouTube summarizer audit rows, and
+  the wider `success: true` / discarded-`persistMemory()` tail.
+
+Bugs Found:
+- `POST /api/github/fix-plan` returned a `receipt` with `outcome: VERIFIED` (and
+  `verified: true`) even when the scan reached nothing — empty account scan
+  (`scans: []`) or every repository unreachable. `reconcileFixPlanWithCoverage`
+  corrected `nothingToDo` and the steps but spread the planner's receipt
+  unchanged; `buildFixPlan` stamps `outcome: 'VERIFIED'` unconditionally. A
+  caller reading the receipt was told the plan took effect over an unscanned
+  scope. Found by reading `fixPlanCoverage.ts` against the planner contract.
+
+Bugs Fixed:
+- `reconcileFixPlanWithCoverage` now derives the receipt from the same coverage
+  verdict: fully covered => VERIFIED (re-recorded against the real source);
+  uncovered => UNVERIFIED with a detail naming the gap, plus a deduped review
+  step. Negative-validated: reverting only the receipt line fails exactly the 2
+  new guards (`2 failed | 11 passed`); restored -> 13/13.
+
+Tests:    214 files / 2423 tests passed (65.55 s, 0 failed) [npx vitest run]
+Lint:     exit 0 (tsc --noEmit)
+Build:    exit 0 (dist/server.cjs 1082975 bytes)
+E2E:      NOT RUN (no handset)
+Security: no .env staged; diff touches only two src files (no credentials).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  06c3cd4 (docs) / 3e4d80a (fix)
+Push:    succeeded -> origin/feature/hermes-full-completion (fix pushed early)
+
+PR:         NONE (not opened this slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- Real Android E2E / real screenshot — requires a physical handset (not present).
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- Continue item 13 route sweep from the remaining `server.ts` routes (~L8324+),
+  or the telephony-stage non-success variants named in the Known limitations.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में fix-plan रूट के झूठे VERIFIED रसीद को ठीक किया गया जब स्कैन खाली/अपहुँच था; पूरी सूट 2423 टेस्ट पास।
+
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:35
+Window date: 2026-10-10 (window 2026-10-10 -> 2026-10-11)   Window slots completed so far: 13
+
+Completed:
+- #13 Zero-fake-success for all tools — POST /api/github/nightly/run (server.ts)
+  discarded the durability verdict of its own audit row. The route already read
+  recordNightlyRun()'s verdict as `recorded`, but the following addAuditLog(...)
+  — the durable evidence the nightly check ran — had its boolean dropped.
+  addAuditLog() goes through recordDurableAuditRow(), which reads the row back
+  from disk; on a read-only volume / full disk the row never reached
+  jarvis_memory.json yet the response presented the run as logged. Now captured
+  as `auditRecorded` and reported. Evidence:
+  src/tests/nightlyRunRecordDurabilityTruth.test.ts — 5/5 passed; negative-
+  validated by `git stash push server.ts` -> 2 failed | 3 passed; restored -> 5/5.
+
+In Progress:
+- #13 Zero-fake-success — the sweep is not exhausted; remaining sites are
+  lower-traffic informational GETs and unclassified `success: true` literals.
+
+Remaining:
+- #13 continues (long tail of `success: true` / discarded-verdict sites).
+- #1/#2/#50/#51/#54/#55 remain BLOCKED/NOT_AVAILABLE (no handset, no carrier, no
+  live provider credentials).
+
+Bugs Found:
+- POST /api/github/nightly/run presented an audit row as logged when its durable
+  read-back verdict was false (discarded return value). Found by reading the
+  route during the item-13 route sweep.
+
+Bugs Fixed:
+- The nightly-run route now captures addAuditLog()'s read-back verdict and
+  exposes it as `auditRecorded` alongside `recorded`. Verified by the extended
+  durability test (5/5) and negative validation (2 failed without the fix).
+
+Tests:    1 targeted file / 5 passed (src/tests/nightlyRunRecordDurabilityTruth.test.ts). Full suite NOT RUN (slot budget).
+Lint:     `tsc --noEmit` exit 0 (observed).
+Build:    NOT RUN (slot budget).
+E2E:      NOT RUN (no handset).
+Security: NOT RUN this slot (no `.env` touched; no secrets read or written).
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle entry updated).
+Branch:  feature/hermes-full-completion
+Commit:  92ca4cb (fix), 182e492 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion (5622aea..182e492)
+
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- #1/#2 Android bridge / real Android E2E — requires a physical handset.
+- #50/#51/#54/#55 — require a carrier / live provider credentials.
+
+Human Approval Required:
+- None new this slot.
+
+Next Slot:
+- #13 — continue the route sweep; highest-value remaining work is the long tail
+  of unclassified `success: true` literals and discarded persist/audit verdicts.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में POST /api/github/nightly/run की ऑडिट-रो durability जाँच ठीक की — अब असफल डिस्क-राइट को "लॉग हो गया" नहीं बताया जाता; टेस्ट 5/5 पास, lint exit 0.
+
+
+[slot 13 verification addendum — 04:04 IST] Full gate results observed after
+the report was first committed: npx vitest run -> 214 files / 2424 tests
+passed (0 failed, 65.80 s); npm run build -> exit 0 (dist/server.cjs 1083018
+bytes); npm run lint (tsc --noEmit) -> exit 0. Supersedes the "NOT RUN (slot
+budget)" lines in the slot-13 section above.
+
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 04:05
+Window date: 2026-10-10 (window 2026-10-10 -> 2026-10-11)   Window slots completed so far: 14
+
+Completed:
+- #13 Zero-fake-success for all tools — POST /api/github/fix-plan (server.ts)
+  answered `success: true` unconditionally, even after slot 12 made
+  reconcileFixPlanWithCoverage downgrade the plan's receipt to UNVERIFIED when
+  the scan never covered the scope. The response body then contradicted itself:
+  `success: true` beside a receipt that said the plan was not verified, so a
+  caller reading the top-level flag saw a working plan over a scope that was
+  never inspected. The route now derives `success` from `plan.receipt.verified`.
+  Evidence: src/tests/fixPlanSuccessTruth.test.ts — 2/2 passed (an end-to-end run
+  against a real server with a blanked token forces the NOT_CONFIGURED/uncovered
+  branch and asserts success === receipt.verified === false with nothingToDo
+  false; plus a source guard). Negative-validated: restoring the literal
+  `success: true` -> 2 failed; restored -> 2/2.
+
+In Progress:
+- #13 Zero-fake-success — the route sweep is not exhausted; the remaining work
+  is the long tail of unclassified `success: true` literals and discarded
+  persist/audit verdicts across lower-traffic routes.
+
+Remaining:
+- #13 continues (long tail).
+- #1/#2/#50/#51/#54/#55 remain BLOCKED/NOT_AVAILABLE (no handset, no carrier, no
+  live provider credentials).
+
+Bugs Found:
+- POST /api/github/fix-plan reported success:true over a scope that was never
+  scanned, contradicting its own receipt. Found by reading the route during the
+  item-13 route sweep.
+
+Bugs Fixed:
+- The fix-plan route now reports `success: plan.receipt.verified`, so the flag
+  and the receipt can no longer disagree. Verified by fixPlanSuccessTruth.test.ts
+  (2/2) and negative validation (2 failed without the fix).
+
+Tests:    src/tests/fixPlanSuccessTruth.test.ts 2/2 (targeted); full suite
+          `npx vitest run` 215 files / 2426 tests passed (67.51 s, 0 failed).
+Lint:     `tsc --noEmit` exit 0 (observed).
+Build:    exit 0 (observed); dist/server.cjs 1083035 bytes.
+E2E:      NOT RUN (no handset).
+Security: NOT RUN this slot (no `.env` touched; no secrets read or written).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md.
+Branch:  feature/hermes-full-completion
+Commit:  937a3b7 (fix+test), 0ca83ce (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion (5e3eb13..0ca83ce)
+
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- #1/#2 Android bridge / real Android E2E — requires a physical handset.
+- #50/#51/#54/#55 — require a carrier / live provider credentials.
+
+Human Approval Required:
+- None new this slot.
+
+Next Slot:
+- 04:35 IST is the FINALIZATION slot. It should run the full gate set, refresh
+  PR #8, and NOT start new development. If a work slot were available, continue
+  the item-13 sweep over the remaining `success: true` literals.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में POST /api/github/fix-plan की झूठी `success: true` ठीक की — अब यह रसीद के अनुसार ही सफलता बताता है; टेस्ट 2/2 पास, पूरी सूट 2426 पास।
+
+================================================================================
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        FINALIZATION  |  IST time: 04:35
+Window date: 2026-10-10 (window 2026-10-10 -> 2026-10-11)   Window slots completed so far: 15
+
+Completed:
+- Finalization pass. No new development. Re-verified the frozen branch tip
+  (feature/hermes-full-completion @ 7468e11) end to end.
+- Root-caused PR #8's failing required check: the CI job never ran. The
+  check-run annotation reads "The job was not started because your account is
+  locked due to a billing issue." (actions run 38094110362 / job 114336341299;
+  0 steps logged, ~2 s duration). Account/billing condition, not a code failure.
+
+In Progress:
+- #13 Zero-fake-success for all tools — PARTIAL. The unclassified
+  `success: true` / discarded `persistMemory()` tail in server.ts /
+  server_tools.ts remains `UNKNOWN`.
+
+Tests:    215 files / 2426 tests passed, 0 failed (observed: `npx vitest run`).
+Lint:     exit 0 (observed: `npm run lint` -> `tsc --noEmit`).
+Build:    exit 0 (observed: `npm run build`); dist/server.cjs 1 083 035 bytes.
+E2E:      NOT RUN (no handset / emulator / display).
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; no `.env`,
+          `node_modules/`, or `dist/` tracked; credential scan over diff clean;
+          no staged files.
+
+Documentation: docs/COMPLETION_STATUS.md, automation/reports/hermes-window-log.md.
+Branch:  feature/hermes-full-completion
+Commit:  <sha after commit>
+Push:    <filled after push>
+
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+            open . non-draft . mergeable: true . mergeable_state: unstable
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target/hosting integration present
+
+Gate status: lint pass . tests pass . build pass . audit clean . conflicts none
+             CI check: FAIL (infrastructure — account billing-locked, not code)
+
+Blocked:
+- #1/#2 Android bridge / real Android E2E — physical handset required.
+- #50/#51/#54/#55 — live carrier / provider credentials / auditor required.
+- Required CI check — GitHub account billing lock; owner action required.
+
+Human Approval Required:
+- Merge PR #8 to main (owner decision).
+- Clear the GitHub billing lock, then re-run the CI check.
+
+Next Slot:
+- Window finalized. Next window: continue item-13 sweep; re-check the CI lock.
+
+हिंदी सारांश (एक पंक्ति):
+- फाइनलाइज़ेशन स्लॉट — सभी गेट (lint/tests/build) पास, ट्री स्वच्छ; PR #8 मानव
+  स्वीकृति की प्रतीक्षा में; CI विफलता का कारण कोड नहीं, खाते का billing lock है।

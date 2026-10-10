@@ -162,7 +162,11 @@ describe('server.ts persists the approval registry on the decision surfaces', ()
     const start = serverSource.indexOf("app.post('/api/approvals/create'");
     expect(start).toBeGreaterThan(-1);
     const route = serverSource.slice(start, serverSource.indexOf("app.post('/api/approvals/resolve'", start));
-    expect(route).toContain('const persisted = persistApprovalRegistry();');
+    // The gate must be the durable write *and* a read-back of the staged row:
+    // persistApprovalRegistry() alone returns persistMemory()'s boolean, which
+    // is true without a write when the snapshot already matches the file.
+    expect(route).toContain('persistApprovalRegistry() &&');
+    expect(route).toContain("actionRequestStatusOnDisk(result.request.id, 'PENDING_APPROVAL')");
     expect(route).toContain('hydrateActionRequests(registryBefore);');
   });
 
