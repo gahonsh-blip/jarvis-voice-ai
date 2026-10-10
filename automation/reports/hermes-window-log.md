@@ -15302,3 +15302,68 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में fix-plan रूट के झूठे VERIFIED रसीद को ठीक किया गया जब स्कैन खाली/अपहुँच था; पूरी सूट 2423 टेस्ट पास।
+
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:35
+Window date: 2026-10-10 (window 2026-10-10 -> 2026-10-11)   Window slots completed so far: 13
+
+Completed:
+- #13 Zero-fake-success for all tools — POST /api/github/nightly/run (server.ts)
+  discarded the durability verdict of its own audit row. The route already read
+  recordNightlyRun()'s verdict as `recorded`, but the following addAuditLog(...)
+  — the durable evidence the nightly check ran — had its boolean dropped.
+  addAuditLog() goes through recordDurableAuditRow(), which reads the row back
+  from disk; on a read-only volume / full disk the row never reached
+  jarvis_memory.json yet the response presented the run as logged. Now captured
+  as `auditRecorded` and reported. Evidence:
+  src/tests/nightlyRunRecordDurabilityTruth.test.ts — 5/5 passed; negative-
+  validated by `git stash push server.ts` -> 2 failed | 3 passed; restored -> 5/5.
+
+In Progress:
+- #13 Zero-fake-success — the sweep is not exhausted; remaining sites are
+  lower-traffic informational GETs and unclassified `success: true` literals.
+
+Remaining:
+- #13 continues (long tail of `success: true` / discarded-verdict sites).
+- #1/#2/#50/#51/#54/#55 remain BLOCKED/NOT_AVAILABLE (no handset, no carrier, no
+  live provider credentials).
+
+Bugs Found:
+- POST /api/github/nightly/run presented an audit row as logged when its durable
+  read-back verdict was false (discarded return value). Found by reading the
+  route during the item-13 route sweep.
+
+Bugs Fixed:
+- The nightly-run route now captures addAuditLog()'s read-back verdict and
+  exposes it as `auditRecorded` alongside `recorded`. Verified by the extended
+  durability test (5/5) and negative validation (2 failed without the fix).
+
+Tests:    1 targeted file / 5 passed (src/tests/nightlyRunRecordDurabilityTruth.test.ts). Full suite NOT RUN (slot budget).
+Lint:     `tsc --noEmit` exit 0 (observed).
+Build:    NOT RUN (slot budget).
+E2E:      NOT RUN (no handset).
+Security: NOT RUN this slot (no `.env` touched; no secrets read or written).
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle entry updated).
+Branch:  feature/hermes-full-completion
+Commit:  92ca4cb (fix), 182e492 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion (5622aea..182e492)
+
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this environment
+
+Blocked:
+- #1/#2 Android bridge / real Android E2E — requires a physical handset.
+- #50/#51/#54/#55 — require a carrier / live provider credentials.
+
+Human Approval Required:
+- None new this slot.
+
+Next Slot:
+- #13 — continue the route sweep; highest-value remaining work is the long tail
+  of unclassified `success: true` literals and discarded persist/audit verdicts.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में POST /api/github/nightly/run की ऑडिट-रो durability जाँच ठीक की — अब असफल डिस्क-राइट को "लॉग हो गया" नहीं बताया जाता; टेस्ट 5/5 पास, lint exit 0.
