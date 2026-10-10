@@ -4201,21 +4201,41 @@ async function checkAndRunSchedulerJobs() {
   const todayIST = getISTDateString();
   const { hour, minute } = getISTCurrentHourMinute();
 
+  // Each routine tick stamps its per-day marker and may only push / log once
+  // that marker is durable. `persistMemory()` reports true without writing when
+  // the file already holds the identical bytes, and fails outright on a
+  // read-only volume or a full disk; an unverified marker would live only in
+  // memory, so the next boot would re-run the tick and a "delivered" log line
+  // would claim a run the durable store lacks. Each tick reads its marker back
+  // via `routineMarkerOnDisk` before the external push; when it did not land the
+  // in-memory stamp is dropped and a FAILED audit row is recorded (item 13).
+
   // 1. Morning Briefing at 09:00 AM IST
   if (hour === 9 && minute >= 0 && minute <= 15) {
     if (memoryState.schedulerState.lastMorningRunDate !== todayIST) {
       memoryState.schedulerState.lastMorningRunDate = todayIST;
-
-      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
-      if (activeTelegramChatId && getCleanTelegramToken()) {
-        const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
-        const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
-        const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
-        const delivery = await deliverTelegramMessage(activeTelegramChatId, morningText);
-        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
+      if (!persistMemory() || !routineMarkerOnDisk('lastMorningRunDate', todayIST)) {
+        delete memoryState.schedulerState.lastMorningRunDate;
+        const failEntry = `[${new Date().toISOString()}] Morning Briefing (09:00 AM IST) NOT run: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        addAuditLog(
+          'Morning Briefing (09:00 AM IST) NOT run: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+      } else {
+        let push: SchedulerPushOutcome = { attempted: false, delivered: false };
+        if (activeTelegramChatId && getCleanTelegramToken()) {
+          const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
+          const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
+          const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
+          const delivery = await deliverTelegramMessage(activeTelegramChatId, morningText);
+          push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
+        }
+        await recordSchedulerOutcome('Morning Briefing (09:00 AM IST)', push);
       }
-      await recordSchedulerOutcome('Morning Briefing (09:00 AM IST)', push);
-      persistMemory();
     }
   }
 
@@ -4224,8 +4244,20 @@ async function checkAndRunSchedulerJobs() {
     if (memoryState.schedulerState.lastMiddayRunDate !== todayIST) {
       memoryState.schedulerState.lastMiddayRunDate = todayIST;
       // No Telegram push and no audit work: this tick only advances the marker.
-      await recordSchedulerOutcome('Midday Health Audit (02:00 PM IST)', { attempted: false, delivered: false });
-      persistMemory();
+      if (!persistMemory() || !routineMarkerOnDisk('lastMiddayRunDate', todayIST)) {
+        delete memoryState.schedulerState.lastMiddayRunDate;
+        const failEntry = `[${new Date().toISOString()}] Midday Health Audit (02:00 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        addAuditLog(
+          'Midday Health Audit (02:00 PM IST) NOT run: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+      } else {
+        await recordSchedulerOutcome('Midday Health Audit (02:00 PM IST)', { attempted: false, delivered: false });
+      }
     }
   }
 
@@ -4233,8 +4265,20 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 18 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastEveningRunDate !== todayIST) {
       memoryState.schedulerState.lastEveningRunDate = todayIST;
-      await recordSchedulerOutcome('Evening Social Pulse (06:30 PM IST)', { attempted: false, delivered: false });
-      persistMemory();
+      if (!persistMemory() || !routineMarkerOnDisk('lastEveningRunDate', todayIST)) {
+        delete memoryState.schedulerState.lastEveningRunDate;
+        const failEntry = `[${new Date().toISOString()}] Evening Social Pulse (06:30 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        addAuditLog(
+          'Evening Social Pulse (06:30 PM IST) NOT run: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+      } else {
+        await recordSchedulerOutcome('Evening Social Pulse (06:30 PM IST)', { attempted: false, delivered: false });
+      }
     }
   }
 
@@ -4242,15 +4286,26 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 22 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastNightRunDate !== todayIST) {
       memoryState.schedulerState.lastNightRunDate = todayIST;
-
-      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
-      if (activeTelegramChatId && getCleanTelegramToken()) {
-        const nightText = `🌙 *HERMES NIGHTLY WORK REPORT (10:30 PM)*\n\nSir, today's work summary has been recorded.\n• *Commands Executed*: ${memoryState.stats.totalCommands}\n• *Memory Persistence*: Synchronized\n• *Daemon Status*: Standby & Active`;
-        const delivery = await deliverTelegramMessage(activeTelegramChatId, nightText);
-        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
+      if (!persistMemory() || !routineMarkerOnDisk('lastNightRunDate', todayIST)) {
+        delete memoryState.schedulerState.lastNightRunDate;
+        const failEntry = `[${new Date().toISOString()}] Nightly Work Summary (10:30 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        addAuditLog(
+          'Nightly Work Summary (10:30 PM IST) NOT run: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+      } else {
+        let push: SchedulerPushOutcome = { attempted: false, delivered: false };
+        if (activeTelegramChatId && getCleanTelegramToken()) {
+          const nightText = `🌙 *HERMES NIGHTLY WORK REPORT (10:30 PM)*\n\nSir, today's work summary has been recorded.\n• *Commands Executed*: ${memoryState.stats.totalCommands}\n• *Memory Persistence*: Synchronized\n• *Daemon Status*: Standby & Active`;
+          const delivery = await deliverTelegramMessage(activeTelegramChatId, nightText);
+          push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
+        }
+        await recordSchedulerOutcome('Nightly Work Summary (10:30 PM IST)', push);
       }
-      await recordSchedulerOutcome('Nightly Work Summary (10:30 PM IST)', push);
-      persistMemory();
     }
   }
 
@@ -7934,6 +7989,27 @@ function recordNightlyRun(record: NightlyRunRecord): boolean {
   if (persistMemory() && nightlyRunOnDisk(record.runId)) return true;
   anyState.nightlyGithubRuns = runs.filter((r) => r.runId !== record.runId);
   return false;
+}
+
+/**
+ * Whether one of the four routine scheduler run-markers reached disk. Each
+ * routine tick (Morning / Midday / Evening / Night) stamps its per-day marker
+ * and must not carry an external push — or claim the tick in the run log —
+ * until that marker is durable. `persistMemory()` reports true without writing
+ * when the file already holds the identical bytes, and fails outright on a
+ * read-only volume or a full disk; either way the marker would live only in
+ * memory, so it is read back before the tick is treated as run (item 13).
+ */
+type RoutineSchedulerMarker = 'lastMorningRunDate' | 'lastMiddayRunDate' | 'lastEveningRunDate' | 'lastNightRunDate';
+
+function routineMarkerOnDisk(marker: RoutineSchedulerMarker, date: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const state = onDisk?.schedulerState as Record<string, string | undefined> | undefined;
+    return state?.[marker] === date;
+  } catch {
+    return false;
+  }
 }
 
 // Reports whether GitHub automation is usable, without making a network call.
