@@ -84,4 +84,19 @@ describe('POST /api/approvals/create wiring (source guard)', () => {
     expect(route).toContain('removeActionRequest(result.request.id)');
     expect(route).toContain('memoryState.permissionRequests = persistedActionRequests()');
   });
+
+  it('reads the staged gate back from disk before answering success', () => {
+    // `persistApprovalRegistry()` returns `persistMemory()`'s boolean, which is
+    // true whenever the snapshot already matches the file — even when no write
+    // is attempted. So a `staged: true` reply must be backed by a read-back of
+    // the row from disk, as the telephony-stage, YouTube-draft and
+    // approvals-resolve routes already do. Without it an operator is handed an
+    // actionId for a request the next boot never sees.
+    const route = approvalCreateRouteSource();
+    expect(route).toContain(
+      "persistApprovalRegistry() &&\n    actionRequestStatusOnDisk(result.request.id, 'PENDING_APPROVAL')"
+    );
+    // The bare, unverified persist must not be the gate.
+    expect(route).not.toContain('const persisted = persistApprovalRegistry();');
+  });
 });

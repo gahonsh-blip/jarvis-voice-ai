@@ -7400,7 +7400,18 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
   // so a discarded write silently emptied it on the next restart and the
   // operator's later decision resolved nothing. The write result is honored — a
   // request that cannot reach disk is not reported as a staged approval.
-  const persisted = persistApprovalRegistry();
+  //
+  // `persistApprovalRegistry()` returns `persistMemory()`'s boolean, which is
+  // `true` whenever the serialized snapshot already matches `jarvis_memory.json`
+  // — even when no write is attempted (read-only volume, full disk). So the gate
+  // cannot rest on that boolean alone: the staged row is read back from disk
+  // with `actionRequestStatusOnDisk`, exactly as the telephony-stage,
+  // YouTube-draft and approvals-resolve routes do. Without the read-back an
+  // operator could be handed an approval card — and an `actionId` — for a
+  // request the next boot never sees.
+  const persisted =
+    persistApprovalRegistry() &&
+    actionRequestStatusOnDisk(result.request.id, 'PENDING_APPROVAL');
   if (!persisted) {
     // The write failed, so roll the live registry back to what it held before
     // this request. `persistApprovalRegistry` copies the request into
