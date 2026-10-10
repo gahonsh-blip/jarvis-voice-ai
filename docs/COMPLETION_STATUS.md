@@ -4,7 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-10 17:00 UTC (22:35 IST) — WORK SLOT 4 of the
+Last cycle: 2026-10-10 17:35 UTC (23:05 IST) — WORK SLOT 5 of the
+2026-10-10 → 2026-10-11 window. Item 13 (`Zero-fake-success for all tools`) —
+**a scheduled autonomous goal ran, and was recorded as run, once its per-day
+marker could be written, but not once that marker reached disk.** The
+scheduled-autonomous-goal loop in `checkAndRunSchedulerJobs()` (`server.ts`)
+stamped `schedulerState.lastAutonomousGoalRuns[goal.id]` and then ran the goal,
+with a bare `persistMemory()` (boolean discarded) as the only durability step
+before the work — and two more bare `persistMemory()` calls in the approval-gate
+and unsupported-step branches. `persistMemory()` returns true without writing when
+the memory file already holds the identical bytes, and on a read-only volume or a
+full disk the write fails outright; either way the per-day marker existed only in
+memory, so the next boot would find no marker and re-run a goal this process had
+recorded as run — the same discarded-result class already fixed for the nightly
+GitHub check. The loop now reads the marker back with a new
+`autonomousGoalMarkerOnDisk(goalId, date)` helper before the goal runs; when it
+did not land it clears the in-memory marker and records a `FAILED` audit row
+instead of a run that will not be kept. The two redundant bare `persistMemory()`
+calls inside the loop are removed — the marker write is now the gated write.
+Guard: new `src/tests/autonomousGoalMarkerDurabilityTruth.test.ts` (4 source
+guards). Negative-validated — reverting `server.ts` fails 4 of 4; restored → 4/4.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file / 4
+passed; full `npx vitest run` 211 files / 2398 tests passed (66.64 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1077135 bytes). E2E: NOT RUN. Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous): 2026-10-10 17:00 UTC (22:35 IST) — WORK SLOT 4 of the
 2026-10-10 → 2026-10-11 window. Item 13 (`Zero-fake-success for all tools`) —
 **the scheduled nightly GitHub check reported a start whose per-day marker
 never reached disk.** `checkAndRunSchedulerJobs()` (`server.ts`) stamped

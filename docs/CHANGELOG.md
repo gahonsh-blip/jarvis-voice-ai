@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 23:05 IST (2026-10-10 17:35 UTC) — window slot 5: a scheduled autonomous goal runs only once its per-day marker is durable
+
+### Fixed
+- **`checkAndRunSchedulerJobs()` (`server.ts`) — the scheduled-autonomous-goal loop stamped `schedulerState.lastAutonomousGoalRuns[goal.id]` and ran the goal, with a bare `persistMemory()` (boolean discarded) as the only durability step before the work.** `persistMemory()` returns true without writing when the memory file already holds the identical bytes, and on a read-only volume or a full disk the write fails outright; either way, the per-day marker existed only in memory, so the next boot would find no marker and re-run a goal this process had recorded as run — the same discarded-result class already fixed for the nightly GitHub check. The loop now reads the marker back from disk with the new `autonomousGoalMarkerOnDisk(goalId, date)` helper before running the goal; when it did not land, the in-memory marker is cleared and the gap is recorded as a `FAILED` audit row instead of a run that will not be kept. The two further bare `persistMemory()` calls in the loop (approval-gate and unsupported-step branches) are removed — the gated marker write is now the single durability point.
+
+### Tests
+- `src/tests/autonomousGoalMarkerDurabilityTruth.test.ts`: new source guards pinning the read-back gate, the absence of the discarded-`persistMemory(); continue;` shape, the truthful NOT-run outcome, and the helper. Lint (`tsc --noEmit`) exit 0; targeted 1 file / 4 tests passed; full `npx vitest run` 211 files / 2398 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1077135 bytes). Negative-validated: reverting `server.ts` fails 4 of 4; restored → 4/4.
+
+
+
 ## [Unreleased] - 2026-10-10 22:35 IST (2026-10-10 17:00 UTC) — window slot 4: the nightly check reports a start only once its per-day marker is durable
 
 ### Fixed
