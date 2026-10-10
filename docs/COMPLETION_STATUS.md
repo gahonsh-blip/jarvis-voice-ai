@@ -6,6 +6,29 @@ evidence. Anything simulated or hardware-dependent is marked accordingly.
 
 Last cycle: 2026-10-10 17:35 UTC (23:05 IST) — WORK SLOT 5 of the
 2026-10-10 → 2026-10-11 window. Item 13 (`Zero-fake-success for all tools`) —
+**the four routine scheduler ticks (Morning / Midday / Evening / Night) carried
+an external Telegram push, or a run-log line, on the strength of a per-day
+marker whose write was never verified.** Each tick in `checkAndRunSchedulerJobs()`
+(`server.ts`) stamped its marker and then pushed before a bare `persistMemory()`
+whose boolean nobody read. `persistMemory()` returns true without writing when the
+memory file already holds identical bytes and fails outright on a read-only volume
+or full disk; an unverified marker therefore lived only in memory — the next boot
+re-ran the tick and a "delivered" log line could claim a run the durable store
+lacks. Each tick now reads its marker back with a new
+`routineMarkerOnDisk(marker, date)` helper before the push; when it did not land
+the in-memory stamp is dropped and a `FAILED` audit row is recorded instead of a
+run that will not be kept. Guard: new
+`src/tests/routineSchedulerMarkerDurabilityTruth.test.ts` (4 source guards).
+Negative-validated — reverting `server.ts` fails 4 of 4; restored → 4/4.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file / 4
+passed; full `npx vitest run` 212 files / 2402 tests passed on the two clean runs
+(the first run of the fire showed 1 transient failure, 212 files / 2402 tests,
+whose output was not captured — not reproducible on three later runs, root cause
+UNKNOWN); `npm run build` exit 0 (`dist/server.cjs` 1079958 bytes). E2E: NOT RUN.
+Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-`persistMemory()` sites remains.
+
+Earlier in this slot (WORK SLOT 5): Item 13 (`Zero-fake-success for all tools`) —
 **a scheduled autonomous goal ran, and was recorded as run, once its per-day
 marker could be written, but not once that marker reached disk.** The
 scheduled-autonomous-goal loop in `checkAndRunSchedulerJobs()` (`server.ts`)
