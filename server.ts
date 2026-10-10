@@ -4329,6 +4329,25 @@ async function checkAndRunSchedulerJobs() {
       const today = todayIST;
       schedState.lastAutonomousGoalRuns[goal.id] = today;
 
+      // The per-day marker above stops this goal from re-running on the next
+      // tick, but the goal only runs once that marker is on disk. `persistMemory()`
+      // returns true without writing when the file already holds the identical
+      // bytes, and on a read-only volume or full disk the write fails outright;
+      // either way the marker lives only in memory, the next boot finds no marker
+      // and re-runs a goal this process recorded as run. Read the marker back,
+      // skip the goal when it did not land, and leave the in-memory marker unset
+      // so this process does not claim a run the durable store lacks.
+      if (!persistMemory() || !autonomousGoalMarkerOnDisk(goal.id, today)) {
+        delete schedState.lastAutonomousGoalRuns[goal.id];
+        addAuditLog(
+          `Scheduled autonomous task "${goal.name}" (${goal.id}) NOT run: the per-day marker could not be written to durable storage.`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        continue;
+      }
+
       if (goal.requiresApproval) {
         addAuditLog(
           `Scheduled autonomous task "${goal.name}" (${goal.id}) is due but requires human approval; it was NOT run unattended.`,
@@ -4345,7 +4364,6 @@ async function checkAndRunSchedulerJobs() {
           stepsTotal: Array.isArray(goal.steps) ? goal.steps.length : 0,
           at: new Date().toISOString(),
         });
-        persistMemory();
         continue;
       }
 
@@ -4358,7 +4376,6 @@ async function checkAndRunSchedulerJobs() {
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
-        persistMemory();
         continue;
       }
 
@@ -7877,6 +7894,27 @@ function nightlyMarkerOnDisk(date: string): boolean {
     const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
     const state = onDisk?.schedulerState as { lastGithubNightlyRunDate?: string } | undefined;
     return state?.lastGithubNightlyRunDate === date;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the per-goal per-day marker reached disk. The scheduled-autonomous
+ * loop stamps `schedulerState.lastAutonomousGoalRuns[goalId]` before running a
+ * goal; `persistMemory()` reports true without writing when the file already
+ * holds the identical bytes, so the marker is read back before the goal runs. A
+ * marker that never landed would let the next boot re-run a goal this process
+ * already recorded as run, next to a durable marker the store does not have
+ * (item 13).
+ */
+function autonomousGoalMarkerOnDisk(goalId: string, date: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const state = onDisk?.schedulerState as
+      | { lastAutonomousGoalRuns?: Record<string, string> }
+      | undefined;
+    return state?.lastAutonomousGoalRuns?.[goalId] === date;
   } catch {
     return false;
   }
