@@ -4,7 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 01:06 IST — **WORK SLOT 9 of the
+Last cycle: 2026-10-11 01:36 IST — **WORK SLOT 10 of the
+2026-10-10 → 2026-10-11 window (01:35 IST fire), continuation.** Item 13
+(`Zero-fake-success for all tools`) — **the `/api/chat` `set_name` case set
+`actionExecuted = true` unconditionally, even on a failed `persistMemory()`.** The
+spoken reply already followed the durable outcome (`I read your name as …, but I
+could not write it to durable storage, so it is not saved.`), and the
+`actionDetail.payload.persisted` flag was already `false` — but the
+`actionExecuted` flag stayed `true`, so the user-visible "Autonomous Actions
+Executed" counter advanced for a write that never happened. `App.tsx` routes
+`data.actionExecuted && data.intent` to `handleExecuteAction()`, so on a
+read-only volume or full disk the client would record executed work for a name
+that exists only in the process's memory. The case now sets `actionExecuted =
+persisted`, mirroring the adjacent `create_file` case; on failure the flag is
+`false` and no action is dispatched. The Telegram `set_name` path never carried
+the flag on the success object (`actionData = { type: 'set_name', name, persisted
+}`), so only the `/api/chat` case needed the fix. Guarded by the existing
+read-only-disk case in `src/tests/chatDurabilityTruth.test.ts` (new
+`expect(body.actionExecuted).toBe(false)` assertion), and `set_name` was removed
+from the literal-`true` sweep in `src/tests/actionExecutedSweepAudit.test.ts`,
+which now pins its conditional form (`actionExecuted = persisted;`, and asserts
+`actionExecuted = true;` is absent from the case body). Negative-validated —
+reverting only the fix line in `server.ts` fails exactly the new assertion
+(`1 failed | 3 passed`); restored → 4/4 in `chatDurabilityTruth.test.ts`. Gates
+(observed this fire, 01:36 IST): lint (`tsc --noEmit`) exit 0; targeted 5 files /
+42 passed; full suite **214 files / 2420 tests passed** (66.44 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1081937 bytes). E2E: NOT RUN (no
+handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — remaining surfaces
+include telephony-stage non-success variants and the YouTube summarizer audit
+rows.
+
+Last cycle (slot 9): 2026-10-11 01:06 IST — **WORK SLOT 9 of the
 2026-10-10 → 2026-10-11 window (01:05 IST fire), continuation.** Item 13
 (`Zero-fake-success for all tools`) — **`POST /api/approvals/create` could
 answer `staged: true` with an actionable `actionId` while the staged Level-4

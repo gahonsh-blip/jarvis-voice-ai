@@ -15147,3 +15147,69 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में approvals/create रूट को डिस्क-रीड-बैक गार्ड दिया गया ताकि बिना लिखे गए Level-4 गेट को सफलता न बताया जाए।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:36
+Window date: 2026-10-11   Window slots completed so far: 10
+
+Completed:
+- #13 Zero-fake-success for all tools — `/api/chat` `case 'set_name'` set
+  `actionExecuted = true` unconditionally. The spoken reply already followed the
+  durable outcome and `actionDetail.payload.persisted` was already `false`, but
+  the `actionExecuted` flag stayed `true` — so the user-visible "Autonomous
+  Actions Executed" counter advanced on a read-only volume / full disk for a name
+  held only in memory. `App.tsx` routes `data.actionExecuted && data.intent` to
+  `handleExecuteAction()`, so the client recorded executed work for a write that
+  never happened. Fixed: `actionExecuted = persisted`, mirroring the adjacent
+  `create_file` case. Evidence: server.ts (~line 11249, `case 'set_name'`);
+  src/tests/chatDurabilityTruth.test.ts read-only-disk case asserts
+  `body.actionExecuted === false`; src/tests/actionExecutedSweepAudit.test.ts
+  no longer counts set_name as a literal-true site and pins its conditional form.
+  Targeted 5 files / 42 passed.
+
+In Progress:
+- #13 remains `PARTIAL` — remaining surfaces: telephony-stage non-success variants
+  and the YouTube summarizer audit rows.
+
+Bugs Found:
+- `/api/chat` set_name `actionExecuted` was unconditional true even when
+  `persistMemory()` returned false (found by sweeping hard-coded true sites).
+
+Bugs Fixed:
+- server.ts set_name now `actionExecuted = persisted`. Negative-validated:
+  reverting only the fix line fails exactly the new assertion (`1 failed | 3
+  passed`); restored -> chatDurabilityTruth 4/4.
+
+Tests:    214 files / 2420 tests passed (66.44 s, 0 failed) — npx vitest run
+Lint:     PASS (tsc --noEmit exit 0)
+Build:    PASS (npm run build exit 0; dist/server.cjs 1081937 bytes)
+E2E:      NOT RUN (no handset)
+Security: git check-ignore .env -> matched (.gitignore:4); no .env staged;
+          dist/ and node_modules/ ignored; diff vs origin/main carries no secret;
+          test-run side effect on jarvis_memory.json reverted before commit.
+
+Documentation: docs/COMPLETION_STATUS.md (slot-10 Last cycle), docs/CHANGELOG.md
+               (slot-10 Fixed/Tests entry)
+Branch:  feature/hermes-full-completion
+Commit:  b94064f
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (existing; unchanged this slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this sandbox;
+            dist/server.cjs is the verified artifact
+
+Blocked:
+- #1, #2, #50, #51, #54, #55 — require real Android hardware / live credentials absent here.
+
+Human Approval Required:
+- Ongoing merge of feature/hermes-full-completion into main (PR #8).
+
+Next Slot:
+- #13 tail: the telephony-stage non-success variants and the YouTube summarizer audit rows,
+  applying the same read-back-before-claim-success pattern.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में /api/chat के set_name को ठीक किया गया ताकि डिस्क-राइट विफल होने पर executed काउंटर झूठा न बढ़े।

@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 01:36 IST (2026-10-10 20:06 UTC) — window slot 10: `/api/chat` set_name stops crediting execution when the durable write fails
+
+### Fixed
+- **`server.ts` — the `/api/chat` `set_name` case set `actionExecuted = true` unconditionally, even when `persistMemory()` failed.** The spoken reply already followed the durable outcome, and `actionDetail.payload.persisted` was already `false`, but the `actionExecuted` flag stayed `true` — so the user-visible "Autonomous Actions Executed" counter advanced for a write that never happened. `App.tsx` routes `data.actionExecuted && data.intent` to `handleExecuteAction()`, so on a read-only volume or full disk the client would record executed work for a name held only in the process's memory. The flag now follows the write result (`actionExecuted = persisted`), mirroring the adjacent `create_file` case; on failure it is `false` and no action is dispatched (backlog item 13, zero fake success).
+
+### Tests
+- `src/tests/chatDurabilityTruth.test.ts`: the read-only-disk case now asserts `body.actionExecuted === false`. `src/tests/actionExecutedSweepAudit.test.ts`: `set_name` removed from the literal-`true` sweep; a new case pins its conditional form (`actionExecuted = persisted;` present, `actionExecuted = true;` absent). Negative-validated: reverting only the fix line in `server.ts` fails exactly the new assertion (`1 failed | 3 passed`); restored → `chatDurabilityTruth` 4/4. Lint (`tsc --noEmit`) exit 0; targeted 5 files / 42 passed; full `npx vitest run` 214 files / 2420 tests passed (66.44 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1081937 bytes).
+
+
 ## [Unreleased] - 2026-10-11 01:06 IST (2026-10-10 19:36 UTC) — window slot 9: the approvals/create route reads the staged gate back from disk before claiming success
 
 ### Fixed
