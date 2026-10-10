@@ -1,12 +1,12 @@
 {
   "window_date": "2026-10-10",
   "window_started_at": "2026-10-10T15:35:00Z",
-  "last_slot_at": "2026-10-10T16:35:00Z",
-  "slots_completed": 3,
+  "last_slot_at": "2026-10-10T17:00:00Z",
+  "slots_completed": 4,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "3293429",
+  "last_commit": "26c0370",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -15,5 +15,5 @@
   "pr": "https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8",
   "main_merge": "NOT_MERGED_AWAITING_HUMAN",
   "deploy": "NOT_CONFIGURED",
-  "note": "Work slot 3 of window 2026-10-10 -> 2026-10-11 (22:05 IST fire). Item 13 slice: ensureValidYouTubeToken() (server.ts) now captures the persistMemory() result after a token refresh (refreshPersisted + refreshPersistenceError) instead of discarding it, so a minted access token that never reached jarvis_memory.json is reported rather than used as a request validity that dies on the next boot. Commits 5bb30a7 (fix+test), 3293429 (docs). Guard src/tests/youtubeTokenRefreshDurabilityTruth.test.ts, negative-validated. Next: continue the discarded-persistMemory()/success:true sweep in server.ts / server_tools.ts."
+  "note": "Work slot 4 of window 2026-10-10 -> 2026-10-11 (22:35 IST fire). Item 13 slice: checkAndRunSchedulerJobs() (server.ts) no longer launches the scheduled nightly GitHub check on a bare, unread persistMemory(). It now reads the per-day marker back from disk via nightlyMarkerOnDisk(date) and skips the scan with a FAILED audit row when the write did not land, so a start that will not survive a reboot is never logged as started. Commits b725463 (fix+test), 26c0370 (docs). Guard src/tests/nightlyMarkerDurabilityTruth.test.ts, negative-validated (revert fails 4/4). Next: continue the discarded-persistMemory()/success:true sweep in server.ts / server_tools.ts."
 }
