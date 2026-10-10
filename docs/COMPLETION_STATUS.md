@@ -25,8 +25,9 @@ not persisted; plus 3 source guards, one of them new, pinning both the capture
 and the reported field). Negative-validated — `git stash push server.ts` fails
 exactly the 2 new assertions (`2 failed | 3 passed`); restored → 5/5. Gates
 (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file / 5 passed;
-`npm run build` NOT RUN (slot budget); full suite NOT RUN (slot budget). E2E:
-NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the
+full suite **214 files / 2424 tests passed** (65.80 s, 0 failed); `npm run build`
+exit 0 (`dist/server.cjs` 1083018 bytes). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the
 long tail of unclassified `success: true` / discarded-verdict sites remains
 (the sweep this slot confirmed the highest-priority remaining sites in
 `server.ts` — the telephony stage/authorize routes, the YouTube draft routes,
