@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-10 23:46 IST (2026-10-10 18:16 UTC) — window slot 6: the nightly check's audit badge follows the receipt, not the run record
+
+### Fixed
+- **`server.ts` — the nightly GitHub check's audit row reported a partial sweep as a confirmed `VERIFIED` check.** `runNightlyCheck()` marks the run record `COMPLETED` even when the sweep could not reach every repository, while it marks the receipt `DISPATCHED` in that case and reserves `VERIFIED` for a fully clean, remote-confirmed scan. The scheduler's audit row and the manual `POST /api/github/nightly/run` route both derived the badge from `result.record.outcome` (`=== 'COMPLETED' ? 'VERIFIED' : 'FAILED'`), so a partial sweep rendered a green confirmed badge — a superset of what the scan's own receipt admitted (backlog item 13, zero fake success). New `src/utils/github/nightlyAuditTruth.ts` (`nightlyAuditBadge`) maps the receipt outcome: `VERIFIED` only on a remote-confirmed clean scan, `FAILED` on `FAILED`/`BLOCKED`, `UNVERIFIED` otherwise. Both call sites route through it (the inline helper was replaced by the import), and the manual route's success code now rests on `receipt.verified` alone — the redundant `record.outcome` OR is dropped.
+
+### Tests
+- `src/tests/nightlyAuditTruth.test.ts`: the pure badge mapping (5 cases) plus two source guards on `server.ts` pinning that the run-record mapping is gone and both call sites route through `nightlyAuditBadge(result.receipt.outcome)`. Lint (`tsc --noEmit`) exit 0; targeted 1 file / 6 tests passed; full `npx vitest run` 214 files / 2412 tests passed (66.29 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1080103 bytes). Negative-validated: reintroducing `DISPATCHED → VERIFIED` fails exactly the regression case (`1 failed | 5 passed`); restored → 6/6.
+
+---
+
 ## [Unreleased] - 2026-10-10 23:05 IST (2026-10-10 17:35 UTC) — window slot 5: each routine scheduler tick runs only once its per-day marker is durable
 
 ### Fixed

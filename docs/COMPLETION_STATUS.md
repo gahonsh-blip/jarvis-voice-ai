@@ -4,7 +4,32 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-10 18:10 UTC (23:40 IST 2026-10-10) — **WORK SLOT 6 of the
+Last cycle: 2026-10-10 18:16 UTC (23:46 IST 2026-10-10) — **WORK SLOT 6 of the
+2026-10-10 → 2026-10-11 window (23:35 IST fire), continuation.** Item 13
+(`Zero-fake-success for all tools`) — **the nightly GitHub check's audit row
+reported a partial sweep as a confirmed `VERIFIED` check.** `runNightlyCheck()`
+marks the run record `COMPLETED` even when the sweep could not reach every
+repository, while it marks the receipt `DISPATCHED` in that case and reserves
+`VERIFIED` for a fully clean, remote-confirmed scan. The scheduler's audit row and
+the manual `POST /api/github/nightly/run` route both derived the badge from
+`result.record.outcome` (`=== 'COMPLETED' ? 'VERIFIED' : 'FAILED'`), so a partial
+sweep rendered a green confirmed badge — a superset of what the scan's own receipt
+admitted. New `src/utils/github/nightlyAuditTruth.ts` (`nightlyAuditBadge`) maps
+the receipt outcome: `VERIFIED` only on a remote-confirmed clean scan, `FAILED` on
+`FAILED`/`BLOCKED`, `UNVERIFIED` otherwise. Both call sites now route through it
+(inline helper removed, imported instead), and the manual route's success code
+rests on `receipt.verified` alone (the redundant `record.outcome` OR is dropped).
+Guarded by `src/tests/nightlyAuditTruth.test.ts` (6 cases: pure mapping + two
+source guards on `server.ts`). Negative-validated — reintroducing
+`DISPATCHED → VERIFIED` fails exactly the regression case (`1 failed | 5 passed`);
+restored → 6/6. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full
+suite **214 files / 2412 tests passed** (66.29 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1080103 bytes). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-`persistMemory()` sites remains. (Note: rebased onto
+the live branch head `4382641` before pushing.)
+
+Last cycle (previous): 2026-10-10 18:10 UTC (23:40 IST 2026-10-10) — **WORK SLOT 6 of the
 2026-10-10 → 2026-10-11 window.** Item 13 (`Zero-fake-success for all tools`) —
 **the Tools HUD rendered an unobserved web-fetch title as a blank "successful"
 title.** The server's `realWebFetch` already refuses a page that exposed nothing,
