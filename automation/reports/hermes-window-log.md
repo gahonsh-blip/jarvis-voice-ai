@@ -14929,3 +14929,82 @@ Item 13 (Zero-fake-success for all tools) — further slice advanced. The four r
 **Slot: WORK | IST 2026-10-10 23:35 (18:16 UTC) | window 2026-10-10 -> 2026-10-11, slot 6**
 
 Item 13 (Zero-fake-success for all tools) — further slice advanced. The nightly GitHub check's audit row reported a partial sweep as a confirmed `VERIFIED` check. `runNightlyCheck()` marks the run record `COMPLETED` even when the sweep could not reach every repository, while the receipt stays `DISPATCHED` in that case and reserves `VERIFIED` for a fully clean, remote-confirmed scan. The scheduler's audit row and the manual `POST /api/github/nightly/run` route both derived the badge from `result.record.outcome` (`=== 'COMPLETED' ? 'VERIFIED' : 'FAILED'`), so a partial sweep drew a green confirmed badge — a superset of what the scan's own receipt admitted. New `src/utils/github/nightlyAuditTruth.ts` (`nightlyAuditBadge`) maps `receipt.outcome` -> `VERIFIED` (remote-confirmed clean only) / `FAILED` (on `FAILED`/`BLOCKED`) / `UNVERIFIED` otherwise; both call sites route through it (the inline helper is replaced by the import), and the manual route's success code now rests on `receipt.verified` alone — the redundant `record.outcome` OR is dropped. Guard: new `src/tests/nightlyAuditTruth.test.ts` (6 cases: pure mapping + two `server.ts` source guards). Negative-validated: reintroducing `DISPATCHED -> VERIFIED` fails exactly the regression case (`1 failed | 5 passed`); restored 6/6. Gates observed this fire: lint (`tsc --noEmit`) exit 0; targeted 1 file / 6 passed; full suite **214 files / 2412 tests passed** (66.29 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1080103 bytes). Commits 86043ad (fix+test, rebased onto live head 4382641), eaa7540 (docs). Item 13 stays PARTIAL — the long tail of unclassified `success:true` / discarded-`persistMemory()` sites remains. Main merge NOT MERGED — awaiting human approval. Deploy NOT_CONFIGURED.
+
+
+----- SLOT 7 | WORK | 2026-10-11 00:05 IST | window 2026-10-10 -----
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:05 (Sun 2026-10-11)
+Window date: 2026-10-10   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools — slice: POST /api/telephony/outbound/stage
+  no longer reports a staged request as durable when the approval row did not
+  reach disk. Evidence: server.ts route now gates on
+  actionRequestStatusOnDisk(id,'PENDING_APPROVAL') read-back; new
+  TelephonySessionManager.cancelOutboundRequest(id) withdraws the pending
+  request on miss and drops the gateway registry entry; route answers
+  staged:false/outcome:'NOT_DURABLE'. Test src/tests/outboundStageTruth.test.ts:
+  1 file / 18 passed (was 15 cases, +1 source guard, +3 behavioral).
+  Negative-validated: reverting only the read-back gate fails the source guard
+  (1 failed | 17 passed); restored -> 18/18.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the long tail of unclassified
+  success:true / discarded-persistMemory() sites remains. Routes audited
+  this slot: /api/routines/trigger (already covered by a truth test),
+  server_tools.ts real* functions (realGitStatus/Log/Diff, realGithubRepos/
+  CreateIssue, realWebFetch, fetchYouTubeTranscriptData).
+
+Remaining:
+- #13 continues next slot: sweep remaining success:true sites in server.ts /
+  server_tools.ts for unverified durability.
+- Items 1, 2, 50, 51, 54, 55 remain blocked (hardware/credential).
+
+Bugs Found:
+- server.ts POST /api/telephony/outbound/stage: persistApprovalRegistry()
+  returns persistMemory()'s boolean, which is true whenever the in-memory
+  snapshot serializes to bytes identical to jarvis_memory.json — even when no
+  write is attempted (read-only volume, full disk). The route therefore handed
+  the operator an approval card and an actionId for a request the next boot
+  would not know existed.
+
+Bugs Fixed:
+- The stage route now reads the approval row back from disk. On a miss it
+  withdraws the pending request (cancelOutboundRequest), removes the gateway
+  registry entry, and returns no actionable id. Proven by the negative-validated
+  source guard plus the 3 behavioral cancel cases (18/18).
+
+Tests:    214 files / 2416 tests passed (65.56 s, 0 failed) — full npx vitest run
+          targeted: src/tests/outboundStageTruth.test.ts 1 file / 18 passed
+Lint:     npm run lint (tsc --noEmit) exit 0
+Build:    npm run build exit 0 — dist/server.cjs 1081278 bytes
+E2E:      NOT RUN (no handset attached)
+Security: git check-ignore -v .env -> matched .gitignore:4:.env (ignored, not staged);
+          git status clean of tokens/keys/node_modules/dist; no .env staged
+
+Documentation: docs/COMPLETION_STATUS.md updated (slot 7 entry)
+Branch:  feature/hermes-full-completion
+Commit:  76fd723 (fix), 5d7e8c9 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion (76fd723..5d7e8c9)
+
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; the verified artifact
+            is the deployment unit available.
+
+Blocked:
+- #1/#2 Android Bridge / Real Android E2E — requires a real Android device
+- #50/#51/#54/#55 — require hardware/credentials not present in this sandbox
+
+Human Approval Required:
+- Merge of PR #8 into main (owner reads final verification report first).
+- PR CI may still be blocked by the owner account billing lock (unverified here).
+
+Next Slot:
+- #13 (Zero-fake-success) — continue the success:true / discarded-persistMemory()
+  durability sweep; next candidate: remaining action/approval registry routes.
+
+Hindi summary (one line):
+- Iss slot mein telephony outbound stage route theek kiya — ab sirf tabhi
+  success:true/staged:true milega jab approval row sach mein disk par likhi gayi ho;
+  poori suite 214 files / 2416 tests pass.
