@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 01:06 IST (2026-10-10 19:36 UTC) — window slot 9: the approvals/create route reads the staged gate back from disk before claiming success
+
+### Fixed
+- **`server.ts` — `POST /api/approvals/create` could answer `staged: true` / `success: true` with an actionable `actionId` while the staged Level-4 approval never reached disk.** The route gated its reply on `persistApprovalRegistry()`, which returns `persistMemory()`'s boolean — `true` whenever the in-memory snapshot serializes to bytes identical to `jarvis_memory.json`, even when no write is attempted (read-only volume, full disk). The operator was handed an approval card for a request the next boot would not know existed. The route now reads the staged row back from disk with `actionRequestStatusOnDisk(result.request.id, 'PENDING_APPROVAL')` before reporting a staged approval — matching the telephony-stage, YouTube-draft and approvals-resolve routes — and on a miss rolls the live registry back to the pre-request snapshot and answers `persisted: false` / `NOT_DURABLE` (backlog item 13, zero fake success).
+
+### Tests
+- `src/tests/approvalCreateTruth.test.ts`: new source-guard case pinning the read-back (`actionRequestStatusOnDisk`) and the blocked-request drop. `src/tests/approvalDurabilityTruth.test.ts`: the stale guard that pinned the bare `const persisted = persistApprovalRegistry();` assignment now requires the hardened read-back gate. Negative-validated: reverting only the read-back clause in `server.ts` fails exactly the new case (`1 failed | 8 passed`); restored → `approvalCreateTruth` 9/9. Lint (`tsc --noEmit`) exit 0; targeted 2 files / 14 passed; full `npx vitest run` 214 files / 2419 tests passed (64.65 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1081932 bytes).
+
+
 ## [Unreleased] - 2026-10-11 00:36 IST (2026-10-10 19:06 UTC) — window slot 8: the YouTube staging routes read the staged gate back from disk before claiming success
 
 ### Fixed

@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 00:36 IST — **WORK SLOT 8 of the
+Last cycle: 2026-10-11 01:06 IST — **WORK SLOT 9 of the
+2026-10-10 → 2026-10-11 window (01:05 IST fire), continuation.** Item 13
+(`Zero-fake-success for all tools`) — **`POST /api/approvals/create` could
+answer `staged: true` with an actionable `actionId` while the staged Level-4
+approval never reached disk.** The route gated its reply on
+`persistApprovalRegistry()`, which returns `persistMemory()`'s boolean — `true`
+whenever the serialized snapshot already matches `jarvis_memory.json`, even when
+no write is attempted (read-only volume, full disk). In that state the operator
+was handed an approval card for a request the next boot would not know existed.
+The route now reads the staged row back from disk with
+`actionRequestStatusOnDisk(result.request.id, 'PENDING_APPROVAL')` before
+reporting a staged approval — matching the telephony-stage, YouTube-draft and
+approvals-resolve routes — and on a miss rolls the live registry back to the
+pre-request snapshot and answers `persisted: false` / `NOT_DURABLE`. A stale
+source-guard in `src/tests/approvalDurabilityTruth.test.ts` that pinned the bare
+`const persisted = persistApprovalRegistry();` assignment was updated to require
+the read-back gate; the new case lives in
+`src/tests/approvalCreateTruth.test.ts`. Targeted 2 files / 14 passed.
+Negative-validated — reverting only the read-back clause in `server.ts` fails
+exactly the new guard (`1 failed | 8 passed`); restored → 9/9 in
+`approvalCreateTruth.test.ts`. Gates (observed this fire, 01:06 IST): lint
+(`tsc --noEmit`) exit 0; targeted 2 files / 14 passed; full suite **214 files /
+2419 tests passed** (64.65 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1081932 bytes). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — remaining surfaces include
+telephony-stage non-success variants and the YouTube summarizer audit rows.
+
+Last cycle (slot 8): 2026-10-11 00:36 IST — **WORK SLOT 8 of the
 2026-10-10 → 2026-10-11 window (00:35 IST fire), continuation.** Item 13
 (`Zero-fake-success for all tools`) — **the two YouTube staging routes
 (`POST /api/social/youtube/upload-draft`, `POST /api/social/youtube/draft-test`)
@@ -8465,6 +8492,16 @@ stays `PARTIAL` — the sweep is not exhausted.
 ---
 
 ## Known limitations
+
+- **Work slot 9, 2026-10-11 01:06 IST — `POST /api/approvals/create` durability
+  gap closed; Item 13 still `PARTIAL`.** The create route now reads the staged
+  row back from disk before claiming a staged approval, so a phantom Level-4
+  gate can no longer be handed to the operator when the write did not land. The
+  long tail of unclassified `success: true` / discarded-`persistMemory()` sites
+  remains; telephony-stage non-success variants and the YouTube summarizer audit
+  rows are the next named surfaces. No hardware or credential is present in this
+  environment, so Android E2E, real screenshot, and any live provider call remain
+  `NOT_RUN` / `NOT_AVAILABLE`.
 
 - **Finalization slot, 2026-10-09 04:35 IST — window 2026-10-08/09 closed; no
   new backlog item was advanced.** Froze and re-verified the tip `abbd2ec` on
