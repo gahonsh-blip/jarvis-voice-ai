@@ -1,12 +1,12 @@
 {
   "window_date": "2026-10-10",
   "window_started_at": "2026-10-10T15:35:00Z",
-  "last_slot_at": "2026-10-10T17:00:00Z",
-  "slots_completed": 4,
+  "last_slot_at": "2026-10-10T17:35:00Z",
+  "slots_completed": 5,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "97a23a4",
+  "last_commit": "a248b6b",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -15,5 +15,5 @@
   "pr": "https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8",
   "main_merge": "NOT_MERGED_AWAITING_HUMAN",
   "deploy": "NOT_CONFIGURED",
-  "note": "Work slot 4 of window 2026-10-10 -> 2026-10-11 (22:35 IST fire). Item 13 slice: checkAndRunSchedulerJobs() (server.ts) no longer launches the scheduled nightly GitHub check on a bare, unread persistMemory(). It now reads the per-day marker back from disk via nightlyMarkerOnDisk(date) and skips the scan with a FAILED audit row when the write did not land, so a start that will not survive a reboot is never logged as started. Commits b725463 (fix+test), 26c0370 (docs). Guard src/tests/nightlyMarkerDurabilityTruth.test.ts, negative-validated (revert fails 4/4). Next: continue the discarded-persistMemory()/success:true sweep in server.ts / server_tools.ts."
+  "note": "Work slot 5 of window 2026-10-10 -> 2026-10-11 (23:05 IST fire). Item 13 slice: the scheduled-autonomous-goal loop in checkAndRunSchedulerJobs() (server.ts) no longer runs a goal on a bare, unread persistMemory(). It stamps schedulerState.lastAutonomousGoalRuns[goal.id], reads the marker back from disk via new autonomousGoalMarkerOnDisk(goalId, date), skips the goal with a FAILED audit row when the write did not land, and drops the two redundant bare persistMemory() calls in the approval-gate / unsupported-step branches. Commits 1851a54 (fix+test), a248b6b (docs). Guard src/tests/autonomousGoalMarkerDurabilityTruth.test.ts, negative-validated (revert fails 4/4). Next: continue the discarded-persistMemory()/success:true sweep in server.ts / server_tools.ts."
 }
