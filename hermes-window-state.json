@@ -1,19 +1,26 @@
 {
   "window_date": "2026-10-10",
   "window_started_at": "2026-10-10T15:35:00Z",
-  "last_slot_at": "2026-10-10T15:35:00Z",
-  "slots_completed": 1,
+  "last_slot_at": "2026-10-10T16:05:00Z",
+  "slots_completed": 2,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "6444b6f",
+  "last_commit": "5f710c1",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
-  "blocked_items": [1, 2, 50, 51, 54, 55],
+  "blocked_items": [
+    1,
+    2,
+    50,
+    51,
+    54,
+    55
+  ],
   "last_report_path": "/tmp/hermes-window-report.md",
   "pr": "https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8",
   "main_merge": "NOT_MERGED_AWAITING_HUMAN",
   "deploy": "NOT_CONFIGURED",
-  "note": "Work slot 1 of window 2026-10-10 -> 2026-10-11 (21:05 IST fire). Item 13 slice: summarizeYouTubeVideoCore audit rows now durable (recordDurableAuditRow). Commits 3e19c63, 59cbea9, 6444b6f. Next: ensureValidYouTubeToken() (server.ts:815) discarded persistMemory() sweep."
+  "note": "Work slot 2 of window 2026-10-10 -> 2026-10-11 (21:35 IST fire). Item 13 slice: blocked action requests are dropped from the live registry (removeActionRequest) in POST /api/approvals/create 403/423 and POST /api/telephony/outbound/stage 409 so a refused request cannot persist and resurrect. Commits 889ab41, 5f710c1. Next: ensureValidYouTubeToken() (server.ts:815) discarded persistMemory() sweep."
 }
