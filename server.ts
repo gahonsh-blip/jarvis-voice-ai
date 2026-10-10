@@ -261,6 +261,7 @@ import {
 } from './src/utils/github/nightlyScheduler';
 import { ApprovalQueue } from './src/utils/github/approvalQueue';
 import { PROTECTED_BRANCH_NAMES } from './src/utils/github/automationWorkflow';
+import { nightlyAuditBadge } from './src/utils/github/nightlyAuditTruth';
 
 /** Real host action executor, used by the operator endpoints. */
 const hostActionExecutor = new HostActionExecutor({ workspaceRoot: process.cwd() });
@@ -4347,10 +4348,10 @@ async function checkAndRunSchedulerJobs() {
           .then((result) => {
             recordNightlyRun(result.record);
             addAuditLog(
-              `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+              `GitHub nightly check ${result.receipt.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
               1,
               'AUTOMATED_SCHEDULE',
-              result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
+              nightlyAuditBadge(result.receipt.outcome)
             );
             console.log('[Scheduler] Nightly repository check:', result.record.outcome);
           })
@@ -8299,13 +8300,13 @@ app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
     const runRecorded = recordNightlyRun(result.record);
 
     addAuditLog(
-      `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+      `GitHub nightly check ${result.receipt.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
       1,
       'AUTOMATED_SCHEDULE',
-      result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
+      nightlyAuditBadge(result.receipt.outcome)
     );
 
-    res.status(result.receipt.verified || result.record.outcome === 'COMPLETED' ? 200 : 502).json({
+    res.status(result.receipt.verified ? 200 : 502).json({
       success: result.record.outcome === 'COMPLETED',
       outcome: result.receipt.outcome,
       recorded: runRecorded,
