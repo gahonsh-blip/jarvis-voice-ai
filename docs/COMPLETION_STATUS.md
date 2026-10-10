@@ -4,7 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-10 18:16 UTC (23:46 IST 2026-10-10) — **WORK SLOT 6 of the
+Last cycle: 2026-10-11 00:05 IST — **WORK SLOT 7 of the
+2026-10-10 → 2026-10-11 window (00:05 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **`POST /api/telephony/outbound/stage`
+could answer `success: true` / `staged: true` with an actionable `actionId`
+while the staged Level-4 request lived only in memory.** The route gated its
+reply on `persistApprovalRegistry()`, but that returns `persistMemory()`'s
+boolean, which is `true` whenever the in-memory snapshot serializes to bytes
+identical to `jarvis_memory.json` — even when no write is attempted (read-only
+volume, full disk). In that state the operator was handed an approval card and
+an `actionId` for a request the next boot would not know existed. The route now
+reads the approval row back from disk with
+`actionRequestStatusOnDisk(actionReq.request.id, 'PENDING_APPROVAL')`; when the
+row did not land it withdraws the pending request via the new
+`TelephonySessionManager.cancelOutboundRequest(id)`, drops the gateway registry
+entry (`removeActionRequest`), and answers `staged: false` /
+`outcome: 'NOT_DURABLE'` with no actionable id. Guarded by
+`src/tests/outboundStageTruth.test.ts` (+1 source guard, +3 behavioral cases for
+`cancelOutboundRequest`) — 18 pass. Negative-validated — reverting only the
+route's read-back gate fails the source-guard case exactly (`1 failed | 17
+passed`); restored → 18/18. Gates (observed this fire, 00:05 IST): lint
+(`tsc --noEmit`) exit 0; targeted 1 file / 18 passed; full suite **214 files /
+2416 tests passed** (65.56 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1081278 bytes). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous): 2026-10-10 18:16 UTC (23:46 IST 2026-10-10) — **WORK SLOT 6 of the
 2026-10-10 → 2026-10-11 window (23:35 IST fire), continuation.** Item 13
 (`Zero-fake-success for all tools`) — **the nightly GitHub check's audit row
 reported a partial sweep as a confirmed `VERIFIED` check.** `runNightlyCheck()`
