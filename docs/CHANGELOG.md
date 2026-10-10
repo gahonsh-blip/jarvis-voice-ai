@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 04:05 IST (2026-10-10 22:35 UTC) — window slot 14: the fix-plan route stops reporting `success: true` over an unscanned scope
+
+### Fixed
+- **`server.ts` — `POST /api/github/fix-plan` answered `success: true` unconditionally, contradicting the receipt in the same body.** Slot 12 made `reconcileFixPlanWithCoverage` downgrade the plan's receipt to `UNVERIFIED` when the scan never covered the scope, but the route kept emitting a literal `success: true` regardless. A caller reading the top-level flag saw a working plan over a scope that was never inspected, while the receipt beside it said the plan was not verified. The route now derives `success` from `plan.receipt.verified`, so the two fields cannot disagree (backlog item 13, zero fake success).
+
+### Tests
+- `src/tests/fixPlanSuccessTruth.test.ts`: an end-to-end run against a real server with a blanked token (the NOT_CONFIGURED scan forces the uncovered branch) asserts `success === receipt.verified === false` with `nothingToDo: false`; a source guard pins `success: plan.receipt.verified`. Negative-validated: restoring the literal `success: true` fails exactly both assertions (`2 failed`); restored → 2/2. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 215 files / 2426 tests passed (67.51 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1083035 bytes).
+
+
 ## [Unreleased] - 2026-10-11 03:06 IST (2026-10-10 21:36 UTC) — window slot 12: the fix-plan route stops stamping VERIFIED over an unscanned scope
 
 ### Fixed

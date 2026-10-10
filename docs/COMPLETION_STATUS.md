@@ -4,7 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 03:35 IST — **WORK SLOT 13 of the
+Last cycle: 2026-10-11 04:05 IST — **WORK SLOT 14 of the
+2026-10-10 → 2026-10-11 window (04:05 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **`POST /api/github/fix-plan` answered
+`success: true` unconditionally, contradicting its own receipt.** Slot 12
+reconciled the plan's `receipt` with real coverage — `reconcileFixPlanWithCoverage`
+now downgrades it to `UNVERIFIED` when the scan never covered the scope — but the
+route kept reporting a literal `success: true` in the same JSON body. A caller
+reading the top-level flag saw a working plan over a scope that was never
+inspected, while the receipt beside it said the plan was not verified. The route
+now derives `success` from `plan.receipt.verified`, so the two fields cannot
+disagree. Guarded by the new `src/tests/fixPlanSuccessTruth.test.ts` (2 cases: an
+end-to-end run against a real server with a blanked token — the NOT_CONFIGURED
+scan forces the uncovered branch — asserts `success === receipt.verified === false`
+with `nothingToDo: false`; plus a source guard pinning `success: plan.receipt.verified`).
+Negative-validated — restoring the literal `success: true` fails exactly both
+assertions (`2 failed`); restored → 2/2. Gates (observed this fire): lint
+(`tsc --noEmit`) exit 0; targeted 1 file / 2 passed; full suite **215 files /
+2426 tests passed** (67.51 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1083035 bytes). E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` literals across the remaining routes is not yet exhausted.
+
+Last cycle (slot 13): 2026-10-11 03:35 IST — **WORK SLOT 13 of the
 2026-10-10 → 2026-10-11 window (03:35 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **`POST /api/github/nightly/run` discarded
 the durability verdict of its own audit row.** The route already consumed
