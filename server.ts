@@ -8343,7 +8343,14 @@ app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
     // recorded when the next boot would not find it.
     const runRecorded = recordNightlyRun(result.record);
 
-    addAuditLog(
+    // The audit row is the durable evidence that the check ran. `addAuditLog()`
+    // returns the read-back verdict (`recordDurableAuditRow`), which the route
+    // discarded: on a read-only volume or full disk the row never reached disk
+    // while the response still presented the run as logged, so a later Security
+    // Matrix read would show no trace of it. Capture the verdict and report it,
+    // alongside the run-record verdict, so the caller can tell a run whose
+    // evidence survived from one whose did not.
+    const auditRecorded = addAuditLog(
       `GitHub nightly check ${result.receipt.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
       1,
       'AUTOMATED_SCHEDULE',
@@ -8354,6 +8361,7 @@ app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
       success: result.record.outcome === 'COMPLETED',
       outcome: result.receipt.outcome,
       recorded: runRecorded,
+      auditRecorded,
       record: result.record,
       plan: result.plan
         ? {

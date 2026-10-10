@@ -124,6 +124,9 @@ describe('POST /api/github/nightly/run reports run-record durability honestly', 
 
     const { body } = await runNightly();
     expect(body.recorded).toBe(false);
+    // The run's audit row is written through the same durable path, so it too
+    // must be reported as not recorded rather than presented as logged evidence.
+    expect(body.auditRecorded).toBe(false);
 
     // The phantom row is not left on disk (it never got there) and the response's
     // runId is not present in the durable history.
@@ -152,5 +155,13 @@ describe('the nightly-run history is written through a durable, read-back helper
   it('has the manual-run route consume and report the verdict', () => {
     expect(route).toContain('const runRecorded = recordNightlyRun(result.record);');
     expect(route).toContain('recorded: runRecorded,');
+  });
+
+  it('has the manual-run route consume and report the audit-row durability verdict', () => {
+    // The audit row is durable evidence of the run; a discarded `addAuditLog()`
+    // verdict presented an unlogged run as logged. Guard both the capture and
+    // the reported field so a future edit cannot drop the check again.
+    expect(route).toContain('const auditRecorded = addAuditLog(');
+    expect(route).toContain('auditRecorded,');
   });
 });
