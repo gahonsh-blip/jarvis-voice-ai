@@ -16016,3 +16016,91 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में scheduled-goal run history को restart-safe बनाया (item 43, evidence के साथ) और flaky suite की असली वजह — duplicate test ports — ढूँढकर ठीक की; पूरी suite 2478/2478 पास।
+
+## 2026-10-12 01:35 IST (2026-10-11 20:05 UTC) — WORK SLOT 9 (window 2026-10-11 → 2026-10-12)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:35 (fire 01:35)
+Window date: 2026-10-11 (window 2026-10-11 → 2026-10-12)   Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (one more slice, honestly partial).
+  Fixed `src/components/AndroidPermissionCenter.tsx`: `handleToggleCategory`
+  (per-category notification toggles) and `handleToggleAppRule` (per-application
+  allow/block rules) called `androidBridgeEngine.updateSettings(...)` and
+  **discarded its boolean result**. `updateSettings` returns `false` when the
+  bridge store refused the write (no `localStorage`, quota exceeded, private
+  mode), so a refused settings change looked durable — the toggle stayed flipped
+  on screen until the next reload silently restored the old value. Both handlers
+  now capture the result and render an explicit **NOT SAVED** notice that names
+  the reload revert, matching the gating `updatePermission` already used in the
+  same component.
+  Evidence: `src/tests/androidPermissionCenterTruth.test.ts` — **4 passed**
+  (both handlers capture the result, no bare `androidBridgeEngine.updateSettings(...)`
+  statement remains, both branch on `persisted` with a `NOT SAVED`/`reverts on
+  reload` notice). Negative-validated: restoring the discarded-result pattern
+  fails all 4 assertions (`4 failed`); restored → `4 passed`.
+
+In Progress:
+- #13 Zero-fake-success for all tools — still PARTIAL. The long tail of
+  unclassified `success: true` surfaces remains; each slot closes one or two
+  handlers. Next candidates: remaining discarded-result calls to
+  `updateSettings` / `updatePermission` / `recordAudit` / `clearAuditLogs` /
+  `saveMobilePermissions` across the mobile + operator surfaces.
+
+Remaining:
+- #1–#12 Android bridge / real E2E / real screenshot / computer operator —
+  blocked on a physical Android device and a GUI runtime (not present).
+- #14+ AI/Memory, Autonomous Tasks, Voice, Wake Word, Production Hardening —
+  largely present; remaining gaps are the non-VERIFIED items below #13.
+- #50, #51, #54, #55 — blocked (see Blocked).
+
+Bugs Found:
+- Discarded persistence result in `AndroidPermissionCenter` settings handlers
+  (found by grepping the component for calls whose boolean return was dropped,
+  then reading `updateSettings` in the bridge engine to confirm it returns a
+  real write verdict).
+
+Bugs Fixed:
+- The two `AndroidPermissionCenter` handlers now branch on the real write
+  verdict. Verification: new regression test `androidPermissionCenterTruth.test.ts`
+  (4 cases) fails with the old pattern and passes with the fix.
+
+Tests:    221 files / 2482 tests passed (0 failed) — `npx vitest run`, observed this fire.
+Lint:     `tsc --noEmit` exit 0 — observed.
+Build:    `npm run build` exit 0; `dist/server.cjs` 1084956 bytes — observed.
+E2E:      NOT RUN (no Android handset in this sandbox).
+Security: `.env` gitignored (`.gitignore:4`); `git status --short` empty;
+          no `node_modules`/`dist` tracked; credential-pattern scan of
+          `git diff origin/main` returned no matches.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md updated this slot.
+Branch:  feature/hermes-full-completion
+Commit:  3189465 (fix) + e82b832 (docs)
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         NOT REFRESHED this slot (no PR tool exposed in this environment); branch pushed.
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target/hosting integration in this sandbox;
+            the verified artifact is dist/server.cjs (1084956 bytes).
+
+Blocked:
+- #1–#12 Android bridge / real E2E / real screenshot / computer operator — require a
+  physical Android device and a GUI runtime; not present here.
+- #50, #51, #54, #55 — require hardware/credentials not available in this sandbox.
+- Voice / wake-word audio paths — require a real microphone/speech engine.
+
+Human Approval Required:
+- None new. The pending main merge still needs a human read of the report.
+
+Next Slot:
+- Continue #13: fix the next discarded-result handler (a deterministic, testable slice).
+
+Note on window state:
+- The persisted state file lagged by one slot: it recorded `slots_completed: 7`,
+  but the 01:05 IST fire wrote report slot 8 without updating the state file.
+  This slot is 9 and the state file is corrected to 9.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में Android Permission Center के दो handlers ठीक किए जो settings लिखने की
+  असफलता को "सेव हो गया" बताते थे (item 13, evidence के साथ); पूरी suite 2482/2482 पास।
