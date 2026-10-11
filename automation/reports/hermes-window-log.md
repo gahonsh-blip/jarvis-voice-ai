@@ -16177,6 +16177,39 @@ Note on window state:
 
 ---
 
+## Slot 12 — 2026-10-12 03:35 IST (WORK)
+
+Item #13 — Zero-fake-success for all tools: Memory Bank offline fallback.
+
+Found: the four Memory Bank handlers (handleUpdateName, handleAddCustomKey,
+handleDeleteNote, handleSaveNotepadNote) in src/App.tsx fall back to
+queuePendingSync(...) when the server write fails, and the boolean it returns was
+discarded. A refused queue (quota exceeded, private mode, no localStorage) still
+left the console reading "saved to localStorage and queued for sync" while the
+server would never receive the change.
+
+Fixed: src/utils/hardening/memoryStoreTruth.ts adds classifySyncQueueWrite(queued,
+label) -> { queued, tone, notice }. A landed queue is silent; a refused queue names
+the item and states it stays on this device only and the server will not receive it
+until retry. All four offline fallbacks now capture the result and raise a
+dismissible role="alert" notice when the queue was refused.
+
+Evidence: src/tests/memoryStoreWriteTruth.test.ts — 12 passed (3 new unit cases on
+the queue classifier + 2 new source guards: every offline queue call is gated on
+classifySyncQueueWrite(...), and no console.warn(...); queuePendingSync(...) discard
+pattern remains). Negative-validated: reverting the name-change fallback to the
+discarded pattern failed the two source guards (2 failed | 10 passed); restored ->
+12/12.
+Gates: lint exit 0; full npx vitest run 223 files / 2504 tests passed (78.00 s, 0
+failed); npm run build exit 0 (dist/server.cjs 1084956 bytes). Security: .env
+gitignored, tree clean, no credential in the diff. E2E: NOT RUN. Deploy:
+NOT_CONFIGURED. Item 13 stays PARTIAL.
+
+हिंदी सारांश: इस स्लॉट में Memory Bank के offline fallback को ठीक किया जो refused
+sync-queue को "queued" बताता था (item 13, evidence के साथ); पूरी suite 2504/2504 पास।
+
+---
+
 ## Slot 11 — 2026-10-12 03:05 IST (WORK)
 
 Item #13 — Zero-fake-success for all tools: Permission Gateway decision durability.
