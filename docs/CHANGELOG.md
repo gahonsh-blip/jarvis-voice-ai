@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 22:35 IST (2026-10-11 17:05 UTC) — window slot 4: Android bridge persistence stops reporting fake success
+
+### Fixed
+- **`src/utils/androidBridgeEngine.ts` — `AndroidBridgeManager.saveState()` swallowed `localStorage` write failures in an empty `catch` and returned `void`; `updatePermission()`, `updateSettings()`, `recordAudit()` and `clearAuditLogs()` all propagated that void.** A refused write (quota exceeded, private mode, storage unavailable) looked identical to a persisted one, so `src/components/AndroidPermissionCenter.tsx` (`handleTogglePermState`, `handleGrantAll`) and `src/components/MobilePersonalStatusModal.tsx` (`handleToggleAndroidBridgePerm`) applied a permission or privacy setting that silently reverted on reload. `saveState()` now returns `boolean` (true only when all three writes landed; false when `window`/`localStorage` is absent or a write throws), the four callers propagate it, and both components show a `NOT SAVED … reverts on reload` notice instead of implying success (backlog item 13, zero fake success).
+
+### Tests
+- `src/tests/androidMobileBridge.test.ts`: 5 new cases under "Android bridge persistence reports real durability (zero fake success)" — `saveState()` true plus a round-trip through a reloaded manager on success, false on a refused write, false for `updateSettings`/`recordAudit`, false with no storage. Negative-validated: restoring `return true` in the catch fails 4 assertions (`4 failed | 44 passed`); restored → 48/48. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 215 files / 2442 tests passed (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1 083 372 bytes).
+
+
 ## [Unreleased] - 2026-10-11 22:05 IST (2026-10-11 16:35 UTC) — window slot 3: mobile permission writes stop reporting fake success
 
 ### Fixed

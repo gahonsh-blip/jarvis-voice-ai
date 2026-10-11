@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 22:05 IST — **WORK SLOT 3 of the
+Last cycle: 2026-10-11 22:35 IST — **WORK SLOT 4 of the
+2026-10-11 → 2026-10-12 window (22:35 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **`AndroidBridgeManager.saveState()` in
+`src/utils/androidBridgeEngine.ts` swallowed `localStorage` write failures in an
+empty `catch` and returned `void`, and `updatePermission()`, `updateSettings()`,
+`recordAudit()` and `clearAuditLogs()` all propagated that void — so an Android
+permission toggle, privacy-settings change, or audit row that never reached
+storage looked identical to one that did.** `saveState()` now returns `boolean`
+(true only when all three writes landed; `false` when `window`/`localStorage` is
+absent or a write throws) and the four callers propagate the verdict.
+`src/components/AndroidPermissionCenter.tsx`
+(`handleTogglePermState`, `handleGrantAll`) and
+`src/components/MobilePersonalStatusModal.tsx`
+(`handleToggleAndroidBridgePerm`) now show a `NOT SAVED … reverts on reload`
+notice instead of claiming the permission was applied. Evidence:
+`src/tests/androidMobileBridge.test.ts` (**48 passed**, 5 new cases under
+"Android bridge persistence reports real durability": true+round-trip on
+success, false on a refused write with a reloaded manager confirming the change
+was not durable, false for `updateSettings`/`recordAudit`, false with no
+storage) — negative-validated by reverting `saveState`'s catch to `return true`
+(`4 failed | 44 passed`), then restored (`48 passed`). Lint exit 0; full suite
+**215 files / 2442 tests passed** (0 failed); build exit 0 (`dist/server.cjs`
+1 083 372 bytes). Security: `.env` gitignored (`.gitignore:4`), tree clean, no
+credential in the diff. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — the long tail of unclassified `success: true`
+surfaces remains.
+
+Last cycle (previous slot): 2026-10-11 22:05 IST — **WORK SLOT 3 of the
 2026-10-11 → 2026-10-12 window (22:05 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **`saveMobilePermissions()` in
 `src/utils/mobileStatusEngine.ts` returned `void` and swallowed the
