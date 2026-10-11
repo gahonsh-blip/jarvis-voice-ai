@@ -137,7 +137,10 @@ export const MobileBridgeModal: React.FC<Props> = ({
 
   const tryAnswerCall = (ev: PendingMobileEvent) => {
     onSpeak(buildCallAnswerUnsupported(activeLanguage));
-    updatePendingEventStatus(ev.eventId, 'FAILED');
+    const persisted = updatePendingEventStatus(ev.eventId, 'FAILED');
+    if (!persisted) {
+      setSimNotice('STATUS NOT SAVED — local storage refused the write; this item stays in the queue.');
+    }
     refresh();
   };
 
@@ -200,22 +203,32 @@ export const MobileBridgeModal: React.FC<Props> = ({
     const outcome = replyDispatchOutcome(httpStatus, body);
     // A handed-off reply is not EXECUTED (the device has not confirmed it), and
     // an unconfirmed dispatch is not a SUCCESS in the audit log.
-    updatePendingEventStatus(ev.eventId, replyEventStatusForOutcome(outcome));
+    const statusPersisted = updatePendingEventStatus(ev.eventId, replyEventStatusForOutcome(outcome));
     const auditProjection = replyAuditProjection(outcome);
-    logMobileAudit({
+    const auditPersisted = logMobileAudit({
       application: ev.appLabel || ev.displaySubtitle,
       actionRequested: 'SEND_REPLY',
       permissionState: 'GRANTED',
       ...auditProjection,
     });
-    setSimNotice('REPLY ' + outcome + ' (HTTP ' + httpStatus + ')');
+    const persistNote = statusPersisted && auditPersisted
+      ? ''
+      : ' \u2014 STORAGE WRITE REFUSED: ' +
+        (!statusPersisted ? 'queue status not saved' : '') +
+        (!statusPersisted && !auditPersisted ? ' and ' : '') +
+        (!auditPersisted ? 'audit entry not saved' : '') +
+        ' (reverts on reload).';
+    setSimNotice('REPLY ' + outcome + ' (HTTP ' + httpStatus + ')' + persistNote);
     onSpeak(replyDispatchSpeech(outcome, activeLanguage));
     setReplyBusyId(null);
     refresh();
   };
 
   const dismissPending = (ev: PendingMobileEvent) => {
-    updatePendingEventStatus(ev.eventId, 'REJECTED');
+    const persisted = updatePendingEventStatus(ev.eventId, 'REJECTED');
+    if (!persisted) {
+      setSimNotice('DISMISS NOT SAVED — local storage refused the write; this item stays in the queue.');
+    }
     refresh();
   };
 

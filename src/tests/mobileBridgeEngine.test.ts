@@ -369,4 +369,42 @@ describe('Mobile Bridge Engine + Notification Privacy Suite', () => {
       assert.equal(maskCallerId(undefined), 'unknown number');
     });
   });
+
+  describe('8. Storage writes report real durability (zero fake success)', () => {
+    it('enqueuePendingEvent returns true only when the queue write persisted', () => {
+      installMemoryStorage();
+      assert.equal(enqueuePendingEvent(makeCall() as any), true);
+    });
+
+    it('updatePendingEventStatus returns false for an unknown event id', () => {
+      installMemoryStorage();
+      assert.equal(updatePendingEventStatus('does-not-exist', 'REJECTED'), false);
+    });
+
+    it('updatePendingEventStatus returns false when storage refuses the write', () => {
+      installMemoryStorage();
+      enqueuePendingEvent(makeCall() as any);
+      (globalThis as any).localStorage.setItem = () => {
+        throw new Error('QuotaExceededError');
+      };
+      assert.equal(updatePendingEventStatus('call-1', 'REJECTED'), false);
+    });
+
+    it('enqueuePendingEvent returns false when storage refuses the write', () => {
+      installMemoryStorage();
+      (globalThis as any).localStorage.setItem = () => {
+        throw new Error('QuotaExceededError');
+      };
+      assert.equal(enqueuePendingEvent(makeCall() as any), false);
+    });
+
+    it('logMobileAudit returns true on success and false when the write is refused', () => {
+      installMemoryStorage();
+      assert.equal(logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any), true);
+      (globalThis as any).localStorage.setItem = () => {
+        throw new Error('QuotaExceededError');
+      };
+      assert.equal(logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any), false);
+    });
+  });
 });

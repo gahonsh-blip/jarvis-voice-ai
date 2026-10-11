@@ -170,18 +170,18 @@ function loadQueue(): PendingMobileEvent[] {
  }
 }
 
-function persistQueue(queue: PendingMobileEvent[]): void {
+function persistQueue(queue: PendingMobileEvent[]): boolean {
  {
-  if (typeof window === 'undefined') return;
-   try { localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue)); } catch {}
+  if (typeof window === 'undefined') return false;
+   try { localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue)); return true; } catch { return false; }
 }
 }
 
-export function enqueuePendingEvent(event: PendingMobileEvent): void {
+export function enqueuePendingEvent(event: PendingMobileEvent): boolean {
  {
   const queue = loadQueue().filter((e) => e.status === 'PENDING_APPROVAL');
    queue.push(event);
-   persistQueue(queue);
+   return persistQueue(queue);
 }
 }
 
@@ -197,14 +197,13 @@ export function getTopPendingEvent(): PendingMobileEvent | undefined {
 }
 }
 
-export function updatePendingEventStatus(eventId: string, status: PendingMobileEvent['status']): void {
+export function updatePendingEventStatus(eventId: string, status: PendingMobileEvent['status']): boolean {
  {
   const queue = loadQueue();
    const idx = queue.findIndex((e) => e.eventId === eventId);
-    if (idx >= 0) {
+    if (idx < 0) return false;
      queue[idx] = { ...queue[idx],  status: status };
-     persistQueue(queue);
-   }
+     return persistQueue(queue);
 }
 }
 
@@ -277,8 +276,8 @@ function redactAuditSecrets(entry: Record<string, unknown>): Record<string, unkn
   return out;
 }
 
-export function logMobileAudit(entry: Omit<MobileAuditEntry, 'id' | 'timestamp'>): void {
-  if (typeof window === 'undefined') return;
+export function logMobileAudit(entry: Omit<MobileAuditEntry, 'id' | 'timestamp'>): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     const raw = localStorage.getItem(AUDIT_STORAGE_KEY);
     const list: MobileAuditEntry[] = raw ? JSON.parse(raw) : [];
@@ -286,8 +285,9 @@ export function logMobileAudit(entry: Omit<MobileAuditEntry, 'id' | 'timestamp'>
     list.unshift({ ...sanitized, id: auditId(), timestamp: new Date().toISOString() } as MobileAuditEntry);
     const trimmed = list.slice(0, MAX_AUDIT_ENTRIES);
     localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(trimmed));
+    return true;
   } catch {
-    // ignore
+    return false;
   }
 }
 
