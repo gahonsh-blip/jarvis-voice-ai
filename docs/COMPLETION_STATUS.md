@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 23:35 IST — **WORK SLOT 6 of the
+Last cycle: 2026-10-12 00:05 IST — **WORK SLOT 7 of the
+2026-10-11 → 2026-10-12 window (00:05 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **the screenshot "Download PNG" handler
+(`src/components/ScreenshotModal.tsx`) set its success flag the instant it
+clicked the download anchor and always rendered "Saved to device storage &
+logged to screenshot gallery." Two claims were false: the anchor click only
+hands the PNG to the browser (the page cannot confirm the write landed), and no
+screenshot gallery exists anywhere in this app (`grep` for "gallery" matched only
+that string).** Added `buildDownloadNotice()` to
+`src/utils/computerOperator/screenshotDispatchTruth.ts`, returning
+`{delivered, tone, text}`: a success notice that states only the provable
+hand-off and explicitly denies the gallery, and a `warn` no-op notice when no
+image is in hand; `handleDownload` now gates the anchor click on
+`notice.delivered`, and the modal renders the notice (emerald success / rose
+warn) in place of the retired boolean. Evidence:
+`src/tests/screenshotDownloadNoticeTruth.test.ts` (**5 passed**): builder
+hand-off text (no "logged to screenshot gallery", contains the "nothing is
+logged to a gallery" denial), builder no-op on `null`, plus three source scans
+pinning the modal (`buildDownloadNotice(`, no retired string, no
+`setSavedMessage`, renders on `downloadNotice &&`) — negative-validated by
+restoring the false claim in the builder (`1 failed | 4 passed`), then restored
+(`5 passed`). Lint exit 0; full suite **218 files / 2461 tests passed** (0
+failed); build exit 0 (`dist/server.cjs` 1 083 372 bytes). Security: `.env`
+gitignored (`.gitignore:4`), tree clean, no credential in the diff. E2E: NOT RUN
+(no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` surfaces remains.
+
+Last cycle (previous slot): 2026-10-11 23:35 IST — **WORK SLOT 6 of the
 2026-10-11 → 2026-10-12 window (23:35 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **the JARVIS Notepad save button
 (`src/components/NotepadModal.tsx`) wrote the draft with a bare

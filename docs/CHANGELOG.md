@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-12 00:05 IST (2026-10-11 18:35 UTC) — window slot 7: screenshot download stops claiming a gallery write
+
+### Fixed
+- **`src/components/ScreenshotModal.tsx` — the "Download PNG" handler set its success flag the instant it clicked the download anchor and always rendered "Saved to device storage & logged to screenshot gallery."** Two claims were false: the anchor click only hands the PNG to the browser (the page cannot confirm the write landed), and no screenshot gallery exists anywhere in this app (`grep` for "gallery" matched only that string). The handler now routes through `buildDownloadNotice()` and renders its result — an emerald hand-off notice that explicitly denies the gallery, or a rose no-op notice when no image is in hand — instead of a bare boolean.
+- **`src/utils/computerOperator/screenshotDispatchTruth.ts` — added `buildDownloadNotice(capturedImage)`** returning `{ delivered, tone, text }`, so the download path states only the provable hand-off.
+
+### Tests
+- `src/tests/screenshotDownloadNoticeTruth.test.ts`: 5 cases — builder hand-off text (no "logged to screenshot gallery", contains the "nothing is logged to a gallery" denial), builder no-op on `null`, plus three source scans pinning the modal (`buildDownloadNotice(`, no retired string, no `setSavedMessage`, renders on `downloadNotice &&`). Negative-validated: restoring the false claim in the builder fails 1 assertion (`1 failed | 4 passed`); restored → 5/5. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 218 files / 2461 tests passed (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1 083 372 bytes).
+
+
 ## [Unreleased] - 2026-10-11 23:35 IST (2026-10-11 18:05 UTC) — window slot 6: Notepad save stops reporting fake success
 
 ### Fixed
