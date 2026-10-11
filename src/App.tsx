@@ -84,6 +84,7 @@ import {
   getPendingSyncQueue,
   clearPendingSyncQueue,
 } from './utils/offlineStorage';
+import { classifyMemoryStoreWrite } from './utils/hardening/memoryStoreTruth';
 import { processOfflineCommand } from './utils/localJarvisEngine';
 import {
   determineTtsLocale,
@@ -116,6 +117,9 @@ export default function App() {
   const [volumeLevel, setVolumeLevel] = useState<number>(0);
   const [statusText, setStatusText] = useState<string>('SYSTEM READY • OFFLINE-FIRST STORAGE ACTIVE');
   const [geminiConnected, setGeminiConnected] = useState<boolean>(false);
+  // Non-null only when a Memory Bank edit could not be persisted; a refused
+  // local write must not read as a completed save (item 13).
+  const [memorySaveNotice, setMemorySaveNotice] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   // The backend's reachability is a separate observation from the browser's
   // network state; it stays null until a probe has actually answered.
@@ -1584,7 +1588,8 @@ export default function App() {
   const handleUpdateName = async (name: string) => {
     const updatedMemory = { ...memory, name };
     setMemory(updatedMemory);
-    saveLocalMemory(updatedMemory);
+    const localWrite = classifyMemoryStoreWrite(saveLocalMemory(updatedMemory), 'The name change');
+    setMemorySaveNotice(localWrite.notice || null);
 
     try {
       const res = await fetch('/api/memory', {
@@ -1595,7 +1600,8 @@ export default function App() {
       const data = await res.json();
       if (data.memory) {
         setMemory(data.memory);
-        saveLocalMemory(data.memory);
+        const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(data.memory), 'The synced name');
+        setMemorySaveNotice(mergeWrite.notice || null);
       }
     } catch (err) {
       console.warn('[OfflineStorage] Update name offline, saved to localStorage and queued for sync:', err);
@@ -1612,7 +1618,8 @@ export default function App() {
       },
     };
     setMemory(updatedMemory);
-    saveLocalMemory(updatedMemory);
+    const localWrite = classifyMemoryStoreWrite(saveLocalMemory(updatedMemory), 'The new fact');
+    setMemorySaveNotice(localWrite.notice || null);
 
     try {
       const res = await fetch('/api/memory', {
@@ -1623,7 +1630,8 @@ export default function App() {
       const data = await res.json();
       if (data.memory) {
         setMemory(data.memory);
-        saveLocalMemory(data.memory);
+        const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(data.memory), 'The synced fact');
+        setMemorySaveNotice(mergeWrite.notice || null);
       }
     } catch (err) {
       console.warn('[OfflineStorage] Add custom key offline, saved to localStorage and queued for sync:', err);
@@ -1635,7 +1643,8 @@ export default function App() {
     const updatedNotes = memory.notes.filter((n) => n.id !== id);
     const updatedMemory = { ...memory, notes: updatedNotes };
     setMemory(updatedMemory);
-    saveLocalMemory(updatedMemory);
+    const localWrite = classifyMemoryStoreWrite(saveLocalMemory(updatedMemory), 'The note deletion');
+    setMemorySaveNotice(localWrite.notice || null);
 
     try {
       const res = await fetch('/api/memory', {
@@ -1646,7 +1655,8 @@ export default function App() {
       const data = await res.json();
       if (data.memory) {
         setMemory(data.memory);
-        saveLocalMemory(data.memory);
+        const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(data.memory), 'The synced notes');
+        setMemorySaveNotice(mergeWrite.notice || null);
       }
     } catch (err) {
       console.warn('[OfflineStorage] Delete note offline, saved to localStorage and queued for sync:', err);
@@ -1664,7 +1674,8 @@ export default function App() {
     const updatedNotes = [newNote, ...(memory.notes || [])];
     const updatedMemory = { ...memory, notes: updatedNotes };
     setMemory(updatedMemory);
-    saveLocalMemory(updatedMemory);
+    const localWrite = classifyMemoryStoreWrite(saveLocalMemory(updatedMemory), 'The saved note');
+    setMemorySaveNotice(localWrite.notice || null);
 
     try {
       const res = await fetch('/api/memory', {
@@ -1675,7 +1686,8 @@ export default function App() {
       const data = await res.json();
       if (data.memory) {
         setMemory(data.memory);
-        saveLocalMemory(data.memory);
+        const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(data.memory), 'The synced note');
+        setMemorySaveNotice(mergeWrite.notice || null);
       }
     } catch (err) {
       console.warn('[OfflineStorage] Save note offline, saved to localStorage and queued for sync:', err);
@@ -1977,6 +1989,22 @@ export default function App() {
         isOpen={activeApp === 'screenshots'}
         onClose={() => setActiveApp(null)}
       />
+
+      {memorySaveNotice && (
+        <div
+          role="alert"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-md px-4 py-2.5 rounded-lg bg-amber-950/95 border border-amber-500/60 text-amber-200 text-xs font-mono shadow-2xl flex items-start gap-2"
+        >
+          <span className="flex-1">{memorySaveNotice}</span>
+          <button
+            onClick={() => setMemorySaveNotice(null)}
+            className="text-amber-300 hover:text-white font-bold"
+            title="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <MemoryModal
         isOpen={activeApp === 'memory'}
