@@ -4,6 +4,7 @@ const CHAT_HISTORY_KEY = 'hermes_jarvis_chat_history_v1';
 const MEMORY_STORE_KEY = 'hermes_jarvis_memory_store_v1';
 const VOICE_SETTINGS_KEY = 'hermes_jarvis_voice_settings_v1';
 const PENDING_SYNC_KEY = 'hermes_jarvis_pending_sync_v1';
+const NOTEPAD_CONTENT_KEY = 'jarvis_notepad_content';
 
 export interface PendingSyncItem {
   id: string;
@@ -155,6 +156,33 @@ export function saveLocalVoiceSettings(settings: VoiceSettings): boolean {
     return true;
   } catch (err) {
     console.warn('[OfflineStorage] Error saving voice settings to localStorage:', err);
+    return false;
+  }
+}
+
+export function loadLocalNotepadContent(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(NOTEPAD_CONTENT_KEY);
+  } catch (err) {
+    console.warn('[OfflineStorage] Error reading notepad content from localStorage:', err);
+    return null;
+  }
+}
+
+/**
+ * Persists the notepad draft and reports whether the write actually landed. The
+ * Notepad save button used to call `localStorage.setItem` directly and show
+ * "Saved!" unconditionally, so a swallowed quota or private-mode error read as a
+ * durable save the next reload would not find.
+ */
+export function saveLocalNotepadContent(content: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.setItem(NOTEPAD_CONTENT_KEY, content);
+    return true;
+  } catch (err) {
+    console.warn('[OfflineStorage] Error saving notepad content to localStorage:', err);
     return false;
   }
 }

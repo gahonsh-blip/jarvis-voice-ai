@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Download, Copy, Trash2, Check, FileText } from 'lucide-react';
+import { X, Save, Download, Copy, Trash2, Check, FileText, AlertTriangle } from 'lucide-react';
+import { loadLocalNotepadContent, saveLocalNotepadContent } from '../utils/offlineStorage';
 
 interface NotepadModalProps {
   isOpen: boolean;
@@ -17,28 +18,45 @@ export const NotepadModal: React.FC<NotepadModalProps> = ({
   const [text, setText] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [savedStatus, setSavedStatus] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialContent) {
       setText((prev) => (prev ? `${prev}\n\n[Jarvis Input]: ${initialContent}` : initialContent));
     } else {
-      const stored = localStorage.getItem('jarvis_notepad_content');
+      const stored = loadLocalNotepadContent();
       if (stored) setText(stored);
     }
   }, [initialContent, isOpen]);
 
   if (!isOpen) return null;
 
+  // Writes the draft and reports the real result. A swallowed quota or
+  // private-mode storage error must not read as a completed save.
+  const persistDraft = (): boolean => saveLocalNotepadContent(text);
+
   const handleSave = () => {
-    localStorage.setItem('jarvis_notepad_content', text);
-    if (onSaveNote) {
+    const saved = persistDraft();
+    if (saved && onSaveNote) {
       onSaveNote('Desktop Note', text);
     }
-    setSavedStatus(true);
-    setTimeout(() => setSavedStatus(false), 2000);
+    if (saved) {
+      setSaveError(null);
+      setSavedStatus(true);
+      setTimeout(() => setSavedStatus(false), 2000);
+    } else {
+      setSavedStatus(false);
+      setSaveError('NOT SAVED — local storage refused the write; this draft is not persisted and will be lost on reload.');
+    }
   };
 
   const handleDownload = () => {
+    // The export is only a durable record if the draft is also persisted, so a
+    // failed local write downgrades the .txt export to a one-time snapshot.
+    if (!persistDraft()) {
+      setSavedStatus(false);
+      setSaveError('DOWNLOADED AS SNAPSHOT ONLY — local storage refused the write; this draft is not persisted locally.');
+    }
     const blob = new Blob([text || 'Jarvis Voice Notes'], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -113,11 +131,18 @@ export const NotepadModal: React.FC<NotepadModalProps> = ({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition-colors shadow"
               title="Save to local state"
             >
-              <Save className="w-3.5 h-3.5" />
+              {saveError ? <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> : <Save className="w-3.5 h-3.5" />}
               <span>{savedStatus ? 'Saved!' : 'Save'}</span>
             </button>
           </div>
         </div>
+
+        {saveError && (
+          <div className="px-4 py-2 bg-red-950/50 border-b border-red-800/60 text-[11px] font-mono text-red-300 flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-400" />
+            <span>{saveError}</span>
+          </div>
+        )}
 
         {/* Text Area */}
         <div className="flex-1 p-4 bg-slate-900">
