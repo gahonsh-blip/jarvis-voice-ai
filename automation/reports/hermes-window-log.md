@@ -16097,9 +16097,12 @@ Next Slot:
 - Continue #13: fix the next discarded-result handler (a deterministic, testable slice).
 
 Note on window state:
-- The persisted state file lagged by one slot: it recorded `slots_completed: 7`,
-  but the 01:05 IST fire wrote report slot 8 without updating the state file.
-  This slot is 9 and the state file is corrected to 9.
+- The remote state branch had already advanced to slot 8 (`b1738cf`) before this
+  slot's state commit. The local `origin/automation/hermes-state` tracking ref
+  was stale because the clone's fetch refspec tracks only `main`; the true tip
+  was read via `git fetch origin automation/hermes-state` (FETCH_HEAD) and the
+  slot-9 state was committed on top of it (`3ac72fb`). State now records
+  `slots_completed: 9`.
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में Android Permission Center के दो handlers ठीक किए जो settings लिखने की
