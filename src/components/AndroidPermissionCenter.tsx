@@ -139,11 +139,15 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
     const nextIdx = (states.indexOf(current) + 1) % states.length;
     const nextState = states[nextIdx];
 
-    androidBridgeEngine.updatePermission(key, nextState);
+    const persisted = androidBridgeEngine.updatePermission(key, nextState);
     setPermissions(androidBridgeEngine.getPermissions());
     setBridgeStatus(androidBridgeEngine.getStatus());
 
-    setStatusMessage(`Updated ${key} to ${nextState}`);
+    setStatusMessage(
+      persisted
+        ? `Updated ${key} to ${nextState}`
+        : `NOT SAVED: ${key} set to ${nextState} in memory only — the bridge store refused the write; it reverts on reload.`
+    );
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
@@ -158,13 +162,18 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
       notification_history: 'GRANTED',
       location_access: 'GRANTED',
     };
+    let persisted = true;
     for (const [k, v] of Object.entries(granted)) {
-      androidBridgeEngine.updatePermission(k as keyof MobilePermissionMatrix, v);
+      persisted = androidBridgeEngine.updatePermission(k as keyof MobilePermissionMatrix, v) && persisted;
     }
     setPermissions(androidBridgeEngine.getPermissions());
     simulatedAndroidAdapter.connect();
     setBridgeStatus(androidBridgeEngine.getStatus());
-    setStatusMessage('All Android permissions set to GRANTED & Testbed paired');
+    setStatusMessage(
+      persisted
+        ? 'All Android permissions set to GRANTED & Testbed paired'
+        : 'PARTIAL: permissions changed in memory only — the bridge store refused the write; they revert on reload.'
+    );
     setTimeout(() => setStatusMessage(null), 3000);
   };
 

@@ -128,27 +128,33 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
 
   const handleToggleAndroidBridgePerm = (key: 'notification' | 'call' | 'contacts' | 'reply') => {
     const current = { ...androidPerms };
+    let persisted = true;
     if (key === 'notification') {
       const next: AndroidPermissionState = current.notification_access === 'GRANTED' ? 'DENIED' : 'GRANTED';
       current.notification_access = next;
-      androidBridgeEngine.updatePermission('notification_access', next);
+      persisted = androidBridgeEngine.updatePermission('notification_access', next);
     } else if (key === 'call') {
       const next: AndroidPermissionState = current.call_detection === 'GRANTED' ? 'DENIED' : 'GRANTED';
       current.call_detection = next;
       current.call_answer = next;
-      androidBridgeEngine.updatePermission('call_detection', next);
-      androidBridgeEngine.updatePermission('call_answer', next);
+      persisted = androidBridgeEngine.updatePermission('call_detection', next) && persisted;
+      persisted = androidBridgeEngine.updatePermission('call_answer', next) && persisted;
     } else if (key === 'contacts') {
       const next: AndroidPermissionState = current.contacts_lookup === 'GRANTED' ? 'DENIED' : 'GRANTED';
       current.contacts_lookup = next;
-      androidBridgeEngine.updatePermission('contacts_lookup', next);
+      persisted = androidBridgeEngine.updatePermission('contacts_lookup', next);
     } else if (key === 'reply') {
       const next: AndroidPermissionState = current.message_reply === 'GRANTED' ? 'DENIED' : 'GRANTED';
       current.message_reply = next;
-      androidBridgeEngine.updatePermission('message_reply', next);
+      persisted = androidBridgeEngine.updatePermission('message_reply', next);
     }
     setAndroidPerms(current);
     setBridgeStatus(androidBridgeEngine.getStatus());
+    setPermissionNotice(
+      persisted
+        ? null
+        : 'ANDROID PERMISSION NOT SAVED — the bridge store refused the write; this change reverts on reload.'
+    );
   };
 
   const handleTogglePermission = (cat: MobilePermissionCategory) => {

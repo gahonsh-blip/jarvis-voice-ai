@@ -444,14 +444,20 @@ export class AndroidBridgeManager {
     }
   }
 
-  public saveState(): void {
-    if (typeof window === 'undefined') return;
+  /**
+   * Persist settings, permissions and audit logs. Returns `true` only when all
+   * three writes landed; a refused write (quota exceeded, private mode, no
+   * browser storage) must not look like a durable save.
+   */
+  public saveState(): boolean {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return false;
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(this.settings));
       localStorage.setItem(PERMS_STORAGE_KEY, JSON.stringify(this.permissions));
       localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(this.auditLogs.slice(0, 100)));
+      return true;
     } catch {
-      // Safe fallback
+      return false;
     }
   }
 
@@ -471,18 +477,18 @@ export class AndroidBridgeManager {
     return { ...this.permissions };
   }
 
-  public updatePermission(key: keyof MobilePermissionMatrix, state: AndroidPermissionState): void {
+  public updatePermission(key: keyof MobilePermissionMatrix, state: AndroidPermissionState): boolean {
     this.permissions[key] = state;
-    this.saveState();
+    return this.saveState();
   }
 
   public getSettings(): AndroidBridgeSettings {
     return { ...this.settings };
   }
 
-  public updateSettings(updates: Partial<AndroidBridgeSettings>): void {
+  public updateSettings(updates: Partial<AndroidBridgeSettings>): boolean {
     this.settings = { ...this.settings, ...updates };
-    this.saveState();
+    return this.saveState();
   }
 
   public setEmergencyStop(active: boolean): void {
@@ -1288,7 +1294,7 @@ export class AndroidBridgeManager {
     };
   }
 
-  public recordAudit(log: Omit<AndroidAuditLog, 'id' | 'timestamp'>): void {
+  public recordAudit(log: Omit<AndroidAuditLog, 'id' | 'timestamp'>): boolean {
     const entry: AndroidAuditLog = {
       id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       timestamp: new Date().toISOString(),
@@ -1298,16 +1304,16 @@ export class AndroidBridgeManager {
     if (this.auditLogs.length > 200) {
       this.auditLogs.pop();
     }
-    this.saveState();
+    return this.saveState();
   }
 
   public getAuditLogs(): AndroidAuditLog[] {
     return [...this.auditLogs];
   }
 
-  public clearAuditLogs(): void {
+  public clearAuditLogs(): boolean {
     this.auditLogs = [];
-    this.saveState();
+    return this.saveState();
   }
 }
 

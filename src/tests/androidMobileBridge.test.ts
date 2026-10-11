@@ -765,3 +765,81 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     expect(result.status).toBe('PERMISSION_REQUIRED');
   });
 });
+
+describe('Android bridge persistence reports real durability (zero fake success)', () => {
+  const installStorage = () => {
+    const store = new Map<string, string>();
+    (globalThis as any).window = globalThis;
+    (globalThis as any).localStorage = {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => store.set(k, v),
+      removeItem: (k: string) => store.delete(k),
+      clear: () => store.clear(),
+    };
+    return store;
+  };
+
+  const refuseWrites = () => {
+    (globalThis as any).localStorage.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+  };
+
+  it('updatePermission returns true only when the write landed', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(true);
+    expect(mgr.getPermissions().call_answer).toBe('GRANTED');
+  });
+
+  it('updatePermission returns false and the change is not durable when storage refuses the write', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const before = mgr.getPermissions().call_answer;
+    refuseWrites();
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(false);
+    // A fresh manager loading from storage must not see the rejected change.
+    const reloaded = new AndroidBridgeManager();
+    expect(reloaded.getPermissions().call_answer).toBe(before);
+  });
+
+  it('updateSettings reports the real persistence verdict', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    expect(mgr.updateSettings({ autoAnswerEnabled: true })).toBe(true);
+    refuseWrites();
+    expect(mgr.updateSettings({ autoAnswerEnabled: false })).toBe(false);
+  });
+
+  it('recordAudit reports whether the audit entry was durably stored', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const log = {
+      eventType: 'ACTION_DENIED' as const,
+      application: 'WhatsApp',
+      actionRequested: 'Send Reply',
+      permissionState: 'DENIED' as const,
+      authorizationState: 'OWNER_DENIED',
+      result: 'REJECTED' as const,
+      notes: 'owner declined',
+    };
+    expect(mgr.recordAudit(log)).toBe(true);
+    refuseWrites();
+    expect(mgr.recordAudit({ ...log, notes: 'owner declined again' })).toBe(false);
+  });
+
+  it('saveState returns false when there is no browser storage to write to', () => {
+    const originalWindow = (globalThis as any).window;
+    const originalStorage = (globalThis as any).localStorage;
+    delete (globalThis as any).window;
+    delete (globalThis as any).localStorage;
+    try {
+      const mgr = new AndroidBridgeManager();
+      expect(mgr.saveState()).toBe(false);
+    } finally {
+      (globalThis as any).window = originalWindow;
+      (globalThis as any).localStorage = originalStorage;
+    }
+  });
+});
+
