@@ -417,6 +417,11 @@ export default function App() {
         // React may defer the state updater, so record what needs pushing up and
         // flush on the next tick rather than racing the commit.
         let localOnlyCount = 0;
+        // The queue and local-save results are captured here and read in the
+        // setTimeout below, the same way localOnlyCount is. A refused queue or a
+        // refused local write must not be announced as a sync in progress.
+        let memorySyncNotice: string | null = null;
+        let syncQueued = false;
 
         setMemory((prevLocal) => {
           // Merge server data with any existing local memory
@@ -445,16 +450,28 @@ export default function App() {
           // next sync. Without this they would stay local forever and reappear
           // on every reload as if the server had lost them.
           if (localOnlyNotes.length > 0) {
-            queuePendingSync('memory_sync', merged);
+            const queuedWrite = classifySyncQueueWrite(queuePendingSync('memory_sync', merged), `${localOnlyNotes.length} local note${localOnlyNotes.length === 1 ? '' : 's'}`);
+            syncQueued = queuedWrite.queued;
+            memorySyncNotice = queuedWrite.notice || null;
           }
-          saveLocalMemory(merged);
+          const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(merged), 'The merged memory');
+          if (mergeWrite.notice) {
+            memorySyncNotice = mergeWrite.notice;
+          }
           return merged;
         });
         // Flush after the updater has committed; flushing inside the same tick
-        // would read the pre-update local memory.
+        // would read the pre-update local memory. The sync announcement is gated
+        // on the real queue result: a refused queue is named instead of claiming
+        // the notes are on their way to the server.
         setTimeout(() => {
-          if (localOnlyCount > 0) {
+          if (localOnlyCount > 0 && syncQueued) {
             setStatusText(`SYNCING ${localOnlyCount} LOCAL NOTE${localOnlyCount === 1 ? '' : 'S'} TO SERVER`);
+          } else if (localOnlyCount > 0) {
+            setStatusText(`SYNC QUEUE REFUSED • ${localOnlyCount} LOCAL NOTE${localOnlyCount === 1 ? '' : 'S'} STAY ON THIS DEVICE`);
+          }
+          if (memorySyncNotice) {
+            setMemorySaveNotice(memorySyncNotice);
           }
           flushPendingSyncQueue();
         }, 0);
@@ -1335,11 +1352,21 @@ export default function App() {
         });
 
         if (data.memory) {
+          // The merged memory is written here; capture the storage verdict and
+          // surface it on the next tick (the updater may be deferred, so it is
+          // not read synchronously) rather than discarding a refused write.
+          let mergeNotice: string | null = null;
           setMemory((prev) => {
             const merged = { ...prev, ...data.memory };
-            saveLocalMemory(merged);
+            const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(merged), 'The synced memory');
+            mergeNotice = mergeWrite.notice || null;
             return merged;
           });
+          setTimeout(() => {
+            if (mergeNotice) {
+              setMemorySaveNotice(mergeNotice);
+            }
+          }, 0);
         }
 
         if (data.actionExecuted && data.intent) {
