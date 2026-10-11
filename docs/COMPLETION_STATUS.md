@@ -4,7 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-12 03:05 IST — **WORK SLOT 11 of the
+Last cycle: 2026-10-12 03:35 IST — **WORK SLOT 12 of the
+2026-10-11 → 2026-10-12 window (03:35 IST fire).** Item 13 (`Zero-fake-success
+for all tools`) — **the Memory Bank handlers' offline fallback dropped the
+pending-sync queue verdict.** When the server write fails, the four handlers
+(`handleUpdateName`, `handleAddCustomKey`, `handleDeleteNote`,
+`handleSaveNotepadNote`) in `src/App.tsx` fall back to
+`queuePendingSync(...)` so the change can be replayed later. That call was a
+bare statement whose `boolean` was discarded, so a refused queue — quota
+exceeded, private mode, no `window`/`localStorage` — still left the console
+reading "saved to localStorage and queued for sync" while the server would
+never receive the change. A new helper `classifySyncQueueWrite`
+(`src/utils/hardening/memoryStoreTruth.ts`) turns the boolean into a verdict +
+an explicit "could not be queued for server sync; it stays on this device only
+and the server will not receive it until you retry" notice; all four offline
+fallbacks now capture the result and surface a dismissible `role="alert"` toast
+when the queue was refused. Evidence:
+`src/tests/memoryStoreWriteTruth.test.ts` (**12 passed**) — 3 new unit cases on
+the queue classifier (landed queue silent, refused queue names the item and the
+device-only outcome, never claims the queue reached the server) plus 2 source
+guards that every offline queue call is gated on `classifySyncQueueWrite(...)`
+and no `console.warn(...); queuePendingSync(...)` discard pattern remains.
+Negative-validated — restoring the discarded-result pattern at the name-change
+fallback failed the two source guards (`2 failed | 10 passed`), then restoring
+the fix returned 12/12. Gates (observed this fire): lint (`tsc --noEmit`) exit
+0; full `npx vitest run` **223 files / 2504 tests passed** (78.00 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1084956 bytes). Security: `.env`
+gitignored, working tree clean, no credential in the diff. E2E: NOT RUN (no
+browser/handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long
+tail of unclassified `success: true` / discarded-result sites remains.
+
+Last cycle (previous slot): 2026-10-12 03:05 IST — **WORK SLOT 11 of the
 2026-10-11 → 2026-10-12 window (03:05 IST fire).** Item 13 (`Zero-fake-success
 for all tools`) — **the Permission Gateway collapsed `success` and `persisted`
 into one flag.** `POST /api/approvals/resolve` answers with two independent

@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-12 03:35 IST (2026-10-11 22:05 UTC) — window slot 12: Memory Bank offline fallback stops reporting a refused sync queue as queued
+
+### Fixed
+- **`src/App.tsx` — the four Memory Bank handlers (`handleUpdateName`, `handleAddCustomKey`, `handleDeleteNote`, `handleSaveNotepadNote`) fell back to `queuePendingSync(...)` when the server write failed and discarded the `boolean` it returns.** A refused queue (quota exceeded, private mode, no `window`/`localStorage`) still left the console reading "saved to localStorage and queued for sync" while the server would never receive the change. All four fallbacks now capture the result and raise a dismissible `role="alert"` toast when the queue was refused.
+
+### Added
+- **`src/utils/hardening/memoryStoreTruth.ts` — `classifySyncQueueWrite(queued, label)`** returns `{ queued, tone, notice }`; a landed queue stays silent, a refused queue names the item and the device-only outcome ("could not be queued for server sync; it stays on this device only and the server will not receive it until you retry").
+
+### Tests
+- `src/tests/memoryStoreWriteTruth.test.ts`: 12 cases — 3 unit cases on the queue classifier plus 2 source guards (every offline queue call gated on `classifySyncQueueWrite(...)`, no `console.warn(...); queuePendingSync(...)` discard pattern). Negative-validated: restoring the discarded-result pattern at the name-change fallback fails the two source guards (`2 failed | 10 passed`); restored → 12/12. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 223 files / 2504 tests passed; `npm run build` exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-12 03:05 IST (2026-10-11 21:35 UTC) — window slot 11: Permission Gateway stops reporting an unpersisted decision as recorded
 
 ### Fixed
