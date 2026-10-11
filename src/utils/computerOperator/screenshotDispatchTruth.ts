@@ -88,6 +88,39 @@ export function screenshotVerdict(result: ScreenshotResult | null): ScreenshotVe
   };
 }
 
+export interface DownloadNotice {
+  /** True only when a non-empty image was handed to the browser download. */
+  delivered: boolean;
+  tone: 'success' | 'warn';
+  text: string;
+}
+
+/**
+ * Builds the honest notice for the "Download PNG" action.
+ *
+ * The handler always rendered "Saved to device storage & logged to screenshot
+ * gallery." as soon as the download anchor was clicked. The anchor click is not
+ * a landed file — the browser owns the write and the page cannot confirm it —
+ * and no screenshot gallery exists anywhere in this app (`grep` for "gallery"
+ * finds only that string). The notice therefore states only what is provable:
+ * that the PNG was handed to the browser, not that it reached storage or a
+ * gallery. With no image in hand the action is a no-op and must say so.
+ */
+export function buildDownloadNotice(capturedImage: string | null): DownloadNotice {
+  if (!capturedImage) {
+    return {
+      delivered: false,
+      tone: 'warn',
+      text: 'No captured image is in hand, so nothing was downloaded.',
+    };
+  }
+  return {
+    delivered: true,
+    tone: 'success',
+    text: 'PNG handed to the browser download. Confirm the file in your Downloads; nothing is logged to a gallery.',
+  };
+}
+
 /** Honest spoken reply for a capture verdict, in the operator's language. */
 export function screenshotReply(verdict: ScreenshotVerdict, language: string): string {
   const hi = language.startsWith('hi');

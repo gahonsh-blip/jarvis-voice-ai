@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Camera, Download, RefreshCw, CheckCircle, Image as ImageIcon } from 'lucide-react';
-import { browserCaptureVerdict } from '../utils/computerOperator/screenshotDispatchTruth';
+import { browserCaptureVerdict, buildDownloadNotice } from '../utils/computerOperator/screenshotDispatchTruth';
 
 interface ScreenshotModalProps {
   isOpen: boolean;
@@ -10,7 +10,7 @@ interface ScreenshotModalProps {
 export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClose }) => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [savedMessage, setSavedMessage] = useState(false);
+  const [downloadNotice, setDownloadNotice] = useState<{ tone: 'success' | 'warn'; text: string } | null>(null);
   const [captureStatus, setCaptureStatus] = useState<
     | { kind: 'idle' }
     | { kind: 'verified'; detail: string }
@@ -23,6 +23,7 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
 
   const takeScreenCapture = async () => {
     setIsCapturing(true);
+    setDownloadNotice(null);
     let activeStream: MediaStream | null = null;
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
@@ -122,14 +123,17 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
   };
 
   const handleDownload = () => {
-    if (!capturedImage) return;
+    const notice = buildDownloadNotice(capturedImage);
+    if (!notice.delivered || !capturedImage) {
+      setDownloadNotice({ tone: notice.tone, text: notice.text });
+      return;
+    }
     const a = document.createElement('a');
     a.href = capturedImage;
     const filename = `Jarvis_Screenshot_${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
     a.download = filename;
     a.click();
-    setSavedMessage(true);
-    setTimeout(() => setSavedMessage(false), 2500);
+    setDownloadNotice({ tone: notice.tone, text: notice.text });
   };
 
   return (
@@ -204,10 +208,18 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
                 </button>
               </div>
 
-              {savedMessage && (
-                <p className="text-xs font-mono text-emerald-400 flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  <span>Saved to device storage & logged to screenshot gallery.</span>
+              {downloadNotice && (
+                <p
+                  className={`text-xs font-mono flex items-center gap-1 ${
+                    downloadNotice.tone === 'success' ? 'text-emerald-400' : 'text-rose-400'
+                  }`}
+                >
+                  {downloadNotice.tone === 'success' ? (
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  ) : (
+                    <X className="w-3.5 h-3.5" />
+                  )}
+                  <span>{downloadNotice.text}</span>
                 </p>
               )}
             </div>
