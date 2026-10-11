@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   detectSensitiveNotification,
   categorizeApp,
@@ -12,6 +12,8 @@ import {
   loadMobileBridgePolicy,
   setAppPolicy,
   setCategoryPolicy,
+  applyCategoryPolicy,
+  saveMobileBridgePolicy,
 } from '../utils/mobileNotificationPrivacy';
 import {
   DEFAULT_MOBILE_BRIDGE_POLICY,
@@ -376,5 +378,77 @@ describe('Notification Privacy Engine — policy persistence (no window)', () =>
     expect(next.categories.WHATSAPP).toBe('ALLOW');
     expect(original.categories.WHATSAPP).toBe('ASK');
     expect(next).not.toBe(original);
+  });
+});
+
+// Item 13 (Zero-fake-success). The category-policy toggle reported a change
+// that may never have reached storage: saveMobileBridgePolicy discarded the
+// localStorage error and the component adopted the unsaved policy into React
+// state anyway, so the operator saw the privacy filter flip while the next
+// reload silently dropped it. The writer now reports the real result and the
+// applier surfaces it.
+describe('Notification Privacy Engine — policy writes report whether they landed', () => {
+  class ControllableStorage {
+    private store = new Map<string, string>();
+    failWrites = false;
+    get length() {
+      return this.store.size;
+    }
+    clear() {
+      this.store.clear();
+    }
+    getItem(key: string) {
+      return this.store.has(key) ? this.store.get(key)! : null;
+    }
+    setItem(key: string, value: string) {
+      if (this.failWrites) throw new DOMException('QuotaExceededError');
+      this.store.set(key, String(value));
+    }
+    removeItem(key: string) {
+      this.store.delete(key);
+    }
+  }
+
+  const store = new ControllableStorage();
+
+  beforeEach(() => {
+    store.clear();
+    store.failWrites = false;
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('localStorage', store);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('saveMobileBridgePolicy returns true when storage accepts the write', () => {
+    expect(saveMobileBridgePolicy(mkPolicy({ categories: { WHATSAPP: 'DENY' } }))).toBe(true);
+    expect(JSON.parse(store.getItem('hermes_jarvis_mobile_bridge_policy_v1')!).categories.WHATSAPP).toBe('DENY');
+  });
+
+  it('saveMobileBridgePolicy returns false when storage refuses the write', () => {
+    store.failWrites = true;
+    expect(saveMobileBridgePolicy(mkPolicy())).toBe(false);
+  });
+
+  it('applyCategoryPolicy reports persisted=true only when the policy reached storage', () => {
+    const ok = applyCategoryPolicy(mkPolicy(), 'WHATSAPP', 'ALLOW');
+    expect(ok.persisted).toBe(true);
+    expect(ok.policy.categories.WHATSAPP).toBe('ALLOW');
+    expect(JSON.parse(store.getItem('hermes_jarvis_mobile_bridge_policy_v1')!).categories.WHATSAPP).toBe('ALLOW');
+
+    store.failWrites = true;
+    const refused = applyCategoryPolicy(mkPolicy(), 'EMAIL', 'DENY');
+    expect(refused.persisted).toBe(false);
+  });
+});
+
+// Without a browser window the writers must never claim a successful save.
+describe('Notification Privacy Engine — no window means no persisted write', () => {
+  it('saveMobileBridgePolicy and applyCategoryPolicy report not-saved', () => {
+    expect(typeof window).toBe('undefined');
+    expect(saveMobileBridgePolicy(mkPolicy())).toBe(false);
+    expect(applyCategoryPolicy(mkPolicy(), 'WHATSAPP', 'DENY').persisted).toBe(false);
   });
 });

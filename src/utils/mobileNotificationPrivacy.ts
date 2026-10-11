@@ -411,9 +411,18 @@ export function loadMobileBridgePolicy(): MobileBridgePolicy {
   return DEFAULT_MOBILE_BRIDGE_POLICY;
 }
 
-export function saveMobileBridgePolicy(policy: MobileBridgePolicy): void {
-  if (typeof window === 'undefined') return;
-  try { localStorage.setItem(POLICY_STORAGE_KEY, JSON.stringify(policy)); } catch {}
+// Returns whether the policy actually reached storage. It used to return
+// `void` and swallow the storage error in an empty catch, so a refused write
+// (private mode, full disk, or no window) still looked like a saved change.
+export function saveMobileBridgePolicy(policy: MobileBridgePolicy): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.setItem(POLICY_STORAGE_KEY, JSON.stringify(policy));
+    return true;
+  } catch (err) {
+    console.warn('[NotificationPrivacy] Error saving mobile bridge policy to localStorage:', err);
+    return false;
+  }
 }
 
 export function setAppPolicy(policy: MobileBridgePolicy, appKey: string, value: MobileCategoryPolicy): MobileBridgePolicy {
@@ -432,4 +441,24 @@ export function setCategoryPolicy(policy: MobileBridgePolicy, category: MobileNo
   };
   saveMobileBridgePolicy(next);
   return next;
+}
+
+export interface CategoryPolicyChange {
+  policy: MobileBridgePolicy;
+  // Whether the new policy reached storage. False means the change is only in
+  // this view and the next reload will drop it.
+  persisted: boolean;
+}
+
+// Applies a category policy change and reports whether it was actually saved.
+// The bare `setCategoryPolicy` cannot tell the caller the write failed, so the
+// UI used to adopt an unsaved policy into React state and cycle on as if it
+// had been stored.
+export function applyCategoryPolicy(
+  policy: MobileBridgePolicy,
+  category: MobileNotificationCategory,
+  value: MobileCategoryPolicy
+): CategoryPolicyChange {
+  const next = setCategoryPolicy(policy, category, value);
+  return { policy: next, persisted: saveMobileBridgePolicy(next) };
 }

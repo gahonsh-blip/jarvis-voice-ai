@@ -20,7 +20,7 @@ import {
 import {
   loadMobileBridgePolicy,
   saveMobileBridgePolicy,
-  setCategoryPolicy,
+  applyCategoryPolicy,
   setAppPolicy,
   categoryLabel,
 } from '../utils/mobileNotificationPrivacy';
@@ -364,7 +364,18 @@ export const MobileBridgeModal: React.FC<Props> = ({
             return (
               <div key={cat} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-between gap-2">
                 <span className="text-[10px] font-mono text-slate-300">{categoryLabel(cat)}</span>
-                <button onClick={() => { const next = setCategoryPolicy(policy, cat, nextPolicy(current)); setPolicy(next); }} className="text-[9px] px-2 py-1 rounded font-mono font-bold ${current === 'ALLOW' ? 'bg-emerald-900/60 text-emerald-300' : current === 'ASK' ? 'bg-amber-900/50 text-amber-300' : 'bg-rose-950/60 text-rose-300'}">({current})</button>
+                <button
+                  onClick={() => {
+                    const change = applyCategoryPolicy(policy, cat, nextPolicy(current));
+                    setPolicy(change.policy);
+                    if (!change.persisted) {
+                      setSimNotice('POLICY NOT SAVED — local storage refused the write; this change reverts on reload.');
+                    }
+                  }}
+                  className={`text-[9px] px-2 py-1 rounded font-mono font-bold ${current === 'ALLOW' ? 'bg-emerald-900/60 text-emerald-300' : current === 'ASK' ? 'bg-amber-900/50 text-amber-300' : 'bg-rose-950/60 text-rose-300'}`}
+                >
+                  ({current})
+                </button>
               </div>
             );
           })}
