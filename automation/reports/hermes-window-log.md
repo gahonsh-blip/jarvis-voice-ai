@@ -15779,3 +15779,16 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में Android ब्रिज की persistence अब असली नतीजा बताती है — नाकाम सेव पर UI "NOT SAVED" दिखाता है; 48 टेस्ट पास, lint/build हरा, बदलाव पुश हो गया।
+
+---
+### Slot 4 re-verification (live, this run, 22:35 IST fire)
+All numbers above were re-observed live in this sandbox on branch
+`feature/hermes-full-completion` @ 4eab668:
+- `npx vitest run src/tests/androidMobileBridge.test.ts` -> 1 file / 48 passed.
+- `npm run lint` (tsc --noEmit) -> exit 0.
+- `npx vitest run` -> 215 files / 2442 passed, 0 failed (67.28s).
+- `npm run build` -> exit 0; `dist/server.cjs` 1 083 372 bytes.
+- `git check-ignore -v .env` -> .gitignore:4; `node_modules/` -> :6; `dist/` -> :8.
+- Tree clean after reverting a runtime side-effect write to `jarvis_memory.json`
+  (not part of this slot's change; reverted with `git checkout --`).
+State branch `automation/hermes-state` @ a8b1130 (slots_completed 4, item 13 PARTIAL).
