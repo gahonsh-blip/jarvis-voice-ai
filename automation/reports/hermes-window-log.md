@@ -16237,3 +16237,32 @@ clean. E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays PARTIAL.
 हिंदी सारांश: इस स्लॉट में Permission Gateway के approve/reject handlers ठीक किए जो
 अनपरसिस्टेड decision को रिकॉर्ड हो गया बताते थे (item 13, evidence के साथ);
 पूरी suite 2499/2499 पास।
+
+---
+
+## Slot 13 — WORK (second-to-last) — 2026-10-12 04:05 IST fire (2026-10-11 22:36 UTC)
+
+Item 13 (Zero-fake-success). Two more discarded-result sites in src/App.tsx.
+
+Found: the initial GET /api/memory merge path pushed local-only notes up with a bare
+queuePendingSync('memory_sync', merged) (boolean discarded) yet announced "SYNCING N
+LOCAL NOTES TO SERVER" even when the queue was refused (quota, private mode, no
+localStorage). The same path AND the chat-response memory merge both called
+saveLocalMemory(merged) as a bare statement, dropping the write result so a refused
+local write silently reverted on reload. The second saveLocalMemory site was surfaced
+by the new test's own guard.
+
+Fixed: both merge paths capture classifySyncQueueWrite / classifyMemoryStoreWrite
+verdicts. The sync announcement is gated on syncQueued (refused queue reads
+"SYNC QUEUE REFUSED - N LOCAL NOTES STAY ON THIS DEVICE"); a refused merge is named in
+the dismissible role="alert" notice.
+
+Evidence: src/tests/memoryMergeSyncTruth.test.ts - 10 passed (source guards on the
+memory_sync queue call, both saveLocalMemory(merged) writes, the gated announcement,
+and "no bare saveLocalMemory(merged); statement remains"). Negative-validated: reverting
+src/App.tsx to HEAD failed all 10 guards (10 failed); restored -> 10/10.
+
+Gates (observed): lint (tsc --noEmit) exit 0; full npx vitest run 224 files / 2514 tests
+passed (76.63 s, 0 failed); npm run build exit 0 (dist/server.cjs 1084956 bytes).
+Security: .env gitignored, tree clean, no credential in diff. E2E: NOT RUN (no
+browser/handset). Deploy: NOT_CONFIGURED. Item 13 stays PARTIAL.

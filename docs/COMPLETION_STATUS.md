@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-12 03:35 IST — **WORK SLOT 12 of the
+Last cycle: 2026-10-12 04:05 IST — **WORK SLOT 13 of the
+2026-10-11 → 2026-10-12 window (04:05 IST fire; second-to-last work slot).**
+Item 13 (`Zero-fake-success for all tools`) — **two more merge-path
+discarded-result sites in `src/App.tsx`.** The initial `GET /api/memory` merge
+path pushed local-only notes up with a bare `queuePendingSync('memory_sync',
+merged)` (boolean discarded) and then announced "SYNCING N LOCAL NOTES TO
+SERVER" even when the queue was refused (quota, private mode, no
+`localStorage`), while the same path and the chat-response memory merge both
+called `saveLocalMemory(merged)` as a bare statement, dropping the write
+result so a refused local write silently reverted on reload. Both verdicts are
+now captured with `classifySyncQueueWrite` / `classifyMemoryStoreWrite` and
+surfaced: the sync announcement is gated on the real queue result (a refused
+queue reads `SYNC QUEUE REFUSED • N LOCAL NOTES STAY ON THIS DEVICE`), and a
+refused merge is named in the dismissible `role="alert"` notice. Evidence:
+`src/tests/memoryMergeSyncTruth.test.ts` (**10 passed**) — source guards that
+the `memory_sync` queue call and both `saveLocalMemory(merged)` writes are
+gated on the captured verdicts, the sync announcement is conditional on
+`syncQueued`, and no bare `saveLocalMemory(merged);` statement remains anywhere
+in `App.tsx`. Negative-validated — reverting `src/App.tsx` to `HEAD` failed all
+10 new guards (`10 failed`), then restoring the fix returned 10/10. Gates
+(observed this fire): lint (`tsc --noEmit`) exit 0; full `npx vitest run`
+**224 files / 2514 tests passed** (76.63 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1084956 bytes). Security: `.env` gitignored, working tree
+clean, no credential in the diff. E2E: NOT RUN (no browser/handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-result sites remains.
+
+Last cycle (previous slot): 2026-10-12 03:35 IST — **WORK SLOT 12 of the
 2026-10-11 → 2026-10-12 window (03:35 IST fire).** Item 13 (`Zero-fake-success
 for all tools`) — **the Memory Bank handlers' offline fallback dropped the
 pending-sync queue verdict.** When the server write fails, the four handlers

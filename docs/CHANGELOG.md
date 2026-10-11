@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-12 04:05 IST (2026-10-11 22:36 UTC) — window slot 13: App.tsx memory-merge paths stop discarding the queue and local-write verdicts
+
+### Fixed
+- **`src/App.tsx` — the initial `GET /api/memory` merge path called `queuePendingSync('memory_sync', merged)` as a bare statement and discarded the `boolean`, then announced "SYNCING N LOCAL NOTES TO SERVER" even when the queue was refused** (quota exceeded, private mode, no `localStorage`). The sync announcement is now gated on the captured queue verdict; a refused queue reads `SYNC QUEUE REFUSED • N LOCAL NOTES STAY ON THIS DEVICE`.
+- **`src/App.tsx` — the initial merge path and the chat-response memory merge both called `saveLocalMemory(merged)` as a bare statement, dropping the write result**, so a refused local write silently reverted on reload. Both writes are now gated on `classifyMemoryStoreWrite(...)` and a refused merge is named in the dismissible `role="alert"` notice.
+
+### Tests
+- `src/tests/memoryMergeSyncTruth.test.ts`: 10 source guards — the `memory_sync` queue call and both `saveLocalMemory(merged)` writes are gated on the captured verdicts, the sync announcement is conditional on `syncQueued`, a refused queue is named, and no bare `saveLocalMemory(merged);` statement remains anywhere in `App.tsx`. Negative-validated: reverting `src/App.tsx` to `HEAD` fails all 10 guards (`10 failed`); restored → 10/10. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 224 files / 2514 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1084956 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-12 03:35 IST (2026-10-11 22:05 UTC) — window slot 12: Memory Bank offline fallback stops reporting a refused sync queue as queued
 
 ### Fixed
