@@ -1152,6 +1152,22 @@ export default function App() {
         });
       };
 
+      // Announce a terminal operator run, naming the real persistence result so a
+      // COMPLETED run that could not be written to local storage is not read as a
+      // durable record the next reload will find.
+      const announceOperatorResult = (task: OperatorTask, ok: boolean) => {
+        const persistNote =
+          task.status === 'COMPLETED' && task.taskPersisted !== true
+            ? ' • RUN RECORD NOT SAVED LOCALLY (STORAGE UNAVAILABLE)'
+            : '';
+        pushJarvisMessage(
+          formatOperatorTaskMessage(task) + persistNote,
+          undefined,
+          ok,
+          ok ? { status: task.status } : { status: task.status, error: task.error },
+        );
+      };
+
       // Computer-Operator routing: only detected operator/research commands use the engine;
       // every ordinary message continues to the existing backend/offline pipeline below.
 
@@ -1179,12 +1195,7 @@ export default function App() {
             },
           });
           operatorRunActiveRef.current = false;
-          pushJarvisMessage(
-            formatOperatorTaskMessage(result.task),
-            undefined,
-            result.ok,
-            result.ok ? { status: result.task.status } : { status: result.task.status, error: result.task.error },
-          );
+          announceOperatorResult(result.task, result.ok);
           setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
           return;
         }
@@ -1259,12 +1270,7 @@ export default function App() {
           },
         });
         operatorRunActiveRef.current = false;
-        pushJarvisMessage(
-          formatOperatorTaskMessage(result.task),
-          undefined,
-          result.ok,
-          result.ok ? { status: result.task.status } : { status: result.task.status, error: result.task.error },
-        );
+        announceOperatorResult(result.task, result.ok);
         setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
         return;
       }

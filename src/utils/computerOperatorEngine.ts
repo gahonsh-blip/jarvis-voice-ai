@@ -104,6 +104,12 @@ export interface OperatorTask {
   error?: string;
   approvalState: ApprovalState;
   finalResult?: string;
+  /**
+   * Set on a terminal task to the real result of the record + audit writes.
+   * `false` (or `undefined` for a task that never reached a terminal state)
+   * means the run is not one the next reload will find.
+   */
+  taskPersisted?: boolean;
 }
 
 export type OperatorTaskStatus = OperatorTask['status'];
@@ -261,17 +267,20 @@ export function loadOperatorTasks(): OperatorTask[] {
   }
 }
 
-export function saveOperatorTask(task: OperatorTask): void {
-  if (!hasOperatorStorage()) return;
+export function saveOperatorTask(task: OperatorTask): boolean {
+  if (!hasOperatorStorage()) return false;
   try {
     const list = loadOperatorTasks().filter((t) => t.taskId !== task.taskId);
     list.unshift(task);
     localStorage.setItem(OPERATOR_TASK_KEY, JSON.stringify(list.slice(0, 20)));
-  } catch {}
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function recordOperatorAudit(task: OperatorTask): void {
-  if (!hasOperatorStorage()) return;
+export function recordOperatorAudit(task: OperatorTask): boolean {
+  if (!hasOperatorStorage()) return false;
   try {
     const raw = localStorage.getItem(OPERATOR_AUDIT_KEY);
     const list: Record<string, unknown>[] = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
@@ -285,7 +294,24 @@ export function recordOperatorAudit(task: OperatorTask): void {
       error: task.error ? redactSecrets(task.error) : undefined,
     });
     localStorage.setItem(OPERATOR_AUDIT_KEY, JSON.stringify(list.slice(0, 100)));
-  } catch {}
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Persist a terminal operator task (record + audit row) and stamp the task with
+ * whether both writes actually landed. The operator UI reads `taskPersisted` to
+ * decide whether the run it just announced as COMPLETED is one the next reload
+ * will still find. On the server there is no `localStorage`, so both writers
+ * return false and the caller must not claim a durable record.
+ */
+export function persistOperatorTaskState(task: OperatorTask): boolean {
+  const saved = saveOperatorTask(task);
+  const audited = recordOperatorAudit(task);
+  task.taskPersisted = saved && audited;
+  return task.taskPersisted;
 }
 
 export interface OperatorPlanResult {
@@ -357,14 +383,12 @@ export async function executeOperatorTask(
     task.status = 'BLOCKED';
     task.error = 'GLOBAL_KILL_SWITCH_ACTIVE';
     task.approvalState = 'REJECTED';
-    saveOperatorTask(task);
-    recordOperatorAudit(task);
+    persistOperatorTaskState(task);
     return { ok: false, error: task.error, task };
   }
   if (plan.needsApproval) {
     task.status = 'NEEDS_APPROVAL';
-    saveOperatorTask(task);
-    recordOperatorAudit(task);
+    persistOperatorTaskState(task);
     return { ok: false, error: 'APPROVAL_REQUIRED', task };
   }
   task.status = 'RUNNING';
@@ -375,8 +399,7 @@ export async function executeOperatorTask(
     if (cancel) {
       task.status = 'CANCELLED';
       task.error = 'CANCELLED_BY_OWNER';
-      saveOperatorTask(task);
-      recordOperatorAudit(task);
+      persistOperatorTaskState(task);
       return { ok: false, error: task.error, task };
     }
     task.actionIndex = step;
@@ -389,8 +412,7 @@ export async function executeOperatorTask(
     if (!result.ok) {
       task.status = 'FAILED';
       task.error = 'ACTION_FAILED' + '_' + action.type;
-      saveOperatorTask(task);
-      recordOperatorAudit(task);
+      persistOperatorTaskState(task);
       return { ok: false, error: task.error, task };
     }
     const after = await adapter.observe();
@@ -399,8 +421,7 @@ export async function executeOperatorTask(
     if (!verification.ok) {
       task.status = 'FAILED';
       task.error = 'VERIFICATION_FAILED' + '_' + action.type;
-      saveOperatorTask(task);
-      recordOperatorAudit(task);
+      persistOperatorTaskState(task);
       return { ok: false, error: task.error, task };
     }
     if (options.onProgress) {
@@ -409,7 +430,6 @@ export async function executeOperatorTask(
   }
   task.status = 'COMPLETED';
   task.finalResult = 'COMPLETED' + '_' + String(plan.actions.length) + '_STEPS';
-  saveOperatorTask(task);
-  recordOperatorAudit(task);
+  persistOperatorTaskState(task);
   return { ok: true, task };
 }
