@@ -4,7 +4,32 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-12 01:05 IST — **WORK SLOT 8 of the
+Last cycle: 2026-10-12 01:35 IST — **WORK SLOT 9 of the
+2026-10-11 → 2026-10-12 window (01:35 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **the Android Permission Center's
+per-category notification toggles (`handleToggleCategory`) and per-application
+allow/block rules (`handleToggleAppRule`) in
+`src/components/AndroidPermissionCenter.tsx` called
+`androidBridgeEngine.updateSettings(...)` and discarded its boolean result.
+`updateSettings` returns `false` when the bridge store refused the write (no
+`localStorage`, quota exceeded, private mode), so a refused settings change
+looked durable: the toggle stayed flipped on screen until the next reload
+silently restored the old value. `updatePermission` in the same component
+already gates its status message on the persisted boolean; the two settings
+handlers now do the same and render an explicit NOT SAVED notice that names the
+reload revert.** Evidence: `src/tests/androidPermissionCenterTruth.test.ts`
+(**4 passed**): both handlers capture the `updateSettings` result, no bare
+`androidBridgeEngine.updateSettings(...)` statement remains in the source, and
+both handlers branch on `persisted` with a `NOT SAVED`/`reverts on reload`
+notice — negative-validated by restoring the discarded-result pattern
+(`4 failed`), then restoring the fix (`4 passed`). Lint (`tsc --noEmit`) exit 0;
+full `npx vitest run` **221 files / 2482 tests passed** (0 failed); `npm run
+build` exit 0 (`dist/server.cjs` 1084956 bytes). Security: `.env` gitignored
+(`.gitignore:4`), working tree clean, no credential in the diff. E2E: NOT RUN
+(no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` surfaces remains.
+
+Last cycle (previous slot): 2026-10-12 01:05 IST — **WORK SLOT 8 of the
 2026-10-11 → 2026-10-12 window (01:05 IST fire).** Two things this slot.
 
 **(1) Item 43 (`Scheduled autonomous goals`) — durable run history.** The
