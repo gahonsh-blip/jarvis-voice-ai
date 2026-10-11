@@ -84,7 +84,7 @@ import {
   getPendingSyncQueue,
   clearPendingSyncQueue,
 } from './utils/offlineStorage';
-import { classifyMemoryStoreWrite } from './utils/hardening/memoryStoreTruth';
+import { classifyMemoryStoreWrite, classifySyncQueueWrite } from './utils/hardening/memoryStoreTruth';
 import { processOfflineCommand } from './utils/localJarvisEngine';
 import {
   determineTtsLocale,
@@ -1605,7 +1605,8 @@ export default function App() {
       }
     } catch (err) {
       console.warn('[OfflineStorage] Update name offline, saved to localStorage and queued for sync:', err);
-      queuePendingSync('name', { name });
+      const queuedWrite = classifySyncQueueWrite(queuePendingSync('name', { name }), 'The name change');
+      setMemorySaveNotice(queuedWrite.notice || null);
     }
   };
 
@@ -1635,7 +1636,8 @@ export default function App() {
       }
     } catch (err) {
       console.warn('[OfflineStorage] Add custom key offline, saved to localStorage and queued for sync:', err);
-      queuePendingSync('custom_key', { [key]: value });
+      const queuedWrite = classifySyncQueueWrite(queuePendingSync('custom_key', { [key]: value }), 'The new fact');
+      setMemorySaveNotice(queuedWrite.notice || null);
     }
   };
 
@@ -1660,7 +1662,8 @@ export default function App() {
       }
     } catch (err) {
       console.warn('[OfflineStorage] Delete note offline, saved to localStorage and queued for sync:', err);
-      queuePendingSync('note_delete', { id });
+      const queuedWrite = classifySyncQueueWrite(queuePendingSync('note_delete', { id }), 'The note deletion');
+      setMemorySaveNotice(queuedWrite.notice || null);
     }
   };
 
@@ -1691,7 +1694,8 @@ export default function App() {
       }
     } catch (err) {
       console.warn('[OfflineStorage] Save note offline, saved to localStorage and queued for sync:', err);
-      queuePendingSync('note_add', newNote);
+      const queuedWrite = classifySyncQueueWrite(queuePendingSync('note_add', newNote), 'The saved note');
+      setMemorySaveNotice(queuedWrite.notice || null);
     }
   };
 

@@ -55,3 +55,42 @@ export function classifyMemoryStoreWrite(
     notice: `${target} was NOT saved to local storage; this change reverts on reload.`,
   };
 }
+
+export type SyncQueueWriteTone = 'success' | 'warn';
+
+export interface SyncQueueWriteResult {
+  /** The result `queuePendingSync` actually returned. */
+  queued: boolean;
+  tone: SyncQueueWriteTone;
+  /** Short label for a badge. */
+  label: string;
+  /** Full sentence for an inline notice; empty when the item was queued. */
+  notice: string;
+}
+
+/**
+ * Turns the real `queuePendingSync` verdict into a UI result for the offline
+ * fallback path of the four Memory Bank handlers. When the server write fails
+ * the change is meant to be replayed later from the pending-sync queue, but
+ * `queuePendingSync` returns `false` when it cannot write that queue (quota
+ * exceeded, private mode, no `localStorage`). The handlers called it as a bare
+ * statement, so a refused queue left the console reading "saved to localStorage
+ * and queued for sync" while the server would never receive the change. Only a
+ * landed queue is silent; a refused queue names the change and states that it
+ * stays on this device.
+ */
+export function classifySyncQueueWrite(
+  queued: boolean,
+  what: string,
+): SyncQueueWriteResult {
+  const target = what.trim() || 'This change';
+  if (queued) {
+    return { queued: true, tone: 'success', label: 'Queued', notice: '' };
+  }
+  return {
+    queued: false,
+    tone: 'warn',
+    label: 'Not queued',
+    notice: `${target} could not be queued for server sync; it stays on this device only and the server will not receive it until you retry.`,
+  };
+}
