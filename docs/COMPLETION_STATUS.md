@@ -4,7 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 21:35 IST — **WORK SLOT 2 of the
+Last cycle: 2026-10-11 22:05 IST — **WORK SLOT 3 of the
+2026-10-11 → 2026-10-12 window (22:05 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **`saveMobilePermissions()` in
+`src/utils/mobileStatusEngine.ts` returned `void` and swallowed the
+`localStorage.setItem` error in a `catch` that only `console.warn`ed, so the
+mobile permission toggles announced a granted/revoked permission even when the
+write was refused (quota exceeded, private mode).** It now returns `boolean`
+(true only when the write landed; `false` when `window` is absent or the write
+throws). `src/components/MobilePersonalStatusModal.tsx` consumes the result in
+`handleTogglePermission` / `handleGrantAll` / `handleRevokeAll` and shows a
+`PERMISSIONS NOT SAVED — reverts on reload` notice instead of implying success;
+`src/components/PermissionGateway.tsx` captures the same result. Evidence:
+`src/tests/mobileStatusEngine.test.ts` (**16 passed**, 2 new cases under
+"Permission storage writes report real durability": true+round-trip on success,
+false on a refused write, false with no `window`) — negative-validated by
+reverting the catch branch to `return true` (`1 failed | 15 passed`), then
+restored (`16 passed`). Lint exit 0; full suite **215 files / 2437 tests passed**
+(0 failed); build exit 0 (`dist/server.cjs` 1.0 MB). Security: `.env`
+gitignored (`.gitignore:4`), tree clean, no credential in the diff. E2E: NOT RUN
+(no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` surfaces remains.
+
+Last cycle (previous slot): 2026-10-11 21:35 IST — **WORK SLOT 2 of the
 2026-10-11 → 2026-10-12 window (21:35 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **the mobile-bridge approval queue and
 audit writers in `src/utils/mobileBridgeEngine.ts` returned `void` and swallowed

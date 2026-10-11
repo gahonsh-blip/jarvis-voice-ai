@@ -15640,3 +15640,71 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - स्लॉट 2: मोबाइल ब्रिज कतार/ऑडिट लेखकों में fake-success बंद किया — असफल
   लेखन अब boolean verdict व चेतावनी के रूप में सामने आता है; lint/tests/build हरे।
+
+---
+
+## Slot — 2026-10-11 22:05 IST (WORK SLOT 3 of 16)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:05
+Window date: 2026-10-11   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools — `saveMobilePermissions()` in
+  `src/utils/mobileStatusEngine.ts` returned `void` and swallowed the
+  `localStorage.setItem` error (catch only warned), so a refused permission
+  write looked identical to a persisted one. It now returns `boolean`
+  (true only when the write landed; false when `window` is absent or the
+  write throws). Callers `MobilePersonalStatusModal.tsx`
+  (handleTogglePermission / handleGrantAll / handleRevokeAll) and
+  `PermissionGateway.tsx` now surface `PERMISSIONS NOT SAVED — reverts on
+  reload` instead of implying success.
+  Evidence: `src/tests/mobileStatusEngine.test.ts` 16 passed (2 new cases
+  under "Permission storage writes report real durability": true+round-trip,
+  false on refused write, false with no `window`).
+
+In Progress:
+- #13 — the long tail of unclassified `success: true` surfaces remains
+  (next candidate: telephony `save*` void writers).
+
+Remaining:
+- #13 tail; then Android bridge E2E (#1/#2) and other hardware-gated items.
+
+Bugs Found:
+- `saveMobilePermissions()` swallowed storage write failure; permission
+  toggles reported success for a write that would revert on reload.
+
+Bugs Fixed:
+- `saveMobilePermissions()` now returns a real durability verdict; both
+  callers warn on a refused write. Negative-validated: restoring
+  `return true` in the catch fails the refused-write assertion
+  (`1 failed | 15 passed`); restored → 16/16.
+
+Tests:    215 files / 2437 tests passed (0 failed) — `npx vitest run`
+Lint:     exit 0 — `npm run lint` (tsc --noEmit)
+Build:    exit 0 — `npm run build` (`dist/server.cjs` 1.0 MB)
+E2E:      NOT RUN (no Android handset in sandbox)
+Security: `.env` gitignored (`.gitignore:4`); tree clean; no credential in diff
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  9c55f53 (fix + tests) · docs commit this slot
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 (existing, to main)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this environment
+
+Blocked:
+- #1/#2 (Android bridge device E2E), #50/#51/#54/#55 — require hardware/credential
+
+Human Approval Required:
+- none new
+
+Next Slot:
+- #13 continue: sweep `src/utils/telephonyEngine.ts` `save*` void writers for
+  swallowed `localStorage` failures (same pattern, fresh module).
+
+हिंदी सारांश (एक पंक्ति):
+- स्लॉट 3: मोबाइल अनुमति लेखक में fake-success बंद — असफल लेखन अब boolean
+  verdict व "NOT SAVED" चेतावनी देता है; lint/tests/build हरे।

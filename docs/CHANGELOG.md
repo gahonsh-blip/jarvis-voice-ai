@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 22:05 IST (2026-10-11 16:35 UTC) — window slot 3: mobile permission writes stop reporting fake success
+
+### Fixed
+- **`src/utils/mobileStatusEngine.ts` — `saveMobilePermissions()` returned `void` and swallowed the `localStorage.setItem` error in a `catch` that only logged a warning.** A refused write (quota exceeded, private mode) looked identical to a persisted one, so the mobile permission toggles in `src/components/MobilePersonalStatusModal.tsx` announced a granted/revoked permission that would silently revert on reload, and `src/components/PermissionGateway.tsx` treated the same refused write as done. The writer now returns `boolean` (true only when the write landed; false when `window` is absent or the write throws); both callers surface a `PERMISSIONS NOT SAVED — reverts on reload` notice instead of implying success (backlog item 13, zero fake success).
+
+### Tests
+- `src/tests/mobileStatusEngine.test.ts`: 2 new cases under "Permission storage writes report real durability" — `true` plus a real round-trip through `loadMobilePermissions()` on success, `false` on a refused write, `false` with no `window`. Negative-validated: restoring `return true` in the catch fails the refused-write assertion (`1 failed | 15 passed`); restored → 16/16. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 215 files / 2437 tests passed (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1.0 MB).
+
+
 ## [Unreleased] - 2026-10-11 04:05 IST (2026-10-10 22:35 UTC) — window slot 14: the fix-plan route stops reporting `success: true` over an unscanned scope
 
 ### Fixed
