@@ -16104,6 +16104,72 @@ Note on window state:
   slot-9 state was committed on top of it (`3ac72fb`). State now records
   `slots_completed: 9`.
 
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:35
+Window date: 2026-10-11 (window runs 2026-10-11 → 2026-10-12)   Window slots completed so far: 10
+
+Completed:
+- #13 Zero-fake-success for all tools — `src/utils/hardening/memoryStoreTruth.ts`
+  (`classifyMemoryStoreWrite`) added; the four Memory Bank handlers in `src/App.tsx`
+  (`handleUpdateName`, `handleAddCustomKey`, `handleDeleteNote`, `handleSaveNotepadNote`)
+  now capture the real `saveLocalMemory(...)` boolean at all eight call sites and raise a
+  dismissible `role="alert"` toast on a refused write. Evidence:
+  `src/tests/memoryStoreWriteTruth.test.ts` 7 passed (3 unit, 4 source guards).
+  Negative-validated: restoring the discarded-result pattern in `handleUpdateName` failed
+  2 of 7; restored → 7/7.
+
+In Progress:
+- #13 — the long tail of unclassified `success: true` / discarded-result sites remains
+  (server routes and remaining UI handlers).
+
+Remaining:
+- #13 tail (next deterministic handler), then the mandated order continues
+  (Android Bridge → Real Android E2E → …). Items #1, #2, #50, #51, #54, #55 remain
+  blocked on hardware/credentials.
+
+Bugs Found:
+- Four Memory Bank handlers discarded the `saveLocalMemory` boolean, so a refused write
+  (quota/private-mode/no-localStorage) rendered as a durable save until the next reload
+  reverted it silently. Found by reading the handlers and grepping all `saveLocalMemory`
+  call sites in `src/App.tsx`.
+
+Bugs Fixed:
+- The above — all eight call sites now gate on `classifyMemoryStoreWrite(...)` and surface
+  a NOT SAVED / reverts-on-reload notice; verified by `memoryStoreWriteTruth.test.ts`
+  (7/7) and negative validation (2 of 7 fail with the fix reverted).
+
+Tests:    222 files / 2489 tests passed (0 failed) — `npx vitest run`
+Lint:     exit 0 — `npm run lint` (`tsc --noEmit`)
+Build:    exit 0 — `npm run build` (`dist/server.cjs` 1084956 bytes)
+E2E:      NOT RUN (no browser/handset in this sandbox)
+Security: `.env` gitignored (`.gitignore:4:.env`); working tree clean; no credential
+          pattern in the slot diff; no `node_modules`/`dist` tracked
+
+Documentation: `docs/COMPLETION_STATUS.md`, `docs/CHANGELOG.md`
+Branch:  feature/hermes-full-completion
+Commit:  91838e1 (code fix a27310c)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this sandbox
+
+Blocked:
+- #1, #2, #50, #51, #54, #55 — require hardware/credentials not available in this sandbox.
+- Voice / wake-word audio paths — require a real microphone/speech engine.
+
+Human Approval Required:
+- None new. The pending main merge still needs a human read of the report.
+
+Next Slot:
+- Continue #13: fix the next discarded-result handler (a deterministic, testable slice).
+
+Note on window state:
+- The remote state branch tip was read via `git fetch origin automation/hermes-state`
+  (the clone's fetch refspec tracks only `main`). Slot-10 state is committed on top of the
+  true tip with `slots_completed: 10`.
+
 हिंदी सारांश (एक पंक्ति):
-- इस स्लॉट में Android Permission Center के दो handlers ठीक किए जो settings लिखने की
-  असफलता को "सेव हो गया" बताते थे (item 13, evidence के साथ); पूरी suite 2482/2482 पास।
+- इस स्लॉट में Memory Bank के चारों handlers ठीक किए जो localStorage लिखने की असफलता को
+  "सेव हो गया" बताते थे (item 13, evidence के साथ); पूरी suite 2489/2489 पास।
+
