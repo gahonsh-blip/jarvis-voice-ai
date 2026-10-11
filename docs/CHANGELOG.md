@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-12 03:05 IST (2026-10-11 21:35 UTC) — window slot 11: Permission Gateway stops reporting an unpersisted decision as recorded
+
+### Fixed
+- **`src/components/PermissionGateway.tsx` — `handleApprove`/`handleReject` branched only on `data.success` from `POST /api/approvals/resolve`, collapsing two independent facts (`success` = did the action run, `persisted` = did the terminal decision reach durable storage) into one.** A `{ success: true, persisted: false }` body rendered the plain "Authorized & Executed" banner; the route's honest unpersisted-terminal-decision answer (HTTP 500 `{ success: false, persisted: false, outcome: 'UNPERSISTED' }`, decision rolled back to `PENDING_APPROVAL`) fell into a generic "Execution halted" notice and never told the operator the decision was rolled back and would not survive a restart. Both handlers now classify the body and report the real durability outcome.
+
+### Added
+- **`src/utils/hardening/approvalGatewayOutcomeTruth.ts` — `classifyApproveOutcome(raw, label)` / `classifyRejectOutcome(raw, label)`** return `{ tone, message, speak }`; a success is only reported as recorded when `persisted` is also true, an `UNPERSISTED` decision names the rollback, and `UNVERIFIED` keeps its "recorded but not confirmed" wording.
+
+### Tests
+- `src/tests/approvalGatewayOutcomeTruth.test.ts`: 10 cases — 8 unit cases on the classifiers plus 2 source guards (handlers use the classifiers, no longer branch on `data.success` alone). Negative-validated: collapsing `success && persisted` back to `success` fails the durability case (`1 failed | 9 passed`); restored → 10/10. Lint (`tsc --noEmit`) exit 0; targeted approval/permission suites 9 files / 85 tests passed.
+
+
+
 ## [Unreleased] - 2026-10-12 02:35 IST (2026-10-11 21:05 UTC) — window slot 10: Memory Bank writes stop reporting fake saves
 
 ### Fixed

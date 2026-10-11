@@ -16173,3 +16173,34 @@ Note on window state:
 - इस स्लॉट में Memory Bank के चारों handlers ठीक किए जो localStorage लिखने की असफलता को
   "सेव हो गया" बताते थे (item 13, evidence के साथ); पूरी suite 2489/2489 पास।
 
+
+
+---
+
+## Slot 11 — 2026-10-12 03:05 IST (WORK)
+
+Item #13 — Zero-fake-success for all tools: Permission Gateway decision durability.
+
+Found: handleApprove/handleReject in src/components/PermissionGateway.tsx branched
+only on data.success from POST /api/approvals/resolve, collapsing two independent
+facts (success = did the action run, persisted = did the terminal decision reach
+durable storage) into one. A { success: true, persisted: false } body rendered the
+plain Authorized & Executed banner; the route honest HTTP 500 { success: false,
+persisted: false, outcome: UNPERSISTED } (decision rolled back to PENDING_APPROVAL)
+fell into a generic Execution halted notice and never told the operator the decision
+was rolled back.
+
+Fixed: src/utils/hardening/approvalGatewayOutcomeTruth.ts (classifyApproveOutcome /
+classifyRejectOutcome) turns the raw body into a tone + message + spoken line naming
+the real durability outcome; both handlers route through it.
+
+Evidence: src/tests/approvalGatewayOutcomeTruth.test.ts — 10 passed (8 unit + 2
+source guards). Negative-validated: collapsing success && persisted to success failed
+the durability case (1 failed | 9 passed); restored -> 10/10.
+Gates: lint exit 0; full npx vitest run 223 files / 2499 tests passed (0 failed);
+npm run build exit 0 (dist/server.cjs 1084956 bytes). Security: .env gitignored, tree
+clean. E2E: NOT RUN. Deploy: NOT_CONFIGURED. Item 13 stays PARTIAL.
+
+हिंदी सारांश: इस स्लॉट में Permission Gateway के approve/reject handlers ठीक किए जो
+अनपरसिस्टेड decision को रिकॉर्ड हो गया बताते थे (item 13, evidence के साथ);
+पूरी suite 2499/2499 पास।

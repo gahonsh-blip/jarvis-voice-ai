@@ -4,7 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-12 02:35 IST — **WORK SLOT 10 of the
+Last cycle: 2026-10-12 03:05 IST — **WORK SLOT 11 of the
+2026-10-11 → 2026-10-12 window (03:05 IST fire).** Item 13 (`Zero-fake-success
+for all tools`) — **the Permission Gateway collapsed `success` and `persisted`
+into one flag.** `POST /api/approvals/resolve` answers with two independent
+facts: `success` (did the action run) and `persisted` (did the terminal
+decision reach durable storage). `handleApprove`/`handleReject` in
+`src/components/PermissionGateway.tsx` branched only on `data.success`, so a
+`{ success: true, persisted: false }` body (external action ran, terminal
+decision not written) rendered the plain "Authorized & Executed" success banner;
+worse, the route's honest unpersisted-terminal-decision answer — HTTP 500
+`{ success: false, persisted: false, outcome: 'UNPERSISTED' }`, with the decision
+rolled back to `PENDING_APPROVAL` — fell into the generic "Execution halted"
+branch and never told the operator the decision was rolled back and would not
+survive a restart. A new helper `classifyApproveOutcome` / `classifyRejectOutcome`
+(`src/utils/hardening/approvalGatewayOutcomeTruth.ts`) turns the raw body into a
+tone + message + spoken line that names the real durability outcome; both
+handlers now route through it. Evidence:
+`src/tests/approvalGatewayOutcomeTruth.test.ts` (**10 passed**) — 8 unit cases on
+the classifiers plus 2 source guards that the handlers use the classifiers and no
+longer branch on `data.success` alone. Negative-validated — collapsing
+`success && persisted` back to `success` failed the durability case (`1 failed |
+9 passed`), then restoring the fix returned 10/10. Lint (`tsc --noEmit`) exit 0;
+targeted approval/permission suites **9 files / 85 tests passed**. Item 13 stays
+`PARTIAL` — the long tail of unclassified `success: true` / discarded-result
+sites remains.
+
+Last cycle (previous slot): 2026-10-12 02:35 IST — **WORK SLOT 10 of the
 2026-10-11 → 2026-10-12 window (02:35 IST fire).** Item 13 (`Zero-fake-success
 for all tools`) — **the four Memory Bank handlers wrote the local memory copy
 and dropped the storage verdict.** `handleUpdateName`, `handleAddCustomKey`,
