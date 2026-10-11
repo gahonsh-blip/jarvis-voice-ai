@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-12 02:35 IST (2026-10-11 21:05 UTC) — window slot 10: Memory Bank writes stop reporting fake saves
+
+### Fixed
+- **`src/App.tsx` — the four Memory Bank handlers (`handleUpdateName`, `handleAddCustomKey`, `handleDeleteNote`, `handleSaveNotepadNote`) called `saveLocalMemory(...)` as a bare statement and discarded the real `boolean` it returns.** A refused write (quota exceeded, private mode, no `window`/`localStorage`) still left the edit rendered as applied while nothing reached disk, so the operator read a durable save the next reload would not find. All eight call sites — the four optimistic writes plus the four post-sync merges — now capture the result and raise a dismissible `role="alert"` toast when the write was refused.
+
+### Added
+- **`src/utils/hardening/memoryStoreTruth.ts` — `classifyMemoryStoreWrite(saved, label)`** returns `{ saved, tone, notice }`; a landed write is silent, a refused write names the item and states it was **NOT saved** and **reverts on reload**.
+
+### Tests
+- `src/tests/memoryStoreWriteTruth.test.ts`: 7 cases — 3 unit cases on the helper (landed write silent, refused write names the item and the reload revert, never claims a save on a refused write) plus 4 source guards (App.tsx imports the helper, wires ≥8 `classifyMemoryStoreWrite(saveLocalMemory(...))` sites, leaves no bare `saveLocalMemory(...)` statement, and renders the notice). Negative-validated: restoring the discarded-result pattern in `handleUpdateName` fails 2 of 7; restored → 7/7. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 222 files / 2489 tests passed (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1 084 956 bytes).
+
+
+
 ## [Unreleased] - 2026-10-12 01:35 IST (2026-10-11 20:05 UTC) — window slot 9: Android permission toggles stop reporting fake save
 
 ### Fixed
