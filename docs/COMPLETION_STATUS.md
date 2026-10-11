@@ -4,7 +4,31 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 04:35 IST — **FINALIZATION SLOT of the
+Last cycle: 2026-10-11 21:05 IST — **WORK SLOT 1 of the
+2026-10-11 → 2026-10-12 window (21:05 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **`saveMobileBridgePolicy()` in
+`src/utils/mobileNotificationPrivacy.ts` returned `void` and swallowed the
+`localStorage.setItem` error in an empty `catch`, while the category toggle in
+`src/components/MobileBridgeModal.tsx` applied the new policy and cycled on as
+if it had been stored.** On a refused write (quota, private mode, storage
+disabled) the operator watched the privacy filter flip, and the next reload
+silently reverted it — the UI reported a state change that never persisted.
+Fixed: the writer now returns `boolean` and logs the real error; the exported
+`applyCategoryPolicy()` returns `{ policy, persisted }`; the modal warns
+`POLICY NOT SAVED — the change was not stored` instead of claiming success, and
+only adopts the policy when it actually landed. Also fixed a broken `className`
+on that toggle (a plain string, so the ALLOW/ASK/DENY colour never rendered).
+Evidence: `src/tests/mobileNotificationPrivacy.test.ts` (43 passed, 4 new
+cases: accepted write, refused write, `applyCategoryPolicy` persisted flag,
+no-window) — negative-validated by reverting the writer to fake success
+(`2 failed | 41 passed`), then restored (`43 passed`). Lint exit 0; full suite
+**215 files / 2430 tests passed** (0 failed); build exit 0 (`dist/server.cjs`
+1 083 035 bytes). Security: `.env` gitignored (`.gitignore:4`), tree clean, no
+credential in the diff. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — the long tail of unclassified `success: true`
+surfaces remains.
+
+Last cycle (previous window): 2026-10-11 04:35 IST — **FINALIZATION SLOT of the
 2026-10-10 → 2026-10-11 window (04:35 IST fire; 15th of 16 slots).** No new
 development. The frozen branch tip (`feature/hermes-full-completion` @ `7468e11`)
 was re-verified end to end: `npm run lint` (`tsc --noEmit`) exit 0; `npx vitest

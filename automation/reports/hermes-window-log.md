@@ -15499,3 +15499,79 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - फाइनलाइज़ेशन स्लॉट — सभी गेट (lint/tests/build) पास, ट्री स्वच्छ; PR #8 मानव
   स्वीकृति की प्रतीक्षा में; CI विफलता का कारण कोड नहीं, खाते का billing lock है।
+
+
+---
+
+## Slot 2026-10-11 21:05 IST (WORK 1/16)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:05
+Window date: 2026-10-11   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (one more surface closed).
+  Fixed `saveMobileBridgePolicy()` (`src/utils/mobileNotificationPrivacy.ts`):
+  it returned `void` and swallowed the `localStorage.setItem` failure in an
+  empty `catch`, so the mobile-bridge category toggle in
+  `src/components/MobileBridgeModal.tsx` adopted the new policy and cycled on
+  as if it were stored. On a refused write the operator watched the privacy
+  filter flip and the next reload silently reverted it.
+  Fix: writer returns `boolean` and logs the real error; `applyCategoryPolicy()`
+  returns `{ policy, persisted }`; the modal shows
+  `POLICY NOT SAVED — the change was not stored` and only adopts a policy that
+  landed. Also repaired a `className` on that toggle that was a plain string,
+  so its ALLOW/ASK/DENY colour never rendered.
+  Evidence: `src/tests/mobileNotificationPrivacy.test.ts` — 43 passed (4 new:
+  accepted write, refused write, `applyCategoryPolicy` persisted flag,
+  no-window). Negative-validated: reverting the writer to fake success ->
+  `2 failed | 41 passed`; restored -> `43 passed`.
+
+In Progress:
+- #13 Zero-fake-success — the long tail of unclassified `success: true`
+  surfaces remains; ~30 files still to audit.
+
+Remaining:
+- #13 sweep continues; then items 14+ per the mandated order. Items 1, 2, 50,
+  51, 54, 55 remain BLOCKED (hardware/credential) as recorded previously.
+
+Bugs Found:
+- `saveMobileBridgePolicy` fake-success on a refused storage write (empty
+  `catch`, `void` return) + a broken `className` string on the toggle.
+
+Bugs Fixed:
+- As above; proven by the new tests failing against the reverted writer and
+  passing against the fix.
+
+Tests:    215 files / 2430 tests passed, 0 failed (targeted file: 43 passed)
+Lint:     exit 0 (`tsc --noEmit`)
+Build:    exit 0 — dist/server.cjs 1 083 035 bytes
+E2E:      NOT RUN (no Android handset in this sandbox)
+Security: `.env` gitignored (.gitignore:4); `git status` clean after reverting
+          the test-mutated jarvis_memory.json; no credential in the diff.
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 evidence + Last cycle)
+Branch:  feature/hermes-full-completion
+Commit:  4abfe2f
+Push:    succeeded -> origin/feature/hermes-full-completion (23bea7d..4abfe2f)
+
+PR:         #8 (existing, from prior window)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target/hosting integration present
+
+Blocked:
+- Items 1, 2, 50, 51, 54, 55 — require real Android hardware / provider
+  credentials not available in this sandbox.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (only after a human reads the verification report).
+- The required CI check on PR #8 was previously RED due to a GitHub account
+  billing lock (job never started); that still needs a human to resolve.
+
+Next Slot:
+- Continue the item-13 zero-fake-success sweep on the next unclassified
+  `success: true` surface (rotate to a module not yet audited).
+
+हिंदी सारांश (एक पंक्ति):
+- स्लॉट 1: मोबाइल ब्रिज नीति सेव में fake-success बग ठीक किया (असफल लेखन अब
+  छिपाया नहीं जाता), टेस्ट व ऋणात्मक-सत्यापन सहित; lint/tests/build हरे।
