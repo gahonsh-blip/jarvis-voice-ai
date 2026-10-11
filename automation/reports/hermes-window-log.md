@@ -15792,3 +15792,60 @@ All numbers above were re-observed live in this sandbox on branch
 - Tree clean after reverting a runtime side-effect write to `jarvis_memory.json`
   (not part of this slot's change; reverted with `git checkout --`).
 State branch `automation/hermes-state` @ a8b1130 (slots_completed 4, item 13 PARTIAL).
+
+---
+### Slot 5 (live, this run, 23:05 IST fire)
+Branch `feature/hermes-full-completion`, code commit fd245f8 (docs follow).
+
+Completed:
+- #13 Zero-fake-success for all tools — Computer-Operator task/audit persistence
+  slice. `saveOperatorTask()` / `recordOperatorAudit()` in
+  `src/utils/computerOperatorEngine.ts` now return `boolean`; `executeOperatorTask()`
+  stamps terminal tasks with `taskPersisted`; `persistOperatorTaskState()` is the
+  single writer for `executePlannedOperatorRun()`'s blocked/empty-plan and
+  kill-switch branches; `src/App.tsx` `announceOperatorResult()` discloses a
+  `COMPLETED` run whose record was not saved. Evidence:
+  `src/tests/operatorPersistenceTruth.test.ts` 8 passed.
+
+Bugs Found:
+- Operator terminal-task writers returned `void` and swallowed the localStorage
+  error in a `catch`, so a `COMPLETED` run whose record never landed (quota,
+  private mode, or the server with no `localStorage`) was announced as a durable,
+  audited task.
+
+Bugs Fixed:
+- Writers now report the real write result and the terminal task carries it;
+  App surfaces `RUN RECORD NOT SAVED LOCALLY (STORAGE UNAVAILABLE)`. Verified by
+  negative-validation: forcing `task.taskPersisted = true` fails 3 assertions
+  (`3 failed | 5 passed`); restored -> `8 passed`.
+
+Tests:    216 files / 2450 tests passed, 0 failed (npx vitest run; 67.10s)
+Lint:     exit 0 (npm run lint -> tsc --noEmit)
+Build:    exit 0 (npm run build; dist/server.cjs 1.0 MB)
+E2E:      NOT RUN — no handset / no operator display in this sandbox
+Security: `.env` gitignored (.gitignore:4); tree clean; no credential in diff;
+          no node_modules/dist staged. Dedicated audit tooling: NOT RUN.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  fd245f8
+Push:    succeeded -> origin/feature/hermes-full-completion (146a6f3..fd245f8)
+
+PR:         NONE opened this slot (work slot; PR refresh happens in finalization)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this
+            environment; the verified artifact is dist/server.cjs.
+
+Blocked:
+- #1, #2, #50, #51, #54, #55 — require Android handset / device / credential.
+
+Human Approval Required:
+- Final merge of feature/hermes-full-completion -> main (human review of the
+  window verification report).
+
+Next Slot:
+- #13 continue the long tail: audit remaining `void`-swallowing / `success: true`
+  writers, one coherent slice per slot.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में Computer-Operator के task/audit सेव अब असली नतीजा बताते हैं — नाकाम सेव पर UI "RUN RECORD NOT SAVED" दिखाता है; 2450 टेस्ट पास, lint/build हरा, बदलाव पुश हो गया।

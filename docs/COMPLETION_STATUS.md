@@ -4,7 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 22:35 IST — **WORK SLOT 4 of the
+Last cycle: 2026-10-11 23:05 IST — **WORK SLOT 5 of the
+2026-10-11 → 2026-10-12 window (23:05 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **the Computer-Operator engine's terminal
+task writers `saveOperatorTask()` and `recordOperatorAudit()` in
+`src/utils/computerOperatorEngine.ts` returned `void` and swallowed the
+`localStorage` write error in a `catch`, so `executeOperatorTask()` reported a
+`COMPLETED` task — and `executePlannedOperatorRun()` its `BLOCKED`/kill-switch
+paths — even when the run record never reached storage (quota exceeded, private
+mode, or the server, which has no `localStorage`).** Both writers now return
+`boolean`; `executeOperatorTask()` stamps each terminal task with a new
+`taskPersisted` field (`saved && audited`); `persistOperatorTaskState()` is the
+single entry point used by `executePlannedOperatorRun()`'s blocked/empty-plan
+and kill-switch branches so those no longer return anonymous partial objects.
+`src/App.tsx`'s two operator-result announcements now route through an
+`announceOperatorResult()` helper that appends
+`• RUN RECORD NOT SAVED LOCALLY (STORAGE UNAVAILABLE)` when a `COMPLETED` task
+has `taskPersisted !== true`. Evidence: `src/tests/operatorPersistenceTruth.test.ts`
+(**8 passed**): writers true+stamp on success, false on a refused write, false
+with no `window`/`localStorage`; engine stamps `COMPLETED` persisted on success
+and not-persisted on the server; `executePlannedOperatorRun` persists its
+kill-switch `BLOCKED` task to the audit log; plus two source scans pinning the
+App disclosure (`task.taskPersisted !== true`, the notice string, and exactly two
+`announceOperatorResult(result.task, result.ok)` call sites) — negative-validated
+by forcing `task.taskPersisted = true` (`3 failed | 5 passed`), then restored
+(`8 passed`). Lint exit 0; full suite **216 files / 2450 tests passed** (0
+failed); build exit 0 (`dist/server.cjs` 1.0 MB). Security: `.env` gitignored
+(`.gitignore:4`), tree clean, no credential in the diff. E2E: NOT RUN (no
+handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` surfaces remains.
+
+Last cycle (previous slot): 2026-10-11 22:35 IST — **WORK SLOT 4 of the
 2026-10-11 → 2026-10-12 window (22:35 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **`AndroidBridgeManager.saveState()` in
 `src/utils/androidBridgeEngine.ts` swallowed `localStorage` write failures in an

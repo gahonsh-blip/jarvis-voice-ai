@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 23:05 IST (2026-10-11 17:35 UTC) — window slot 5: Computer-Operator task persistence stops reporting fake success
+
+### Fixed
+- **`src/utils/computerOperatorEngine.ts` — `saveOperatorTask()` and `recordOperatorAudit()` returned `void` and swallowed the `localStorage` write error in a `catch`, so `executeOperatorTask()` reported a `COMPLETED` task even when its run record never reached storage.** A refused write (quota exceeded, private mode, or the server, which has no `localStorage`) was indistinguishable from a persisted one, so the operator's own audit trail claimed a durable record the next reload would not find. Both writers now return `boolean`; `executeOperatorTask()` stamps each terminal task with a new `taskPersisted` field (`saved && audited`); `persistOperatorTaskState()` is the single entry point used by `executePlannedOperatorRun()`'s blocked/empty-plan and kill-switch branches so those no longer build anonymous partial objects.
+- **`src/App.tsx` — both operator-result announcements now route through an `announceOperatorResult()` helper** that appends `• RUN RECORD NOT SAVED LOCALLY (STORAGE UNAVAILABLE)` when a `COMPLETED` task has `taskPersisted !== true`, instead of implying the run was recorded.
+
+### Tests
+- `src/tests/operatorPersistenceTruth.test.ts`: 8 new cases — writers return `true` plus stamp the task on success, `false` on a refused write, `false` with no `window`/`localStorage`; the engine stamps `COMPLETED` persisted on success and not-persisted on the server; `executePlannedOperatorRun` persists its kill-switch `BLOCKED` task to the audit log; two source scans pin the App disclosure (`task.taskPersisted !== true`, the notice string, exactly two `announceOperatorResult(result.task, result.ok)` call sites). Negative-validated: forcing `task.taskPersisted = true` fails 3 assertions (`3 failed | 5 passed`); restored → 8/8. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 216 files / 2450 tests passed (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1.0 MB).
+
+
 ## [Unreleased] - 2026-10-11 22:35 IST (2026-10-11 17:05 UTC) — window slot 4: Android bridge persistence stops reporting fake success
 
 ### Fixed
