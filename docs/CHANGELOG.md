@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-11 23:35 IST (2026-10-11 18:05 UTC) — window slot 6: Notepad save stops reporting fake success
+
+### Fixed
+- **`src/components/NotepadModal.tsx` — the JARVIS Notepad save button wrote the draft with a bare `localStorage.setItem('jarvis_notepad_content', …)` and then unconditionally set `savedStatus = true`, so it read "Saved!" even when storage refused the write (quota exceeded, private mode).** The draft was then lost on reload while the UI had confirmed a durable save. The save path now routes through the new truth-reporting writers and shows an explicit red **NOT SAVED** banner on failure; the `.txt` export is downgraded to a one-time snapshot when the local write fails.
+- **`src/utils/offlineStorage.ts` — added `saveLocalNotepadContent()` and `loadLocalNotepadContent()`** that report the real write result (a `false`/`null` verdict when `window`/`localStorage` is absent or a write throws), consistent with the other offline writers.
+
+### Tests
+- `src/tests/notepadPersistenceTruth.test.ts`: 6 cases — writer true plus a round-trip read on success, false on a refused write with a reloaded read confirming nothing landed, false with no `window`; three source scans pin the component (routes through `saveLocalNotepadContent`, no bare `setItem('jarvis_notepad_content'`, gates on `saved`, surfaces the `NOT SAVED`/`saveError` notice). Negative-validated: reverting `handleSave` to the old unconditional path fails 3 assertions (`3 failed | 3 passed`); restored → 6/6. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 217 files / 2456 tests passed (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1 083 372 bytes).
+
+
 ## [Unreleased] - 2026-10-11 23:05 IST (2026-10-11 17:35 UTC) — window slot 5: Computer-Operator task persistence stops reporting fake success
 
 ### Fixed

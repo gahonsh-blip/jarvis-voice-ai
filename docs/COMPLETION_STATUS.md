@@ -4,7 +4,33 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 23:05 IST — **WORK SLOT 5 of the
+Last cycle: 2026-10-11 23:35 IST — **WORK SLOT 6 of the
+2026-10-11 → 2026-10-12 window (23:35 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **the JARVIS Notepad save button
+(`src/components/NotepadModal.tsx`) wrote the draft with a bare
+`localStorage.setItem('jarvis_notepad_content', …)` and then unconditionally set
+`savedStatus = true`, so it read "Saved!" even when storage refused the write
+(quota exceeded, private mode). The draft was lost on reload while the UI had
+confirmed a durable save.** Added `saveLocalNotepadContent()` and
+`loadLocalNotepadContent()` to `src/utils/offlineStorage.ts`, both returning the
+real result (a `false`/`null` verdict when `window`/`localStorage` is absent or
+a write throws); `handleSave` now gates both the `onSaveNote` callback and the
+"Saved!" state on the writer's verdict and renders an explicit red **NOT SAVED**
+banner on failure, and `handleDownload` downgrades the `.txt` export to a
+one-time snapshot when the local write fails. Evidence:
+`src/tests/notepadPersistenceTruth.test.ts` (**6 passed**): writer true+round-trip
+on success, false on a refused write with a reloaded read confirming nothing
+landed, false with no `window`; plus three source scans pinning the component
+(routes through `saveLocalNotepadContent`, no bare `setItem('jarvis_notepad_content'`,
+gates on `saved`, surfaces the `NOT SAVED`/`saveError` notice) — negative-validated
+by reverting `handleSave` to the old unconditional path (`3 failed | 3 passed`),
+then restored (`6 passed`). Lint exit 0; full suite **217 files / 2456 tests
+passed** (0 failed); build exit 0 (`dist/server.cjs` 1 083 372 bytes). Security:
+`.env` gitignored (`.gitignore:4`), tree clean, no credential in the diff. E2E:
+NOT RUN (no handset). Deploy: NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long
+tail of unclassified `success: true` surfaces remains.
+
+Last cycle (previous slot): 2026-10-11 23:05 IST — **WORK SLOT 5 of the
 2026-10-11 → 2026-10-12 window (23:05 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **the Computer-Operator engine's terminal
 task writers `saveOperatorTask()` and `recordOperatorAudit()` in
