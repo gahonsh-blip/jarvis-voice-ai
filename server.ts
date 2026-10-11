@@ -510,6 +510,11 @@ interface MemoryData {
     scheduledGoals?: ScheduledGoalSpec[];
     /** Last date each goal ran, keyed by goal id. */
     lastAutonomousGoalRuns?: Record<string, string>;
+    /**
+     * Run history for scheduled goals, newest first. Persisted so a restart does
+     * not erase the evidence of what the scheduler actually ran.
+     */
+    scheduledGoalRuns?: ScheduledGoalRecord[];
   };
   /**
    * Operator-ticked blueprint deliverables. Persisted so the Master Blueprint
@@ -4401,6 +4406,15 @@ async function checkAndRunSchedulerJobs() {
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        recordScheduledGoalRun({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: 'FAILED',
+          verified: false,
+          stepsDone: 0,
+          stepsTotal: Array.isArray(goal.steps) ? goal.steps.length : 0,
+          at: new Date().toISOString(),
+        });
         continue;
       }
 
@@ -4411,7 +4425,7 @@ async function checkAndRunSchedulerJobs() {
           'AUTOMATED_SCHEDULE',
           'PENDING'
         );
-        scheduledGoalRuns.unshift({
+        recordScheduledGoalRun({
           goalId: goal.id,
           ranDate: today,
           outcome: 'PERMISSION_REQUIRED',
@@ -4432,13 +4446,22 @@ async function checkAndRunSchedulerJobs() {
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        recordScheduledGoalRun({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: 'FAILED',
+          verified: false,
+          stepsDone: 0,
+          stepsTotal: steps.length,
+          at: new Date().toISOString(),
+        });
         continue;
       }
 
       try {
         const runner = new AutonomousGoalRunner();
         const result = await runner.run(goal.name, steps);
-        scheduledGoalRuns.unshift({
+        recordScheduledGoalRun({
           goalId: goal.id,
           ranDate: today,
           outcome: result.outcome,
@@ -4454,7 +4477,7 @@ async function checkAndRunSchedulerJobs() {
           result.outcome === 'VERIFIED' ? 'VERIFIED' : 'FAILED'
         );
       } catch (err: any) {
-        scheduledGoalRuns.unshift({
+        recordScheduledGoalRun({
           goalId: goal.id,
           ranDate: today,
           outcome: 'FAILED',
@@ -4470,8 +4493,6 @@ async function checkAndRunSchedulerJobs() {
           'FAILED'
         );
       }
-      if (scheduledGoalRuns.length > 100) scheduledGoalRuns.length = 100;
-      persistMemory();
     }
   }
 }
@@ -8689,7 +8710,55 @@ export interface ScheduledGoalSpec {
  * Nothing runs on a schedule until the operator registers something.
  */
 let scheduledGoals: ScheduledGoalSpec[] = [];
+// Bounded run history. The most recent records are also mirrored into
+// `memoryState.schedulerState.scheduledGoalRuns` so a restart does not erase the
+// evidence of what the scheduler actually ran (item 13).
 const scheduledGoalRuns: ScheduledGoalRecord[] = [];
+
+/**
+ * Read the scheduled-goal run history back from the memory file. The per-day
+ * marker makes a goal run at most once a day, so the history is small and is
+ * restored on boot rather than only appended to in memory.
+ */
+function scheduledGoalRunsOnDisk(): ScheduledGoalRecord[] | null {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const rows = onDisk?.schedulerState?.scheduledGoalRuns;
+    return Array.isArray(rows) ? (rows as ScheduledGoalRecord[]) : [];
+  } catch {
+    return null;
+  }
+}
+
+/** True only when this exact run record is present in the memory file on disk. */
+function scheduledGoalRunOnDisk(record: ScheduledGoalRecord): boolean {
+  const rows = scheduledGoalRunsOnDisk();
+  if (!rows) return false;
+  return rows.some(
+    (r) => r?.goalId === record.goalId && r?.ranDate === record.ranDate && r?.at === record.at
+  );
+}
+
+/**
+ * Append a scheduled-goal run record and report whether it is durable.
+ *
+ * The record is the only evidence that a run happened. An in-memory-only record
+ * is erased by the next restart while the per-day marker keeps the goal from
+ * running again, so the run would vanish from the history entirely. The record
+ * is mirrored into `memoryState.schedulerState.scheduledGoalRuns` and trusted
+ * only after it is read back from disk. When the write does not land the record
+ * is removed from memory so the API never shows a run the durable store cannot
+ * confirm.
+ */
+function recordScheduledGoalRun(record: ScheduledGoalRecord): boolean {
+  scheduledGoalRuns.unshift(record);
+  if (scheduledGoalRuns.length > 100) scheduledGoalRuns.length = 100;
+  memoryState.schedulerState.scheduledGoalRuns = scheduledGoalRuns.slice();
+  if (persistMemory() && scheduledGoalRunOnDisk(record)) return true;
+  scheduledGoalRuns.shift();
+  memoryState.schedulerState.scheduledGoalRuns = scheduledGoalRuns.slice();
+  return false;
+}
 
 /** Minimal shape check for a persisted goal, so a corrupt file cannot crash boot. */
 function isPersistedGoal(value: unknown): value is ScheduledGoalSpec {
@@ -8716,6 +8785,14 @@ function loadScheduledGoals(): void {
   for (const goal of scheduledGoals) byId.set(goal.id, goal);
   scheduledGoals = Array.from(byId.values());
   memoryState.schedulerState.scheduledGoals = scheduledGoals;
+
+  // Restore the run history too. It is the only record that a scheduled goal
+  // ran, so losing it on restart would leave a run that happened invisible.
+  const runsOnDisk = scheduledGoalRunsOnDisk();
+  if (runsOnDisk) {
+    scheduledGoalRuns.length = 0;
+    for (const run of runsOnDisk.slice(0, 100)) scheduledGoalRuns.push(run);
+  }
 }
 
 /** Persist the current registry. Returns whether the state actually reached disk. */
