@@ -495,10 +495,12 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
                         onClick={() => {
                           const updated = { ...mobilePerms, [def.category]: !mobilePerms[def.category] };
                           setMobilePerms(updated);
-                          saveMobilePermissions(updated);
+                          const persisted = saveMobilePermissions(updated);
                           showNotification(
-                            `Permission for "${def.nameEn}" updated to: ${updated[def.category] ? 'GRANTED' : 'REVOKED'}`,
-                            'info'
+                            persisted
+                              ? `Permission for "${def.nameEn}" updated to: ${updated[def.category] ? 'GRANTED' : 'REVOKED'}`
+                              : `Permission for "${def.nameEn}" NOT SAVED — local storage refused the write; this change reverts on reload.`,
+                            persisted ? 'info' : 'error'
                           );
                         }}
                         className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all ${

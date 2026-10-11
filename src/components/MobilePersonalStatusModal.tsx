@@ -96,6 +96,7 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   const [activeTab, setActiveTab] = useState<'briefing' | 'telemetry' | 'privacy' | 'bridge'>('briefing');
   const [telegramSending, setTelegramSending] = useState<boolean>(false);
   const [telegramNotice, setTelegramNotice] = useState<string | null>(null);
+  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
 
   const refreshData = async () => {
     setLoading(true);
@@ -153,7 +154,11 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   const handleTogglePermission = (cat: MobilePermissionCategory) => {
     const updated = { ...permissions, [cat]: !permissions[cat] };
     setPermissions(updated);
-    saveMobilePermissions(updated);
+    setPermissionNotice(
+      saveMobilePermissions(updated)
+        ? null
+        : 'PERMISSION NOT SAVED — local storage refused the write; this change reverts on reload.'
+    );
 
     if (statusData) {
       const updatedStatus = {
@@ -176,7 +181,11 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       DEVICE_HEALTH: true,
     };
     setPermissions(allTrue);
-    saveMobilePermissions(allTrue);
+    setPermissionNotice(
+      saveMobilePermissions(allTrue)
+        ? null
+        : 'PERMISSIONS NOT SAVED — local storage refused the write; these changes revert on reload.'
+    );
     refreshData();
   };
 
@@ -190,7 +199,11 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       DEVICE_HEALTH: false,
     };
     setPermissions(allFalse);
-    saveMobilePermissions(allFalse);
+    setPermissionNotice(
+      saveMobilePermissions(allFalse)
+        ? null
+        : 'PERMISSIONS NOT SAVED — local storage refused the write; these changes revert on reload.'
+    );
     refreshData();
   };
 
@@ -377,6 +390,16 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
           <div className="px-5 py-2 bg-blue-950/80 border-b border-blue-600 text-blue-200 text-xs font-mono flex items-center justify-between">
             <span>{telegramNotice}</span>
             <button onClick={() => setTelegramNotice(null)} className="text-blue-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Permission Durability Notice Banner */}
+        {permissionNotice && (
+          <div className="px-5 py-2 bg-amber-950/80 border-b border-amber-600 text-amber-200 text-xs font-mono flex items-center justify-between">
+            <span>{permissionNotice}</span>
+            <button onClick={() => setPermissionNotice(null)} className="text-amber-400 hover:text-white">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>

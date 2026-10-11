@@ -108,12 +108,18 @@ export function loadMobilePermissions(): Record<MobilePermissionCategory, boolea
   }
 }
 
-export function saveMobilePermissions(perms: Record<MobilePermissionCategory, boolean>): void {
-  if (typeof window === 'undefined') return;
+// Returns whether the write actually landed. The callers announce a granted or
+// revoked permission; on a full disk or in a private-mode context the previous
+// version swallowed the storage error and the operator read a completed change
+// the next reload would not find.
+export function saveMobilePermissions(perms: Record<MobilePermissionCategory, boolean>): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(MOBILE_PERMISSIONS_STORAGE_KEY, JSON.stringify(perms));
+    return true;
   } catch (err) {
     console.warn('[MobileEngine] Error saving mobile permissions:', err);
+    return false;
   }
 }
 

@@ -6,6 +6,8 @@ import {
   MOBILE_PERMISSION_DEFINITIONS,
   getRealOrSimulatedBattery,
   getRealOrEstimatedWeather,
+  saveMobilePermissions,
+  loadMobilePermissions,
 } from '../utils/mobileStatusEngine';
 import { MobileStatusData } from '../types';
 
@@ -302,6 +304,38 @@ describe('Mobile Personal Status Engine & Hindi Morning Briefing Suite', () => {
     it('does not claim the weather reading is for the user city when no location was supplied', async () => {
       const statusData = await compileMobileStatusData();
       expect(statusData.weather.location).toMatch(/fixed reference point/);
+    });
+  });
+
+  describe('5. Permission storage writes report real durability (zero fake success)', () => {
+    it('saveMobilePermissions returns true only when the write landed, false when storage refuses', () => {
+      const store = new Map<string, string>();
+      (globalThis as any).window = globalThis;
+      (globalThis as any).localStorage = {
+        getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+        setItem: (k: string, v: string) => store.set(k, v),
+        removeItem: (k: string) => store.delete(k),
+        clear: () => store.clear(),
+      };
+
+      expect(saveMobilePermissions(DEFAULT_MOBILE_PERMISSIONS)).toBe(true);
+      // The granted/revoked change must have actually been persisted.
+      expect(loadMobilePermissions()).toEqual(DEFAULT_MOBILE_PERMISSIONS);
+
+      (globalThis as any).localStorage.setItem = () => {
+        throw new Error('QuotaExceededError');
+      };
+      expect(saveMobilePermissions({ ...DEFAULT_MOBILE_PERMISSIONS, NOTIFICATIONS: false })).toBe(false);
+    });
+
+    it('saveMobilePermissions returns false when there is no browser storage to write to', () => {
+      const originalWindow = (globalThis as any).window;
+      delete (globalThis as any).window;
+      try {
+        expect(saveMobilePermissions(DEFAULT_MOBILE_PERMISSIONS)).toBe(false);
+      } finally {
+        (globalThis as any).window = originalWindow;
+      }
     });
   });
 });
