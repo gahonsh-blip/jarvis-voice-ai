@@ -1,15 +1,22 @@
 {
-  "window_date": "2026-10-10",
-  "window_started_at": "2026-10-10T15:35:00Z",
-  "last_slot_at": "2026-10-10T23:16:30Z",
-  "slots_completed": 15,
+  "window_date": "2026-10-11",
+  "window_started_at": "2026-10-11T15:35:00Z",
+  "last_slot_at": "2026-10-11T15:47:00Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "23bea7d",
+  "last_commit": "5da399a",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "All local gates green (lint exit 0; 215 files / 2426 tests passed, 0 failed; build exit 0, dist/server.cjs 1083035 bytes). Security clean. PR #8 open, non-draft, mergeable, no conflicts; NOT merged (awaiting human approval). Required CI check RED due to GitHub account billing lock (job never started) - human action required. Deploy NOT_CONFIGURED.",
-  "blocked_items": [1, 2, 50, 51, 54, 55],
+  "finalized": false,
+  "finalization_result": null,
+  "blocked_items": [
+    1,
+    2,
+    50,
+    51,
+    54,
+    55
+  ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
