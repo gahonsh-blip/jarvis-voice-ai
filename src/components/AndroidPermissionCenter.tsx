@@ -180,7 +180,13 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
   const handleToggleCategory = (cat: NotificationCategory) => {
     const next = { ...categories, [cat]: !categories[cat] };
     setCategories(next);
-    androidBridgeEngine.updateSettings({ categoryPermissions: next });
+    const persisted = androidBridgeEngine.updateSettings({ categoryPermissions: next });
+    setStatusMessage(
+      persisted
+        ? `${cat} category set to ${next[cat] ? 'ALLOWED' : 'BLOCKED'}`
+        : `NOT SAVED: ${cat} category changed in memory only — the bridge store refused the write; it reverts on reload.`
+    );
+    setTimeout(() => setStatusMessage(null), 3000);
   };
 
   const handleToggleAppRule = (pkg: string) => {
@@ -191,7 +197,13 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
       [pkg]: { ...rule, allowed: !rule.allowed },
     };
     setAppRules(next);
-    androidBridgeEngine.updateSettings({ privacyRules: next });
+    const persisted = androidBridgeEngine.updateSettings({ privacyRules: next });
+    setStatusMessage(
+      persisted
+        ? `${rule.appName} rule set to ${next[pkg].allowed ? 'ALLOWED' : 'BLOCKED'}`
+        : `NOT SAVED: ${rule.appName} rule changed in memory only — the bridge store refused the write; it reverts on reload.`
+    );
+    setTimeout(() => setStatusMessage(null), 3000);
   };
 
   // Test Simulation Actions
