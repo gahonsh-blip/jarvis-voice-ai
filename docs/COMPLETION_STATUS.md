@@ -4,29 +4,42 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-11 21:05 IST — **WORK SLOT 1 of the
+Last cycle: 2026-10-11 21:35 IST — **WORK SLOT 2 of the
+2026-10-11 → 2026-10-12 window (21:35 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **the mobile-bridge approval queue and
+audit writers in `src/utils/mobileBridgeEngine.ts` returned `void` and swallowed
+`localStorage` failures in empty `catch` blocks.** `updatePendingEventStatus()`,
+`enqueuePendingEvent()` and `logMobileAudit()` could not distinguish a refused
+write from a persisted one, so in `src/components/MobileBridgeModal.tsx` an
+approval status change or audit row that never reached storage looked identical
+to one that did — the entry silently reappeared (or the audit row vanished) on
+the next reload. Fixed: all three writers now return `boolean` (persisted / not
+persisted), `updatePendingEventStatus()` returns `false` for an unknown event id
+as well as for a refused write, and the modal surfaces a
+`STORAGE WRITE REFUSED` / `STATUS NOT SAVED` / `DISMISS NOT SAVED` notice
+whenever a write is refused instead of quietly implying success.
+Evidence: `src/tests/mobileBridgeEngine.test.ts` (31 passed, 5 new cases under
+"Storage writes report real durability": enqueue true on success, unknown-id
+false, refused-write false for update/enqueue, audit true/false) —
+negative-validated by reverting `persistQueue` to fake success
+(`2 failed | 29 passed`), then restored (`31 passed`). Lint exit 0; full suite
+**215 files / 2435 tests passed** (0 failed); build exit 0 (`dist/server.cjs`
+1 083 035 bytes). Security: `.env` gitignored (`.gitignore:4`), tree clean, no
+credential in the diff. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+Item 13 stays `PARTIAL` — the long tail of unclassified `success: true`
+surfaces remains.
+
+Last cycle (previous slot): 2026-10-11 21:05 IST — **WORK SLOT 1 of the
 2026-10-11 → 2026-10-12 window (21:05 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **`saveMobileBridgePolicy()` in
 `src/utils/mobileNotificationPrivacy.ts` returned `void` and swallowed the
 `localStorage.setItem` error in an empty `catch`, while the category toggle in
 `src/components/MobileBridgeModal.tsx` applied the new policy and cycled on as
-if it had been stored.** On a refused write (quota, private mode, storage
-disabled) the operator watched the privacy filter flip, and the next reload
-silently reverted it — the UI reported a state change that never persisted.
-Fixed: the writer now returns `boolean` and logs the real error; the exported
+if it had been stored.** Fixed: the writer now returns `boolean`; the exported
 `applyCategoryPolicy()` returns `{ policy, persisted }`; the modal warns
-`POLICY NOT SAVED — the change was not stored` instead of claiming success, and
-only adopts the policy when it actually landed. Also fixed a broken `className`
-on that toggle (a plain string, so the ALLOW/ASK/DENY colour never rendered).
-Evidence: `src/tests/mobileNotificationPrivacy.test.ts` (43 passed, 4 new
-cases: accepted write, refused write, `applyCategoryPolicy` persisted flag,
-no-window) — negative-validated by reverting the writer to fake success
-(`2 failed | 41 passed`), then restored (`43 passed`). Lint exit 0; full suite
-**215 files / 2430 tests passed** (0 failed); build exit 0 (`dist/server.cjs`
-1 083 035 bytes). Security: `.env` gitignored (`.gitignore:4`), tree clean, no
-credential in the diff. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
-Item 13 stays `PARTIAL` — the long tail of unclassified `success: true`
-surfaces remains.
+`POLICY NOT SAVED` instead of claiming success. Evidence:
+`src/tests/mobileNotificationPrivacy.test.ts` (43 passed, 4 new cases) —
+negative-validated, then restored. Full suite was 215 files / 2430 tests.
 
 Last cycle (previous window): 2026-10-11 04:35 IST — **FINALIZATION SLOT of the
 2026-10-10 → 2026-10-11 window (04:35 IST fire; 15th of 16 slots).** No new
