@@ -4,7 +4,45 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-12 00:05 IST — **WORK SLOT 7 of the
+Last cycle: 2026-10-12 01:05 IST — **WORK SLOT 8 of the
+2026-10-11 → 2026-10-12 window (01:05 IST fire).** Two things this slot.
+
+**(1) Item 43 (`Scheduled autonomous goals`) — durable run history.** The
+scheduled-goal path in `server.ts` (`AUTOMATED_SCHEDULE` → `buildGoalSteps()` →
+`AutonomousGoalRunner().run()`) recorded each run only in the in-memory
+`lastAutonomousGoalRuns` array while the per-day marker was persisted. After a
+restart the goal correctly did not re-run for the day, but its run record was
+gone — the schedule endpoint reported no history for a run that had happened.
+Added `recordScheduledGoalRun()`: it mirrors the record into
+`memoryState.schedulerState.scheduledGoalRuns` (capped 100), persists via
+`persistMemory()`, then **reads the record back from disk**
+(`scheduledGoalRunsOnDisk()`) and only keeps it if the write is durable —
+otherwise it rolls the in-memory record back. Run records are hydrated from the
+file on boot. Evidence: `src/tests/scheduledGoalRunHistoryDurabilityTruth.test.ts`
+(**5 passed**, targeted) — real `tsx server.ts` process on a temp memory file
+whose run record survives a **process restart**; a failed write is refused and
+rolled back. Negative-validated — disabling the durability read-back failed 2 of
+5 (`restored` undefined), then restored → 5/5.
+
+**(2) Bug found and fixed — flaky full suite (duplicate test ports).** The
+server-spawning suites bound fixed `JARVIS_PORT` values and three of them
+collided: `scheduledGoalRunHistoryDurabilityTruth` (4767) with
+`chatDurabilityTruth`, and `fixPlanSuccessTruth` / `freelanceLeadDurabilityTruth`
+with `chatGenericMemoryClaimTruth` (all 4771). Under the parallel full suite one
+spawn lost the bind and its HTTP assertions read the other process's state, so a
+**different file failed on each run** (observed: run A failed
+`chatDurabilityTruth` 3 tests, run B failed `chatGenericMemoryClaimTruth` 1 test,
+run C passed 220/220 — same commit). Reassigned the colliding ports to unique
+values (4774/4775/4776); `grep` now reports **no duplicate ports**. Gates
+(observed this fire, on `e643285` after the fix): lint (`tsc --noEmit`) exit 0;
+full `npx vitest run` **220 files / 2478 tests passed** (74.24 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1084956 bytes). Security: `.env`
+gitignored (`.gitignore:4`), working tree clean, no `node_modules`/`dist`
+tracked, no credential in the diff. E2E: NOT RUN (no handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL`; item 43 advances to `PARTIAL` (run
+history now durable; end-to-end execution on real hardware still unverified).
+
+Last cycle (previous slot): 2026-10-12 00:05 IST — **WORK SLOT 7 of the
 2026-10-11 → 2026-10-12 window (00:05 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **the screenshot "Download PNG" handler
 (`src/components/ScreenshotModal.tsx`) set its success flag the instant it
@@ -8197,7 +8235,7 @@ not the quality of a Gemini response, and no live Gemini call is made in tests.
 | 40 | Goal –ï“¢–ì“ò–ì“∂ Plan –ï“¢–ì“ò–ì“∂ Execute –ï“¢–ì“ò–ì“∂ Verify loop | `VERIFIED` | `src/utils/autonomous/goalRunner.ts` runs steps one at a time and requires each step's own verifier before it is `DONE`. A run ends `VERIFIED` only when every step verified. 11 unit tests. |
 | 41 | Multi-step task execution | `VERIFIED` | The runner carries a shared state object between steps and stops a run when a step fails, so later steps never execute against state that was never produced. Proven end-to-end by `autonomousGoals.e2e.test.ts`, which drives real HTTP routes and then checks the filesystem independently. |
 | 42 | Task recovery after failure | `VERIFIED` | Retry is opt-in per step (`retryable`, `maxAttempts`), so a non-idempotent step is never retried by default. A thrown error is captured as a step failure rather than crashing the run. Covered by the retry and throw unit tests. |
-| 43 | Scheduled autonomous tasks | `VERIFIED` | `src/utils/autonomous/schedule.ts` computes due-ness in an explicit timezone and flags a missed window rather than skipping silently. The server scheduler tick runs due tasks through the same verified loop. A task marked `requiresApproval` is never run unattended –ï“¢–î“∂–ì¬∂ it is recorded as `PERMISSION_REQUIRED`. 10 unit tests plus 3 E2E tests. |
+| 43 | Scheduled autonomous tasks | `VERIFIED` | `src/utils/autonomous/schedule.ts` computes due-ness in an explicit timezone and flags a missed window rather than skipping silently. The server scheduler tick runs due tasks through the same verified loop. A task marked `requiresApproval` is never run unattended –ï“¢–î“∂–ì¬∂ it is recorded as `PERMISSION_REQUIRED`. 10 unit tests plus 3 E2E tests. **2026-10-12 01:05 IST — scheduled-run history made durable.** The `AUTOMATED_SCHEDULE` path recorded runs only in an in-memory array while the per-day marker was persisted, so after a restart a run that had happened left no record. `recordScheduledGoalRun()` now mirrors the record into the memory file, reads it back from disk before trusting it, rolls back on a failed write, and hydrates on boot. Evidence: `src/tests/scheduledGoalRunHistoryDurabilityTruth.test.ts` (5 passed; survives a real process restart). Item stays `VERIFIED`; the durability gap in its run history is closed. |
 | 44 | Human approval checkpoints | `VERIFIED` | A step marked `requiresApproval` pauses the run when no approval channel exists, reporting `awaitingApproval` instead of assuming consent. Approval requires a named approver; an anonymous `approved: true` is not a human decision. Covered by unit and E2E tests, including that the gated file is genuinely not written. |
 | 45 | Complete audit trail | `VERIFIED` | Every transition (`STEP_STARTED`, `STEP_SUCCEEDED`, `STEP_FAILED`, `STEP_RETRYING`, `STEP_SKIPPED`, `APPROVAL_REQUESTED`, `APPROVAL_DECIDED`, `RUN_FINISHED`) is recorded on the run and returned by the API. Runs are also written to the server's audit log and kept in a bounded history. |
 

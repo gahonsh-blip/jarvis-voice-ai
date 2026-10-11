@@ -15968,3 +15968,51 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में screenshot डाउनलोड अब सिर्फ़ साबित होने वाली बात बताता है — झूठा 'gallery' दावा हटा; 2461 टेस्ट पास, lint/build हरा, बदलाव पुश हो गया।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:05 (fire 01:05 IST)
+Window date: 2026-10-12   Window slots completed so far: 8
+
+Completed:
+- #43 Scheduled autonomous tasks — run history is now durable across a restart.
+  server.ts: recordScheduledGoalRun() mirrors the record into the memory file, reads it back from disk before trusting it, rolls back on a failed write, and hydrates run records on boot. Evidence: src/tests/scheduledGoalRunHistoryDurabilityTruth.test.ts (5 passed, targeted) — a real tsx server.ts process whose scheduled-goal run record survives a process restart; a failed write is refused and rolled back. Negative-validated: disabling the read-back failed 2/5, restore -> 5/5.
+- #13 (zero-fake-success) — unchanged this slot; the durability read-back is the same no-false-claim discipline applied to scheduled runs. Item stays PARTIAL.
+
+In Progress:
+- #13 Zero-fake-success for all tools — PARTIAL (largest remaining item).
+
+Bugs Found:
+- Duplicate fixed ports across server-spawning test suites made the full suite flaky. Three files collided: scheduledGoalRunHistoryDurabilityTruth (4767) vs chatDurabilityTruth; fixPlanSuccessTruth and freelanceLeadDurabilityTruth vs chatGenericMemoryClaimTruth (all 4771). Under the parallel suite one spawn lost the bind and its HTTP assertions read the other process's state, so a DIFFERENT file failed each run on the same commit (observed: run A failed chatDurabilityTruth 3 tests, run B failed chatGenericMemoryClaimTruth 1 test, run C passed 220/220).
+
+Bugs Fixed:
+- Reassigned the three colliding ports to unique values (4774/4775/4776); grep now reports no duplicate JARVIS_PORT. Verification: full suite run after the fix passed 220 files / 2478 tests.
+
+Tests:    220 files / 2478 tests passed (0 failed) — npx vitest run, observed.
+Lint:     exit 0 — npm run lint (tsc --noEmit), observed.
+Build:    exit 0 — npm run build; dist/server.cjs 1084956 bytes, observed.
+E2E:      NOT RUN — no Android handset or browser runtime in this sandbox.
+Security: .env gitignored (.gitignore:4); working tree clean; no node_modules/dist tracked; no credential in the diff — observed.
+
+Documentation: docs/COMPLETION_STATUS.md (new cycle header + item 43 evidence); automation/reports/hermes-window-log.md (this section).
+Branch:  feature/hermes-full-completion
+Commit:  e643285 (port fix) + docs commit below
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         NOT REFRESHED this slot (no PR tool exposed here); branch pushed.
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target/hosting integration in this sandbox; the verified artifact is dist/server.cjs (1084956 bytes).
+
+Blocked:
+- #1-#12 Android bridge / real E2E / real screenshot / computer operator — require a physical Android device and a GUI runtime; not present here.
+- Voice / wake-word audio paths — require a real microphone/speech engine.
+
+Human Approval Required:
+- None new. The pending main merge still needs a human read of the report.
+
+Next Slot:
+- Continue #13, or the next lowest-numbered non-VERIFIED item that is not hardware-blocked. Prefer a deterministic, testable slice.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में scheduled-goal run history को restart-safe बनाया (item 43, evidence के साथ) और flaky suite की असली वजह — duplicate test ports — ढूँढकर ठीक की; पूरी suite 2478/2478 पास।
