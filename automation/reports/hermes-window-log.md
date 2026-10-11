@@ -15917,3 +15917,54 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में Notepad सेव अब असली नतीजा बताता है — नाकाम सेव पर "NOT SAVED" दिखता है; 2456 टेस्ट पास, lint/build हरा, बदलाव पुश हो गया।
+
+---
+
+## 2026-10-11 00:05 IST (slot 7, WORK) — item 13: screenshot download truth
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:05
+Window date: 2026-10-11   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools (slice: screenshot Download PNG) — src/components/ScreenshotModal.tsx + src/utils/computerOperator/screenshotDispatchTruth.ts; test src/tests/screenshotDownloadNoticeTruth.test.ts 5 passed; negative-validated (1 failed | 4 passed on restored false claim).
+
+In Progress:
+- #13 — long tail of unclassified success:true surfaces (server_tools.ts etc.) remains.
+
+Remaining:
+- #13 (PARTIAL), then items 3-49 per docs/COMPLETION_STATUS.md order.
+
+Bugs Found:
+- ScreenshotModal handleDownload always claimed 'Saved to device storage & logged to screenshot gallery' although no gallery exists and the anchor click cannot confirm a landed file.
+
+Bugs Fixed:
+- Replaced the boolean with buildDownloadNotice() {delivered,tone,text}; handler gates on notice.delivered and renders success/warn notice. Verified by new test + negative validation.
+
+Tests:    218 files / 2461 tests passed (0 failed); targeted 60 passed
+Lint:     exit 0 (tsc --noEmit)
+Build:    exit 0 (dist/server.cjs 1083372 bytes)
+E2E:      NOT RUN (no handset in sandbox)
+Security: .env gitignored (.gitignore:4); tree clean; no token pattern in diff vs origin/main; NOT RUN for npm audit
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  cc7759f
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         NONE
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this environment
+
+Blocked:
+- #1/#2 Android bridge/E2E — requires a real Android handset
+- #50/#51/#54/#55 — requires hardware/credentials (see prior slots)
+
+Human Approval Required:
+- Merge of feature/hermes-full-completion to main.
+
+Next Slot:
+- #13 continue the long tail: audit remaining success:true writers in server_tools.ts.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में screenshot डाउनलोड अब सिर्फ़ साबित होने वाली बात बताता है — झूठा 'gallery' दावा हटा; 2461 टेस्ट पास, lint/build हरा, बदलाव पुश हो गया।
