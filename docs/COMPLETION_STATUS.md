@@ -8962,6 +8962,31 @@ stays `PARTIAL` — the sweep is not exhausted.
 
 ## Known limitations
 
+- **Finalization slot, 2026-10-12 04:36 IST — window 2026-10-11/12 closed; no new
+  backlog item was advanced.** Froze and re-verified the tip `e590e23` on
+  `feature/hermes-full-completion` — the output of **13 work slots** (80 files
+  changed, +9624/−1235 vs `origin/main`). Observed this slot: `npm run lint`
+  (`tsc --noEmit`) exit 0; full `npx vitest run` **224 files / 2514 tests passed**
+  (75.95 s, 0 failed); `npm run build` exit 0 with artifact `dist/server.cjs`
+  **1084956 bytes**. Security: `git check-ignore -v .env` → `.gitignore:4:.env`;
+  `git status --short` empty; only `dist/` and `node_modules/` ignored/untracked;
+  the credential-pattern scan of `git diff origin/main` (80 files) matched
+  nothing. `npm audit` reports **5 vulnerabilities — 1 critical (`proxy-addr`,
+  GHSA-jqcg-44mw-7w3h), 1 high (`source-map-js`, GHSA-68fv-2mgg-jv7q), 3 moderate
+  (`qs` via `express`/`body-parser`)**; all transitive, not fixed this slot
+  (dependency bumps are a human production-hardening decision). **PR #8 is open
+  and non-draft, `mergeable: true`; `mergeable_state` is `unstable` solely
+  because the repository's own CI workflow could not run — the owner-account
+  billing lock.** That is not a code failure; the identical lint/test/build gates
+  pass locally in this sandbox. `main` is **NOT merged — awaiting human
+  approval.** Item 13 (`Zero-fake-success for all tools`) remains `PARTIAL` — the
+  tail of unclassified `success: true` / discarded-`persistMemory()` sites in
+  `server.ts` / `server_tools.ts` is still not individually audited (truthfulness
+  `UNKNOWN`). E2E: NOT RUN — no handset / emulator / display session. Deploy:
+  `NOT_CONFIGURED` — the verified `dist/server.cjs` is the deployment unit
+  available. Hardware-blocked items #1/#2/#50/#51/#54/#55 remain
+  `NOT_AVAILABLE`/`PARTIAL`.
+
 - **Work slot 9, 2026-10-11 01:06 IST — `POST /api/approvals/create` durability
   gap closed; Item 13 still `PARTIAL`.** The create route now reads the staged
   row back from disk before claiming a staged approval, so a phantom Level-4
