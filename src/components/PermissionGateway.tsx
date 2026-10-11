@@ -43,6 +43,10 @@ import {
   emergencyStatusKnown,
 } from '../utils/emergencyTruth';
 import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import {
+  classifyApproveOutcome,
+  classifyRejectOutcome,
+} from '../utils/hardening/approvalGatewayOutcomeTruth';
 
 interface PermissionGatewayProps {
   isOpen?: boolean;
@@ -175,18 +179,13 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
           }),
         });
         const data = await res.json();
-        if (data.success) {
-          showNotification(`✅ Authorized & Executed: "${reqToApprove.exactAction}"`, 'success');
-          if (onSpeak) onSpeak(`Level 4 permission granted. Action ${reqToApprove.exactAction} executed successfully, Sir.`);
-        } else if (data.outcome === 'UNVERIFIED') {
-          // Approval was recorded, but no provider confirmed the action. Never
-          // tell the operator it executed.
-          showNotification(`⚠️ Not confirmed: ${data.message || 'no provider confirmation received.'}`, 'error');
-          if (onSpeak) onSpeak('Approval recorded, but the action could not be confirmed as executed, Sir.');
-        } else {
-          showNotification(data.error || 'Execution halted', 'error');
-          if (onSpeak) onSpeak(`Execution notice: ${data.error || 'Execution halted'}`);
-        }
+        // The server reports two independent facts — `success` (did the action
+        // run) and `persisted` (is the terminal decision durable). Both must be
+        // read: a success whose decision never reached disk, and an UNPERSISTED
+        // decision that was rolled back, must not be presented as recorded.
+        const outcome = classifyApproveOutcome(data, reqToApprove.exactAction);
+        showNotification(outcome.message, outcome.tone);
+        if (onSpeak) onSpeak(outcome.speak);
       }
       await fetchData();
     } catch (err: any) {
@@ -212,10 +211,11 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
           }),
         });
         const data = await res.json();
-        if (data.success) {
-          showNotification(`❌ Rejected: "${reqToReject.exactAction}" cancelled safely.`, 'error');
-          if (onSpeak) onSpeak(`Action ${reqToReject.exactAction} cancelled safely without external modification, Sir.`);
-        }
+        // A rejection that could not be written to durable storage is rolled
+        // back by the route; do not tell the operator it was recorded.
+        const outcome = classifyRejectOutcome(data, reqToReject.exactAction);
+        showNotification(outcome.message, outcome.tone);
+        if (onSpeak) onSpeak(outcome.speak);
       }
       await fetchData();
     } catch (err: any) {
