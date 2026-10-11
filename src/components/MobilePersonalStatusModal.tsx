@@ -59,6 +59,7 @@ import {
   telegramBroadcastNotice,
   telegramBroadcastTransportFailure,
 } from '../utils/hardening/telegramBroadcastNotice';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 
 interface Props {
   isOpen: boolean;
@@ -93,6 +94,7 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   );
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [activeTab, setActiveTab] = useState<'briefing' | 'telemetry' | 'privacy' | 'bridge'>('briefing');
   const [telegramSending, setTelegramSending] = useState<boolean>(false);
   const [telegramNotice, setTelegramNotice] = useState<string | null>(null);
@@ -224,15 +226,12 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
     onSpeak(textToSpeak);
   };
 
-  const handleCopyBriefing = () => {
+  const handleCopyBriefing = async () => {
     if (!briefing) return;
     const text = selectedLang === 'english' ? briefing.spokenTextEn : briefing.spokenTextHi;
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch((err) => {
-        console.warn('Clipboard write prevented:', err);
-      });
-    }
-    setCopied(true);
+    const outcome = await copyToClipboard(text, 'The briefing script');
+    setCopyOutcome(outcome);
+    setCopied(outcome.copied);
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -758,10 +757,16 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                   <button
                     onClick={handleCopyBriefing}
                     className="px-3 py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-300 rounded-xl text-xs font-mono flex items-center gap-1.5 transition-colors"
-                    title="Copy full speech script"
+                    title={copyOutcome?.detail || 'Copy full speech script'}
                   >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copied ? 'Copied' : 'Copy'}</span>
+                    {copied ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : copyOutcome?.tone === 'warn' ? (
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    <span>{copied ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy'}</span>
                   </button>
                 </div>
               </div>

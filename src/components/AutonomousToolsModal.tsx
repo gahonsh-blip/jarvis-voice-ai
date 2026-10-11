@@ -52,6 +52,7 @@ import {
   transcriptBadgeLabel,
   transcriptTabLabel,
 } from '../utils/hardening/youtubeTranscriptLabelTruth';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 import {
   hasRealYouTubeSummary,
   youtubeSummaryCopyText,
@@ -122,6 +123,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   const [ytResult, setYtResult] = useState<any>(null);
   const [ytSearchQuery, setYtSearchQuery] = useState<string>('');
   const [ytCopied, setYtCopied] = useState<boolean>(false);
+  const [ytCopyOutcome, setYtCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [ytSubTab, setYtSubTab] = useState<'summary' | 'takeaways' | 'transcript'>('summary');
 
   // Finance-guard self-check. Null until /api/security/finance-guard answers,
@@ -494,17 +496,24 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   };
 
-  const handleCopySummary = (result: any) => {
+  const handleCopySummary = async (result: any) => {
     // Never announce a copy that carried no summary. When the summariser
     // produced nothing, the clipboard gets the explanatory notice so the
     // "Summary copied" toast is never a claim the result cannot back.
     const text = youtubeSummaryCopyText(result || {});
-    navigator.clipboard.writeText(text);
-    setYtCopied(true);
+    const outcome = await copyToClipboard(
+      text,
+      'The summary',
+      'there was no summary to copy'
+    );
+    setYtCopyOutcome(outcome);
+    setYtCopied(outcome.copied);
     showFeedback(
-      hasRealYouTubeSummary(result || {})
-        ? 'Summary copied to clipboard!'
-        : 'No summary was produced — the explanation was copied instead.'
+      outcome.copied
+        ? hasRealYouTubeSummary(result || {})
+          ? 'Summary copied to clipboard!'
+          : 'No summary was produced — the explanation was copied instead.'
+        : outcome.detail
     );
     setTimeout(() => setYtCopied(false), 3000);
   };
@@ -954,10 +963,17 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                       </a>
                       <button
                         onClick={() => handleCopySummary(ytResult)}
+                        title={ytCopyOutcome?.detail || 'Copy summary'}
                         className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-mono text-cyan-300 flex items-center gap-1.5 transition-colors"
                       >
-                        {ytCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{ytCopied ? 'Copied' : 'Copy Summary'}</span>
+                        {ytCopied ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : ytCopyOutcome?.tone === 'warn' ? (
+                          <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        <span>{ytCopied ? 'Copied' : ytCopyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy Summary'}</span>
                       </button>
                     </div>
                   </div>

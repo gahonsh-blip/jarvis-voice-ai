@@ -18,6 +18,7 @@ import {
   Check,
   ExternalLink,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
 import { BlueprintPhase } from '../types';
 import {
@@ -28,6 +29,7 @@ import {
   blueprintFooterLabel,
   blueprintPhaseCountLabel,
 } from '../utils/blueprintTruth';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 
 interface Props {
   isOpen: boolean;
@@ -67,6 +69,7 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
   const [reportMarkdown, setReportMarkdown] = useState<string>('');
   const [showFullReport, setShowFullReport] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   // False until /api/blueprint actually answered with phases. A failed request
   // must not leave the progress figures rendering as measured zeros.
@@ -127,12 +130,11 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
     }
   };
 
-  const handleCopyReport = () => {
-    if (reportMarkdown) {
-      navigator.clipboard.writeText(reportMarkdown);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const handleCopyReport = async () => {
+    const outcome = await copyToClipboard(reportMarkdown, 'The blueprint report');
+    setCopyOutcome(outcome);
+    setCopied(outcome.copied);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (!isOpen) return null;
@@ -217,10 +219,17 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
               <div className="flex gap-2">
                 <button
                   onClick={handleCopyReport}
+                  title={copyOutcome?.detail || 'Copy Markdown'}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 flex items-center gap-1"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? 'Copied!' : 'Copy Markdown'}
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : copyOutcome?.tone === 'warn' ? (
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  {copied ? 'Copied!' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy Markdown'}
                 </button>
                 <button
                   onClick={() => setShowFullReport(false)}

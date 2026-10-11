@@ -53,6 +53,7 @@ import {
   describeGrantedScopes,
   youtubeCanPublishMeasured,
 } from '../utils/socialPublishHonesty';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 
 interface Props {
   isOpen: boolean;
@@ -68,7 +69,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   const [platform, setPlatform] = useState<string>('LinkedIn');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [copiedRedirectUri, setCopiedRedirectUri] = useState<boolean>(false);
+  const [redirectCopyOutcome, setRedirectCopyOutcome] = useState<ClipboardCopyResult | null>(null);
 
   // Platform Integration Hub State
   const [platforms, setPlatforms] = useState<PlatformIntegrationInfo[]>([]);
@@ -569,9 +572,10 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     }
   };
 
-  const handleCopyRedirectUri = (uri: string) => {
-    navigator.clipboard.writeText(uri);
-    setCopiedRedirectUri(true);
+  const handleCopyRedirectUri = async (uri: string) => {
+    const outcome = await copyToClipboard(uri, 'The redirect URL');
+    setRedirectCopyOutcome(outcome);
+    setCopiedRedirectUri(outcome.copied);
     setTimeout(() => setCopiedRedirectUri(false), 2500);
   };
 
@@ -722,10 +726,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     }
   };
 
-  const handleCopyPost = () => {
+  const handleCopyPost = async () => {
     if (selectedPost) {
-      navigator.clipboard.writeText(selectedPost.content);
-      setCopied(true);
+      const outcome = await copyToClipboard(selectedPost.content, 'The post text');
+      setCopyOutcome(outcome);
+      setCopied(outcome.copied);
       setTimeout(() => setCopied(false), 2000);
     }
   };
@@ -1127,10 +1132,17 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     </span>
                     <button
                       onClick={handleCopyPost}
+                      title={copyOutcome?.detail || 'Copy post text'}
                       className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1 transition-colors"
                     >
-                      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      {copied ? 'Copied' : 'Copy Text'}
+                      {copied ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : copyOutcome?.tone === 'warn' ? (
+                        <AlertCircle className="w-3 h-3 text-rose-400" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                      {copied ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy Text'}
                     </button>
                   </div>
 
@@ -2045,10 +2057,17 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                               </span>
                               <button
                                 onClick={() => handleCopyRedirectUri(oauth.redirectUri!)}
+                                title={redirectCopyOutcome?.detail || 'Copy redirect URL'}
                                 className="px-2.5 py-1 rounded bg-purple-900/60 hover:bg-purple-800 border border-purple-500/40 text-purple-200 text-[11px] font-mono flex items-center gap-1 transition-colors"
                               >
-                                {copiedRedirectUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                                {copiedRedirectUri ? 'Copied!' : 'Copy URL'}
+                                {copiedRedirectUri ? (
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                ) : redirectCopyOutcome?.tone === 'warn' ? (
+                                  <AlertCircle className="w-3 h-3 text-rose-400" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                                {copiedRedirectUri ? 'Copied!' : redirectCopyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy URL'}
                               </button>
                             </div>
                             <code className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-purple-300 font-mono text-xs break-all select-all">
@@ -2070,10 +2089,17 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                               </span>
                               <button
                                 onClick={() => handleCopyRedirectUri(ytOauth.redirectUri!)}
+                                title={redirectCopyOutcome?.detail || 'Copy redirect URL'}
                                 className="px-2.5 py-1 rounded bg-red-900/60 hover:bg-red-800 border border-red-500/40 text-red-200 text-[11px] font-mono flex items-center gap-1 transition-colors"
                               >
-                                {copiedRedirectUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                                {copiedRedirectUri ? 'Copied!' : 'Copy URL'}
+                                {copiedRedirectUri ? (
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                ) : redirectCopyOutcome?.tone === 'warn' ? (
+                                  <AlertCircle className="w-3 h-3 text-rose-400" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                                {copiedRedirectUri ? 'Copied!' : redirectCopyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy URL'}
                               </button>
                             </div>
                             <code className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-red-300 font-mono text-xs break-all select-all">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Download, Copy, Trash2, Check, FileText, AlertTriangle } from 'lucide-react';
 import { loadLocalNotepadContent, saveLocalNotepadContent } from '../utils/offlineStorage';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 
 interface NotepadModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const NotepadModal: React.FC<NotepadModalProps> = ({
 }) => {
   const [text, setText] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [savedStatus, setSavedStatus] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -66,9 +68,10 @@ export const NotepadModal: React.FC<NotepadModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
+  const handleCopy = async () => {
+    const outcome = await copyToClipboard(text, 'The note');
+    setCopyOutcome(outcome);
+    setCopied(outcome.copied);
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -111,10 +114,18 @@ export const NotepadModal: React.FC<NotepadModalProps> = ({
             <button
               onClick={handleCopy}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
-              title="Copy to clipboard"
+              title={copyOutcome?.detail || 'Copy to clipboard'}
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied' : 'Copy'}</span>
+              {copied ? (
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              ) : copyOutcome?.tone === 'warn' ? (
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+              <span className={copyOutcome?.tone === 'warn' ? 'text-rose-400' : undefined}>
+                {copied ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy'}
+              </span>
             </button>
 
             <button

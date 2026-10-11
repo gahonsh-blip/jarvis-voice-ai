@@ -41,6 +41,7 @@ import {
   isResolvedAddress,
   type CoordsSource,
 } from '../utils/locationService';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 
 interface LocationServicesModalProps {
   isOpen: boolean;
@@ -81,6 +82,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
   const [mapLayer, setMapLayer] = useState<'radar' | 'osm' | 'hybrid'>('radar');
   const [zoomLevel, setZoomLevel] = useState<number>(14);
   const [copiedCoords, setCopiedCoords] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [selectedWaypoint, setSelectedWaypoint] = useState<WaypointMarker>(TACTICAL_PRESETS[0]);
   const [customLat, setCustomLat] = useState<string>('');
   const [customLon, setCustomLon] = useState<string>('');
@@ -210,11 +212,12 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
   }, [isOpen, coords, highAccuracy, fetchCurrentLocation]);
 
   // Copy coordinates
-  const handleCopyCoords = () => {
+  const handleCopyCoords = async () => {
     if (!coords) return;
     const text = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
-    navigator.clipboard.writeText(text);
-    setCopiedCoords(true);
+    const outcome = await copyToClipboard(text, 'The coordinates');
+    setCopyOutcome(outcome);
+    setCopiedCoords(outcome.copied);
     setTimeout(() => setCopiedCoords(false), 2000);
   };
 
@@ -426,10 +429,19 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                   {coords && (
                     <button
                       onClick={handleCopyCoords}
+                      title={copyOutcome?.detail || 'Copy coordinates'}
                       className="flex items-center gap-1 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono text-cyan-300 border border-slate-700 transition-colors"
                     >
-                      {copiedCoords ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedCoords ? 'Copied' : 'Copy'}</span>
+                      {copiedCoords ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : copyOutcome?.tone === 'warn' ? (
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                      <span className={copyOutcome?.tone === 'warn' ? 'text-rose-400' : undefined}>
+                        {copiedCoords ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy'}
+                      </span>
                     </button>
                   )}
                 </div>

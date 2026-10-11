@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { FreelanceLead } from '../types';
 import { formatLeadBudget } from '../utils/freelanceLeadTruth';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 
 interface Props {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
   const [rawRequirement, setRawRequirement] = useState<string>('');
   const [budgetAmount, setBudgetAmount] = useState<number>(65000);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   // The server reports an update that changed nothing (an unknown status or a
   // repeat of the stored one) as success:false; the operator is told rather
   // than shown a silent no-op.
@@ -113,7 +115,7 @@ export const FreelancePipelineModal: React.FC<Props> = ({ isOpen, onClose }) => 
     }
   };
 
-  const handleCopyQuotation = () => {
+  const handleCopyQuotation = async () => {
     if (selectedLead?.quotation) {
       const text = `PROPOSAL & QUOTATION
 Client: ${selectedLead.clientName}
@@ -125,8 +127,9 @@ ${selectedLead.quotation.scopeSummary}
 
 Milestones:
 ${selectedLead.quotation.milestones.map((m, i) => `${i + 1}. ${m.title} - ₹${m.price.toLocaleString()} (${m.days} days)`).join('\n')}`;
-      navigator.clipboard.writeText(text);
-      setCopied(true);
+      const outcome = await copyToClipboard(text, 'The quotation');
+      setCopyOutcome(outcome);
+      setCopied(outcome.copied);
       setTimeout(() => setCopied(false), 2000);
     }
   };
@@ -235,10 +238,17 @@ ${selectedLead.quotation.milestones.map((m, i) => `${i + 1}. ${m.title} - ₹${m
                     </span>
                     <button
                       onClick={handleCopyQuotation}
+                      title={copyOutcome?.detail || 'Copy quotation'}
                       className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1"
                     >
-                      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      {copied ? 'Copied' : 'Copy Quote'}
+                      {copied ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : copyOutcome?.tone === 'warn' ? (
+                        <AlertCircle className="w-3 h-3 text-rose-400" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                      {copied ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy Quote'}
                     </button>
                   </div>
 
