@@ -16333,3 +16333,35 @@ drifted its `window_date` to `2026-10-12` while its slots ran during the
 drift is flagged for the next slot / human review.
 
 हिंदी सारांश: टेलीफोनी हब के पैनल ने पाँच काल्पनिक सैंपल संपर्कों को "सत्यापित नंबर" बताया था; अब केवल असली संपर्क गिने जाते हैं और सैंपल सेट स्पष्ट रूप से नामित होता है — 5 नए टेस्ट पास।
+
+
+---
+
+## 2026-10-12 21:35 IST — WORK SLOT 2
+
+Item 13 (`Zero-fake-success for all tools`) — the Computer Operator owner
+DENIAL was announced as audited while the denial-audit write result was
+discarded. `App.tsx` called `recordOperatorAudit(rejectedTask)` as a bare
+statement; on a refused write (full disk / private mode) or absent
+`localStorage` (server, SSR) the audit row never landed, yet the run was still
+pushed as "ACTION DENIED BY OWNER ... Not executed". The boolean is now captured
+and the announcement appends "DENIAL NOT AUDITED (STORAGE UNAVAILABLE)" only
+when the write was refused.
+
+Evidence: `src/tests/operatorPersistenceTruth.test.ts` (9 passed, up from 8) —
+the new source guard pins the captured binding and the disclosure string and
+asserts exactly one `recordOperatorAudit(rejectedTask)` call site.
+Negative-validated — reverting the site to the bare call failed exactly the new
+guard (1 failed | 8 passed); restored -> 9/9.
+
+Gates (observed this fire): lint (tsc --noEmit) exit 0; full npx vitest run
+225 files / 2520 tests passed (76.47 s, 0 failed); npm run build exit 0
+(dist/server.cjs 1.0mb). Security: .env gitignored, working tree clean, no
+credential in the diff. E2E: NOT RUN (no browser/handset). Deploy:
+NOT_CONFIGURED. Main NOT merged — awaiting human approval. Item 13 stays
+PARTIAL — the long tail of unclassified success:true / discarded-result sites
+remains.
+
+Commits: ba87705 (fix) -> 91ed6a2 (docs), both pushed to
+feature/hermes-full-completion. State branch automation/hermes-state
+a34010b -> ae0cb55.
