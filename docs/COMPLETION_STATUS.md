@@ -4,7 +4,30 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-12 21:05 IST — **WORK SLOT 1 of a new
+Last cycle: 2026-10-12 21:35 IST — **WORK SLOT 2 of the
+2026-10-12 → 2026-10-13 window (21:35 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **an owner DENIAL of a Computer
+Operator action was announced as audited while the denial-audit write
+result was discarded.** `App.tsx` called `recordOperatorAudit(rejectedTask)`
+as a bare statement; on a full disk, in private mode, or on the server (no
+`localStorage`) the audit row never landed, yet the run was still pushed as
+"ACTION DENIED BY OWNER … Not executed" with no hint that no audit record
+exists. The boolean is now captured (`const denialAudited = …`) and the
+announcement appends "• DENIAL NOT AUDITED (STORAGE UNAVAILABLE)" only when
+the write was refused. Evidence:
+`src/tests/operatorPersistenceTruth.test.ts` (**9 passed**, up from 8) — the
+new source guard pins both the captured binding and the disclosure string,
+and asserts exactly one `recordOperatorAudit(rejectedTask)` call site.
+Negative-validated — reverting the site to the bare call failed exactly the
+new guard (`1 failed | 8 passed`); restored → 9/9. Gates (observed this
+fire): lint (`tsc --noEmit`) exit 0; full `npx vitest run`
+**225 files / 2520 tests passed** (76.47 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1.0mb). Security: `.env` gitignored, working tree clean,
+no credential in the diff. E2E: NOT RUN (no browser/handset). Deploy:
+NOT_CONFIGURED. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-result sites remains.
+
+Last cycle (previous slot): 2026-10-12 21:05 IST — **WORK SLOT 1 of the
 2026-10-12 → 2026-10-13 window (21:05 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **the Telephony Hub privacy panel
 presented five fabricated sample contacts as "verified numbers".** The panel
