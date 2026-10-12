@@ -370,10 +370,22 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       });
       const data = await res.json();
       if (data.success) {
-        showFeedback(`File written successfully: ${target} (${data.bytesWritten} bytes)`);
+        // The write happened, but the route independently reports whether its
+        // audit row reached durable storage (`auditPersisted`). A write whose
+        // trail could not be persisted must not read as a clean success, so
+        // surface the durability gap as an info verdict rather than a green
+        // "written successfully".
         setNewFileName('');
         setNewFileContent('');
         fetchFsList(fsPath);
+        if (data.auditPersisted === false) {
+          showFeedback(
+            `File written: ${target} (${data.bytesWritten} bytes) — audit record NOT written to durable storage.`,
+            'info'
+          );
+        } else {
+          showFeedback(`File written successfully: ${target} (${data.bytesWritten} bytes)`);
+        }
       } else {
         showFeedback(data.error || 'File write failed', 'error');
       }
