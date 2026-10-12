@@ -120,6 +120,10 @@ export default function App() {
   // Non-null only when a Memory Bank edit could not be persisted; a refused
   // local write must not read as a completed save (item 13).
   const [memorySaveNotice, setMemorySaveNotice] = useState<string | null>(null);
+  // The observed verdict of the last memory-store write, or null before one is
+  // seen. The Memory Bank header badge derives from this instead of asserting a
+  // fixed "LocalStorage Synced" for a store nothing measured (item 13).
+  const [memoryPersistenceState, setMemoryPersistenceState] = useState<boolean | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   // The backend's reachability is a separate observation from the browser's
   // network state; it stays null until a probe has actually answered.
@@ -255,7 +259,9 @@ export default function App() {
   }, [messages]);
 
   useEffect(() => {
-    saveLocalMemory(memory);
+    // Capture the real verdict so the Memory Bank header can report what was
+    // actually durable instead of a fixed "LocalStorage Synced" (item 13).
+    setMemoryPersistenceState(saveLocalMemory(memory));
   }, [memory]);
 
   useEffect(() => {
@@ -2047,6 +2053,7 @@ export default function App() {
         isOpen={activeApp === 'memory'}
         onClose={() => setActiveApp(null)}
         memory={memory}
+        persistenceState={memoryPersistenceState}
         onUpdateName={handleUpdateName}
         onAddCustomKey={handleAddCustomKey}
         onDeleteNote={handleDeleteNote}
