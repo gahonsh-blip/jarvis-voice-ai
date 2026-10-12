@@ -1,15 +1,19 @@
 {
   "window_date": "2026-10-13",
   "window_started_at": "2026-10-12T15:35:00Z",
-  "last_slot_at": "2026-10-12T22:41:00Z",
-  "slots_completed": 13,
+  "last_slot_at": "2026-10-12T23:09:00Z",
+  "slots_completed": 14,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "893acdc",
+  "last_commit": "e17afc5",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": false,
-  "finalization_result": null,
-  "blocked_items": [1, 2, 50, 51, 54, 55],
+  "finalized": true,
+  "finalization_result": "Window finalized 2026-10-13 04:39 IST. Local gates green: tsc exit 0; vitest 235 files / 2600 tests passed (0 failed); build exit 0 (dist/server.cjs 1,088,323 bytes). PR #8 open, non-draft, mergeable, no conflicts. Main NOT merged (awaiting human approval). Deploy NOT_CONFIGURED. CI check FAILS on head 893acdc and on re-run: runner_id 0, 0 steps, ~2s, log blob absent = GitHub Actions runner provisioning failure, not a code failure.",
+  "blocked_items": [
+    "Real Android E2E / screenshot — requires a physical handset (NOT_AVAILABLE)",
+    "Social live dispatch — requires provider credentials (PERMISSION_REQUIRED)",
+    "CI check on PR #8 — GitHub Actions runner provisioning failure (runner_id 0, 0 steps), external to repo"
+  ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
