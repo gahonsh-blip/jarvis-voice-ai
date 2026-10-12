@@ -4,7 +4,44 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 00:35 IST — **WORK SLOT 6 of the
+Last cycle: 2026-10-13 01:05 IST — **WORK SLOT 7 of the
+2026-10-12 → 2026-10-13 window (01:05 IST fire; state `slots_completed: 6`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+AutonomousToolsModal *approvals* tab read a non-durable approval decision as
+"executed successfully".** `handleResolveApproval` resolved
+`POST /api/approvals/resolve` through the same endpoint the Permission
+Gateway uses, but branched only on `data.success`, discarding the
+independent `persisted` flag the route returns. Two honest server answers
+were therefore rendered falsely: `{ success: true, persisted: false }` (the
+action ran but the terminal decision could not be written, so a restart
+forgets it) showed "✅ Action executed successfully", and the route's
+`HTTP 500 { success: false, persisted: false, outcome: 'UNPERSISTED' }`
+(the decision was *rolled back to PENDING_APPROVAL*) fell into a generic
+"Execution blocked" message that hid the rollback. The handler now routes
+through the shared classifiers `classifyApproveOutcome` /
+`classifyRejectOutcome` already used by `src/components/PermissionGateway.tsx`
+(`src/utils/hardening/approvalGatewayOutcomeTruth.ts`); an executed-but-
+unpersisted decision renders an amber **info** banner ("not written to
+durable storage") and the UNPERSISTED rollback is reported as such.
+`showFeedback` gained the `'info'` tone. Evidence:
+`src/tests/autonomousToolsApprovalDurabilityTruth.test.ts` (**6 passed**) —
+three behavioural guards pin the executed-but-unpersisted info verdict, the
+rolled-back-still-pending error verdict, and the reject-side durability
+notice; three source guards assert the modal imports and applies both
+classifiers, no longer carries the retired `Action executed successfully`
+literal, and renders the amber info tone. Negative-validated — reverting the
+resolve branch to `if (data.success)` failed exactly the two wiring guards
+(`2 failed | 4 passed`); restored → 6/6. Gates (observed this fire): lint
+(`tsc --noEmit`) exit 0; targeted `autonomousToolsApprovalDurabilityTruth` +
+`approvalGatewayOutcomeTruth` **16 passed / 2 files**; full `npx vitest run`
+**229 files / 2556 tests passed** (77.08 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1088323 bytes). Security: `.env` gitignored
+(`.gitignore:4`), working tree clean, no credential in the diff. E2E: NOT RUN
+(no handset). Deploy: NOT_CONFIGURED. Commit `ca88a0d` (this slot). Item 13
+stays `PARTIAL` — the long tail of unclassified `success: true` /
+unverified assertions is still open.
+
+Previous cycle: 2026-10-13 00:35 IST — **WORK SLOT 6 of the
 2026-10-12 → 2026-10-13 window (00:35 IST fire; state `slots_completed: 5`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
 Telegram `create_social_post` command claimed it had drafted a post while it

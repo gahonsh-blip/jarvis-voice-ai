@@ -16487,3 +16487,28 @@ State: slot 6 persisted on automation/hermes-state.
 Next slot: continue item #13 long tail — Computer Operator owner DENIAL
 audited-vs-actual, then residual `profilePersisted` / social-publish success
 assertions.
+
+---
+
+## 2026-10-13 01:05 IST — WORK SLOT 7 (window 2026-10-12)
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL) — AutonomousToolsModal approval resolve now honours the independent `persisted` flag via the shared classifyApproveOutcome / classifyRejectOutcome classifiers; an executed-but-unpersisted decision renders an amber info banner, and the 500 UNPERSISTED rollback is reported as such. Evidence: src/tests/autonomousToolsApprovalDurabilityTruth.test.ts 6/6.
+
+Bugs Fixed:
+- handleResolveApproval branched only on data.success. Negative-validated: reverting the branch fails exactly the 2 wiring guards (2 failed | 4 passed).
+
+Tests:    targeted 6/6 (new file) + approvalGatewayOutcomeTruth 16/16 across 2 files; full npx vitest run 229 files / 2556 tests passed (77.08s, 0 failed)
+Lint:     tsc --noEmit exit 0
+Build:    npm run build exit 0; dist/server.cjs 1088323 bytes
+E2E:      NOT RUN (no handset)
+Security: .env gitignored (.gitignore:4); tree clean; no credential in diff
+
+Branch:  feature/hermes-full-completion
+Commit:  ca88a0d
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+Main merge: NOT MERGED — awaiting human approval
+Deploy:     NOT_CONFIGURED
+
+Next Slot: #13 continued — another unclassified success:true surface.

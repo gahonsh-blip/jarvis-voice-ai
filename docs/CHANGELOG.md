@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 01:05 IST (2026-10-12 19:35 UTC) — window slot 7: the approvals tab stops reporting an unpersisted decision as executed
+
+### Fixed
+- **`src/components/AutonomousToolsModal.tsx` — the *approvals* tab branched only on `data.success` from `POST /api/approvals/resolve`.** The route reports `success` (did the action run) and `persisted` (is the terminal decision durable) as independent facts, and answers `HTTP 500 { success: false, persisted: false, outcome: 'UNPERSISTED' }` when the decision could not be written and was rolled back to `PENDING_APPROVAL`. Ignoring `persisted` meant `{ success: true, persisted: false }` rendered "✅ Action executed successfully" for a decision a restart would forget, and the UNPERSISTED rollback hid behind a generic "Execution blocked". `handleResolveApproval` now routes through the shared `classifyApproveOutcome` / `classifyRejectOutcome` (`src/utils/hardening/approvalGatewayOutcomeTruth.ts`) already used by `PermissionGateway.tsx`; the banner gained an amber **info** tone for an executed-but-unpersisted decision.
+
+### Tests
+- `src/tests/autonomousToolsApprovalDurabilityTruth.test.ts`: 6 cases — three behavioural guards pin the executed-but-unpersisted info verdict, the rolled-back-still-pending error verdict, and the reject-side durability notice; three source guards assert the modal imports and applies both classifiers, no longer carries the retired `Action executed successfully` literal, and renders the amber info tone. Negative-validated: reverting the resolve branch to `if (data.success)` failed exactly the two wiring guards (`2 failed | 4 passed`); restored → 6/6. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 229 files / 2556 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1088323 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-13 00:35 IST (2026-10-12 19:05 UTC) — window slot 6: the Telegram `create_social_post` command stops claiming it drafted a post
 
 ### Fixed
