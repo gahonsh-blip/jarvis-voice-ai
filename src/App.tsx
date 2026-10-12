@@ -101,6 +101,10 @@ import { recordedOwnNumber } from './utils/hardening/telephonyOwnNumberTruth';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
 import { androidBridgeEngine } from './utils/androidBridgeEngine';
+import {
+  mobileCallAnswerOutcome,
+  mobileMessageReplyOutcome,
+} from './utils/hardening/mobileBridgeSpokenOutcomeTruth';
 import { AndroidPendingEvent } from './types/mobileBridge';
 import { detectWakeWord } from './utils/voice/wakeWord';
 import { VoiceSession } from './utils/voice/voiceSession';
@@ -611,9 +615,9 @@ export default function App() {
     if (!capability.supported) {
       speakText('सर, इस Android device पर JARVIS को अभी call answer करने की अनुमति नहीं मिली है।');
     } else {
-      androidBridgeEngine.executeCallAnswer();
-      setPendingMobileEvent(null);
-      speakText('सर, कॉल उठा ली गई है।');
+      const outcome = mobileCallAnswerOutcome(androidBridgeEngine.executeCallAnswer());
+      if (outcome.consumed) setPendingMobileEvent(null);
+      speakText(outcome.spoken);
     }
   }, [speakText]);
 
@@ -624,9 +628,9 @@ export default function App() {
   }, [speakText]);
 
   const handleReplyMobileMessage = useCallback(() => {
-    androidBridgeEngine.executeMessageReply('Approved by user');
-    setPendingMobileEvent(null);
-    speakText('सर, संदेश का उत्तर सफलतापूर्वक भेज दिया गया है।');
+    const outcome = mobileMessageReplyOutcome(androidBridgeEngine.executeMessageReply('Approved by user'));
+    if (outcome.consumed) setPendingMobileEvent(null);
+    speakText(outcome.spoken);
   }, [speakText]);
 
   const handleOpenMobileApp = useCallback((pkg?: string) => {
