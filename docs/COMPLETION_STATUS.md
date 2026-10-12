@@ -36,7 +36,7 @@ persisted: false`) and three asserting the client requires `data.post`, sets
 **Negative-validated** — `git stash` of `SocialMediaModal.tsx` failed exactly
 the 3 client guards (`3 failed | 1 passed`); restored → 4/4. Gates (observed
 this fire): lint (`tsc --noEmit`) exit 0; full `npx vitest run` **234 files /
-2592 tests passed** (78.07 s, 0 failed); `npm run build` exit 0
+2592 tests passed** (75.70 s, 0 failed); `npm run build` exit 0
 (`dist/server.cjs` 1,088,323 bytes). Security: no credential written, no
 `.env`, no force-push. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
 Commit `3ceb673` (this slot). Item 13 stays `PARTIAL` — the long tail of
