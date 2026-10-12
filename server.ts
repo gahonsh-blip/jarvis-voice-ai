@@ -261,7 +261,7 @@ import {
 } from './src/utils/github/nightlyScheduler';
 import { ApprovalQueue } from './src/utils/github/approvalQueue';
 import { PROTECTED_BRANCH_NAMES } from './src/utils/github/automationWorkflow';
-import { nightlyAuditBadge } from './src/utils/github/nightlyAuditTruth';
+import { nightlyAuditBadge, nightlyRunLogLine } from './src/utils/github/nightlyAuditTruth';
 
 /** Real host action executor, used by the operator endpoints. */
 const hostActionExecutor = new HostActionExecutor({ workspaceRoot: process.cwd() });
@@ -4325,19 +4325,14 @@ async function checkAndRunSchedulerJobs() {
     };
     if (schedState.lastGithubNightlyRunDate !== todayIST) {
       schedState.lastGithubNightlyRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Started Nightly Repository Check (03:00 AM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
 
       // The per-day marker that stops this 15-minute window from re-running the
       // scan is stamped above, but the scan only proceeds once that marker is on
       // disk. `persistMemory()` returns true without writing when the file
       // already holds the identical bytes, so on a read-only volume the marker
-      // and the "Started Nightly Repository Check" log line would be held in
-      // memory only — the next boot would find no marker and re-run the check,
-      // and the log line would claim a run the durable record lacks. Read the
-      // marker back before starting; skip the scan when it did not land and say
-      // so, rather than recording a start that will not be kept.
+      // would be held in memory only — the next boot would find no marker and
+      // re-run the check. Read the marker back before starting; skip the scan
+      // when it did not land and say so.
       if (!persistMemory() || !nightlyMarkerOnDisk(todayIST)) {
         const failEntry = `[${new Date().toISOString()}] Nightly Repository Check NOT started: the per-day marker could not be written to durable storage.`;
         schedulerRunLog.unshift(failEntry);
@@ -4351,14 +4346,32 @@ async function checkAndRunSchedulerJobs() {
       } else {
         runNightlyCheck({ github: githubFetchOptions() })
           .then((result) => {
-            recordNightlyRun(result.record);
-            addAuditLog(
+            // Consume both durability verdicts. The run-history row and the audit
+            // row are the durable evidence of the check; on a read-only volume or
+            // a full disk neither reaches storage, and discarding the verdicts
+            // left the process (and its run log) claiming a check whose record the
+            // next boot would not have.
+            const recorded = recordNightlyRun(result.record);
+            const auditRecorded = addAuditLog(
               `GitHub nightly check ${result.receipt.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
               1,
               'AUTOMATED_SCHEDULE',
               nightlyAuditBadge(result.receipt.outcome)
             );
-            console.log('[Scheduler] Nightly repository check:', result.record.outcome);
+            // Log what was observed, after the check — never a pre-scan "started"
+            // line that asserted a run before it had produced anything.
+            const logEntry = nightlyRunLogLine(
+              {
+                receiptOutcome: result.receipt.outcome,
+                scannedRepositories: result.record.scannedRepositories,
+                unreachableRepositories: result.record.unreachableRepositories,
+                reposWithFailingCi: result.record.reposWithFailingCi.length,
+                plannedSteps: result.record.plannedSteps,
+              },
+              { recorded, auditRecorded }
+            );
+            schedulerRunLog.unshift(logEntry);
+            console.log('[Scheduler]', logEntry);
           })
           .catch((err: any) => {
             console.warn('[Scheduler] Nightly repository check failed:', err?.message);
@@ -8383,11 +8396,26 @@ app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
       nightlyAuditBadge(result.receipt.outcome)
     );
 
+    // Surface the same observed line the scheduler would record, so a manual run
+    // and a scheduled one leave the same durable, non-overstated trace.
+    const logEntry = nightlyRunLogLine(
+      {
+        receiptOutcome: result.receipt.outcome,
+        scannedRepositories: result.record.scannedRepositories,
+        unreachableRepositories: result.record.unreachableRepositories,
+        reposWithFailingCi: result.record.reposWithFailingCi.length,
+        plannedSteps: result.record.plannedSteps,
+      },
+      { recorded: runRecorded, auditRecorded }
+    );
+    schedulerRunLog.unshift(logEntry);
+
     res.status(result.receipt.verified ? 200 : 502).json({
       success: result.record.outcome === 'COMPLETED',
       outcome: result.receipt.outcome,
       recorded: runRecorded,
       auditRecorded,
+      runLogEntry: logEntry,
       record: result.record,
       plan: result.plan
         ? {
