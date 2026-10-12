@@ -20,6 +20,7 @@ import {
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
 import { resolveSocialGeneration } from './src/utils/hardening/socialGenerationTruth';
+import { mobileSocialDraftReply } from './src/utils/hardening/mobileSocialDraftTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
@@ -3739,17 +3740,26 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       ],
     };
   } else if (intentData.intent === 'create_social_post') {
-    const activeDraft = memoryState.socialPosts.find((p) => p.status === 'pending_approval') || memoryState.socialPosts[0];
-    botReplyText = `📱 *NEW SOCIAL MEDIA POST DRAFTED*\n\n*Topic*: ${activeDraft.topic}\n*Platform*: ${activeDraft.platform}\n\n📝 *Draft Content*:\n"${activeDraft.content.substring(0, 220)}..."\n\n⚠️ *Human Approval Mode*: Post तैयार है। क्या मैं इसे publish करूँ?`;
-    actionData = { type: 'social_draft', postId: activeDraft.id, status: 'pending_approval' };
-    inlineKeyboard = {
-      inline_keyboard: [
-        [
-          { text: '✅ YES (Approve & Publish)', callback_data: `approve_post_${activeDraft.id}` },
-          { text: '❌ REJECT (Draft Only)', callback_data: `reject_post_${activeDraft.id}` },
+    // This branch only looks up a stored draft — it creates nothing. It used to
+    // answer "NEW SOCIAL MEDIA POST DRAFTED" and, with an empty store, throw on
+    // `activeDraft.topic` so the webhook 500'd for the command it claimed to
+    // have drafted. Derive the reply and the approval target from the draft that
+    // was really found, and answer a plain "no draft" notice when none exists.
+    const socialDraft = mobileSocialDraftReply(memoryState.socialPosts);
+    botReplyText = socialDraft.replyText;
+    if (socialDraft.found && socialDraft.draftId) {
+      actionData = { type: 'social_draft', postId: socialDraft.draftId, status: 'pending_approval' };
+      inlineKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '✅ YES (Approve & Publish)', callback_data: `approve_post_${socialDraft.draftId}` },
+            { text: '❌ REJECT (Draft Only)', callback_data: `reject_post_${socialDraft.draftId}` },
+          ],
         ],
-      ],
-    };
+      };
+    } else {
+      actionData = { type: 'social_draft_unavailable', posts: memoryState.socialPosts.length };
+    }
   } else if (intentData.intent === 'find_document') {
     const doc = intentData.actionPayload?.query || '';
     const search = realFsSearch(doc);
