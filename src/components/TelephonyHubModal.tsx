@@ -231,6 +231,11 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
 
   const effectiveContacts = contacts && contacts.length > 0 ? contacts : DEFAULT_CONTACTS;
   const maskUnknownEnabled = tempSettings.maskUnknownCallerId !== false;
+  // A contact is only "verified" when it came from a real device source. The
+  // built-in placeholders are fictional people and numbers with no source
+  // behind them, so counting them as verified would be a fabricated claim.
+  const savedContactCount = effectiveContacts.filter((c) => !c.isSample).length;
+  const sampleContactCount = effectiveContacts.length - savedContactCount;
 
   const handleToggleMaskUnknownCallerId = (checked: boolean) => {
     const updated = { ...tempSettings, maskUnknownCallerId: checked };
@@ -807,7 +812,11 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     </div>
 
                     <div className="mt-2.5 pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] font-mono">
-                      <span className="text-slate-500">Contact list: {contacts.length} verified numbers</span>
+                      <span className="text-slate-500">
+                        {sampleContactCount > 0 && savedContactCount === 0
+                          ? `Contact list: ${sampleContactCount} SAMPLE contacts — no verified numbers saved`
+                          : `Contact list: ${savedContactCount} verified numbers`}
+                      </span>
                       <span className={maskUnknownEnabled ? 'text-cyan-400 font-semibold' : 'text-slate-500'}>
                         {maskUnknownEnabled ? '✓ Masking unknown numbers in UI' : 'Raw carrier names displayed'}
                       </span>
