@@ -54,6 +54,10 @@ import {
 } from '../utils/hardening/youtubeTranscriptLabelTruth';
 import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 import {
+  classifyApproveOutcome,
+  classifyRejectOutcome,
+} from '../utils/hardening/approvalGatewayOutcomeTruth';
+import {
   hasRealYouTubeSummary,
   youtubeSummaryCopyText,
   youtubeTakeawaysEmptyLabel,
@@ -74,7 +78,7 @@ type ActiveTab = 'approvals' | 'youtube' | 'git' | 'filesystem' | 'github' | 'we
 export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOpen, onClose, initialQuery }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('approvals');
   const [loading, setLoading] = useState<boolean>(false);
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Emergency Control State. Null until /api/emergency/status answers, so a
   // failed or unstarted fetch can never read as "not paused".
@@ -155,7 +159,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   }, [isOpen, initialQuery]);
 
-  const showFeedback = (text: string, type: 'success' | 'error' = 'success') => {
+  const showFeedback = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setActionMessage({ type, text });
     setTimeout(() => setActionMessage(null), 5000);
   };
@@ -242,16 +246,16 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
         body: JSON.stringify({ id, decision, approver: 'HUMAN_OPERATOR_WEB_GATE' }),
       });
       const data = await res.json();
-      if (data.success) {
-        showFeedback(
-          decision === 'APPROVE'
-            ? `✅ Action executed successfully: ${data.request?.exactAction}`
-            : `❌ Action rejected and safely cancelled.`,
-          decision === 'APPROVE' ? 'success' : 'error'
-        );
-      } else {
-        showFeedback(data.error || 'Execution blocked', 'error');
-      }
+      // The server reports `success` (did the action run) and `persisted` (is the
+      // terminal decision durable) as independent facts, and answers HTTP 500
+      // `{ success: false, persisted: false, outcome: 'UNPERSISTED' }` when the
+      // decision could not be written and was rolled back. Branching on
+      // `data.success` alone read a non-durable decision as "executed
+      // successfully" and hid the rollback behind a generic block message.
+      const outcome = decision === 'APPROVE'
+        ? classifyApproveOutcome(data, data.request?.exactAction || id)
+        : classifyRejectOutcome(data, data.request?.exactAction || id);
+      showFeedback(outcome.message, outcome.tone);
       fetchApprovals();
     } catch (err: any) {
       showFeedback('Approval request failed: ' + err.message, 'error');
@@ -656,7 +660,9 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
             className={`px-4 py-2 text-xs font-mono font-semibold flex items-center gap-2 transition-all ${
               actionMessage.type === 'success'
                 ? 'bg-emerald-950/90 text-emerald-200 border-b border-emerald-800'
-                : 'bg-rose-950/90 text-rose-200 border-b border-rose-800'
+                : actionMessage.type === 'info'
+                  ? 'bg-amber-950/90 text-amber-200 border-b border-amber-800'
+                  : 'bg-rose-950/90 text-rose-200 border-b border-rose-800'
             }`}
           >
             {actionMessage.type === 'success' ? <Check className="w-4 h-4" /> : <AlertOctagon className="w-4 h-4" />}
