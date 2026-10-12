@@ -1,15 +1,22 @@
 {
   "window_date": "2026-10-12",
-  "window_started_at": "2026-10-11T15:35:00Z",
-  "last_slot_at": "2026-10-11T23:09:35Z",
-  "slots_completed": 14,
+  "window_started_at": "2026-10-12T15:43:25Z",
+  "last_slot_at": "2026-10-12T15:43:25Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "74e0352",
+  "last_commit": "09d0945",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "VERIFIED branch tip re-checked: lint exit 0; vitest 224 files/2514 tests passed; build exit 0 (dist/server.cjs 1084956 bytes). Security clean (.env ignored, empty status, no credential in diff). PR #8 open/non-draft, mergeable=true, mergeable_state=unstable (CI billing lock, not code). Main NOT merged (awaiting human approval). Deploy NOT_CONFIGURED. Item 13 remains PARTIAL.",
-  "blocked_items": [1, 2, 50, 51, 54, 55],
+  "finalized": false,
+  "finalization_result": null,
+  "blocked_items": [
+    1,
+    2,
+    50,
+    51,
+    54,
+    55
+  ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
