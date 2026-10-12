@@ -3481,6 +3481,10 @@ let telegramConfig = {
   totalMessagesReceived: 0,
   lastActivity: new Date().toISOString(),
   errorMessage: undefined as string | undefined,
+  // Observed verdict of the last processed-update marker write in the polling
+  // loop. False until a persist is actually observed, so no caller can read a
+  // fabricated "saved" state before a write ran.
+  lastPersistFailed: false,
 };
 
 let activeTelegramChatId: string | number | null = initialAdminChatId;
@@ -4126,7 +4130,18 @@ async function startTelegramPolling() {
                 });
               }
             }
-            persistMemory();
+            // Honor the write verdict. The advanced offset and the dedup list
+            // live only in memory until they reach disk; a silently failed
+            // persist (read-only volume, full disk) would lose the processed
+            // marker, and the next boot would reprocess every update in the
+            // window — re-running commands and re-firing approvals. The loop
+            // still continues (a transient disk error must not stop the daemon),
+            // but the gap is recorded in the live Telegram status instead of
+            // being discarded.
+            telegramConfig.lastPersistFailed = !persistMemory();
+            if (telegramConfig.lastPersistFailed) {
+              console.warn('[Telegram Bot] Processed-update marker could not be written to durable storage; it may be reprocessed after a restart.');
+            }
           }
         } catch (pollErr: any) {
           consecutiveErrors++;
