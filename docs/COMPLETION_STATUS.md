@@ -4,7 +4,40 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-12 23:50 IST — **WORK SLOT 5 of the
+Last cycle: 2026-10-13 00:05 IST — **WORK SLOT 5 of the
+2026-10-12 → 2026-10-13 window (00:05 IST fire; state `slots_completed: 4`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+Telegram long-polling loop discarded the persist verdict for the
+processed-update marker.** `startTelegramPolling()` advanced
+`lastTelegramUpdateId` and pushed each processed update into
+`memoryState.processedTelegramUpdates`, then called a bare
+`persistMemory()` whose boolean nobody read. `persistMemory()` returns
+`false` when the write cannot reach disk (read-only volume, full disk) and
+returns `true` without writing when the file already holds identical
+bytes. Either way the dedup marker lived in memory only, so after a restart
+that never wrote, the loop re-fetched and reprocessed updates it had
+already run — re-firing commands and approvals — while nothing in the
+status reported the gap. The verdict is now captured on
+`telegramConfig.lastPersistFailed` (`= !persistMemory()`), defaults to
+`false` so no caller can read a fabricated "saved" state before a write
+ran, and the gap is named in a `console.warn` instead of discarded. The
+existing `/api/telegram/status` route returns `config: telegramConfig`
+verbatim, so the field is surfaced without a route change. Evidence:
+`src/tests/telegramPollingPersistTruth.test.ts` (**4 passed**) — two source
+guards assert the polling block records the verdict and emits the warning
+and that the old discarded-result shape is gone; one guard pins the `false`
+default; one asserts the status route still spreads the config.
+Negative-validated — reverting the block to a bare `persistMemory();`
+failed exactly the two behavioral guards (`2 failed | 2 passed`); restored
+→ 4/4. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted
+file 4/4; full `npx vitest run` **227 files / 2540 tests passed** (77.66 s,
+0 failed); `npm run build` exit 0 (`dist/server.cjs` 1086854 bytes).
+Security: `.env` gitignored, working tree clean, no credential in the
+diff. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Commit `6f0bb5b`
+(this slot). Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / unverified assertions is still open.
+
+Previous cycle: 2026-10-12 23:50 IST — **WORK SLOT 5 of the
 2026-10-12 → 2026-10-13 window (23:50 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **the Memory Bank header asserted
 "LocalStorage Synced" as a compile-time constant.** `MemoryModal.tsx`

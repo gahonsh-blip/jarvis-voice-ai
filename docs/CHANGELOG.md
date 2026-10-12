@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 00:05 IST (2026-10-12 18:35 UTC) — window slot 5: the Telegram polling loop stops discarding the processed-update persist verdict
+
+### Fixed
+- **`server.ts` — `startTelegramPolling()` advanced `lastTelegramUpdateId`, pushed each processed update into `memoryState.processedTelegramUpdates`, then called a bare `persistMemory()` whose boolean was discarded.** On a read-only volume or a full disk `persistMemory()` returns `false` without writing, and when the file already holds identical bytes it returns `true` without writing either; in both cases the dedup marker lived in memory only, so a restart that never wrote reprocessed every update in the window — re-firing commands and approvals — with nothing in the status reporting the gap. The verdict is now captured as `telegramConfig.lastPersistFailed = !persistMemory()`, defaults to `false` so no fabricated "saved" state can be read before a write runs, and the gap is named in a warning instead of discarded. `/api/telegram/status` returns `config: telegramConfig` verbatim, so the field rides along without a route change.
+
+### Tests
+- `src/tests/telegramPollingPersistTruth.test.ts`: 4 cases — two source guards assert the polling block records the verdict and emits the warning and that the old discarded-result shape is gone, one pins the `false` default, one asserts the status route still spreads the config. Negative-validated: reverting the block to a bare `persistMemory();` fails exactly the two behavioral guards (`2 failed | 2 passed`); restored → 4/4. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 227 files / 2540 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1086854 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-12 23:35 IST (2026-10-12 18:06 UTC) — window slot 4: the scheduled nightly GitHub check stops logging a start it never verified
 
 ### Fixed
