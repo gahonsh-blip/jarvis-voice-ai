@@ -28,13 +28,13 @@ throw inside the `try` and be swallowed by the `catch`. The handler now
 requires `data.success && data.post`, and on any refusal stores the server
 `error` (or an honest fallback) in a new `generateNotice`, renders it as an
 amber banner next to the generator form, and speaks "Draft not prepared …".
-Evidence: `src/tests/socialGenerateOutcomeTruth.test.ts` (**6 passed / 1
+Evidence: `src/tests/socialGenerateOutcomeTruth.test.ts` (**4 passed / 1
 file**) — one static guard asserting the route's durable gate
 (`persistMemory() || !diskHasAuditRow(auditRow.id)`, `success: false,
 persisted: false`) and three asserting the client requires `data.post`, sets
 `generateNotice`, speaks the refusal, and renders `{generateNotice && (`.
 **Negative-validated** — `git stash` of `SocialMediaModal.tsx` failed exactly
-the 3 client guards (`3 failed | 1 passed`); restored → 6/6. Gates (observed
+the 3 client guards (`3 failed | 1 passed`); restored → 4/4. Gates (observed
 this fire): lint (`tsc --noEmit`) exit 0; full `npx vitest run` **234 files /
 2592 tests passed** (78.07 s, 0 failed); `npm run build` exit 0
 (`dist/server.cjs` 1,088,323 bytes). Security: no credential written, no

@@ -16725,7 +16725,7 @@ Next Slot:
 
 - Item worked: #13 Zero-fake-success for all tools
 - Status: PARTIAL (continuing — social quick-generator refusal now surfaced)
-- Tests: full suite 234 files / 2592 tests passed; targeted socialGenerateOutcomeTruth 6 passed / 1 file; tsc --noEmit exit 0; build exit 0 (dist/server.cjs 1,088,323 bytes)
+- Tests: full suite 234 files / 2592 tests passed; targeted socialGenerateOutcomeTruth 4 passed / 1 file; tsc --noEmit exit 0; build exit 0 (dist/server.cjs 1,088,323 bytes)
 - Commit: 6f48948 (docs) on 3ceb673 (fix)  Push: ok (feature/hermes-full-completion, 3ceb673..6f48948)
 - Notes / blockers:
   - `src/components/SocialMediaModal.tsx` `handleGeneratePost` branched only on
@@ -16734,7 +16734,7 @@ Next Slot:
     as "prepared". Handler now requires `data.success && data.post`, surfaces the
     server `error` in `generateNotice` (amber banner) and speaks the refusal.
   - Negative-validated: `git stash` of SocialMediaModal.tsx failed exactly the 3
-    client guards (3 failed | 1 passed); restored → 6/6.
+    client guards (3 failed | 1 passed); restored → 4/4.
   - Remaining #13 tail: AutonomousToolsModal write paths, HUDHeader kill-switch,
     SecurityMatrix, filesystem tools.
   - Blocked: real Android E2E (no handset); Deploy (no configured target).
