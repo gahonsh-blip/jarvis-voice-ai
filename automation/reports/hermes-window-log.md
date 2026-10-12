@@ -16654,3 +16654,69 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - ऐप के Android अनुमोदन कॉलबैक अब असली bridge verdict बोलते हैं; पहले वे बिना
   पुष्टि के "कॉल उठा ली" / "संदेश भेज दिया" बोलते थे और कार्ड हटा देते थे।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:06
+Window date: 2026-10-13   Window slots completed so far: 11 (this slot included)
+
+Completed:
+- #13 Zero-fake-success for all tools — the Blueprint deliverable toggle now speaks the server verdict.
+  Evidence: src/utils/hardening/blueprintToggleOutcomeTruth.ts (new), src/components/BlueprintRoadmapModal.tsx
+  (handleToggleDeliverable reads the body via res.json().catch(()=>null), classifies with
+  blueprintToggleOutcome, stores toggleNotice, renders a role="status" banner, resyncs only on
+  outcome.refresh). Test src/tests/blueprintToggleOutcomeTruth.test.ts — 10 passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — still PARTIAL. Remaining: the long tail of unclassified
+  success: true / unverified assertions across routes and components beyond the blueprint toggle.
+
+Remaining:
+- #13 tail plus the other non-VERIFIED backlog items (hardware/credential-blocked ones stay BLOCKED).
+
+Bugs Found:
+- BlueprintRoadmapModal.tsx handleToggleDeliverable dropped every server refusal: POST
+  /api/blueprint/toggle-item answers 400 { success:false, applied:false, error } for a malformed
+  toggle, and 500 { success:false, applied:false, persisted:false, error } when a tick could not be
+  written to durable storage and was rolled back. The handler noticed neither, so a refused click
+  left the checklist desynced and a non-durable tick looked saved until the next load. There was also
+  no res.ok check, so a non-JSON error page threw inside res.json() into the swallowed catch.
+
+Bugs Fixed:
+- Wired blueprintToggleOutcome + toggleNotice + res.json().catch(()=>null). Verification: targeted
+  src/tests/blueprintToggleOutcomeTruth.test.ts 10/10; negative-validated by git stash of the
+  component (4 wiring guards failed: 4 failed | 6 passed), restored -> 10/10.
+
+Tests:    10/10 targeted (blueprintToggleOutcomeTruth); full npx vitest run 233 files / 2588 tests passed, 0 failed
+Lint:     pass — npm run lint (tsc --noEmit) exit 0
+Build:    pass — npm run build exit 0; dist/server.cjs 1,088,323 bytes
+E2E:      NOT RUN (no handset / no device)
+Security: no credential written, no .env, no force-push
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle), docs/CHANGELOG.md (slot 11 entry),
+automation/reports/hermes-window-log.md (this report)
+Branch:  feature/hermes-full-completion
+Commit:  5329ec6 (code+test); docs commit follows
+Push:    succeeded -> origin/feature/hermes-full-completion (758b6bb..5329ec6)
+
+PR:         NONE opened this slot (not the finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present; the verified artifact
+            (dist/server.cjs) is the deployment unit available
+
+Blocked:
+- Real Android E2E / Real Screenshot — requires a physical handset (NOT AVAILABLE here)
+- Deploy — requires a configured deployment target / hosting integration
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13 tail: continue auditing remaining success:true-prone routes/components (AutonomousToolsModal
+  write paths, HUDHeader kill-switch, SecurityMatrix, filesystem tools) for unconditional success.
+
+हिंदी सारांश (एक पंक्ति):
+- Blueprint चेकलिस्ट टॉगल अब सर्वर की असली मंज़ूरी/मना ही बोलता है; झूठी सफलता हटाई गई, 10 नए टेस्ट
+  पास, lint/build हरे, और बदलाव पुश हो गया।

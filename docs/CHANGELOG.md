@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 03:06 IST (2026-10-12 21:36 UTC) — window slot 11: the blueprint deliverable toggle stops swallowing a server refusal
+
+### Fixed
+- **`src/components/BlueprintRoadmapModal.tsx` — `handleToggleDeliverable` branched only on `data.success` from `POST /api/blueprint/toggle-item` and discarded every server refusal.** The route is deliberately honest: a malformed body (unknown `phaseId`, out-of-range `itemIndex`) answers HTTP 400 `{ success: false, applied: false, error }`, and a tick whose write could not reach durable storage is rolled back and answers HTTP 500 `{ success: false, applied: false, persisted: false, error }` (`src/utils/hardening/blueprintToggleTruth.ts`). The handler showed no notice for either, so a click that changed nothing read as if it worked and the checklist stayed desynced from the server, while a non-durable tick looked saved until the next load. There was also no `res.ok` check, so a non-JSON error page threw inside `res.json()` and was swallowed by the `catch`. The handler now reads the body regardless of status and speaks the verdict.
+
+### Added
+- `src/utils/hardening/blueprintToggleOutcomeTruth.ts`: `blueprintToggleOutcome(body)` records a tick only on the server's own `success: true` with `applied !== false`, and otherwise surfaces the server's `error` / `message` / `reason` as an honest refusal line, with a truthful fallback when no reason is present. Malformed bodies (`null` / `undefined` / `{}` / `'ok'` / `42` / `{ success: 'true' }`) are never recorded.
+- The modal stores the verdict in a `toggleNotice`, renders it as a `role="status"` banner, and resyncs the checklist **only** inside `outcome.refresh`.
+
+### Tests
+- `src/tests/blueprintToggleOutcomeTruth.test.ts`: 10 cases — six exercise `blueprintToggleOutcome` directly (recorded success; the 400 malformed refusal; the 500 rolled-back non-durable refusal; `applied:false` treated as refusal even with truthy `success`; malformed bodies never recorded; reasonless refusal falls back honestly); four static guards assert the modal reads the body via `res.json().catch(() => null)`, classifies with `blueprintToggleOutcome`, gates `fetchBlueprint()` on `outcome.refresh` (and not on a bare `data.success`), and renders `{toggleNotice && (`. Negative-validated: `git stash` of `BlueprintRoadmapModal.tsx` failed exactly the 4 wiring guards (`4 failed | 6 passed`); restored → 10/10. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 233 files / 2588 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,088,323 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-13 02:36 IST (2026-10-12 21:06 UTC) — window slot 10: the App Android approval callbacks stop announcing an answer or a delivery the bridge never confirmed
 
 ### Fixed

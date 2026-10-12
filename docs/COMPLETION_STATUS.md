@@ -4,7 +4,56 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 02:36 IST — **WORK SLOT 10 of the
+Last cycle: 2026-10-13 03:06 IST — **WORK SLOT 11 of the
+2026-10-12 → 2026-10-13 window (03:06 IST fire; state `slots_completed: 10`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+Blueprint deliverable toggle swallowed every server refusal.** The
+`handleToggleDeliverable` handler in `src/components/BlueprintRoadmapModal.tsx`
+fired `POST /api/blueprint/toggle-item` and branched only on `data.success`:
+
+```
+const data = await res.json();
+if (data.success) { fetchBlueprint(); }
+```
+
+The route is deliberately honest — a malformed body (unknown `phaseId`,
+out-of-range `itemIndex`) answers HTTP 400 `{ success: false, applied: false,
+error }`, and a tick whose write could not reach durable storage is rolled back
+and answers HTTP 500 `{ success: false, applied: false, persisted: false,
+error }` (backed by
+`src/utils/hardening/blueprintToggleTruth.ts`). The handler discarded both: a
+refused tick showed **no notice at all**, so a click that changed nothing read
+as if it had worked and the checklist stayed desynced from the server, while a
+non-durable tick looked saved for the moment and vanished on the next load.
+There was also no `res.ok` check, so a non-JSON error page would throw inside
+`res.json()` and be swallowed by the `catch`. New
+`src/utils/hardening/blueprintToggleOutcomeTruth.ts` (`blueprintToggleOutcome`)
+records a tick only on the server's own `success: true` **with** `applied !==
+false`, and otherwise surfaces the server's `error` / `message` / `reason` as
+an honest refusal line (with a truthful fallback when no reason is present).
+The handler now reads the body regardless of status, stores the verdict in a
+`toggleNotice`, renders it (amber/red banner, `role="status"`), and resyncs the
+checklist **only** inside `outcome.refresh`. Evidence:
+`src/tests/blueprintToggleOutcomeTruth.test.ts` (**10 passed**) — six classifier
+cases (recorded success; the 400 malformed refusal; the 500 rolled-back
+non-durable refusal; `applied:false` treated as refusal even with truthy
+`success`; malformed bodies `null` / `undefined` / `{}` / `'ok'` / `42` /
+`{ success: 'true' }` never recorded; reasonless refusal falls back honestly)
+and four static guards asserting the modal reads the body via
+`res.json().catch(() => null)`, classifies with `blueprintToggleOutcome`,
+gates `fetchBlueprint()` on `outcome.refresh` (and not on a bare
+`data.success`), and renders `{toggleNotice && (`. **Negative-validated** —
+`git stash` of `BlueprintRoadmapModal.tsx` failed exactly the 4 wiring guards
+(`4 failed | 6 passed`); restored → 10/10. Gates (observed this fire): lint
+(`tsc --noEmit`) exit 0; targeted `blueprintToggleOutcomeTruth` **10 passed / 1
+file**; full `npx vitest run` **233 files / 2588 tests passed** (77.17 s, 0
+failed); `npm run build` exit 0 (`dist/server.cjs` 1,088,323 bytes). Security:
+no credential written, no `.env`, no force-push. E2E: NOT RUN (no handset).
+Deploy: NOT_CONFIGURED. Commit `5329ec6` (this slot). Item 13 stays `PARTIAL` —
+the long tail of unclassified `success: true` / unverified assertions is still
+open.
+
+Previous cycle: 2026-10-13 02:36 IST — **WORK SLOT 10 of the
 2026-10-12 → 2026-10-13 window (02:36 IST fire; state `slots_completed: 9`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
 App-level Android approval callbacks reported done outcomes the bridge
