@@ -52,3 +52,20 @@ export function telegramPushLabel(statusKnown: boolean, live: boolean | undefine
   if (!statusKnown) return 'Telegram Push: UNKNOWN (status not queried)';
   return live ? 'Telegram Push: live-connected' : 'Telegram Push: NOT CONNECTED';
 }
+
+/**
+ * Cron line for the proactive briefing panel. The panel used to print "Next
+ * automated cron broadcast: Scheduled at time slot" as a constant — it named a
+ * specific slot the store does not pin and asserted a scheduled broadcast even
+ * while the push channel was not connected. Only a live-connected push makes a
+ * scheduled broadcast real; otherwise the line names the truth.
+ */
+export function nextRoutineCronLabel(telegramLive: boolean | null, slotLabel: string): string {
+  if (telegramLive === null) {
+    return 'Next automated cron broadcast: UNKNOWN (Telegram push status not queried)';
+  }
+  if (!telegramLive) {
+    return 'Next automated cron broadcast: NONE (Telegram push not connected)';
+  }
+  return `Next automated cron broadcast: ${slotLabel} (live-connected)`;
+}

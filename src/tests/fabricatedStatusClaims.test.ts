@@ -6,6 +6,7 @@ import {
   payloadChecksumLine,
   cronSchedulerLabel,
   telegramPushLabel,
+  nextRoutineCronLabel,
 } from '../utils/checksumTruth';
 
 // Regression guard for fabricated status claims in the UI. Each string below
@@ -66,6 +67,27 @@ describe('components do not print hardcoded success claims', () => {
     expect(src).not.toContain('Cron Scheduler: Active');
     expect(src).toContain('/api/telegram/status');
     expect(src).toContain('/api/daemon/status');
+  });
+
+  it('nextRoutineCronLabel never claims a scheduled broadcast without a live push', () => {
+    // Unqueried status must read UNKNOWN, never a scheduled slot.
+    expect(nextRoutineCronLabel(null, 'Morning')).toContain('UNKNOWN');
+    // A disconnected push must read NONE: the panel cannot promise a broadcast.
+    expect(nextRoutineCronLabel(false, 'Morning')).toContain('NONE');
+    expect(nextRoutineCronLabel(false, 'Morning')).not.toContain('Morning');
+    // Only a live-connected push may name the slot.
+    const live = nextRoutineCronLabel(true, 'Morning');
+    expect(live).toContain('Morning');
+    expect(live).toContain('live-connected');
+  });
+
+  it('ProactiveRoutinesModal does not hardcode a delivery or cron-broadcast claim', () => {
+    const src = read('ProactiveRoutinesModal.tsx');
+    // Both strings were rendered unconditionally, asserting delivery and a
+    // scheduled broadcast that the panel's own probes did not establish.
+    expect(src).not.toContain('delivered directly to your Android phone via Telegram');
+    expect(src).not.toContain('Next automated cron broadcast: Scheduled at time slot');
+    expect(src).toContain('nextRoutineCronLabel');
   });
 
   it('BlueprintRoadmapModal does not seed a 100% completion state before fetching', () => {
