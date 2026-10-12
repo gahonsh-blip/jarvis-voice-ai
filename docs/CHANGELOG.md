@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-12 23:35 IST (2026-10-12 18:06 UTC) — window slot 4: the scheduled nightly GitHub check stops logging a start it never verified
+
+### Fixed
+- **`server.ts` — the scheduled nightly check pushed "Started Nightly Repository Check (03:00 AM IST)" the instant the per-day marker landed, before the scan had produced anything, and discarded both durability verdicts.** `recordNightlyRun(result.record)` and the `addAuditLog(...)` return were bare statements, so on a read-only volume or a full disk the durable run history gained no row and the Security Matrix gained no audit entry, yet the run log asserted a check the next boot would not find. The log line is now composed *after* the check via `nightlyRunLogLine`, both verdicts are captured and fed to it, and the manual route (`POST /api/github/nightly-check`) surfaces the same line and verdicts in its response instead of dropping them.
+- **`src/utils/github/nightlyAuditTruth.ts` — added `nightlyRunLogLine(record, durability)`**: reports the receipt outcome and the scan / unreachable / failing-CI / planned counts, and appends a named `run record NOT written to durable storage` / `audit row NOT written to durable storage` caveat when a write did not land.
+
+### Tests
+- `src/tests/nightlyAuditTruth.test.ts`: +8 cases (now 14) — the helper's four durability combinations, the non-VERIFIED receipt wording, and source guards that the pre-scan "Started" literal is gone, the scheduled tick captures `recordNightlyRun()` / `addAuditLog()` results, and both the scheduled tick and the manual route log through `nightlyRunLogLine`. Negative-validated: reintroducing the old "Started Nightly Repository Check" literal fails exactly the new source guard (`1 failed | 13 passed`); restored → 14/14. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 225 files / 2530 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1086366 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-12 22:05 IST (2026-10-12 16:42 UTC) — window slot 3: the Proactive Routines panel stops claiming a Telegram delivery and a scheduled cron broadcast it never measured
 
 ### Fixed
