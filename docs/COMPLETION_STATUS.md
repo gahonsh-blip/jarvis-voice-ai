@@ -20,15 +20,19 @@ respond`), and both update handlers gained the missing `res.ok` check and now
 adopt the **confirmed echoed** level rather than the requested value. Both
 handlers and both catch blocks now resync via `fetchSecurity()` after a
 rejected or failed update, so a refused change can no longer leave the request
-on screen. Evidence: `src/tests/securityMatrixLevelBadgeTruth.test.ts`
-(**6 passed / 1 file**) — 2 helper-contract tests and 4 wiring guards.
+on screen. The footer's own `Level ${activeLevel} of 4 active` line had the same
+latent flaw (`Level null of 4` when a state loaded without a `currentLevel`) and
+is now gated on the observed level. Evidence:
+`src/tests/securityMatrixLevelBadgeTruth.test.ts`
+(**8 passed / 1 file**) — 2 helper-contract tests and 6 wiring guards.
 **Negative-validated** — reintroducing the `useState<1 | 2 | 3 | 4>(2)` seed
-failed exactly the 2 wiring guards (`2 failed | 4 passed`); restored → 6/6.
+failed exactly the 2 wiring guards (`2 failed | 4 passed`, before the footer and
+fetch guards were added); restored → 6/6, later extended to 8/8.
 Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full `npx vitest run`
-**235 files / 2598 tests passed** (77.86 s, 0 failed); `npm run build` exit 0
+**235 files / 2600 tests passed** (0 failed); `npm run build` exit 0
 (`dist/server.cjs` 1,088,323 bytes). Security: no credential written, no
 `.env`, no force-push. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
-Commit `5f799ce` (this slot). Item 13 stays `PARTIAL` — the long tail of
+Commit `23487c0` (this slot). Item 13 stays `PARTIAL` — the long tail of
 unclassified `success: true` / unverified assertions is still open.
 
 Previous cycle: 2026-10-13 03:36 IST — **WORK SLOT 12 of the
