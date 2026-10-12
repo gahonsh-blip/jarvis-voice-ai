@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 01:05 IST — **WORK SLOT 7 of the
+Last cycle: 2026-10-13 01:35 IST — **WORK SLOT 8 of the
+2026-10-12 → 2026-10-13 window (01:35 IST fire; state `slots_completed: 7`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+AutonomousToolsModal *filesystem* tab read a write with an unpersisted audit
+trail as a clean success.** `handleCreateOrSaveFile` branched only on
+`data.success` from `POST /api/tools/fs/write` and always printed "File
+written successfully". The route reports two independent facts: `success`
+(the bytes reached disk) and `auditPersisted` (its VERIFIED audit row reached
+durable storage via a disk read-back) — and returns an `error` string when
+the row is not durable. The handler discarded `auditPersisted`, so a write
+whose compliance trail could not be persisted read as green. It now surfaces
+`auditPersisted === false` as an amber **info** verdict ("audit record NOT
+written to durable storage") before it can claim success, matching the
+approval-gate (`ca88a0d`) and telephony treatments. Evidence:
+`src/tests/autonomousToolsFsWriteDurabilityTruth.test.ts` (**2 passed**) — one
+guard pins the modal's branch on `data.auditPersisted === false` + info tone,
+one asserts the route returns `auditPersisted` from `recordDurableAuditRow`
+with the non-durable error. Negative-validated — reverting the handler to
+`if (data.success)` failed the wiring guard (`1 failed | 1 passed`); restored
+→ 2/2. Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted
+`autonomousToolsFsWriteDurabilityTruth` **2 passed / 1 file**; full
+`npx vitest run` **230 files / 2558 tests passed** (76.46 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1.0mb). Security: `.env` gitignored,
+working tree clean, no credential in the diff. E2E: NOT RUN (no handset).
+Deploy: NOT_CONFIGURED. Commit `7730a53` (this slot). Item 13 stays `PARTIAL`
+— the long tail of unclassified `success: true` / unverified assertions is
+still open.
+
+Previous cycle: 2026-10-13 01:05 IST — **WORK SLOT 7 of the
 2026-10-12 → 2026-10-13 window (01:05 IST fire; state `slots_completed: 6`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
 AutonomousToolsModal *approvals* tab read a non-durable approval decision as

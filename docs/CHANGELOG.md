@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 01:35 IST (2026-10-12 20:05 UTC) — window slot 8: the filesystem tab stops reporting a write with an unpersisted audit trail as a clean success
+
+### Fixed
+- **`src/components/AutonomousToolsModal.tsx` — `handleCreateOrSaveFile` branched only on `data.success` from `POST /api/tools/fs/write` and always printed "File written successfully".** The route reports two independent facts — `success` (did the bytes reach disk) and `auditPersisted` (did its VERIFIED audit row reach durable storage, proven by a read-back) — and returns an `error` string when the row is not durable. Discarding `auditPersisted` meant a write whose compliance trail could not be persisted read as green. The handler now surfaces `auditPersisted === false` as an amber **info** verdict naming the durability gap, before it can claim a clean success; the fresh-state refresh (`setNewFileName('')` / `setNewFileContent('')` / `fetchFsList`) still runs so the UI reflects the real write. Matches the approval-gate (`ca88a0d`) and telephony treatments.
+
+### Tests
+- `src/tests/autonomousToolsFsWriteDurabilityTruth.test.ts`: 2 cases — one guard pins the modal's branch on `data.auditPersisted === false` and the info tone; one asserts the route returns `auditPersisted` from `recordDurableAuditRow` with the non-durable error string. Negative-validated: reverting the handler to `if (data.success)` failed the wiring guard (`1 failed | 1 passed`); restored → 2/2. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 230 files / 2558 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1.0mb).
+
+---
+
 ## [Unreleased] - 2026-10-13 01:05 IST (2026-10-12 19:35 UTC) — window slot 7: the approvals tab stops reporting an unpersisted decision as executed
 
 ### Fixed
