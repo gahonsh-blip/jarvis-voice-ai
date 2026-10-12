@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 03:36 IST — **WORK SLOT 12 of the
+Last cycle: 2026-10-13 04:06 IST — **WORK SLOT 13 of the
+2026-10-12 → 2026-10-13 window (04:06 IST fire; state `slots_completed: 12`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+Security Matrix header asserted a level the probe never reported.** The modal
+(`src/components/SecurityMatrixModal.tsx`) rendered `Level {activeLevel}
+Active` with `activeLevel` seeded to the literal `2`. On a load where
+`/api/security` never answered, the header drew "Level 2 Active" while the
+footer already stated "Security state unavailable — /api/security did not
+respond" — the modal contradicted itself and asserted a safety posture that was
+never observed. The observed level is now seeded to `null`, the badge is built
+by `securityMatrixLevelBadge(activeLevel)` (`Level N Active` only for a level
+that was actually read, otherwise `Level UNKNOWN — /api/security did not
+respond`), and both update handlers gained the missing `res.ok` check and now
+adopt the **confirmed echoed** level rather than the requested value. Both
+handlers and both catch blocks now resync via `fetchSecurity()` after a
+rejected or failed update, so a refused change can no longer leave the request
+on screen. Evidence: `src/tests/securityMatrixLevelBadgeTruth.test.ts`
+(**6 passed / 1 file**) — 2 helper-contract tests and 4 wiring guards.
+**Negative-validated** — reintroducing the `useState<1 | 2 | 3 | 4>(2)` seed
+failed exactly the 2 wiring guards (`2 failed | 4 passed`); restored → 6/6.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full `npx vitest run`
+**235 files / 2598 tests passed** (77.86 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1,088,323 bytes). Security: no credential written, no
+`.env`, no force-push. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+Commit `5f799ce` (this slot). Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` / unverified assertions is still open.
+
+Previous cycle: 2026-10-13 03:36 IST — **WORK SLOT 12 of the
 2026-10-12 → 2026-10-13 window (03:36 IST fire; state `slots_completed: 11`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
 SocialMediaModal quick-generator swallowed a refused post draft.** The

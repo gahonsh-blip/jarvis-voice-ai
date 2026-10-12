@@ -50,4 +50,16 @@ describe('SecurityMatrixModal derives its level badge from an observed reading',
     const catchResyncs = src.match(/await fetchSecurity\(\);/g) ?? [];
     expect(catchResyncs.length).toBeGreaterThanOrEqual(4);
   });
+
+  it('never prints a bare numeric level in the footer when the probe returned none', () => {
+    // The numeric footer line must be gated on the observed level, so a state
+    // that loaded without a `currentLevel` cannot render "Level null of 4".
+    expect(src).toMatch(/typeof activeLevel === 'number'\s*\?\s*`Level \$\{activeLevel\} of 4 active/);
+    expect(src).toContain('Security level unknown — /api/security returned no current level');
+  });
+
+  it('clears the claimed level when fetchSecurity fails or the body carries none', () => {
+    expect(src).toContain('if (!res.ok) throw new Error(`HTTP ${res.status}`)');
+    expect(src).toMatch(/catch \(err\) \{[\s\S]*?setActiveLevel\(null\);/);
+  });
 });

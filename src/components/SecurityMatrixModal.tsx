@@ -318,7 +318,9 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
         <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
           <span>
             {securityState
-              ? `Level ${activeLevel} of 4 active · permissions enforced by the gateway`
+              ? typeof activeLevel === 'number'
+                ? `Level ${activeLevel} of 4 active · permissions enforced by the gateway`
+                : 'Security level unknown — /api/security returned no current level'
               : 'Security state unavailable — /api/security did not respond'}
           </span>
           <button

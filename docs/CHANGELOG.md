@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 04:06 IST (2026-10-12 22:36 UTC) — window slot 13: the Security Matrix header stops asserting a level the probe never reported
+
+### Fixed
+- **`src/components/SecurityMatrixModal.tsx` — the header rendered `Level {activeLevel} Active` with `activeLevel` seeded to the literal `2`.** On a load where `/api/security` never answered, the badge drew "Level 2 Active" while the footer already stated "Security state unavailable — /api/security did not respond": the modal contradicted itself and asserted a safety posture that was never observed. `activeLevel` is now seeded to `null` and the badge is built by `securityMatrixLevelBadge(activeLevel)` — `Level N Active` only for a level that was actually read, otherwise `Level UNKNOWN — /api/security did not respond`.
+- **`fetchSecurity` had no `res.ok` check and did not clear the claimed level on failure.** It now throws on a non-2xx, adopts the level only when the body actually carries a numeric `currentLevel`, and clears both `securityState` and `activeLevel` in the `catch` so a missing field can no longer leave a stale level on screen.
+- **Both update handlers (`handleUpdateLevel`, `handleToggleHumanApproval`) branched on `data.success` alone, and their `catch` blocks left the requested value asserted.** They now require `res.ok && data.success`, adopt the **confirmed echoed** snapshot (for the level, the echoed `securityState.currentLevel`) rather than the requested value, and resync via `fetchSecurity()` after a rejected or failed update.
+- **The footer had the same latent flaw: `Level ${activeLevel} of 4 active` printed `Level null of 4` whenever the state loaded without a `currentLevel`.** The numeric line is now gated on the observed level; otherwise the footer states `Security level unknown — /api/security returned no current level`.
+
+### Tests
+- `src/tests/securityMatrixLevelBadgeTruth.test.ts`: 8 cases — 2 helper-contract tests (`Level 1/4 Active` only for an observed number; `UNKNOWN` for `null`/`undefined`) and 6 wiring guards (no literal seed, no `Level {activeLevel} Active` literal, helper-driven badge keyed on the observed level, `res.ok` + confirmed-echo adoption, resync on refusal, level-gated footer line, and a `catch` that clears both `securityState` and `activeLevel`). Negative-validated: reintroducing the `useState<1 | 2 | 3 | 4>(2)` seed failed exactly the 2 wiring guards (`2 failed | 4 passed`, before the extra guards were added); restored → 6/6; the two later footer/fetch guards brought the file to 8/8. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 235 files / 2600 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,088,323 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-13 03:36 IST (2026-10-12 22:06 UTC) — window slot 12: the social quick-generator stops reading a refused draft as prepared
 
 ### Fixed
