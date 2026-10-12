@@ -16365,3 +16365,27 @@ remains.
 Commits: ba87705 (fix) -> 91ed6a2 (docs), both pushed to
 feature/hermes-full-completion. State branch automation/hermes-state
 a34010b -> ae0cb55.
+
+## 2026-10-12 22:05 IST — WORK slot 3 (window 2026-10-12 → 2026-10-13)
+
+Item #13 `Zero-fake-success for all tools` (stays PARTIAL).
+
+Completed:
+- Removed two unconditional delivery claims from `src/components/ProactiveRoutinesModal.tsx`: the header line "delivered directly to your Android phone via Telegram" and the strip "Next automated cron broadcast: Scheduled at time slot". Both rendered as fact regardless of the live `/api/telegram/status` probe and even though `/api/routines` pins no next-fire time.
+- Added `nextRoutineCronLabel(telegramLive, slotLabel)` to `src/utils/checksumTruth.ts` (UNKNOWN -> NONE when not connected -> named slot only when live-connected). Header now says the four templates' delivery is "shown below, read live from the server".
+
+Evidence:
+- `src/tests/fabricatedStatusClaims.test.ts` — 10 passed (up from 8). New guards pin the helper's three branches and assert both old strings are gone and the modal calls `nextRoutineCronLabel`.
+- Negative validation: reintroducing the old "Scheduled at time slot" literal failed exactly the new modal guard (`1 failed | 9 passed`); restored -> 10/10.
+
+Gates (observed this fire):
+- lint (`tsc --noEmit`): exit 0
+- full `npx vitest run`: 225 files / 2522 tests passed (77.47 s, 0 failed)
+- `npm run build`: exit 0 (`dist/server.cjs` 1084956 bytes)
+
+Security: `.env` gitignored; working tree clean; no credential in the diff. E2E: NOT RUN (no browser/handset). Deploy: NOT_CONFIGURED.
+
+Commit: c28a15f (docs) / 133f5a9 (fix), branch feature/hermes-full-completion.
+State: slot 3 persisted on automation/hermes-state (fe6c875).
+
+Next slot: continue item #13 long tail — server.ts / server_tools.ts `success: true` sites and the SourceTruthPanel's missing per-template generation / next-fire fields.
