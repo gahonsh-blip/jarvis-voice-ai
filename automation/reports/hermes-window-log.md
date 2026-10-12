@@ -16417,3 +16417,38 @@ State: slot 4 persisted on automation/hermes-state (c12a19c).
 
 Next slot: continue item #13 long tail — Computer Operator owner DENIAL
 audited-vs-actual, then Telephony Hub fake sample contacts.
+
+---
+
+## 2026-10-13 00:05 IST — WORK SLOT 5 (2026-10-12 -> 2026-10-13 window)
+
+Item #13 `Zero-fake-success for all tools` — PARTIAL (long tail continues).
+
+Bugs found: `startTelegramPolling()` (`server.ts`) advanced `lastTelegramUpdateId`,
+pushed each processed update into `memoryState.processedTelegramUpdates`, then called a
+bare `persistMemory()` and threw its boolean away. `persistMemory()` returns `false`
+when the write cannot reach disk (read-only volume, full disk) and `true` without
+writing when the file already holds identical bytes. Either way the dedup marker lived
+in memory only: after a restart that never wrote, the loop re-fetched and reprocessed
+updates it had already run — re-firing commands and approvals — while nothing in the
+status reported the gap. Audit sweep for resumed Item 13.
+
+Bugs fixed: the verdict is now captured as
+`telegramConfig.lastPersistFailed = !persistMemory()`, the field defaults to `false`
+(so no caller can read a fabricated "saved" state before a write ran), and the gap is
+named in a `console.warn` instead of discarded. `/api/telegram/status` returns
+`config: telegramConfig` verbatim, so the field is surfaced without a route change.
+
+Tests: `src/tests/telegramPollingPersistTruth.test.ts` 4 passed. Negative-validated:
+reverting the block to a bare `persistMemory();` fails exactly the two behavioral
+guards (2 failed | 2 passed); restored -> 4/4.
+Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 227 files / 2540 tests passed
+(77.66 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1086854 bytes).
+E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED. Security: `.env` gitignored, clean
+tree, no credential in the diff.
+
+Commit 6f0bb5b (fix+test), 36319c7 (docs), branch feature/hermes-full-completion.
+State: slot 5 persisted on automation/hermes-state (e8e4906).
+
+Next slot: continue item #13 long tail — Computer Operator owner DENIAL audited-vs-actual,
+then residual `profilePersisted` / social-publish success assertions.
