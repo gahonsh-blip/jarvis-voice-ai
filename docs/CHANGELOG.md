@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-12 21:05 IST (2026-10-12 15:35 UTC) — new window slot 1: Telephony Hub stops presenting sample contacts as verified numbers
+
+### Fixed
+- **`src/components/TelephonyHubModal.tsx` — the privacy panel labeled the five built-in `DEFAULT_CONTACTS` as `Contact list: N verified numbers`.** `contacts` falls back to that constant when the device supplies none, and it holds fictional people with fictional numbers and no device source, so the panel claimed verified numbers that did not exist. The count now derives from `!c.isSample` and, when no real number is saved, the panel names the placeholder set (`N SAMPLE contacts — no verified numbers saved`).
+- **`src/types/telephony.ts` — `ContactItem` gained an optional `isSample` provenance flag; all five `DEFAULT_CONTACTS` entries are marked `isSample: true`.**
+
+### Tests
+- `src/tests/telephonyContactProvenanceTruth.test.ts`: 5 cases — every built-in is `isSample` and none counts as verified, the old `contacts.length` claim is gone, the count derives from `!c.isSample`, and the sample set is named. Negative-validated: reverting the panel render to the pre-fix line fails exactly the 3 source guards (`3 failed | 2 passed`); restored → 5/5. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 225 files / 2519 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1084956 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-12 04:05 IST (2026-10-11 22:36 UTC) — window slot 13: App.tsx memory-merge paths stop discarding the queue and local-write verdicts
 
 ### Fixed
