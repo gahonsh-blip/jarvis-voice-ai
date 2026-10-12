@@ -69,6 +69,10 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   const [topicPrompt, setTopicPrompt] = useState<string>('');
   const [platform, setPlatform] = useState<string>('LinkedIn');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  // A generation the server refused (durable write failed) must be told to the
+  // operator; the old handler showed nothing and spoke nothing, so a failed
+  // draft read as if it had been prepared.
+  const [generateNotice, setGenerateNotice] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [copiedRedirectUri, setCopiedRedirectUri] = useState<boolean>(false);
@@ -641,6 +645,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     if (!topicPrompt.trim() || isGenerating) return;
 
     setIsGenerating(true);
+    setGenerateNotice('');
     try {
       const res = await fetch('/api/social/generate', {
         method: 'POST',
@@ -648,13 +653,22 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         body: JSON.stringify({ topic: topicPrompt, platform }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.post) {
         setPosts((prev) => [data.post, ...prev]);
         setSelectedPost(data.post);
         setTopicPrompt('');
         onSpeak(`Post prepared for ${platform}. It is queued in Human Approval Mode.`);
+      } else {
+        // The route answers success only when the draft and its audit row are
+        // durable; anything else (a refused write, a malformed body) must not
+        // read as a prepared draft. Say so instead of leaving the form silent.
+        const reason = data.error || 'The draft could not be stored durably.';
+        setGenerateNotice(`Draft not prepared: ${reason}`);
+        onSpeak(`Draft not prepared. ${reason}`);
       }
-    } catch (err) {
+    } catch (err: any) {
+      setGenerateNotice('Draft not prepared — the server could not be reached.');
+      onSpeak('Draft not prepared — the server could not be reached.');
       console.warn('Post generation failed:', err);
     } finally {
       setIsGenerating(false);
@@ -911,6 +925,12 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     <Sparkles className="w-3.5 h-3.5" />
                     {isGenerating ? 'Drafting with Gemini...' : `Draft Post for ${platform}`}
                   </button>
+
+                  {generateNotice && (
+                    <p className="text-[11px] font-mono text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded-lg px-2 py-1.5">
+                      {generateNotice}
+                    </p>
+                  )}
 
                   {platform === 'YouTube' && (
                     <button
