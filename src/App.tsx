@@ -1235,8 +1235,14 @@ export default function App() {
             approvalState: 'REJECTED',
             error: 'ACTION_DENIED_BY_OWNER',
           };
-          recordOperatorAudit(rejectedTask);
-          pushJarvisMessage('COMPUTER OPERATOR • ACTION DENIED BY OWNER, SIR. Not executed.', undefined, false, undefined);
+          const denialAudited = recordOperatorAudit(rejectedTask);
+          pushJarvisMessage(
+            'COMPUTER OPERATOR • ACTION DENIED BY OWNER, SIR. Not executed.' +
+              (denialAudited ? '' : ' • DENIAL NOT AUDITED (STORAGE UNAVAILABLE)'),
+            undefined,
+            false,
+            undefined
+          );
           setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
           return;
         }

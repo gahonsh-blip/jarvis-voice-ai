@@ -164,4 +164,16 @@ describe('App.tsx discloses an operator run that was not persisted', () => {
     const calls = [...appFlat.matchAll(/announceOperatorResult\(result\.task, result\.ok\)/g)].length;
     expect(calls).toBe(2);
   });
+
+  // The owner's denial was announced as audited while the audit write result was
+  // dropped, so a refused `recordOperatorAudit` still read as a logged denial.
+  it('discloses an owner denial whose audit row was not written', () => {
+    expect(appFlat).toContain('const denialAudited = recordOperatorAudit(rejectedTask);');
+    expect(appFlat).toContain('DENIAL NOT AUDITED (STORAGE UNAVAILABLE)');
+    // The write result must be captured, not dropped: assigning it to the
+    // `denialAudited` binding is the only way the old bare call can appear.
+    const captures = [...appFlat.matchAll(/denialAudited = recordOperatorAudit\(rejectedTask\)/g)].length;
+    expect(captures).toBe(1);
+    expect([...appFlat.matchAll(/recordOperatorAudit\(rejectedTask\)/g)].length).toBe(1);
+  });
 });
