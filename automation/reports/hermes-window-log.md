@@ -16292,3 +16292,44 @@ Main is NOT merged — awaiting human approval. Deploy: NOT_CONFIGURED — the v
 
 हिंदी सारांश: यह फाइनलाइज़ेशन स्लॉट था; कोई नया फीचर नहीं जोड़ा गया, बस शाखा
 e590e23 को पूरी तरह सत्यापित किया और PR #8 को मानव-स्वीकृति के लिए तैयार छोड़ा।
+
+
+## 2026-10-12 21:05 IST — WORK SLOT 1 (new window 2026-10-12 -> 2026-10-13) — Item 13: Telephony Hub stops presenting sample contacts as verified numbers
+
+**Item 13 (`Zero-fake-success for all tools`) — the Telephony Hub privacy panel
+claimed five "verified numbers" that were five fabricated samples.**
+`TelephonyHubModal.tsx` rendered `Contact list: {contacts.length} verified
+numbers`. `contacts` falls back to `DEFAULT_CONTACTS` when the device supplies
+none, and that constant is five *fictional* people with *fictional* numbers
+("Dr. Julian Wayne", "+1 (415) 890-2134", ...) and no device source behind them —
+so the panel asserted five verified numbers when none existed. `ContactItem`
+now carries an optional `isSample` provenance flag; all five built-ins are
+marked; the panel counts only non-sample contacts (`Contact list: N verified
+numbers`) and, when no real number is saved, names the placeholder set
+(`Contact list: N SAMPLE contacts — no verified numbers saved`).
+
+Evidence: `src/tests/telephonyContactProvenanceTruth.test.ts` (**5 passed**) —
+data guards (every built-in is `isSample`, zero verified among them) plus source
+guards that the old `contacts.length` claim is gone, the count derives from
+`!c.isSample`, and the sample set is named. Negative-validated — reverting the
+panel render to the pre-fix `{contacts.length} verified numbers` line failed
+exactly the 3 source guards (`3 failed | 2 passed`); restored -> 5/5.
+
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; full `npx vitest run`
+**225 files / 2519 tests passed** (76.67 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1084956 bytes). Security: `.env` gitignored, working tree
+clean, no credential in the diff. E2E: NOT RUN (no browser/handset). Deploy:
+NOT_CONFIGURED. PR #8 open, non-draft. Main NOT merged — awaiting human
+approval. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / sample-data-as-real sites remains.
+
+Commits: `9e48583` (fix) -> `09d0945` (docs), both pushed to
+`feature/hermes-full-completion`. State branch `automation/hermes-state`
+`6151b6d -> a34010b`.
+
+Window note: this fire began a fresh window. The prior window's state file had
+drifted its `window_date` to `2026-10-12` while its slots ran during the
+2026-10-11 evening; `slots_completed` was reset to 1 for this window and the
+drift is flagged for the next slot / human review.
+
+हिंदी सारांश: टेलीफोनी हब के पैनल ने पाँच काल्पनिक सैंपल संपर्कों को "सत्यापित नंबर" बताया था; अब केवल असली संपर्क गिने जाते हैं और सैंपल सेट स्पष्ट रूप से नामित होता है — 5 नए टेस्ट पास।
