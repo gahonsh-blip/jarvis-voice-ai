@@ -4,7 +4,45 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 03:06 IST — **WORK SLOT 11 of the
+Last cycle: 2026-10-13 03:36 IST — **WORK SLOT 12 of the
+2026-10-12 → 2026-10-13 window (03:36 IST fire; state `slots_completed: 11`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+SocialMediaModal quick-generator swallowed a refused post draft.** The
+`handleGeneratePost` handler fired `POST /api/social/generate` and branched
+only on `data.success`:
+
+```
+const data = await res.json();
+if (data.success) { ... setTopicPrompt(''); onSpeak(`Post prepared for ${platform}...`); }
+```
+
+The route is deliberately honest: it answers `success: true` only when the
+draft **and** its audit row reached durable storage (read back with
+`diskHasAuditRow(auditRow.id)`), and otherwise answers `{ success: false,
+persisted: false, error: 'The draft could not be written to durable
+storage…' }`. The handler had **no `else` and no catch message**: a refused
+generation showed nothing and spoke nothing, so a draft that was never stored
+read as if it had been prepared. There was also no `res.ok` check and no guard
+on `data.post`, so a `success: true` response missing the post object would
+throw inside the `try` and be swallowed by the `catch`. The handler now
+requires `data.success && data.post`, and on any refusal stores the server
+`error` (or an honest fallback) in a new `generateNotice`, renders it as an
+amber banner next to the generator form, and speaks "Draft not prepared …".
+Evidence: `src/tests/socialGenerateOutcomeTruth.test.ts` (**6 passed / 1
+file**) — one static guard asserting the route's durable gate
+(`persistMemory() || !diskHasAuditRow(auditRow.id)`, `success: false,
+persisted: false`) and three asserting the client requires `data.post`, sets
+`generateNotice`, speaks the refusal, and renders `{generateNotice && (`.
+**Negative-validated** — `git stash` of `SocialMediaModal.tsx` failed exactly
+the 3 client guards (`3 failed | 1 passed`); restored → 6/6. Gates (observed
+this fire): lint (`tsc --noEmit`) exit 0; full `npx vitest run` **234 files /
+2592 tests passed** (78.07 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1,088,323 bytes). Security: no credential written, no
+`.env`, no force-push. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+Commit `3ceb673` (this slot). Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` / unverified assertions is still open.
+
+Previous cycle: 2026-10-13 03:06 IST — **WORK SLOT 11 of the
 2026-10-12 → 2026-10-13 window (03:06 IST fire; state `slots_completed: 10`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
 Blueprint deliverable toggle swallowed every server refusal.** The
