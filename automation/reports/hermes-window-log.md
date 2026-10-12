@@ -16738,3 +16738,28 @@ Next Slot:
   - Remaining #13 tail: AutonomousToolsModal write paths, HUDHeader kill-switch,
     SecurityMatrix, filesystem tools.
   - Blocked: real Android E2E (no handset); Deploy (no configured target).
+
+## 2026-10-12T22:41Z — slot 13/16 (WORK)
+
+- Item worked: #13 Zero-fake-success for all tools
+- Status: PARTIAL (continuing — Security Matrix level badge no longer asserts an unobserved level)
+- Tests: targeted securityMatrixLevelBadgeTruth 8 passed / 1 file; full suite 235 files / 2600 tests passed; tsc --noEmit exit 0; build exit 0 (dist/server.cjs 1,088,323 bytes)
+- Commit: 5162428 (docs) on 23487c0 (footer fix) on 5f799ce (header fix)  Push: ok (feature/hermes-full-completion, ef851b6..5162428)
+- Notes / blockers:
+  - `src/components/SecurityMatrixModal.tsx` rendered header `Level {activeLevel}
+    Active` with `activeLevel` seeded to the literal `2`; on a load where
+    `/api/security` never answered it drew "Level 2 Active" while the footer said
+    the state was unavailable. Seeded to `null`; badge now built by
+    `securityMatrixLevelBadge(activeLevel)` (Level N Active only for an observed
+    level, else UNKNOWN). `fetchSecurity` gained the missing `res.ok` check and
+    clears the claim on failure. Both update handlers require `res.ok && data.success`
+    and adopt the confirmed echoed level; both catch blocks resync via `fetchSecurity()`.
+  - Footer took the same fix: the numeric footer line was gated on `securityState`
+    alone and printed "Level null of 4" when a state loaded without a `currentLevel`;
+    now gated on the observed level.
+  - Negative-validated: reintroducing the `useState<1 | 2 | 3 | 4>(2)` seed failed
+    exactly the 2 wiring guards (2 failed | 4 passed); restored -> 6/6, then extended
+    to 8/8 with the footer and fetch-clear guards.
+  - Remaining #13 tail: AutonomousToolsModal write paths, HUDHeader kill-switch,
+    filesystem tools.
+  - Blocked: real Android E2E (no handset); Deploy (no configured target).
