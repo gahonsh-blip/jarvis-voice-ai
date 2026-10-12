@@ -16559,3 +16559,20 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - FS-write tab ab audit-durability flag ko honest info ke roop me dikhata hai; 2 new tests pass, poora suite 2558 pass, lint+build green.
+
+---
+
+## WORK SLOT 9 — 2026-10-13 02:06 IST (window 2026-10-12 → 2026-10-13; state slots_completed 8 before this fire)
+
+Item 13 (Zero-fake-success for all tools) — SocialMediaModal `handleRejectLevel4Approval`.
+Discarded the `/api/social/action` reject reply and unconditionally cleared the staged
+YouTube draft + spoke "rejected and kept offline". Server answers `success:false` on
+durable-write failure / post-not-found / kill switch, leaving the draft `pending_approval`
+on disk. Added `src/utils/hardening/socialActionCommandTruth.ts` (socialRejectOutcome:
+only exact `success:true` counts as recorded) and gated the clear/speak on `outcome.recorded`.
+
+Evidence: `src/tests/socialActionCommandTruth.test.ts` 8 passed; negative-validated
+(stash modal → 3 wiring guards fail, `3 failed | 5 passed`; restored → 8/8).
+Gates: lint exit 0; full vitest 231 files / 2566 tests passed; build exit 0
+(dist/server.cjs 1,088,323 bytes). Commit 644c973 + 437a9c2. Item 13 stays PARTIAL.
+Deploy: NOT_CONFIGURED. E2E: NOT RUN (no handset).
