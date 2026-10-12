@@ -4,7 +4,48 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 00:05 IST — **WORK SLOT 5 of the
+Last cycle: 2026-10-13 00:35 IST — **WORK SLOT 6 of the
+2026-10-12 → 2026-10-13 window (00:35 IST fire; state `slots_completed: 5`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+Telegram `create_social_post` command claimed it had drafted a post while it
+only looked one up (and 500'd when none existed).** In
+`processMobileCommand` the `create_social_post` branch read
+`memoryState.socialPosts.find(p => p.status === 'pending_approval') ||
+socialPosts[0]` and unconditionally answered "📱 *NEW SOCIAL MEDIA POST
+DRAFTED*". It generated nothing, yet the reply asserted a newly created
+draft with an approval keyboard wired to it. With an empty store the
+fallback yielded `undefined`, so `activeDraft.topic` threw and the Telegram
+webhook answered 500 for exactly the command the reply claimed to have
+drafted. Every sibling reports this intent honestly: the `/api/chat` case
+titles the result "Existing Draft Awaiting Approval", and the offline engine
+opens the Social Media Console without claiming a post was created. The
+branch now routes through a new helper
+`src/utils/hardening/mobileSocialDraftTruth.ts`
+(`resolveMobileSocialDraft` / `mobileSocialDraftReply`): a found draft is
+labelled **EXISTING SOCIAL MEDIA DRAFT** and the reply states plainly that no
+new post was created; an empty or malformed store answers a real
+"NO SOCIAL MEDIA DRAFT" notice with **no action target and no approval
+keyboard**, so callbacks can no longer be wired to an `undefined` id. Missing
+topic/platform/content render named placeholders rather than blank labels or
+an empty quoted body. Evidence: `src/tests/mobileSocialDraftTruth.test.ts`
+(**10 passed**) — four data guards pin the pending-preferred / most-recent
+fallback / null-for-empty selection, the existing-draft labelling, the
+no-draft notice, and the placeholder rendering; three source guards assert
+the branch calls the helper, no longer carries the retired
+`botReplyText = \`📱 *NEW SOCIAL MEDIA POST DRAFTED*` literal, drops the
+`activeDraft` fallback, and wires the keyboard only under
+`if (socialDraft.found && socialDraft.draftId)`. Negative-validated —
+reintroducing an `activeDraft` access into the branch failed exactly the
+behavioral source guard (`1 failed | 9 passed`); restored → 10/10. Gates
+(observed this fire): lint (`tsc --noEmit`) exit 0; targeted file 10/10;
+full `npx vitest run` **228 files / 2550 tests passed** (77.67 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1088323 bytes). Security: `.env`
+gitignored, working tree clean, no credential in the diff. E2E: NOT RUN (no
+handset). Deploy: NOT_CONFIGURED. Commit `b504002` (this slot). Item 13 stays
+`PARTIAL` — the long tail of unclassified `success: true` / unverified
+assertions is still open.
+
+Previous cycle: 2026-10-13 00:05 IST — **WORK SLOT 5 of the
 2026-10-12 → 2026-10-13 window (00:05 IST fire; state `slots_completed: 4`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
 Telegram long-polling loop discarded the persist verdict for the

@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 00:35 IST (2026-10-12 19:05 UTC) — window slot 6: the Telegram `create_social_post` command stops claiming it drafted a post
+
+### Fixed
+- **`server.ts` — the `processMobileCommand` `create_social_post` branch answered "📱 *NEW SOCIAL MEDIA POST DRAFTED*" while it only looked up a stored draft.** It read `memoryState.socialPosts.find(p => p.status === 'pending_approval') || socialPosts[0]` and generated nothing, yet the reply asserted a newly created post with an approval keyboard wired to it. With an empty store the fallback yielded `undefined`, so `activeDraft.topic` threw and the Telegram webhook answered 500 for exactly the command the reply claimed to have drafted. Every sibling reports this intent honestly (the `/api/chat` case titles the result "Existing Draft Awaiting Approval"; the offline engine opens the Social Media Console without claiming a creation). The branch now routes through a new helper `src/utils/hardening/mobileSocialDraftTruth.ts` (`resolveMobileSocialDraft` / `mobileSocialDraftReply`): a found draft is labelled **EXISTING SOCIAL MEDIA DRAFT** with an explicit "no new post created" line, and an empty or malformed store answers a real "NO SOCIAL MEDIA DRAFT" notice with **no action target and no approval keyboard**, so callbacks can no longer be wired to an `undefined` id. Missing topic/platform/content render named placeholders.
+
+### Tests
+- `src/tests/mobileSocialDraftTruth.test.ts`: 10 cases — four data guards pin the pending-preferred / most-recent fallback / null-for-empty selection, existing-draft labelling, the no-draft notice, and placeholder rendering; three source guards assert the branch calls the helper, no longer carries the retired `NEW SOCIAL MEDIA POST DRAFTED` literal, drops the `activeDraft` fallback, and wires the keyboard only under `if (socialDraft.found && socialDraft.draftId)`. Negative-validated: reintroducing an `activeDraft` access fails exactly the behavioral source guard (`1 failed | 9 passed`); restored → 10/10. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 228 files / 2550 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1088323 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-13 00:05 IST (2026-10-12 18:35 UTC) — window slot 5: the Telegram polling loop stops discarding the processed-update persist verdict
 
 ### Fixed
