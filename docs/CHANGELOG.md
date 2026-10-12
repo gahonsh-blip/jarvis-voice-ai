@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 02:36 IST (2026-10-12 21:06 UTC) — window slot 10: the App Android approval callbacks stop announcing an answer or a delivery the bridge never confirmed
+
+### Fixed
+- **`src/App.tsx` — `handleAnswerMobileCall` and `handleReplyMobileMessage` discarded the `androidBridgeEngine` verdict, spoke a flat success line ("कॉल उठा ली गई है" / "संदेश ... सफलतापूर्वक भेज दिया गया है") and unconditionally cleared the pending-approval card.** The engine is deliberately honest: `executeCallAnswer()` returns `ANSWER_DISPATCHED` with `success:false` (only a device ack promotes it to `VERIFIED`) and refuses with `CALL_ANSWER_UNSUPPORTED`, `BLOCKED_EMERGENCY_STOP` or `MOBILE_NOT_CONNECTED`; `executeMessageReply()` mirrors this. The App therefore claimed a completed answer or delivery on the three easiest failures — no connected device, missing telecom role/permission, or an active emergency stop — and hid the approval card on those refusals. Both handlers now speak the engine verdict and clear the card only when the engine actually consumed the event. (`handleDeclineMobileCall` already read the engine result.)
+
+### Added
+- `src/utils/hardening/mobileBridgeSpokenOutcomeTruth.ts`: `mobileCallAnswerOutcome(result)` and `mobileMessageReplyOutcome(result)` read the engine's real `status`, prefer the engine's own Hindi notice (inline reply vs hand-off to the app) over a generic line, treat `ANSWER_DISPATCHED` / `REPLY_DISPATCHED` as unconfirmed hand-offs (`confirmed: false`), and set `consumed: true` only for statuses the engine processed. Malformed bodies fall back to an honest refusal line.
+
+### Tests
+- `src/tests/mobileBridgeSpokenOutcomeTruth.test.ts`: 12 cases driven by a real `AndroidBridgeManager` — dispatched-vs-refused call answer, dispatch fallback line, emergency-stop refusal leaves the card at `AWAITING_APPROVAL`, disconnected refusal, inline-reply dispatch spoken as delivery-unconfirmed, missing-message refusal, malformed bodies fall back honestly, an English-only reason is passed through, and two static guards assert each App handler reads the verdict and gates `setPendingMobileEvent(null)` on `outcome.consumed`. Negative-validated: `git stash` of `src/App.tsx` failed exactly the 2 wiring guards (`2 failed | 10 passed`); restored → 12/12. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 232 files / 2578 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,088,323 bytes).
+
+---
+
+
 ## [Unreleased] - 2026-10-13 02:06 IST (2026-10-12 20:36 UTC) — window slot 9: the social reject handler stops announcing a rejection the server never confirmed
 
 ### Fixed

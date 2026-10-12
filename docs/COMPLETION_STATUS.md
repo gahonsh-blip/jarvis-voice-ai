@@ -4,7 +4,49 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 02:06 IST — **WORK SLOT 9 of the
+Last cycle: 2026-10-13 02:36 IST — **WORK SLOT 10 of the
+2026-10-12 → 2026-10-13 window (02:36 IST fire; state `slots_completed: 9`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+App-level Android approval callbacks reported done outcomes the bridge
+engine never confirmed.** `handleAnswerMobileCall`, `handleReplyMobileMessage`
+(and `handleDeclineMobileCall`) in `src/App.tsx` called
+`androidBridgeEngine.executeCallAnswer()` / `executeMessageReply(...)` and
+discarded the returned verdict, then spoke a flat success line — "कॉल उठा ली
+गई है" / "संदेश ... सफलतापूर्वक भेज दिया गया है" — and unconditionally
+cleared the pending-approval card. The engine is deliberately honest
+(`AndroidBridgeManager.executeCallAnswer` returns `ANSWER_DISPATCHED` with
+`success:false` and only a device ack promotes it to `VERIFIED`; it refuses
+with `CALL_ANSWER_UNSUPPORTED`, `BLOCKED_EMERGENCY_STOP` or
+`MOBILE_NOT_CONNECTED`), so the App claimed an answer or a delivery on the
+three easiest failures — no connected device, missing telecom role/permission,
+or an active emergency stop — and hid the approval card on those refusals. New
+`src/utils/hardening/mobileBridgeSpokenOutcomeTruth.ts`
+(`mobileCallAnswerOutcome`, `mobileMessageReplyOutcome`) reads the engine's
+real `status`, prefers the engine's own Hindi notice (an inline reply vs a
+hand-off to the app) over any generic line, treats `ANSWER_DISPATCHED` /
+`REPLY_DISPATCHED` as unconfirmed hand-offs, and marks `consumed: true` only
+when the engine actually processed the event. Both handlers now speak the
+verdict and clear the card only inside `outcome.consumed`. (`handleDecline…`
+already read the engine result.) Evidence:
+`src/tests/mobileBridgeSpokenOutcomeTruth.test.ts` (**12 passed**), driven by a
+real `AndroidBridgeManager`: dispatched-vs-refused call answer, dispatch
+fallback line, emergency-stop refusal leaves the card at `AWAITING_APPROVAL`,
+disconnected refusal, inline-reply dispatch is spoken as delivery-unconfirmed,
+missing-message refusal, malformed bodies (`null` / `undefined` / `{}` /
+`'ok'` / `42` / `{ success: 'true' }`) fall back to an honest refusal, an
+English-only reason is passed through, and two static guards assert each App
+handler reads the verdict and gates `setPendingMobileEvent(null)` on
+`outcome.consumed`. **Negative-validated** — `git stash` of `src/App.tsx`
+failed exactly the 2 wiring guards (`2 failed | 10 passed`); restored → 12/12.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted
+`mobileBridgeSpokenOutcomeTruth` **12 passed / 1 file**; full `npx vitest run`
+**232 files / 2578 tests passed** (77.57 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1,088,323 bytes). Security: no credential written, no
+`.env`, no force-push. E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+Commit `2042896` (this slot). Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` / unverified assertions is still open.
+
+Previous cycle: 2026-10-13 02:06 IST — **WORK SLOT 9 of the
 2026-10-12 → 2026-10-13 window (02:06 IST fire; state `slots_completed: 8`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
 SocialMediaModal *reject* handler reported a rejection the server never
