@@ -54,6 +54,7 @@ import {
   youtubeCanPublishMeasured,
 } from '../utils/socialPublishHonesty';
 import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import { socialRejectOutcome } from '../utils/hardening/socialActionCommandTruth';
 
 interface Props {
   isOpen: boolean;
@@ -443,7 +444,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   const handleRejectLevel4Approval = async () => {
     if (!ytStagedPost) return;
     try {
-      await fetch('/api/social/action', {
+      const res = await fetch('/api/social/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -451,11 +452,32 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
           action: 'reject',
         }),
       });
-      setYtStagedPost(null);
-      fetchPosts();
-      onSpeak('YouTube video draft rejected and kept offline, Sir.');
+      // Only clear the draft and announce a rejection when the server confirmed
+      // it was recorded. A failed write leaves the draft pending on disk, so
+      // hiding it here and claiming a rejection is exactly the fake success
+      // this hardening pass removes.
+      const data = await res.json().catch(() => null);
+      const outcome = socialRejectOutcome(data);
+      if (outcome.recorded) {
+        setYtStagedPost(null);
+        fetchPosts();
+        onSpeak('YouTube video draft rejected and kept offline, Sir.');
+      } else {
+        setYtUploadResult({
+          success: false,
+          message: outcome.message,
+          errorReason: 'The rejection was not confirmed as recorded; the draft is still awaiting authorization.',
+        });
+        fetchPosts();
+        onSpeak(outcome.message);
+      }
     } catch (err) {
       console.warn('Reject failed:', err);
+      setYtUploadResult({
+        success: false,
+        message: 'Reject request could not reach the server.',
+        errorReason: 'Network error during rejection.',
+      });
     }
   };
 
