@@ -16389,3 +16389,31 @@ Commit: c28a15f (docs) / 133f5a9 (fix), branch feature/hermes-full-completion.
 State: slot 3 persisted on automation/hermes-state (fe6c875).
 
 Next slot: continue item #13 long tail — server.ts / server_tools.ts `success: true` sites and the SourceTruthPanel's missing per-template generation / next-fire fields.
+
+
+---
+
+## WORK SLOT 4 — 2026-10-12 23:35 IST (2026-10-12 18:06 UTC)
+
+Item #13 `Zero-fake-success for all tools` — **the scheduled GitHub nightly check
+logged its start before the scan had run.** `server.ts` (block 5 of
+`checkAndRunSchedulerJobs`) pushed "Started Nightly Repository Check (03:00 AM IST)"
+the moment the per-day marker landed, then discarded `recordNightlyRun(result.record)`
+and the `addAuditLog(...)` return as bare statements. New `nightlyRunLogLine(record,
+durability)` in `src/utils/github/nightlyAuditTruth.ts` composes the line after the
+check and reports only observed facts (receipt outcome, scan/unreachable/failing-CI/
+planned counts, plus a named not-written caveat). The scheduled tick captures both
+verdicts; the manual nightly route surfaces the same line and verdicts.
+
+Tests: `src/tests/nightlyAuditTruth.test.ts` 14 passed (up from 6).
+Negative-validated: old "Started Nightly Repository Check" literal fails exactly the
+new source guard (1 failed | 13 passed); restored -> 14/14.
+Lint exit 0; full `npx vitest run` 225 files / 2530 tests passed (77.28 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1086366 bytes).
+E2E: NOT RUN. Deploy: NOT_CONFIGURED. Security: `.env` gitignored, clean tree.
+
+Commit d859977 (fix), 14bb31c (docs), branch feature/hermes-full-completion.
+State: slot 4 persisted on automation/hermes-state (c12a19c).
+
+Next slot: continue item #13 long tail — Computer Operator owner DENIAL
+audited-vs-actual, then Telephony Hub fake sample contacts.
