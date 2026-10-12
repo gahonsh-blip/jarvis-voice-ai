@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 02:06 IST (2026-10-12 20:36 UTC) — window slot 9: the social reject handler stops announcing a rejection the server never confirmed
+
+### Fixed
+- **`src/components/SocialMediaModal.tsx` — `handleRejectLevel4Approval` discarded the `/api/social/action` reply and unconditionally cleared the staged YouTube draft and spoke "YouTube video draft rejected and kept offline, Sir."** The server does not always reject successfully: `executeApprovedAction` (`server.ts`) returns `{ success: false }` when the rejection could not be written to durable storage (read-only volume / full disk), when the target post is not found, or when the kill switch is active. On those the draft stays `pending_approval` on disk — the panel hid a draft the next load still finds and announced a rejection that was never recorded. The handler now routes the response through a new truth helper and clears the draft / speaks the rejection only when the rejection was confirmed recorded.
+
+### Added
+- `src/utils/hardening/socialActionCommandTruth.ts`: `socialRejectOutcome(data)` treats only an exact `success: true` as a recorded rejection (a non-boolean truthy value is not a confirmation the server contract guarantees), surfaces the server `message` when present, and otherwise returns an honest fallback line. A non-recorded reply is rendered as a red `setYtUploadResult` banner and the draft is left visible.
+
+### Tests
+- `src/tests/socialActionCommandTruth.test.ts`: 8 cases — five exercise `socialRejectOutcome` directly (`success:true` with/without message, `success:false` with/without message, and `null`/`undefined`/`{}`/`'ok'`/`42`/`{ success: 'true' }` malformed bodies); three source guards assert the handler reads the response, clears the draft only inside `outcome.recorded`, and never announces "rejected and kept offline" outside that branch. Negative-validated: `git stash` of `SocialMediaModal.tsx` failed exactly the 3 wiring guards (`3 failed | 5 passed`); restored → 8/8. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 231 files / 2566 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,088,323 bytes).
+
+---
+
+
 ## [Unreleased] - 2026-10-13 01:35 IST (2026-10-12 20:05 UTC) — window slot 8: the filesystem tab stops reporting a write with an unpersisted audit trail as a clean success
 
 ### Fixed

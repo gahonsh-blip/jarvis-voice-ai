@@ -4,7 +4,48 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 01:35 IST — **WORK SLOT 8 of the
+Last cycle: 2026-10-13 02:06 IST — **WORK SLOT 9 of the
+2026-10-12 → 2026-10-13 window (02:06 IST fire; state `slots_completed: 8`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
+SocialMediaModal *reject* handler reported a rejection the server never
+confirmed.** `handleRejectLevel4Approval`
+(`src/components/SocialMediaModal.tsx`) issued `POST /api/social/action` with
+`action: 'reject'` and then discarded the reply entirely: it cleared the
+staged YouTube draft from the panel and spoke "YouTube video draft rejected
+and kept offline, Sir." without reading the response. The server does not
+always reject successfully — `executeApprovedAction` (`server.ts`) answers
+`{ success: false }` when the rejection could not be written to durable
+storage (read-only volume / full disk), when the target post is not found, or
+when the kill switch is active. On all of those the draft stays
+`pending_approval` on disk, so the panel hid a draft the operator's next load
+still finds and announced a rejection that was never recorded. New
+`src/utils/hardening/socialActionCommandTruth.ts` (`socialRejectOutcome`)
+treats only an exact `success: true` as a recorded rejection (a non-boolean
+truthy value is not a confirmation the contract guarantees) and otherwise
+surfaces the server `message` or an honest fallback line. The handler now
+clears the draft and speaks the rejection only inside the `outcome.recorded`
+branch; a non-recorded reply renders a red banner via `setYtUploadResult` and
+the draft is left visible. The sibling `handleAction` (`data.success` check)
+was already honest. Evidence:
+`src/tests/socialActionCommandTruth.test.ts` (**8 passed**) — five cases
+exercise `socialRejectOutcome` directly (`success:true` with/without message,
+`success:false` with/without message, and `null` / `undefined` / `{}` /
+`'ok'` / `42` / `{ success: 'true' }` malformed bodies), and three source
+guards assert the handler reads the response (`await res.json()` +
+`socialRejectOutcome(`), clears the draft only inside `outcome.recorded`, and
+never speaks "rejected and kept offline" outside that branch.
+**Negative-validated** — `git stash` of `SocialMediaModal.tsx` failed exactly
+the 3 wiring guards (`3 failed | 5 passed`); restored → 8/8. Gates (observed
+this fire): lint (`tsc --noEmit`) exit 0; targeted
+`socialActionCommandTruth` **8 passed / 1 file**; full `npx vitest run`
+**231 files / 2566 tests passed** (78.05 s, 0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1,088,323 bytes). Security: `.env` gitignored, working
+tree clean, no credential in the diff. E2E: NOT RUN (no handset/YouTube
+credential). Deploy: NOT_CONFIGURED. Commit `644c973` (this slot). Item 13
+stays `PARTIAL` — the long tail of unclassified `success: true` / unverified
+assertions is still open.
+
+Previous cycle: 2026-10-13 01:35 IST — **WORK SLOT 8 of the
 2026-10-12 → 2026-10-13 window (01:35 IST fire; state `slots_completed: 7`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **the
 AutonomousToolsModal *filesystem* tab read a write with an unpersisted audit
