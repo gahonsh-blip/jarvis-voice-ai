@@ -16452,3 +16452,38 @@ State: slot 5 persisted on automation/hermes-state (e8e4906).
 
 Next slot: continue item #13 long tail — Computer Operator owner DENIAL audited-vs-actual,
 then residual `profilePersisted` / social-publish success assertions.
+
+---
+
+## Slot 6 — 2026-10-13 00:35 IST (WORK SLOT)
+
+Item 13 (`Zero-fake-success for all tools`). Fixed the Telegram
+`create_social_post` branch claiming it had drafted a post while it only
+looked one up — and 500'ing when none existed.
+
+- `server.ts` `processMobileCommand` `create_social_post` answered
+  "NEW SOCIAL MEDIA POST DRAFTED" from a lookup
+  (`socialPosts.find(p => p.status === 'pending_approval') || socialPosts[0]`),
+  generating nothing. Empty store -> `activeDraft.topic` threw -> webhook 500.
+- New helper `src/utils/hardening/mobileSocialDraftTruth.ts`
+  (`resolveMobileSocialDraft` / `mobileSocialDraftReply`): found draft labelled
+  EXISTING, empty store answers a NO SOCIAL MEDIA DRAFT notice with no action
+  target and no approval keyboard.
+- Test `src/tests/mobileSocialDraftTruth.test.ts` — 10 passed.
+
+Evidence:
+- Targeted: 10/10. Negative-validated (reintroduced `activeDraft` -> behavioral
+  source guard failed `1 failed | 9 passed`; restored -> 10/10).
+- Lint (`tsc --noEmit`) exit 0.
+- Full `npx vitest run`: 228 files / 2550 tests passed (77.67 s, 0 failed).
+- `npm run build` exit 0 (`dist/server.cjs` 1088323 bytes).
+- Security: `.env` gitignored, tree clean, no credential in diff.
+
+E2E: NOT RUN (no handset). Deploy: NOT_CONFIGURED.
+
+Commit b504002 (fix+test), 623e5b7 (docs), branch feature/hermes-full-completion.
+State: slot 6 persisted on automation/hermes-state.
+
+Next slot: continue item #13 long tail — Computer Operator owner DENIAL
+audited-vs-actual, then residual `profilePersisted` / social-publish success
+assertions.
