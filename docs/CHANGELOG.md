@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-12 22:05 IST (2026-10-12 16:42 UTC) — window slot 3: the Proactive Routines panel stops claiming a Telegram delivery and a scheduled cron broadcast it never measured
+
+### Fixed
+- **`src/components/ProactiveRoutinesModal.tsx` — the header asserted "Self-initiating 4-times daily intelligence briefings delivered directly to your Android phone via Telegram", and the delivery strip asserted "Next automated cron broadcast: Scheduled at time slot" as a constant.** `/api/routines` does not pin a next-fire time, and the strings rendered even when no Telegram chat was connected. The header now states the four templates are shown with delivery read live from the server; the strip derives from `nextRoutineCronLabel`.
+- **`src/utils/checksumTruth.ts` — added `nextRoutineCronLabel(telegramLive, slotLabel)`**: `UNKNOWN` before the status query, `NONE (Telegram push not connected)` when the channel is down, and the named slot only when the push is `live-connected`.
+
+### Tests
+- `src/tests/fabricatedStatusClaims.test.ts`: +2 cases (now 10) — the helper's UNKNOWN / NONE / live branches, and source guards that both old strings are gone and the modal calls `nextRoutineCronLabel`. Negative-validated: reintroducing the old "Scheduled at time slot" literal fails exactly the new modal guard (`1 failed | 9 passed`); restored → 10/10. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 225 files / 2522 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1084956 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-12 21:35 IST (2026-10-12 16:05 UTC) — window slot 2: the Computer Operator denial announcement stops claiming an audit record that was never written
 
 ### Fixed

@@ -4,7 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-12 21:35 IST — **WORK SLOT 2 of the
+Last cycle: 2026-10-12 22:05 IST — **WORK SLOT 3 of the
+2026-10-12 → 2026-10-13 window (22:05 IST fire).** Item 13
+(`Zero-fake-success for all tools`) — **the Proactive Routines panel
+printed two unconditional delivery claims.** The modal header asserted
+"Self-initiating 4-times daily intelligence briefings delivered directly
+to your Android phone via Telegram", and the delivery strip asserted
+"Next automated cron broadcast: Scheduled at time slot" as a constant.
+Neither string is backed by anything the panel measures: `/api/routines`
+does not pin a next-fire time, and a server with no connected Telegram
+chat still rendered both as fact. The header now states there are four
+daily briefing templates with delivery "shown below, read live from the
+server", and the strip derives from a new helper
+`nextRoutineCronLabel(telegramLive, slotLabel)` — `UNKNOWN` before the
+status query reaches the screen, `NONE (Telegram push not connected)`
+when the channel is down, and only names the slot when the push is
+`live-connected`. Evidence: `src/tests/fabricatedStatusClaims.test.ts`
+(**10 passed**, up from 8) — two new guards pin the helper's UNKNOWN /
+NONE / live branches and assert both old strings are gone and the modal
+calls `nextRoutineCronLabel`. Negative-validated — reintroducing the old
+"Scheduled at time slot" literal failed exactly the new modal guard
+(`1 failed | 9 passed`); restored → 10/10. Gates (observed this fire):
+lint (`tsc --noEmit`) exit 0; targeted file 10/10; full `npx vitest run`
+**225 files / 2522 tests passed** (77.47 s, 0 failed); `npm run build`
+exit 0 (`dist/server.cjs` 1084956 bytes). Security: `.env` gitignored,
+working tree clean, no credential in the diff. E2E: NOT RUN (no
+browser/handset). Deploy: NOT_CONFIGURED. Commit `133f5a9`. Item 13 stays
+`PARTIAL` — the long tail of unclassified `success: true` /
+discarded-result sites remains, and the SourceTruthPanel does not surface
+per-template generation time or next-fire time.
+
+Last cycle (previous slot): 2026-10-12 21:35 IST — **WORK SLOT 2 of the
 2026-10-12 → 2026-10-13 window (21:35 IST fire).** Item 13
 (`Zero-fake-success for all tools`) — **an owner DENIAL of a Computer
 Operator action was announced as audited while the denial-audit write
