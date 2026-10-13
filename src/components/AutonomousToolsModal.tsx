@@ -66,6 +66,11 @@ import {
   webFetchDisplayTitle,
   webFetchSuccessNotice,
 } from '../utils/hardening/webFetchDisplayTruth';
+import {
+  githubStatusBadge,
+  githubStatusMessage,
+  githubStatusTone,
+} from '../utils/hardening/githubStatusDisplayTruth';
 
 interface AutonomousToolsModalProps {
   isOpen: boolean;
@@ -108,6 +113,9 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
 
   // GitHub State
   const [githubStatus, setGithubStatus] = useState<any>(null);
+  // False until `/api/tools/github/status` actually answers. The banner must not
+  // draw "NOT CONNECTED" / "Inspecting..." from the initial `null`.
+  const [githubStatusObserved, setGithubStatusObserved] = useState(false);
   const [githubRepos, setGithubRepos] = useState<any[]>([]);
   const [issueRepo, setIssueRepo] = useState<string>('');
   const [issueTitle, setIssueTitle] = useState<string>('');
@@ -399,11 +407,25 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   // 5. GitHub Tools
   const fetchGithubData = async () => {
     try {
-      const [statusRes, reposRes] = await Promise.all([
-        fetch('/api/tools/github/status', { method: 'POST' }).then((r) => r.json()),
-        fetch('/api/tools/github/repos', { method: 'POST' }).then((r) => r.json()),
-      ]);
-      setGithubStatus(statusRes);
+      const statusRes = await fetch('/api/tools/github/status', { method: 'POST' });
+      // A non-OK status response is not a status: mark it unobserved so the
+      // banner reads UNKNOWN rather than a claim drawn from a failed probe.
+      if (!statusRes.ok) {
+        setGithubStatusObserved(false);
+        setGithubStatus(null);
+      } else {
+        const statusData = await statusRes.json();
+        setGithubStatus(statusData);
+        setGithubStatusObserved(true);
+      }
+    } catch {
+      // The status endpoint could not be reached. Report it as unobserved, not
+      // as "NOT CONNECTED".
+      setGithubStatusObserved(false);
+      setGithubStatus(null);
+    }
+    try {
+      const reposRes = await fetch('/api/tools/github/repos', { method: 'POST' }).then((r) => r.json());
       setGithubRepos(reposRes.repos || []);
     } catch {
       // safe fallback
@@ -1361,7 +1383,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
               {/* Status Banner */}
               <div
                 className={`p-4 rounded-xl border flex items-center justify-between font-mono text-xs ${
-                  githubStatus?.connected
+                  githubStatusTone(githubStatusObserved, githubStatus?.connected) === 'connected'
                     ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
                     : 'bg-amber-950/60 border-amber-500/40 text-amber-200'
                 }`}
@@ -1378,20 +1400,22 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                     <GitFork className="w-6 h-6" />
                   )}
                   <div>
-                    <span className="font-bold">{githubStatus?.message || 'Inspecting GitHub connection...'}</span>
-                    {githubStatus?.publicRepos !== undefined && (
+                    <span className="font-bold">
+                      {githubStatusMessage(githubStatus?.message, githubStatusObserved)}
+                    </span>
+                    {githubStatusObserved && githubStatus?.publicRepos !== undefined && (
                       <p className="text-[10px] text-slate-400">Public Repos: {githubStatus.publicRepos}</p>
                     )}
                   </div>
                 </div>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                    githubStatus?.connected
+                    githubStatusTone(githubStatusObserved, githubStatus?.connected) === 'connected'
                       ? 'bg-emerald-900 border border-emerald-500 text-emerald-300'
                       : 'bg-amber-900 border border-amber-500 text-amber-300'
                   }`}
                 >
-                  {githubStatus?.connected ? 'AUTHENTICATED' : 'NOT CONNECTED'}
+                  {githubStatusBadge(githubStatusObserved, githubStatus?.connected)}
                 </span>
               </div>
 
