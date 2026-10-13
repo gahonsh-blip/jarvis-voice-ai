@@ -17090,3 +17090,61 @@ browser/handset). Security: `.env` ignored, tree clean, no real secret in the
 diff. Deploy: NOT_CONFIGURED. Commit `a451643` (+ docs `9bb18cc`). Item 13
 stays `PARTIAL` — the long tail of unclassified `success: true` /
 discarded-`persistMemory()` sites remains.
+
+---
+
+## Slot 11 — 2026-10-14 03:05 IST (WORK SLOT)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:05
+Window date: 2026-10-13   Window slots completed so far: 11
+
+Completed:
+- #13 Zero-fake-success for all tools — LinkedIn connected-member banner no
+  longer fabricates a member URN. Evidence: `src/utils/hardening/socialAccountIdTruth.ts`
+  adds `linkedInAuthorUrnLabel()` + `AUTHOR_URN_NOT_RECORDED_LABEL`;
+  `src/components/SocialMediaModal.tsx:1995` renders via the helper;
+  `src/tests/socialAccountIdTruth.test.ts` "Item 13 — the LinkedIn banner never
+  fabricates a member URN" (5 cases + source guard). Targeted: 18 passed.
+  Negative-validated: reverting the component expression failed exactly the new
+  guard (1 failed | 17 passed); restored → 18/18.
+
+Bugs Found:
+- oauth.authorUrn || urn:li:person:(oauth.memberSub || 'self') rendered
+  `urn:li:person:self` when neither the author URN nor member sub was recorded —
+  a valid-looking member URN no provider had returned.
+
+Bugs Fixed:
+- Routed the Author URN line through `linkedInAuthorUrnLabel`, which emits the
+  recorded URN, else a URN from a real member sub, else an honest "not recorded"
+  label. Verified by negative validation + 18/18 targeted tests.
+
+Tests:    237 files / 2647 passed (0 failed; 76.88 s) via `npx vitest run`
+Lint:     `tsc --noEmit` exit 0
+Build:    exit 0 (`dist/server.cjs` 1088751 bytes)
+E2E:      NOT RUN (no browser/handset)
+Security: `.env` ignored, tree clean, no real secret in the diff
+
+Documentation: docs/COMPLETION_STATUS.md (slot 11 "Last cycle")
+Branch:  feature/hermes-full-completion
+Commit:  f601498
+Push:    succeeded (origin/feature/hermes-full-completion)
+
+PR:         #8 (already open) — state branch pushed, no new PR this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target in this sandbox
+
+Blocked:
+- Real Android E2E / screenshot — requires a physical handset (NOT_AVAILABLE)
+- Social live dispatch — requires provider credentials (PERMISSION_REQUIRED)
+
+Human Approval Required:
+- PR #8 merge to main (owner-gated)
+- CI runner provisioning on PR #8 (runner_id 0, 0 steps) — external to repo
+
+Next Slot:
+- #13 continues — the next unclassified `success: true` / discarded
+  `persistMemory()` site.
+
+हिंदी सारांश (एक पंक्ति):
+- LinkedIn कनेक्टेड बैनर अब कोई नकली member URN नहीं दिखाता; 2647 टेस्ट पास।
