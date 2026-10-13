@@ -28,7 +28,8 @@ new tests fail**, then restoring the fix (30/30). Items 13 and 26 stay
 `PARTIAL` (item 26's social automation remains an ongoing honesty sweep).
 Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted `npx vitest
 run src/tests/socialPublishHonesty.test.ts` **1 file / 30 tests passed**; full
-`npx vitest run` and `npm run build` run below. E2E: NOT RUN (no
+`npx vitest run` **236 files / 2611 tests passed** (78.24 s, 0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1,088,323 bytes). E2E: NOT RUN (no
 browser/handset). Deploy: NOT_CONFIGURED. Main **NOT MERGED** (awaiting human
 approval).
 
