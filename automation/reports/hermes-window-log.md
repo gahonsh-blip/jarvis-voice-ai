@@ -17182,3 +17182,42 @@ Documentation: docs/COMPLETION_STATUS.md (slot 12 "Last cycle")
 Branch:  feature/hermes-full-completion
 Commit:  354e9e3
 Push:    succeeded (origin/feature/hermes-full-completion)
+
+---
+
+## Slot — 2026-10-14 04:05 IST (WORK SLOT 13 of the 2026-10-13 → 2026-10-14 window)
+
+Completed:
+- #13 Zero-fake-success for all tools — closed the telephony transcript-heading
+  fake-success. `src/components/TelephonyHubModal.tsx` rendered the literal
+  heading `Complete Verified Transcript (N turns)`; nothing in the capture path
+  verifies a turn (agent turns = scripted greeting / model-authored reply through
+  the browser synth; caller/callee turns = browser speech recognition; no
+  provider, confidence or speaker check). Heading now from
+  `callTranscriptHeadingLabel()` in `src/utils/hardening/callSummaryTruth.ts`
+  (names the turns "recorded", reports an unmeasured count explicitly, never says
+  "verified"), with `TRANSCRIPT_NOT_VERIFIED_NOTE` beneath. Evidence: 5 new cases
+  in `src/tests/callSummaryTruth.test.ts`; file 54 passed.
+
+In Progress:
+- #13 stays PARTIAL — long tail of unclassified `success: true` sites remains.
+
+Bugs Found: TelephonyHubModal asserted a verified transcript with no verification.
+Bugs Fixed: heading now truth-derived. Negative-validated — restoring the
+`Complete Verified Transcript` literal failed exactly the two new source guards
+(`2 failed | 52 passed`); restored → 54/54.
+
+Tests: 2655 passed (237 files) — full `npx vitest run`. Targeted `callSummaryTruth`
+54 passed.
+Lint: `tsc --noEmit` exit 0.
+Build: `npm run build` exit 0; `dist/server.cjs` 1,089,856 bytes.
+E2E: NOT RUN (no handset / no live provider credentials).
+Security: `.env` git-ignored (`.gitignore:4`); tree clean; no secret in the diff.
+
+Documentation: docs/COMPLETION_STATUS.md (slot 13 "Last cycle"), docs/CHANGELOG.md.
+Branch:  feature/hermes-full-completion
+Commit:  4c53f8a
+Push:    succeeded (origin/feature/hermes-full-completion)
+State:   automation/hermes-state (9a00bae, slots_completed 13, finalized false)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:  NOT_CONFIGURED — no deployment target in this environment.
