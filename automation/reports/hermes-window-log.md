@@ -16927,3 +16927,44 @@ clean; credential-pattern scan of the branch diff matched nothing; no
   origin/feature/hermes-full-completion. State pushed to
   origin/automation/hermes-state (`a3fc873`, slots_completed=4).
 - PR #8 open. Main: NOT MERGED — awaiting human approval.
+
+---
+
+## Slot 5 — 2026-10-13 23:06 IST (WORK) · window date 2026-10-13 · slots completed: 5
+
+Item #13 `Zero-fake-success for all tools` (PARTIAL — long-tail audit).
+
+**Fixed.** `src/components/AndroidPermissionCenter.tsx` — the "Grant All & Pair"
+button reported `'All Android permissions set to GRANTED & Testbed paired'`.
+The component imports **only** `simulatedAndroidAdapter`; `RealAndroidBridgeAdapter`
+/ `realAndroidAdapter` is never constructed here, so `handleGrantAll` →
+`simulatedAndroidAdapter.connect()` registers the `[SIMULATION_ONLY] Android
+Virtual Testbed` and negotiates `LIMITED_CAPABILITY` — no handset is involved.
+On a screen whose whole purpose is hardware truth, "Testbed paired" reads as a
+live device connection. The message now names the simulation and surfaces the
+negotiated status: `Permissions set to GRANTED. Simulation testbed paired —
+status LIMITED_CAPABILITY (no live handset connected).` A refused settings write
+keeps the honest `PARTIAL: permissions changed in memory only …` wording.
+
+**Evidence.** `src/tests/androidPermissionCenterTruth.test.ts` — the handler-body
+helper now bounds each handler at its real closing `};` (the old fixed 900-char
+slice truncated the grown `handleGrantAll`), and a new `describe` block pins (a)
+the component imports only `simulatedAndroidAdapter`, (b) no bare `Testbed
+paired` claim remains, and (c) the message names the simulation, the negotiated
+status, and `no live handset connected`. Negative-validated: restoring only the
+old literal failed exactly 2 of the new guards (`2 failed | 5 passed`); restored
+→ 7/7.
+
+**Gates (observed).** Lint `tsc --noEmit` exit 0. Targeted 1 file / 7 passed.
+Full `npx vitest run` 236 files / 2621 tests passed (76.72 s, 0 failed). Build
+exit 0, `dist/server.cjs` 1088323 bytes. E2E: NOT RUN (no browser/handset).
+Deploy: NOT_CONFIGURED.
+
+**Security.** `git check-ignore -v .env` → `.gitignore:4:.env`. Working tree
+clean; credential-pattern scan of this slot's range (`ff17589..HEAD`) matched
+nothing; no `node_modules`/`dist` staged.
+
+- Commits: `5947074` (fix) · `034bbec` (docs). Both pushed to
+  origin/feature/hermes-full-completion. State pushed to
+  origin/automation/hermes-state (`3d431b6`, slots_completed=5).
+- PR #8 open. Main: NOT MERGED — awaiting human approval.
