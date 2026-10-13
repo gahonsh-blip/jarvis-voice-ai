@@ -4,7 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 23:36 IST — **WORK SLOT 6 of the
+Last cycle: 2026-10-14 00:36 IST — **WORK SLOT 7 of the
+2026-10-13 → 2026-10-14 window (00:35 IST fire; state `slots_completed: 6`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
+real fake-success site: the dashboard geolocation snippet defaulted an unknown
+coordinate source to a live GPS fix.** `DashboardMapSnippet.tsx` destructured
+`source = 'live'`, so any caller that did not pass the provenance prop — and any
+future caller that forgot to — rendered as a device GPS reading: the radar pin
+fell through to the `CURRENT FIX` label, the badge read live, and every helper
+(`locationSourceLabel`, `accuracyDisplay`) received a non-null source it had not
+observed. The unknown default is now `null`, which the shared helpers already
+render as `NO FIX`. `App.tsx` was already passing the real `userCoordsSource`,
+so no live behaviour changed; this closes the prop's unsafe default. Guarded by a
+new case in `src/tests/locationServicesTruth.test.ts` (18 in the file) that pins
+`source = null` and the absence of the `'live'` default. Negative-validated —
+restoring only `source = 'live'` failed exactly 1 of the 18 (`1 failed | 17
+passed`); restored → 18/18. Gates (observed this fire): lint (`tsc --noEmit`)
+exit 0; targeted 1 file / 18 passed; full `npx vitest run`
+**236 files / 2627 tests passed** (0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1.0mb). E2E: NOT RUN (no browser/handset). Deploy:
+NOT_CONFIGURED. Commit `272fecf`. Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous slot): 2026-10-13 23:36 IST — **WORK SLOT 6 of the
 2026-10-13 → 2026-10-14 window (23:36 IST fire; state `slots_completed: 5`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
 real fake-success site: the post-call HUD asserted "Call concluded normally."
