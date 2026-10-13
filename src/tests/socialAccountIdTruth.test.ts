@@ -8,6 +8,8 @@ import {
   connectedLinkedInIdentity,
   connectedYouTubeChannelId,
   linkedInAuthorUrnLabel,
+  resolveLinkedInAuthorUrn,
+  LEGACY_LINKEDIN_SELF_URN,
   AUTHOR_URN_NOT_RECORDED_LABEL,
   ACCOUNT_NAME_NOT_RETURNED_LABEL,
   CHANNEL_ID_NOT_RECORDED_LABEL,
@@ -184,3 +186,39 @@ describe('Item 13 — the LinkedIn banner never fabricates a member URN', () => 
     expect(src).toContain('linkedInAuthorUrnLabel(oauth.authorUrn, oauth.memberSub)');
   });
 });
+
+describe('Item 13 — the LinkedIn publish path refuses an unresolved author', () => {
+  it('resolves the author URN from a recorded URN, else a real member sub', () => {
+    expect(resolveLinkedInAuthorUrn('urn:li:person:abc123', undefined)).toBe('urn:li:person:abc123');
+    expect(resolveLinkedInAuthorUrn('  urn:li:person:abc123  ', 'xyz')).toBe('urn:li:person:abc123');
+    expect(resolveLinkedInAuthorUrn(undefined, 'abc123')).toBe('urn:li:person:abc123');
+    expect(resolveLinkedInAuthorUrn('', '  abc123  ')).toBe('urn:li:person:abc123');
+  });
+
+  it('treats the legacy `urn:li:person:self` (and sub `self`) as unresolved', () => {
+    expect(resolveLinkedInAuthorUrn(LEGACY_LINKEDIN_SELF_URN, undefined)).toBeNull();
+    expect(resolveLinkedInAuthorUrn(LEGACY_LINKEDIN_SELF_URN, 'abc123')).toBe('urn:li:person:abc123');
+    expect(resolveLinkedInAuthorUrn(undefined, 'self')).toBeNull();
+    for (const [urn, sub] of [
+      [undefined, undefined],
+      ['', ''],
+      ['   ', '   '],
+      [null, null],
+      [42, 42],
+      ['urn:li:person:self', 'self'],
+    ] as [unknown, unknown][]) {
+      expect(resolveLinkedInAuthorUrn(urn, sub)).toBeNull();
+    }
+  });
+
+  it('the LinkedIn publish path no longer falls back to `urn:li:person:self`', () => {
+    const src = squeezed('server.ts');
+    expect(src).not.toContain("targetAuthor = 'urn:li:person:self'");
+    expect(src).toContain('resolveLinkedInAuthorUrn(configuredUrn, oauthConn?.memberSub)');
+    // The connect callback must not persist the placeholder as a real member.
+    expect(src).not.toContain("let authorUrn = 'urn:li:person:self'");
+    // The /api/auth/linkedin/status route must not display the placeholder.
+    expect(src).not.toContain("authorUrn: staticUrn || 'urn:li:person:self'");
+  });
+});
+

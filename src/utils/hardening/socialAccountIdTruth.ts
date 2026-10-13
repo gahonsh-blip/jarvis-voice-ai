@@ -132,6 +132,29 @@ export function connectedYouTubeChannelId(raw: unknown): string {
 export const AUTHOR_URN_NOT_RECORDED_LABEL = 'author URN not recorded — no member was read';
 
 /**
+ * The historical placeholder member URN. It is syntactically valid but names no
+ * real member, so it must never be treated as a resolved author — a legacy
+ * persisted value is as good as unread.
+ */
+export const LEGACY_LINKEDIN_SELF_URN = 'urn:li:person:self';
+
+/**
+ * Resolves the member URN to publish under, or `null` when no real member
+ * identity was read. The publish path defaulted an unresolved author to
+ * `urn:li:person:self`, so a grant that carried no author URN and whose
+ * `/v2/userinfo` returned no member sub was published to an invented member.
+ * This returns the recorded URN, else a URN derived from a real member sub,
+ * else `null` so the caller can refuse instead of posting to a phantom author.
+ */
+export function resolveLinkedInAuthorUrn(rawUrn: unknown, rawMemberSub: unknown): string | null {
+  const urn = typeof rawUrn === 'string' ? rawUrn.trim() : '';
+  if (urn && urn !== LEGACY_LINKEDIN_SELF_URN) return urn;
+  const sub = typeof rawMemberSub === 'string' ? rawMemberSub.trim() : '';
+  if (sub && sub !== 'self') return `urn:li:person:${sub}`;
+  return null;
+}
+
+/**
  * Author-URN line for the connected LinkedIn banner. The banner rendered
  * `oauth.authorUrn || \`urn:li:person:${oauth.memberSub || 'self'}\``. A grant
  * whose author URN and member sub were both absent — the member identity was

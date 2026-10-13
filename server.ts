@@ -26,7 +26,7 @@ import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } f
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
 import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
-import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel } from './src/utils/hardening/socialAccountIdTruth';
+import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel, resolveLinkedInAuthorUrn, AUTHOR_URN_NOT_RECORDED_LABEL } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
@@ -2122,16 +2122,16 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
   }
 
   try {
-    let targetAuthor = configuredUrn;
-    if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
+    let targetAuthor = resolveLinkedInAuthorUrn(configuredUrn, oauthConn?.memberSub);
+    if (!targetAuthor) {
       const meRes = await fetch(`${getLinkedInApiBaseUrl()}/v2/userinfo`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (meRes.ok) {
         const meData: any = await meRes.json().catch(() => null);
         if (meData?.sub) {
-          targetAuthor = `urn:li:person:${meData.sub}`;
-          if (oauthConn) {
+          targetAuthor = resolveLinkedInAuthorUrn(undefined, meData.sub);
+          if (targetAuthor && oauthConn) {
             oauthConn.memberSub = meData.sub;
             oauthConn.authorUrn = targetAuthor;
             if (meData.name) oauthConn.name = meData.name;
@@ -2157,8 +2157,18 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
       }
     }
 
-    if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
-      targetAuthor = 'urn:li:person:self';
+    if (!targetAuthor) {
+      // No real member identity was read (no author URN on the connection, no
+      // member from /v2/userinfo). Posting under `urn:li:person:self` would
+      // publish to an invented member, so refuse rather than fabricate an author.
+      return {
+        success: false,
+        executionStatus: 'NOT_PUBLISHED',
+        verificationStatus: 'MISSING_CREDENTIALS',
+        finalTruthState: 'DRAFT',
+        errorReason: 'LinkedIn member identity could not be resolved: neither the connection nor /v2/userinfo returned an author URN. Reconnect to refresh the member identity.',
+        userMessage: '⚠️ NOT PUBLISHED: Could not resolve the LinkedIn author URN (the token authenticated but returned no member identity). The post is retained in your local DRAFT queue with zero false claims; reconnect LinkedIn to publish.',
+      };
     }
 
     // Official LinkedIn REST Posts API (2025/v2) Payload for Personal Member Profile
@@ -5633,7 +5643,7 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
         authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_ENV_TOKEN' : undefined,
         name: conn?.name || (staticLinkedInToken ? 'Configured Personal Member' : undefined),
         memberSub: conn?.memberSub,
-        authorUrn: conn?.authorUrn || (staticLinkedInToken ? process.env.LINKEDIN_AUTHOR_URN || 'urn:li:person:self' : undefined),
+        authorUrn: resolveLinkedInAuthorUrn(conn?.authorUrn, conn?.memberSub) ?? (staticLinkedInToken ? resolveLinkedInAuthorUrn(process.env.LINKEDIN_AUTHOR_URN, undefined) ?? undefined : undefined),
         email: conn?.email,
         picture: conn?.picture,
         connectedAt: conn?.connectedAt,
@@ -5922,7 +5932,11 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
     // fall back to the invented 'LinkedIn Member'.
     let memberName: string | null = null;
     let memberSub = '';
-    let authorUrn = 'urn:li:person:self';
+    // An unresolved member must not be recorded as `urn:li:person:self`: the
+    // placeholder names no real member, so a later publish (or the connected
+    // banner) would treat an unread identity as a concrete author. Record the
+    // empty string and let the publish path refuse rather than fabricate one.
+    let authorUrn = '';
     let memberEmail = '';
     let memberPicture = '';
 
@@ -5931,7 +5945,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       if (uData) {
         memberSub = uData.sub || '';
         memberName = observedAccountName(uData.name) ?? observedAccountName(`${uData.given_name || ''} ${uData.family_name || ''}`.trim());
-        authorUrn = memberSub ? `urn:li:person:${memberSub}` : 'urn:li:person:self';
+        authorUrn = memberSub ? `urn:li:person:${memberSub}` : '';
         memberEmail = uData.email || '';
         memberPicture = uData.picture || '';
       }
@@ -6092,7 +6106,7 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
       configured: true,
       authType: 'STATIC_ENV_TOKEN',
       name: 'Configured Personal Member (Env Token)',
-      authorUrn: staticUrn || 'urn:li:person:self',
+      authorUrn: resolveLinkedInAuthorUrn(staticUrn, undefined) ?? AUTHOR_URN_NOT_RECORDED_LABEL,
       hasClientId: Boolean(clientId),
       hasClientSecret: Boolean(clientSecret),
       redirectUri,
