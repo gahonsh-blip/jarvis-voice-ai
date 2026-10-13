@@ -17148,3 +17148,37 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - LinkedIn कनेक्टेड बैनर अब कोई नकली member URN नहीं दिखाता; 2647 टेस्ट पास।
+
+## 2026-10-14 03:35 IST — WORK slot 12
+
+Item 13 (`Zero-fake-success for all tools`) — closed the LinkedIn **publish-path**
+fake-success: a post could be published to the fabricated member URN
+`urn:li:person:self`. The publish path `verifyAndPublishToLinkedIn` in `server.ts`
+set `targetAuthor = 'urn:li:person:self'` whenever the OAuth connection carried no
+author URN and `/v2/userinfo` returned no member sub — i.e. a grant whose member
+identity was never read. The same placeholder was persisted by the connect callback
+(`let authorUrn = 'urn:li:person:self'`) and displayed by `GET /api/auth/linkedin/status`
+(`authorUrn: staticUrn || 'urn:li:person:self'`). All three sites now use
+`resolveLinkedInAuthorUrn(configuredUrn, memberSub)` in
+`src/utils/hardening/socialAccountIdTruth.ts`: recorded URN → else URN from a **real**
+member sub (rejecting `'self'`) → else `null`. The publish path refuses with
+`NOT_PUBLISHED`; the callback stores `''`; the status route reports
+`AUTHOR_URN_NOT_RECORDED_LABEL`.
+
+Bugs Found: fabricated LinkedIn member author URN `urn:li:person:self` on the
+publish path, connect callback, and status route.
+Bugs Fixed: all three now honest. Negative-validated — reverting the publish-path
+resolver to `configuredUrn` failed exactly the new source guard (`1 failed | 20 passed`);
+restored → 21/21.
+
+Tests: 2650 passed (237 files) — full `npx vitest run`. Targeted `socialAccountIdTruth`
+21 passed; related OAuth/LinkedIn 5 files 38 passed.
+Lint: `tsc --noEmit` exit 0.
+Build: `npm run build` exit 0; `dist/server.cjs` 1,089,856 bytes.
+E2E: NOT RUN (no handset / no live provider credentials).
+Security: `.env` ignored; tree clean; no real secret in the diff.
+
+Documentation: docs/COMPLETION_STATUS.md (slot 12 "Last cycle")
+Branch:  feature/hermes-full-completion
+Commit:  354e9e3
+Push:    succeeded (origin/feature/hermes-full-completion)
