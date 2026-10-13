@@ -167,12 +167,17 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
       persisted = androidBridgeEngine.updatePermission(k as keyof MobilePermissionMatrix, v) && persisted;
     }
     setPermissions(androidBridgeEngine.getPermissions());
+    // This component wires only `simulatedAndroidAdapter` (the real adapter is
+    // never constructed here), so pairing registers the SIMULATION_ONLY testbed,
+    // not a live handset. The message must say so: a bare "paired" claim read as
+    // a real device connection on a screen whose whole purpose is hardware truth.
     simulatedAndroidAdapter.connect();
-    setBridgeStatus(androidBridgeEngine.getStatus());
+    const simStatus = androidBridgeEngine.getStatus();
+    setBridgeStatus(simStatus);
     setStatusMessage(
-      persisted
-        ? 'All Android permissions set to GRANTED & Testbed paired'
-        : 'PARTIAL: permissions changed in memory only — the bridge store refused the write; they revert on reload.'
+      !persisted
+        ? 'PARTIAL: permissions changed in memory only — the bridge store refused the write; they revert on reload.'
+        : `Permissions set to GRANTED. Simulation testbed paired — status ${simStatus} (no live handset connected).`
     );
     setTimeout(() => setStatusMessage(null), 3000);
   };

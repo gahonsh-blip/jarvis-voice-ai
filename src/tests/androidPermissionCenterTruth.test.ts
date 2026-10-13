@@ -24,10 +24,16 @@ const source = fs.readFileSync(SOURCE_PATH, 'utf-8');
 function handlerBody(name: string): string {
   const start = source.indexOf(`const ${name} = `);
   expect(start, `${name} not found`).toBeGreaterThanOrEqual(0);
-  // The handlers are short; take a generous slice ending at the next handler.
-  const slice = source.slice(start, start + 900);
-  const end = slice.indexOf('\n  };');
-  return end >= 0 ? slice.slice(0, end + 4) : slice;
+  const rest = source.slice(start);
+  // Bound at this handler's closing `};` or the next top-level handler,
+  // whichever comes first — a fixed-width slice truncates the longer handlers.
+  const close = /\n  \};/.exec(rest);
+  const nextConst = rest.indexOf('\n  const ', 1);
+  const end = Math.min(
+    close ? close.index + close[0].length : rest.length,
+    nextConst >= 0 ? nextConst : rest.length
+  );
+  return rest.slice(0, end);
 }
 
 describe('AndroidPermissionCenter never presents a settings write as saved without a store', () => {
@@ -52,5 +58,30 @@ describe('AndroidPermissionCenter never presents a settings write as saved witho
       expect(body, `${name} must warn when the write was refused`).toMatch(/NOT SAVED/);
       expect(body, `${name} must say the change reverts on reload`).toMatch(/reverts on reload/);
     }
+  });
+});
+
+describe('AndroidPermissionCenter "Grant All & Pair" names the simulation, not a live handset', () => {
+  // `handleGrantAll` calls `simulatedAndroidAdapter.connect()`, which registers
+  // the SIMULATION_ONLY testbed and yields LIMITED_CAPABILITY. The success
+  // message used to say "Testbed paired", which reads as a real device
+  // connection on a screen whose purpose is hardware truth. The message must
+  // name the simulation and surface the real negotiated status.
+  const grantAllBody = handlerBody('handleGrantAll');
+
+  it('imports only the simulated adapter, never the real one', () => {
+    expect(source).toMatch(/import \{ simulatedAndroidAdapter \}/);
+    expect(source).not.toMatch(/\brealAndroidAdapter\b/);
+  });
+
+  it('does not claim a bare "Testbed paired" success', () => {
+    expect(grantAllBody).not.toMatch(/Testbed paired/);
+  });
+
+  it('names the simulation and reports the negotiated status', () => {
+    expect(grantAllBody).toMatch(/Simulation testbed paired/);
+    expect(grantAllBody).toMatch(/no live handset connected/);
+    expect(grantAllBody).toMatch(/simStatus/);
+    expect(grantAllBody).toMatch(/androidBridgeEngine\.getStatus\(\)/);
   });
 });
