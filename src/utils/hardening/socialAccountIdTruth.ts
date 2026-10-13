@@ -30,6 +30,10 @@ const INVENTED_ACCOUNT_NAMES = new Set([
   // connection carried no name, then logged the removal with the placeholder.
   'LinkedIn User',
   'YouTube Account',
+  // The connected-account banners in SocialMediaModal.tsx fell back to these
+  // when the OAuth grant carried no name, and announced a named member.
+  'Personal Member',
+  'Authenticated Member',
 ]);
 
 /**
@@ -94,4 +98,32 @@ export function describeVerifiedAccount(
 export function disconnectAccountLabel(raw: unknown): string {
   const name = observedAccountName(raw);
   return name ? name : 'account name not recorded — no name was read';
+}
+
+/** Label shown when a connected account's channel/account ID was not recorded. */
+export const CHANNEL_ID_NOT_RECORDED_LABEL = 'channel ID not recorded — no channel was read';
+
+/**
+ * Identity line for the connected LinkedIn banner. The banner rendered
+ * `oauth.name || 'Personal Member'` and the target line rendered
+ * `linkedInInfo?.accountName || 'Authenticated Member'`, so a connected grant
+ * whose name the provider never returned was announced as a named member. This
+ * returns the observed name or states plainly that none was returned.
+ */
+export function connectedLinkedInIdentity(raw: unknown): string {
+  return observedAccountName(raw) ?? ACCOUNT_NAME_NOT_RETURNED_LABEL;
+}
+
+/**
+ * Channel-ID line for the connected YouTube banner. The banner rendered
+ * `ytOauth.channelId || 'Authenticated Google Account'`, so a connection whose
+ * channel ID was never read displayed an invented account identity. This
+ * returns the recorded ID or states that no channel was read.
+ */
+export function connectedYouTubeChannelId(raw: unknown): string {
+  if (typeof raw !== 'string') return CHANNEL_ID_NOT_RECORDED_LABEL;
+  const trimmed = raw.trim();
+  // A replayed payload carrying the old placeholder must not read as an ID.
+  if (!trimmed || trimmed === 'Authenticated Google Account') return CHANNEL_ID_NOT_RECORDED_LABEL;
+  return trimmed;
 }

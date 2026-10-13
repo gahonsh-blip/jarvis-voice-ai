@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
 import { describeStagedChannel } from '../utils/hardening/youtubeChannelTruth';
+import { connectedLinkedInIdentity, connectedYouTubeChannelId } from '../utils/hardening/socialAccountIdTruth';
 import { oauthConnectionNotice } from '../utils/hardening/oauthAccountNoticeTruth';
 import {
   classifyProviderTestResponse,
@@ -1014,7 +1015,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                         </div>
                         <p className="text-[11px] text-slate-400 font-mono">
                           {isLinkedInConnected
-                            ? (linkedInInfo?.accountName || 'Authenticated Member')
+                            ? connectedLinkedInIdentity(linkedInInfo?.accountName)
                             : 'Not Connected — Connect via OAuth'}
                         </p>
                       </div>
@@ -1985,7 +1986,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           )}
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-100 text-xs">{oauth.name || 'Personal Member'}</span>
+                              <span className="font-bold text-slate-100 text-xs">{connectedLinkedInIdentity(oauth.name)}</span>
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
                                 OAuth 2.0 Token Active
                               </span>
@@ -2033,7 +2034,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-400 font-mono">
-                              Channel ID: <code className="text-red-300">{ytOauth.channelId || 'Authenticated Google Account'}</code>
+                              Channel ID: <code className="text-red-300">{connectedYouTubeChannelId(ytOauth.channelId)}</code>
                             </p>
                           </div>
                         </div>

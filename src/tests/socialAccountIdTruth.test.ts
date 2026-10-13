@@ -5,7 +5,10 @@ import {
   observedAccountName,
   describeVerifiedAccount,
   disconnectAccountLabel,
+  connectedLinkedInIdentity,
+  connectedYouTubeChannelId,
   ACCOUNT_NAME_NOT_RETURNED_LABEL,
+  CHANNEL_ID_NOT_RECORDED_LABEL,
 } from '../utils/hardening/socialAccountIdTruth';
 
 // Item 13 ("zero fake success") — the live connection probes in server.ts named
@@ -106,5 +109,39 @@ describe('Item 13 — an OAuth disconnect never names an account it did not read
     expect(src).not.toContain("memoryState.youTubeConnection.channelTitle || 'YouTube Account'");
     expect(src).toContain('disconnectAccountLabel(memoryState.linkedInConnection.name)');
     expect(src).toContain('disconnectAccountLabel(memoryState.youTubeConnection.channelTitle)');
+  });
+});
+
+describe('Item 13 — a connected-account banner never invents the account identity', () => {
+  it('connectedLinkedInIdentity returns the observed name, else says none was returned', () => {
+    expect(connectedLinkedInIdentity('Ada Lovelace')).toBe('Ada Lovelace');
+    expect(connectedLinkedInIdentity('  Ada Lovelace  ')).toBe('Ada Lovelace');
+    // Blank, missing, non-string, or a historical placeholder must never become
+    // the invented "Personal Member" / "Authenticated Member" identity.
+    for (const raw of ['', '   ', undefined, null, 42, 'LinkedIn Member', 'Personal Member']) {
+      expect(connectedLinkedInIdentity(raw)).toBe(ACCOUNT_NAME_NOT_RETURNED_LABEL);
+    }
+    expect(ACCOUNT_NAME_NOT_RETURNED_LABEL).toMatch(/not returned/i);
+  });
+
+  it('connectedYouTubeChannelId returns the recorded ID, else says no channel was read', () => {
+    expect(connectedYouTubeChannelId('UChdG0AL8NdFtGHzNY-C6XnQ')).toBe('UChdG0AL8NdFtGHzNY-C6XnQ');
+    expect(connectedYouTubeChannelId('  UChdG0AL8NdFtGHzNY-C6XnQ  ')).toBe('UChdG0AL8NdFtGHzNY-C6XnQ');
+    for (const raw of ['', '   ', undefined, null, 42]) {
+      expect(connectedYouTubeChannelId(raw)).toBe(CHANNEL_ID_NOT_RECORDED_LABEL);
+    }
+    // The label itself must not read as a channel ID or an account name.
+    expect(CHANNEL_ID_NOT_RECORDED_LABEL).toMatch(/not recorded/i);
+    expect(CHANNEL_ID_NOT_RECORDED_LABEL).not.toMatch(/authenticated/i);
+  });
+
+  it('the Social Hub connected banners no longer invent an account identity', () => {
+    const src = squeezed('src/components/SocialMediaModal.tsx');
+    expect(src).not.toContain("'Authenticated Member'");
+    expect(src).not.toContain("'Authenticated Google Account'");
+    expect(src).not.toContain("oauth.name || 'Personal Member'");
+    expect(src).toContain('connectedLinkedInIdentity(linkedInInfo?.accountName)');
+    expect(src).toContain('connectedLinkedInIdentity(oauth.name)');
+    expect(src).toContain('connectedYouTubeChannelId(ytOauth.channelId)');
   });
 });
