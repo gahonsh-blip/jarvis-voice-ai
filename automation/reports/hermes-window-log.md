@@ -16851,3 +16851,38 @@ render failed the guard exactly (1 failed | 4 passed); restored → 5/5.
 - Commits: `bed7189` (fix) · `c496997` (docs). Both pushed to
   origin/feature/hermes-full-completion. State pushed to origin/automation/hermes-state (`e871d07`).
 - PR #8 open, non-draft. Main: NOT MERGED — awaiting human approval.
+
+---
+
+## 2026-10-13 22:06 IST — WORK SLOT 3 (2026-10-13 → 2026-10-14 window)
+
+Item #13 `Zero-fake-success for all tools` / #26 `Social Automation` — PARTIAL
+(one site fixed).
+
+**Fixed:** the Social Hub publish badge (`src/components/SocialMediaModal.tsx`
+~1246) rendered `'Uploaded & Verified Live on YouTube'` for every post the
+server reported `VERIFIED`, asserting a public audience nobody measured. A
+YouTube upload is **PRIVATE unless public is applied**, and the server's own
+success message already states the applied privacy (`verifyAndPublishToYouTube`,
+`server.ts` ~2700: "visible only to the channel owner"). The panel overrode
+that honest wording with a blanket "Live". New helper `publishedPostReachLabel()`
+(`src/utils/socialPublishHonesty.ts`) reads the `privacyStatus` the server
+recorded (`post.privacyStatus`, set at `server.ts` 2706 from
+`uploadData.status.privacyStatus`) and renders the reach actually confirmed:
+`Uploaded & Verified Public/Unlisted/Private on YouTube`, or `Uploaded &
+Verified — visibility not recorded` when the field is absent; non-YouTube
+platforms keep the generic `Live & Verified`.
+
+**Evidence:** `src/tests/socialPublishHonesty.test.ts` — 1 file / 30 passed
+(6 new). Negative-validated: disabling the privacy branch failed exactly 4 of
+the new tests; restored → 30/30.
+
+- Tests: full `npx vitest run` 236 files / 2611 tests passed (78.24 s, 0 failed).
+- Lint: PASS (`tsc --noEmit` exit 0). Build: PASS (`dist/server.cjs` 1,088,323 bytes).
+- E2E: NOT RUN (no browser/handset). Deploy: NOT_CONFIGURED.
+- Security: `git check-ignore -v .env` -> .gitignore:4:.env; tree clean; no
+  secret in the diff; no node_modules/dist staged.
+- Commits: `14130a4` (fix) · `fa99102` (docs) · `b912129` (docs). All pushed to
+  origin/feature/hermes-full-completion. State pushed to
+  origin/automation/hermes-state (`a4e3fda`, slots_completed=3).
+- PR #8 open, non-draft. Main: NOT MERGED — awaiting human approval.
