@@ -16886,3 +16886,44 @@ the new tests; restored → 30/30.
   origin/feature/hermes-full-completion. State pushed to
   origin/automation/hermes-state (`a4e3fda`, slots_completed=3).
 - PR #8 open, non-draft. Main: NOT MERGED — awaiting human approval.
+
+---
+
+## Slot 4 — 2026-10-13 22:36 IST (WORK) · window date 2026-10-13 · slots completed: 4
+
+Item #13 `Zero-fake-success for all tools` (PARTIAL — long-tail audit).
+
+**Fixed.** `src/components/SocialMediaModal.tsx` YouTube Data API v3 Studio
+panel rendered `'Status: Ready for YouTube Video File Selection & Level-4 Human
+Authorization'` whenever `youTubeOAuthStatus` was absent — before the platforms
+probe answered, after a failed load, and for every status the branches did not
+name (`AUTH_REQUIRED`, `AUTHORIZATION_REQUIRED`, `AUTHORIZED`, `CONNECTED` are
+all valid `YouTubeOAuthStatus` values the branches ignored). A green "Ready"
+over a value nobody observed reads as a live, authorized channel.
+
+New `youTubeStudioStatusLine()` + `YOUTUBE_STUDIO_UNKNOWN_STATUS` in
+`src/utils/socialPublishHonesty.ts` render only the observed verdict — a
+provider-confirmed upload grant, a read-only channel, configured-but-unverified,
+a token/permission error, or `Status: UNKNOWN — the YouTube connection state has
+not been observed yet`. The banner routes through it; the pre-fix literal is
+gone.
+
+**Evidence.** `src/tests/socialPublishHonesty.test.ts` — 9 new cases (unobserved
+inputs, an unnamed status, no `Ready`/`Level-4`, the verified/read-only/
+configured/token branches, plus a source guard). Negative-validated: reverting
+only `SocialMediaModal.tsx` to the pre-fix render failed exactly the source
+guard (`1 failed | 36 passed`); restored → 37/37.
+
+**Gates (observed).** Lint `tsc --noEmit` exit 0. Targeted 1 file / 37 passed.
+Full `npx vitest run` 236 files / 2618 tests passed (77.78 s, 0 failed). Build
+exit 0, `dist/server.cjs` 1088323 bytes. E2E: NOT RUN (no browser/handset).
+Deploy: NOT_CONFIGURED.
+
+**Security.** `git check-ignore -v .env` → `.gitignore:4:.env`. Working tree
+clean; credential-pattern scan of the branch diff matched nothing; no
+`node_modules`/`dist` staged.
+
+- Commits: `560498a` (fix) · `6bf156a` (docs). Both pushed to
+  origin/feature/hermes-full-completion. State pushed to
+  origin/automation/hermes-state (`a3fc873`, slots_completed=4).
+- PR #8 open. Main: NOT MERGED — awaiting human approval.
