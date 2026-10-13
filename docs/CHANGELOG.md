@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 23:36 IST (2026-10-13 18:06 UTC) — window slot 6: the post-call HUD stops asserting "Call concluded normally." for an unrecorded summary
+
+### Fixed
+- **`src/components/ActiveCallHUD.tsx` — the AI Briefing Summary rendered `activeCall.summary || 'Call concluded normally.'`.** `App.tsx` stores an **empty** summary on the declined / spam-filter path, so a call the summariser never summarised — nothing to conclude — was presented to the operator as a call that concluded normally.
+
+### Added
+- `describeCallSummary()` and `NO_CALL_SUMMARY_NOTE` in `src/utils/hardening/callSummaryTruth.ts`: a real summary passes through unchanged; an absent one renders as `No summary was recorded for this call — the outcome was not observed.` The HUD routes the field through it and the pre-fix literal is gone.
+
+### Tests
+- `src/tests/callSummaryTruth.test.ts` (49 in the file): a real summary round-trips, empty/whitespace/null/undefined all map to `NO_CALL_SUMMARY_NOTE`, the note never says "concluded normally", plus source guards pinning the HUD render site and the absence of the old literal. Negative-validated: restoring only the old literal failed exactly 2 of the new guards (`2 failed | 47 passed`); restored → 49/49. Lint (`tsc --noEmit`) exit 0; full suite 236 files / 2626 tests passed; build exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-13 23:06 IST (2026-10-13 17:36 UTC) — window slot 5: "Grant All & Pair" stops claiming a live handset pairing
 
 ### Fixed
