@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 22:36 IST (2026-10-13 17:06 UTC) — window slot 4: the YouTube Studio banner stops asserting a "Ready" state nobody observed
+
+### Fixed
+- **`src/components/SocialMediaModal.tsx` — the YouTube Studio status line rendered `'Status: Ready for YouTube Video File Selection & Level-4 Human Authorization'` whenever `youTubeOAuthStatus` was absent.** The line branched on `ytOauth?.status` and fell through to the "Ready" literal before the platforms probe answered, after a failed load, and for any status the branches did not name (`AUTH_REQUIRED`, `AUTHORIZATION_REQUIRED`, `AUTHORIZED`, `CONNECTED` are all valid `YouTubeOAuthStatus` values the branches ignored). A green "Ready" over an unobserved value reads as a live, authorized channel.
+
+### Added
+- **`youTubeStudioStatusLine()` + `YOUTUBE_STUDIO_UNKNOWN_STATUS` in `src/utils/socialPublishHonesty.ts`** — renders only the observed verdict: a provider-confirmed upload grant, a read-only channel, configured-but-unverified credentials, a token/permission error, or `Status: UNKNOWN — the YouTube connection state has not been observed yet`. The banner now routes through it and the pre-fix literal is gone.
+
+### Tests
+- `src/tests/socialPublishHonesty.test.ts`: 9 new cases — the unobserved inputs (undefined / null / missing status) and an unnamed status all report UNKNOWN, no `Ready`/`Level-4` claim survives, the verified/read-only/configured/token-error branches map correctly, plus a source guard that the banner calls `youTubeStudioStatusLine(ytOauth)` and the old literal is absent. Negative-validated: reverting only `SocialMediaModal.tsx` failed exactly the source guard (`1 failed | 36 passed`); restored → 37/37. Lint (`tsc --noEmit`) exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-13 22:06 IST (2026-10-13 16:36 UTC) — window slot 3: the publish badge stops claiming a public audience it never measured
 
 ### Fixed
