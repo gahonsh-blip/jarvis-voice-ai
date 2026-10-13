@@ -393,7 +393,11 @@ export async function executeOperatorTask(
   }
   task.status = 'RUNNING';
   saveOperatorTask(task);
-  const maxSteps = options.maxSteps ?? Math.min(plan.actions.length, 8);
+  // `maxSteps` is a cap on how many actions may run, not a replacement for the
+  // plan length. The previous `?? plan.length` default meant the loop executed
+  // every planned action while a caller-supplied cap was silently ignored.
+  const maxSteps = Math.min(plan.actions.length, options.maxSteps ?? MAX_PLAN_STEPS);
+  let completedSteps = 0;
   for (let step = 0; step < maxSteps; step++) {
     const cancel = options.cancelCheck ? options.cancelCheck() : false;
     if (cancel) {
@@ -424,12 +428,21 @@ export async function executeOperatorTask(
       persistOperatorTaskState(task);
       return { ok: false, error: task.error, task };
     }
+    completedSteps += 1;
     if (options.onProgress) {
       options.onProgress(task);
     }
   }
   task.status = 'COMPLETED';
-  task.finalResult = 'COMPLETED' + '_' + String(plan.actions.length) + '_STEPS';
+  // Report the steps that actually ran and verified. Counting `plan.actions`
+  // claimed work the engine never executed whenever the run was capped, so a
+  // truncated task was announced as a full-plan completion.
+  task.finalResult = 'COMPLETED' + '_' + String(completedSteps) + '_STEPS';
   persistOperatorTaskState(task);
+  // A capped run returns before the loop's last `onProgress`, so emit the final
+  // terminal task here — otherwise the UI never renders the COMPLETED status.
+  if (options.onProgress) {
+    options.onProgress(task);
+  }
   return { ok: true, task };
 }
