@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 23:06 IST (2026-10-13 17:36 UTC) — window slot 5: "Grant All & Pair" stops claiming a live handset pairing
+
+### Fixed
+- **`src/components/AndroidPermissionCenter.tsx` — the "Grant All & Pair" button reported `'All Android permissions set to GRANTED & Testbed paired'` after connecting a simulation.** The component imports **only** `simulatedAndroidAdapter`; `RealAndroidBridgeAdapter` / `realAndroidAdapter` is never constructed here, so `simulatedAndroidAdapter.connect()` registers the `[SIMULATION_ONLY] Android Virtual Testbed` and negotiates `LIMITED_CAPABILITY` — no handset is involved. On a screen whose whole purpose is hardware truth, "Testbed paired" read as a live device connection.
+
+### Changed
+- The success message now names the simulation and surfaces the negotiated bridge status: `Permissions set to GRANTED. Simulation testbed paired — status LIMITED_CAPABILITY (no live handset connected).` A refused settings write keeps the honest `PARTIAL: permissions changed in memory only …` wording.
+
+### Tests
+- `src/tests/androidPermissionCenterTruth.test.ts`: the handler-body helper now bounds each handler at its real closing `};` (the old fixed 900-char slice truncated the longer `handleGrantAll`); a new `describe` block pins that the component imports only `simulatedAndroidAdapter`, that no bare `Testbed paired` claim remains, and that the message names the simulation, the negotiated status, and `no live handset connected`. Negative-validated: restoring only the old literal failed exactly 2 of the new guards (`2 failed | 5 passed`); restored → 7/7. Lint (`tsc --noEmit`) exit 0; full suite 236 files / 2621 tests passed; build exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-13 22:36 IST (2026-10-13 17:06 UTC) — window slot 4: the YouTube Studio banner stops asserting a "Ready" state nobody observed
 
 ### Fixed

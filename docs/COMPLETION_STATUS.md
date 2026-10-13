@@ -4,7 +4,37 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 22:36 IST — **WORK SLOT 4 of the
+Last cycle: 2026-10-13 23:06 IST — **WORK SLOT 5 of the
+2026-10-13 → 2026-10-14 window (23:06 IST fire; state `slots_completed: 4`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
+real fake-success site: the Android Permission Center's "Grant All & Pair"
+button claimed a live testbed pairing nobody performed.**
+`AndroidPermissionCenter.tsx` imports **only** `simulatedAndroidAdapter` (the
+real `RealAndroidBridgeAdapter` / `realAndroidAdapter` is never constructed in
+that component), so `handleGrantAll` → `simulatedAndroidAdapter.connect()`
+registers the `[SIMULATION_ONLY] Android Virtual Testbed` and negotiates
+`LIMITED_CAPABILITY` — no handset is involved. The success message nevertheless
+read `'All Android permissions set to GRANTED & Testbed paired'`, which on a
+screen whose whole purpose is hardware truth reads as a live device
+connection. The message now names the simulation and surfaces the negotiated
+status: `Permissions set to GRANTED. Simulation testbed paired — status
+LIMITED_CAPABILITY (no live handset connected).` A refused settings write keeps
+the honest `PARTIAL: permissions changed in memory only …` wording. Guard:
+`src/tests/androidPermissionCenterTruth.test.ts` now bounds each handler body at
+its real closing `};` (the old fixed 900-char slice truncated the longer
+`handleGrantAll`), and a new `describe` block pins (a) the component imports
+only `simulatedAndroidAdapter`, (b) no bare `Testbed paired` claim remains, and
+(c) the message names the simulation, the negotiated status, and
+`no live handset connected`. Negative-validated — restoring only the old literal
+failed exactly 2 of the new guards (`2 failed | 5 passed`); restored → 7/7.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file / 7
+passed; full `npx vitest run` **236 files / 2621 tests passed** (76.72 s, 0
+failed); `npm run build` exit 0 (`dist/server.cjs` 1088323 bytes). E2E: NOT RUN
+(no browser/handset). Deploy: NOT_CONFIGURED. Commit `5947074`. Item 13 stays
+`PARTIAL` — the long tail of unclassified `success: true` /
+discarded-`persistMemory()` sites remains.
+
+Last cycle (previous slot): 2026-10-13 22:36 IST — **WORK SLOT 4 of the
 2026-10-13 → 2026-10-14 window (22:36 IST fire; state `slots_completed: 3`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
 real fake-success site: the YouTube Studio banner asserted a "Ready for
