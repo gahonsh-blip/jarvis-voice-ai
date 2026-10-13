@@ -16822,3 +16822,32 @@ Next Slot:
 - Security: `git check-ignore -v .env` -> .gitignore:4:.env; tree clean; no
   node_modules/dist staged.
 - PR #8 open, non-draft, no conflicts. Main: NOT MERGED — awaiting human approval.
+
+---
+
+## 2026-10-13 21:36 IST — WORK SLOT 2 (2026-10-13 → 2026-10-14 window)
+
+Item #13 `Zero-fake-success for all tools` — PARTIAL (one site fixed).
+
+**Fixed:** the Tools HUD GitHub banner (`src/components/AutonomousToolsModal.tsx`)
+rendered `githubStatus?.connected ? 'AUTHENTICATED' : 'NOT CONNECTED'` and
+`githubStatus?.message || 'Inspecting GitHub connection...'` from a `null` seed,
+so it asserted a connection state nobody had observed — before
+`POST /api/tools/github/status` answered, and after a non-OK response or network
+error that `fetchGithubData` swallowed in a bare `catch` (no `res.ok` check).
+New `src/utils/hardening/githubStatusDisplayTruth.ts` renders only the observed
+verdict (`STATUS UNKNOWN` until the endpoint answers). `fetchGithubData` now
+records `githubStatusObserved` and treats a non-OK response as unobserved.
+
+**Evidence:** `src/tests/githubStatusDisplayTruth.test.ts` — 1 file / 5 passed
+(incl. a source guard on the modal). Negative-validated: restoring the pre-fix
+render failed the guard exactly (1 failed | 4 passed); restored → 5/5.
+
+- Tests: full `npx vitest run` 236 files / 2605 tests passed (77.98 s, 0 failed).
+- Lint: PASS (`tsc --noEmit` exit 0). Build: PASS (`dist/server.cjs` 1,088,323 bytes).
+- E2E: NOT RUN (no browser/handset). Deploy: NOT_CONFIGURED.
+- Security: `git check-ignore -v .env` -> .gitignore:4:.env; tree clean; no
+  node_modules/dist staged.
+- Commits: `bed7189` (fix) · `c496997` (docs). Both pushed to
+  origin/feature/hermes-full-completion. State pushed to origin/automation/hermes-state (`e871d07`).
+- PR #8 open, non-draft. Main: NOT MERGED — awaiting human approval.
