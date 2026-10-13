@@ -4,32 +4,29 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-14 03:35 IST — **WORK SLOT 12 of the
-2026-10-13 → 2026-10-14 window (03:35 IST fire).** Item 13
-(`Zero-fake-success for all tools`) — **closed the LinkedIn publish-path
-fake-success: a post could be published to the fabricated member URN
-`urn:li:person:self`.** The publish path `verifyAndPublishToLinkedIn` in
-`server.ts` set `targetAuthor = 'urn:li:person:self'` whenever the OAuth
-connection carried no author URN and `/v2/userinfo` returned no member sub —
-i.e. a grant whose member identity was never read. The same placeholder was
-persisted by the connect callback (`let authorUrn = 'urn:li:person:self'`) and
-displayed by `GET /api/auth/linkedin/status`
-(`authorUrn: staticUrn || 'urn:li:person:self'`). All three sites now use
-`resolveLinkedInAuthorUrn(configuredUrn, memberSub)` in
-`src/utils/hardening/socialAccountIdTruth.ts`, which returns the recorded URN,
-else a URN derived from a **real** member sub (rejecting the historical
-`'self'` placeholder), else `null`. The publish path refuses with
-`NOT_PUBLISHED` when no real member identity exists; the callback stores `''`;
-the status route reports `AUTHOR_URN_NOT_RECORDED_LABEL` ("author URN not
-recorded — no member was read"). Guarded by the new
-`Item 13 — the LinkedIn publish path refuses an unresolved author` block in
-`src/tests/socialAccountIdTruth.test.ts`. Negative-validated — reverting the
-publish-path resolver to the raw `configuredUrn` failed exactly the new source
-guard (`1 failed | 20 passed`); restored → 21/21. Gates (observed this fire):
-lint (`tsc --noEmit`) exit 0; targeted file 21 passed; related OAuth/LinkedIn
-files 38 passed; full suite 2650 passed (237 files); `npm run build` exit 0,
-`dist/server.cjs` 1,089,856 bytes. Item 13 stays `PARTIAL` — the long tail of
-unclassified `success: true` sites remains.
+Last cycle: 2026-10-14 04:05 IST — **WORK SLOT 13 of the
+2026-10-13 → 2026-10-14 window (04:05 IST fire; second-to-last slot).**
+Item 13 (`Zero-fake-success for all tools`) — **closed the telephony
+transcript-heading fake-success: the recorded-call panel labelled its transcript
+"Verified" with nothing performing verification.**
+`src/components/TelephonyHubModal.tsx` rendered the literal heading
+`Complete Verified Transcript (N turns)`. Nothing in the capture path verifies a
+turn: agent turns are the scripted greeting / model-authored reply spoken
+through the browser synth (never read back), and caller/callee turns come from
+browser speech recognition — no provider, confidence or speaker check was ever
+consulted. The heading now comes from `callTranscriptHeadingLabel()` in
+`src/utils/hardening/callSummaryTruth.ts`, which names the turns as **recorded**
+and reports an unmeasured count explicitly ("unmeasured turn count") rather than
+a measured-looking zero. A new `TRANSCRIPT_NOT_VERIFIED_NOTE` states the
+recorded-but-unverified provenance beneath the heading. Guarded by 5 new cases
+in `src/tests/callSummaryTruth.test.ts` (`callTranscriptHeadingLabel ...` and
+`TelephonyHubModal renders the transcript heading ...`; file total 54).
+Negative-validated — restoring the `Complete Verified Transcript` literal in the
+modal failed exactly the two new source guards (`2 failed | 52 passed`);
+restored → 54/54. Gates (observed this fire): lint (`tsc --noEmit`) exit 0;
+targeted file 54 passed; full suite 2655 passed (237 files); `npm run build`
+exit 0, `dist/server.cjs` 1,089,856 bytes. Item 13 stays `PARTIAL` — the long
+tail of unclassified `success: true` sites remains.
 
 Last cycle (previous slot): 2026-10-14 02:35 IST — **WORK SLOT 10 of the
 2026-10-13 → 2026-10-14 window (02:35 IST fire; state `slots_completed: 9`

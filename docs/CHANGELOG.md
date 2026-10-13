@@ -4,6 +4,14 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-14 04:05 IST — window slot 13: the recorded-call transcript heading stops claiming a verification nobody performed
+
+### Fixed
+- **`src/components/TelephonyHubModal.tsx` — the recorded-call panel drew the heading `Complete Verified Transcript (N turns)` as a literal.** Nothing in the capture path verifies a turn: agent turns are the scripted greeting / model-authored reply spoken through the browser synth, and caller/callee turns come from browser speech recognition. No provider, confidence or speaker check was consulted, so the heading asserted a verification that never happened.
+
+### Added
+- `callTranscriptHeadingLabel()` and `TRANSCRIPT_NOT_VERIFIED_NOTE` in `src/utils/hardening/callSummaryTruth.ts`. The heading now names the turns as **recorded**, reports an unmeasured count explicitly ("unmeasured turn count") rather than a measured-looking zero, and never uses the word "verified". The note beneath states the recorded-but-unverified provenance.
+
 ## [Unreleased] - 2026-10-14 02:35 IST (2026-10-13 21:05 UTC) — window slot 10: the Telegram Gateway test banner stops claiming a delivery it did not confirm
 
 ### Fixed
