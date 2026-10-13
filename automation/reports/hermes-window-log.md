@@ -17004,3 +17004,18 @@ clean; no token/key in the branch diff; no `node_modules`/`dist` staged.
   origin/feature/hermes-full-completion. State pushed to
   origin/automation/hermes-state (`8b8242a`, slots_completed=6).
 - PR #8 open. Main: NOT MERGED — awaiting human approval.
+
+## Slot 7 — WORK — 2026-10-14 00:35 IST
+
+**Item #13 (Zero-fake-success for all tools) — PARTIAL (one site closed).**
+
+**Bug found and fixed.** `src/components/DashboardMapSnippet.tsx` destructured its prop as `source = 'live'`. Any caller that did not pass `source` — and any future caller that forgot to — therefore rendered an unknown coordinate provenance as a live device GPS fix: the radar pin fell through to the `CURRENT FIX` label, the badge read live, and `locationSourceLabel` / `accuracyDisplay` were handed a non-null source the app never observed. The default is now `null`, which the shared helpers already render as `NO FIX`. `App.tsx` was already passing the real `userCoordsSource`, so no live behaviour changed — this closes the prop's unsafe default.
+
+**Evidence.** New case in `src/tests/locationServicesTruth.test.ts` (18 in the file) pins `source = null` and the absence of the `'live'` default. Negative-validated: restoring only `source = 'live'` failed exactly 1 of 18 (`1 failed | 17 passed`); restored → 18/18.
+
+**Gates (observed).** Lint `tsc --noEmit` exit 0. Targeted 1 file / 18 passed. Full `npx vitest run` 236 files / 2627 tests passed (80.86 s, 0 failed). Build exit 0, `dist/server.cjs` 1.0mb. E2E: NOT RUN (no browser/handset). Deploy: NOT_CONFIGURED.
+
+**Security.** Working tree clean after commit; no token/key in the branch diff; no `node_modules`/`dist` staged; `.env` ignored.
+
+- Commits: `272fecf` (fix) · `874f138` (docs). Both pushed to origin/feature/hermes-full-completion.
+- PR #8 open. Main: NOT MERGED — awaiting human approval.
