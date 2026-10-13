@@ -253,3 +253,48 @@ export function publishedPostReachLabel(post: {
   }
   return 'Live & Verified';
 }
+
+/** The status line the YouTube Studio banner shows for the current OAuth state. */
+export const YOUTUBE_STUDIO_UNKNOWN_STATUS =
+  'Status: UNKNOWN — the YouTube connection state has not been observed yet';
+
+/**
+ * Honest status line for the YouTube Data API v3 Studio banner.
+ *
+ * The banner used to fall through to
+ * `Status: Ready for YouTube Video File Selection & Level-4 Human Authorization`
+ * whenever `youTubeOAuthStatus` was absent — before the platforms probe
+ * answered, after a failed load, or on a response whose status the branches did
+ * not name. A green "Ready" over a value nobody observed reads as a live
+ * channel. This names only what the provider data shows: a verified upload
+ * grant, a read-only channel, configured-but-unverified credentials, a token
+ * error, or an explicit UNKNOWN when no status was recorded.
+ */
+export function youTubeStudioStatusLine(
+  oauth: {
+    status?: string;
+    connected?: boolean;
+    canPublish?: boolean;
+    authType?: string;
+    channelTitle?: string;
+    scopes?: string[];
+    diagnosticError?: string;
+  } | null | undefined
+): string {
+  if (!oauth || !oauth.status) {
+    return YOUTUBE_STUDIO_UNKNOWN_STATUS;
+  }
+  if (oauth.status === 'API_VERIFIED' || (oauth.connected && oauth.canPublish)) {
+    if (youtubeCanPublishMeasured(oauth)) {
+      return `Channel: ${oauth.channelTitle || 'Unnamed channel'} | Grant confirmed by the provider — scopes: ${describeGrantedScopes(oauth.scopes)}`;
+    }
+    return `Channel confirmed read-only: ${oauth.channelTitle || 'unnamed channel'} | Video upload is NOT authorized — granted scopes: ${describeGrantedScopes(oauth.scopes)}`;
+  }
+  if (oauth.status === 'CONFIGURED') {
+    return `Status: Configured (${oauth.authType || 'OAuth 2.0'}) — 1-Click OAuth Connect Required for Uploads`;
+  }
+  if (oauth.status === 'TOKEN_INVALID' || oauth.status === 'ERROR') {
+    return `Status: Token / Permission Error (${oauth.diagnosticError || 'Re-authentication required'})`;
+  }
+  return YOUTUBE_STUDIO_UNKNOWN_STATUS;
+}

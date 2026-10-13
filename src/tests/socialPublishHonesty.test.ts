@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import {
   classifyProviderTestResponse,
   verifiedAccountName,
@@ -14,7 +16,12 @@ import {
   describeGrantedScopes,
   youtubeCanPublishMeasured,
   publishedPostReachLabel,
+  youTubeStudioStatusLine,
+  YOUTUBE_STUDIO_UNKNOWN_STATUS,
 } from '../utils/socialPublishHonesty';
+
+const source = (rel: string) =>
+  fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8');
 
 describe('social publish honesty — the Hub must not claim an unmeasured connection', () => {
   it('treats a verified provider answer with a named account as verified', () => {
@@ -220,5 +227,67 @@ describe('social publish honesty — a verified upload must not claim a public a
 
   it('is safe on an empty post', () => {
     expect(publishedPostReachLabel({})).toBe('Live & Verified');
+  });
+});
+
+describe('youTubeStudioStatusLine — the Studio banner must not assert an unobserved state', () => {
+  it('reports UNKNOWN when the connection state was never observed', () => {
+    expect(youTubeStudioStatusLine(undefined)).toBe(YOUTUBE_STUDIO_UNKNOWN_STATUS);
+    expect(youTubeStudioStatusLine(null)).toBe(YOUTUBE_STUDIO_UNKNOWN_STATUS);
+    expect(youTubeStudioStatusLine({})).toBe(YOUTUBE_STUDIO_UNKNOWN_STATUS);
+  });
+
+  it('reports UNKNOWN for a status the branches do not name', () => {
+    expect(youTubeStudioStatusLine({ status: 'AUTHORIZED', connected: false })).toBe(
+      YOUTUBE_STUDIO_UNKNOWN_STATUS
+    );
+    expect(youTubeStudioStatusLine({ status: 'AUTH_REQUIRED', connected: false })).toBe(
+      YOUTUBE_STUDIO_UNKNOWN_STATUS
+    );
+  });
+
+  it('never claims Ready / Level-4 authorization over an unobserved state', () => {
+    const line = youTubeStudioStatusLine(undefined);
+    expect(line).not.toMatch(/Ready for YouTube Video File Selection/);
+    expect(line).not.toMatch(/Level-4/);
+  });
+
+  it('names the verified channel only when the upload grant was measured', () => {
+    const line = youTubeStudioStatusLine({
+      status: 'API_VERIFIED',
+      connected: true,
+      canPublish: true,
+      channelTitle: 'Hermes Channel',
+      scopes: ['https://www.googleapis.com/auth/youtube.upload'],
+    });
+    expect(line).toContain('Hermes Channel');
+    expect(line).toMatch(/Grant confirmed by the provider/);
+  });
+
+  it('reports a read-only channel when the upload scope was not granted', () => {
+    const line = youTubeStudioStatusLine({
+      status: 'API_VERIFIED',
+      connected: true,
+      canPublish: false,
+      channelTitle: 'Read Only',
+      scopes: ['https://www.googleapis.com/auth/youtube.readonly'],
+    });
+    expect(line).toMatch(/read-only/);
+    expect(line).toMatch(/NOT authorized/);
+  });
+
+  it('reports configured-but-unverified and token errors distinctly', () => {
+    expect(youTubeStudioStatusLine({ status: 'CONFIGURED' })).toMatch(/1-Click OAuth Connect Required/);
+    expect(
+      youTubeStudioStatusLine({ status: 'TOKEN_INVALID', diagnosticError: 'invalid_grant' })
+    ).toMatch(/invalid_grant/);
+  });
+});
+
+describe('SocialMediaModal — the pre-fix unobserved "Ready" literal is gone', () => {
+  it('routes the banner through youTubeStudioStatusLine and drops the fixed Ready string', () => {
+    const src = source('src/components/SocialMediaModal.tsx');
+    expect(src).toMatch(/youTubeStudioStatusLine\(ytOauth\)/);
+    expect(src).not.toMatch(/Ready for YouTube Video File Selection & Level-4 Human Authorization/);
   });
 });

@@ -50,9 +50,8 @@ import {
   connectionStatusLabel,
   isUsableCredential,
   socialApprovalPostureLabel,
-  describeGrantedScopes,
-  youtubeCanPublishMeasured,
   publishedPostReachLabel,
+  youTubeStudioStatusLine,
 } from '../utils/socialPublishHonesty';
 import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 import { socialRejectOutcome } from '../utils/hardening/socialActionCommandTruth';
@@ -1338,15 +1337,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 font-mono">
-                    {ytOauth?.status === 'API_VERIFIED' || (ytOauth?.connected && ytOauth?.canPublish)
-                      ? youtubeCanPublishMeasured(ytOauth)
-                        ? `Channel: ${ytOauth?.channelTitle || 'Unnamed channel'} | Grant confirmed by the provider — scopes: ${describeGrantedScopes(ytOauth?.scopes)}`
-                        : `Channel confirmed read-only: ${ytOauth?.channelTitle || 'unnamed channel'} | Video upload is NOT authorized — granted scopes: ${describeGrantedScopes(ytOauth?.scopes)}`
-                      : ytOauth?.status === 'CONFIGURED'
-                      ? `Status: Configured (${ytOauth.authType || 'OAuth 2.0'}) — 1-Click OAuth Connect Required for Uploads`
-                      : ytOauth?.status === 'TOKEN_INVALID' || ytOauth?.status === 'ERROR'
-                      ? `Status: Token / Permission Error (${ytOauth.diagnosticError || 'Re-authentication required'})`
-                      : 'Status: Ready for YouTube Video File Selection & Level-4 Human Authorization'}
+                    {youTubeStudioStatusLine(ytOauth)}
                   </p>
                 </div>
               </div>
