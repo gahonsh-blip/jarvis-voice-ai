@@ -4,7 +4,31 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-14 02:35 IST — **WORK SLOT 10 of the
+Last cycle: 2026-10-14 03:05 IST — **WORK SLOT 11 of the
+2026-10-13 → 2026-10-14 window (03:05 IST fire; state `slots_completed: 10`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
+real fake-success site: the LinkedIn connected-member banner fabricated a
+member URN.** The banner rendered
+`oauth.authorUrn || \`urn:li:person:${oauth.memberSub || 'self'}\`` in
+`src/components/SocialMediaModal.tsx`. A grant whose author URN and member sub
+were both absent — the member identity was never read from the provider — still
+displayed `urn:li:person:self`, a syntactically valid member URN, so the
+operator read a concrete author identity no provider had returned. The line is
+now produced by `linkedInAuthorUrnLabel(authorUrn, memberSub)` in
+`src/utils/hardening/socialAccountIdTruth.ts`, which returns the recorded author
+URN, else a URN derived from a **real** member sub (rejecting the historical
+`'self'` placeholder), else a plain `AUTHOR_URN_NOT_RECORDED_LABEL`
+("author URN not recorded — no member was read"). Guarded by the new
+`Item 13 — the LinkedIn banner never fabricates a member URN` block in
+`src/tests/socialAccountIdTruth.test.ts` (5 cases incl. the full input matrix
+and a source guard that `oauth.memberSub || 'self'` is gone). Negative-validated
+— restoring the pre-fix expression in the component failed exactly the new
+source guard (`1 failed | 17 passed`); restored → 18/18. Gates (observed this
+fire): lint (`tsc --noEmit`) exit 0; targeted file 18 passed. Full suite/build
+recorded below. Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` sites remains.
+
+Last cycle (previous slot): 2026-10-14 02:35 IST — **WORK SLOT 10 of the
 2026-10-13 → 2026-10-14 window (02:35 IST fire; state `slots_completed: 9`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
 real fake-success site: the Telegram Gateway "Test Connection" banner drew a

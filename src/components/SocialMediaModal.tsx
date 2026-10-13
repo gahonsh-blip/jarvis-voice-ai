@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
 import { describeStagedChannel } from '../utils/hardening/youtubeChannelTruth';
-import { connectedLinkedInIdentity, connectedYouTubeChannelId } from '../utils/hardening/socialAccountIdTruth';
+import { connectedLinkedInIdentity, connectedYouTubeChannelId, linkedInAuthorUrnLabel } from '../utils/hardening/socialAccountIdTruth';
 import { oauthConnectionNotice } from '../utils/hardening/oauthAccountNoticeTruth';
 import {
   classifyProviderTestResponse,
@@ -1992,7 +1992,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-400 font-mono">
-                              Author URN: <code className="text-purple-300">{oauth.authorUrn || `urn:li:person:${oauth.memberSub || 'self'}`}</code>
+                              Author URN: <code className="text-purple-300">{linkedInAuthorUrnLabel(oauth.authorUrn, oauth.memberSub)}</code>
                             </p>
                           </div>
                         </div>

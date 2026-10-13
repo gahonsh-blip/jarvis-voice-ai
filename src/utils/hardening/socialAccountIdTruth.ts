@@ -127,3 +127,24 @@ export function connectedYouTubeChannelId(raw: unknown): string {
   if (!trimmed || trimmed === 'Authenticated Google Account') return CHANNEL_ID_NOT_RECORDED_LABEL;
   return trimmed;
 }
+
+/** Label shown when a connected account's LinkedIn author URN was not recorded. */
+export const AUTHOR_URN_NOT_RECORDED_LABEL = 'author URN not recorded — no member was read';
+
+/**
+ * Author-URN line for the connected LinkedIn banner. The banner rendered
+ * `oauth.authorUrn || \`urn:li:person:${oauth.memberSub || 'self'}\``. A grant
+ * whose author URN and member sub were both absent — the member identity was
+ * never read — still displayed `urn:li:person:self`, a syntactically valid
+ * member URN, so the operator read a concrete author identity that no provider
+ * had returned. This returns the recorded URN or member-sub-derived URN, or
+ * states plainly that no member was read; it never fabricates `self`.
+ */
+export function linkedInAuthorUrnLabel(rawUrn: unknown, rawMemberSub: unknown): string {
+  const urn = typeof rawUrn === 'string' ? rawUrn.trim() : '';
+  if (urn) return urn;
+  const sub = typeof rawMemberSub === 'string' ? rawMemberSub.trim() : '';
+  // `self` is the historical placeholder for an unread member, not a real sub.
+  if (sub && sub !== 'self') return `urn:li:person:${sub}`;
+  return AUTHOR_URN_NOT_RECORDED_LABEL;
+}

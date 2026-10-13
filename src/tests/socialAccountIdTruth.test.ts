@@ -7,6 +7,8 @@ import {
   disconnectAccountLabel,
   connectedLinkedInIdentity,
   connectedYouTubeChannelId,
+  linkedInAuthorUrnLabel,
+  AUTHOR_URN_NOT_RECORDED_LABEL,
   ACCOUNT_NAME_NOT_RETURNED_LABEL,
   CHANNEL_ID_NOT_RECORDED_LABEL,
 } from '../utils/hardening/socialAccountIdTruth';
@@ -143,5 +145,42 @@ describe('Item 13 — a connected-account banner never invents the account ident
     expect(src).toContain('connectedLinkedInIdentity(linkedInInfo?.accountName)');
     expect(src).toContain('connectedLinkedInIdentity(oauth.name)');
     expect(src).toContain('connectedYouTubeChannelId(ytOauth.channelId)');
+  });
+});
+
+describe('Item 13 — the LinkedIn banner never fabricates a member URN', () => {
+  it('returns the recorded author URN when one was read', () => {
+    expect(linkedInAuthorUrnLabel('urn:li:person:abc123', undefined)).toBe('urn:li:person:abc123');
+    expect(linkedInAuthorUrnLabel('  urn:li:person:abc123  ', 'xyz')).toBe('urn:li:person:abc123');
+  });
+
+  it('derives the URN from a real member sub when the author URN is absent', () => {
+    expect(linkedInAuthorUrnLabel(undefined, 'abc123')).toBe('urn:li:person:abc123');
+    expect(linkedInAuthorUrnLabel('', '  abc123  ')).toBe('urn:li:person:abc123');
+  });
+
+  it('never fabricates `urn:li:person:self` for an unread member', () => {
+    // The historical placeholder sub is not a real member identity.
+    expect(linkedInAuthorUrnLabel(undefined, 'self')).toBe(AUTHOR_URN_NOT_RECORDED_LABEL);
+    for (const [urn, sub] of [
+      [undefined, undefined],
+      ['', ''],
+      ['   ', '   '],
+      [null, null],
+      [42, 42],
+      ['', 'self'],
+    ] as [unknown, unknown][]) {
+      const label = linkedInAuthorUrnLabel(urn, sub);
+      expect(label).not.toMatch(/person:self/);
+      expect(label).toBe(AUTHOR_URN_NOT_RECORDED_LABEL);
+    }
+    expect(AUTHOR_URN_NOT_RECORDED_LABEL).toMatch(/not recorded/i);
+    expect(AUTHOR_URN_NOT_RECORDED_LABEL).not.toMatch(/urn:li:person/);
+  });
+
+  it('the LinkedIn banner no longer falls back to `urn:li:person:self`', () => {
+    const src = squeezed('src/components/SocialMediaModal.tsx');
+    expect(src).not.toContain("oauth.memberSub || 'self'");
+    expect(src).toContain('linkedInAuthorUrnLabel(oauth.authorUrn, oauth.memberSub)');
   });
 });
