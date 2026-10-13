@@ -21,7 +21,7 @@ interface DashboardMapSnippetProps {
 export const DashboardMapSnippet: React.FC<DashboardMapSnippetProps> = ({
   coords,
   address,
-  source = 'live',
+  source = null,
   isLoading = false,
   onOpenModal,
   onRefresh,
