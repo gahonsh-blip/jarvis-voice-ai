@@ -46,6 +46,23 @@ export function speechReadinessLabel(readiness: SpeechReadiness): string {
   return 'SPEECH STATUS UNKNOWN';
 }
 
+/**
+ * Status text for the Settings TTS diagnostics row. The pre-fix render read
+ * `speechDiagnostics?.speechSynthesisAvailable ? 'Web Speech API Active' : 'API
+ * Standby'`, so a `null` diagnostics snapshot — the panel is open before any
+ * utterance has run — fell to the else branch and printed a settled "API
+ * Standby" for a platform that was never probed. Only an observed boolean may
+ * claim either verdict; an unobserved one reports that no probe has run.
+ */
+export function speechEngineStatusLabel(
+  diagnostics: SpeechReadinessShape | null | undefined
+): string {
+  if (diagnostics == null || typeof diagnostics.speechSynthesisAvailable !== 'boolean') {
+    return 'TTS ENGINE NOT PROBED';
+  }
+  return diagnostics.speechSynthesisAvailable ? 'Web Speech API Active' : 'API Standby';
+}
+
 /** Shape of the mobile status snapshot this helper reads provenance from. */
 export interface BriefingProvenanceShape {
   isSample?: boolean;
