@@ -57,7 +57,11 @@ import {
 } from '../utils/telephonyEndpointTruth';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
 import { ACOUSTIC_FILTER_STATUS, ACOUSTIC_FILTER_SPEC } from '../utils/hardening/acousticFilterTruth';
-import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
+import {
+  ACTION_ITEM_LIST_NOTE,
+  TRANSCRIPT_NOT_VERIFIED_NOTE,
+  callTranscriptHeadingLabel,
+} from '../utils/hardening/callSummaryTruth';
 import { formatDurationWords } from '../utils/hardening/callDurationTruth';
 import {
   downloadCallHistoryCsv,
@@ -1254,8 +1258,9 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     {/* Full Transcript */}
                     <div className="mt-4 flex-1">
                       <div className="text-[11px] font-mono text-slate-400 uppercase mb-2">
-                        Complete Verified Transcript ({selectedLog.transcript.length} turns)
+                        {callTranscriptHeadingLabel(selectedLog.transcript.length)}
                       </div>
+                      <p className="text-[10px] text-slate-500 mb-2">{TRANSCRIPT_NOT_VERIFIED_NOTE}</p>
                       <div className="max-h-56 overflow-y-auto space-y-2 rounded-xl bg-slate-950 p-3 border border-slate-800 text-xs">
                         {selectedLog.transcript.map((t, idx) => {
                           let speakerLabel = 'JARVIS AI';

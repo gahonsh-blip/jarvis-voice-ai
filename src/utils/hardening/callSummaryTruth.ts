@@ -154,6 +154,33 @@ export function formatLocalTurnReply(replyText: string): string {
   return `${trimmed} ${LOCAL_TURN_REPLY_NOTE}`;
 }
 
+/**
+ * Heading for the recorded-call transcript panel. `TelephonyHubModal` rendered
+ * `Complete Verified Transcript (N turns)` unconditionally. Nothing in the
+ * capture path verifies a turn: the agent turns are the scripted greeting and
+ * the model-authored reply (spoken through the browser synth, never read back),
+ * and the caller/callee turns come from the browser's own speech recognition.
+ * No transcription provider, per-turn confidence or speaker disambiguation was
+ * ever consulted, so the word "Verified" asserted a check nobody performed.
+ *
+ * The heading names the turns as recorded. A non-finite or absent count is
+ * reported explicitly rather than coerced to a measured-looking `0`.
+ */
+export function callTranscriptHeadingLabel(turns: number | null | undefined): string {
+  const count =
+    typeof turns === 'number' && Number.isFinite(turns) ? Math.max(0, Math.floor(turns)) : null;
+  return count === null
+    ? 'Recorded Call Transcript (turn count unmeasured)'
+    : `Recorded Call Transcript (${count} turn${count === 1 ? '' : 's'})`;
+}
+
+/**
+ * Note rendered beside the transcript so a recorded turn is not read as a
+ * provider-verified one.
+ */
+export const TRANSCRIPT_NOT_VERIFIED_NOTE =
+  'Recorded turns — not verified by a transcription provider and not speaker-confirmed.';
+
 /** Marker every offline-captured action item carries. */
 export const LOCAL_TURN_ACTION_ITEM_NOTE = 'captured offline — not confirmed as performed';
 

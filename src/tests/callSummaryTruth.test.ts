@@ -17,6 +17,8 @@ import {
   LOCAL_TURN_REPLY_NOTE,
   describeCallSummary,
   NO_CALL_SUMMARY_NOTE,
+  callTranscriptHeadingLabel,
+  TRANSCRIPT_NOT_VERIFIED_NOTE,
 } from '../utils/hardening/callSummaryTruth';
 import { generateLocalCallTurn, summarizeCallTranscript } from '../utils/telephonyEngine';
 import type { CallTurn } from '../types/telephony';
@@ -402,5 +404,47 @@ describe('ActiveCallHUD renders the summary through describeCallSummary', () => 
   it('no longer substitutes the "Call concluded normally." assurance', () => {
     expect(hudSource).not.toContain("|| 'Call concluded normally.'");
     expect(hudSource).not.toMatch(/Call concluded normally/);
+  });
+});
+
+// item 13, continued — the recorded-call transcript heading. `TelephonyHubModal`
+// rendered `Complete Verified Transcript (N turns)` unconditionally, but nothing
+// in the capture path verifies a turn: the agent turns are the scripted greeting
+// and the model-authored reply, and the caller/callee turns come from the
+// browser's own speech recognition. No provider, confidence or speaker check was
+// ever consulted, so the heading asserted a verification nobody performed.
+describe('callTranscriptHeadingLabel names the turns as recorded, never as verified', () => {
+  it('counts the recorded turns and says "Recorded"', () => {
+    expect(callTranscriptHeadingLabel(3)).toBe('Recorded Call Transcript (3 turns)');
+    expect(callTranscriptHeadingLabel(1)).toBe('Recorded Call Transcript (1 turn)');
+    expect(callTranscriptHeadingLabel(0)).toBe('Recorded Call Transcript (0 turns)');
+  });
+
+  it('reports an unmeasured count explicitly instead of a measured-looking zero', () => {
+    expect(callTranscriptHeadingLabel(null)).toContain('unmeasured');
+    expect(callTranscriptHeadingLabel(undefined)).toContain('unmeasured');
+    expect(callTranscriptHeadingLabel(Number.NaN)).toContain('unmeasured');
+  });
+
+  it('never asserts a verified transcript', () => {
+    expect(callTranscriptHeadingLabel(4)).not.toMatch(/verified/i);
+    expect(TRANSCRIPT_NOT_VERIFIED_NOTE).toMatch(/not verified/i);
+  });
+});
+
+describe('TelephonyHubModal renders the transcript heading through the truth helper', () => {
+  const modalSource = fs.readFileSync(
+    path.resolve(__dirname, '../components/TelephonyHubModal.tsx'),
+    'utf8'
+  );
+
+  it('uses callTranscriptHeadingLabel and the not-verified note', () => {
+    expect(modalSource).toContain('callTranscriptHeadingLabel(selectedLog.transcript.length)');
+    expect(modalSource).toContain('TRANSCRIPT_NOT_VERIFIED_NOTE');
+  });
+
+  it('no longer carries the "Complete Verified Transcript" literal', () => {
+    expect(modalSource).not.toContain('Complete Verified Transcript');
+    expect(modalSource).not.toMatch(/Verified Transcript/);
   });
 });
