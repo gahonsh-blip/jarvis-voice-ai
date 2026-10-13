@@ -4,7 +4,34 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-14 00:36 IST — **WORK SLOT 7 of the
+Last cycle: 2026-10-14 01:35 IST — **WORK SLOT 8 of the
+2026-10-13 → 2026-10-14 window (01:35 IST fire; state `slots_completed: 7`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
+real fake-success site: the Social Hub connected-account banners named an
+account the provider never returned.** In `SocialMediaModal.tsx` the LinkedIn
+target line rendered `linkedInInfo?.accountName || 'Authenticated Member'`, the
+LinkedIn connected banner rendered `oauth.name || 'Personal Member'`, and the
+YouTube connected banner printed `ytOauth.channelId || 'Authenticated Google
+Account'`. A connected OAuth grant is real; those names were not — a grant whose
+provider response omitted the name still read as a named member, and a channel
+ID that was never read displayed an invented account identity. The three sites
+now route through `connectedLinkedInIdentity()` and `connectedYouTubeChannelId()`
+in `src/utils/hardening/socialAccountIdTruth.ts`: the first returns the observed
+name or `ACCOUNT_NAME_NOT_RETURNED_LABEL`, the second the recorded ID or
+`CHANNEL_ID_NOT_RECORDED_LABEL`. Both treat the historical placeholders
+(`Personal Member`, `Authenticated Member`, `Authenticated Google Account`) as
+absent, so a replayed payload cannot read as a real identity. Guarded by a new
+`describe` block in `src/tests/socialAccountIdTruth.test.ts` (14 tests in the
+file, up from 11). Negative-validated — restoring only `oauth.name || 'Personal
+Member'` failed exactly 1 of the 14 (`1 failed | 13 passed`); restored → 14/14.
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 1 file / 14
+passed; full `npx vitest run` **236 files / 2633 tests passed** (0 failed);
+`npm run build` exit 0 (`dist/server.cjs` 1.0mb). E2E: NOT RUN (no
+browser/handset). Deploy: NOT_CONFIGURED. Commit `866175c`. Item 13 stays
+`PARTIAL` — the long tail of unclassified `success: true` / discarded-
+`persistMemory()` sites remains.
+
+Last cycle (previous slot): 2026-10-14 00:36 IST — **WORK SLOT 7 of the
 2026-10-13 → 2026-10-14 window (00:35 IST fire; state `slots_completed: 6`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
 real fake-success site: the dashboard geolocation snippet defaulted an unknown

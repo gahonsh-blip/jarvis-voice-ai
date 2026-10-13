@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-14 01:35 IST (2026-10-13 20:05 UTC) — window slot 8: the Social Hub connected banners stop naming an account the provider never returned
+
+### Fixed
+- **`src/components/SocialMediaModal.tsx` — the connected-account banners invented the account identity.** The LinkedIn target line rendered `linkedInInfo?.accountName || 'Authenticated Member'`, the LinkedIn connected banner rendered `oauth.name || 'Personal Member'`, and the YouTube connected banner printed `ytOauth.channelId || 'Authenticated Google Account'`. The OAuth grant is real; the names were not — a grant whose provider response omitted the name still read as a named member, and a channel ID that was never read displayed an invented account identity.
+
+### Added
+- `connectedLinkedInIdentity()` and `connectedYouTubeChannelId()` in `src/utils/hardening/socialAccountIdTruth.ts`: the first returns the observed name or `ACCOUNT_NAME_NOT_RETURNED_LABEL`; the second the recorded ID or `CHANNEL_ID_NOT_RECORDED_LABEL`. Both treat the historical placeholders (`Personal Member`, `Authenticated Member`, `Authenticated Google Account`) as absent, so a replayed payload cannot read as a real identity. The two LinkedIn placeholder strings were also added to the shared `INVENTED_ACCOUNT_NAMES` set.
+
+### Tests
+- `src/tests/socialAccountIdTruth.test.ts` (14 in the file, up from 11): a new `describe` block covers the connected-banner helpers — a real name/ID round-trips trimmed, every blank/non-string/placeholder input maps to the honest label, and source guards pin the three render sites and the absence of the old literals. Negative-validated: restoring only `oauth.name || 'Personal Member'` failed exactly 1 of the 14 (`1 failed | 13 passed`); restored → 14/14. Lint (`tsc --noEmit`) exit 0; full suite 236 files / 2633 tests passed; build exit 0 (`dist/server.cjs` 1.0mb).
+
+---
+
 ## [Unreleased] - 2026-10-13 23:36 IST (2026-10-13 18:06 UTC) — window slot 6: the post-call HUD stops asserting "Call concluded normally." for an unrecorded summary
 
 ### Fixed

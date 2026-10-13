@@ -17019,3 +17019,18 @@ clean; no token/key in the branch diff; no `node_modules`/`dist` staged.
 
 - Commits: `272fecf` (fix) · `874f138` (docs). Both pushed to origin/feature/hermes-full-completion.
 - PR #8 open. Main: NOT MERGED — awaiting human approval.
+
+## Slot 8 — WORK — 2026-10-14 01:35 IST
+
+**Item #13 (Zero-fake-success for all tools) — PARTIAL (one real site closed).**
+
+**Bug found and fixed.** The Social Hub connected-account banners in `src/components/SocialMediaModal.tsx` named an account the provider never returned. The LinkedIn target line rendered `linkedInInfo?.accountName || 'Authenticated Member'`, the LinkedIn connected banner rendered `oauth.name || 'Personal Member'`, and the YouTube connected banner printed `ytOauth.channelId || 'Authenticated Google Account'`. A connected OAuth grant is real; those names were not — a grant whose provider response omitted the name still read as a named member, and a channel ID that was never read displayed an invented account identity. The three sites now route through `connectedLinkedInIdentity()` / `connectedYouTubeChannelId()` in `src/utils/hardening/socialAccountIdTruth.ts`, which return the observed value or an explicit not-returned / not-recorded label, and treat the historical placeholders as absent so a replayed payload cannot read as a real identity.
+
+**Evidence.** New `describe` block in `src/tests/socialAccountIdTruth.test.ts` (14 in the file, up from 11): a real name/ID round-trips trimmed, every blank / non-string / placeholder input maps to the honest label, and source guards pin the three render sites and the absence of the old literals. Negative-validated: restoring only `oauth.name || 'Personal Member'` failed exactly 1 of 14 (`1 failed | 13 passed`); restored → 14/14.
+
+**Gates (observed).** Lint `tsc --noEmit` exit 0. Targeted 1 file / 14 passed. Full `npx vitest run` 236 files / 2633 tests passed (78.41 s, 0 failed). Build exit 0, `dist/server.cjs` 1088521 bytes. E2E: NOT RUN (no browser/handset). Deploy: NOT_CONFIGURED.
+
+**Security.** `git check-ignore -v .env` → `.gitignore:4:.env`. Working tree clean after commit; no token/key in the branch diff; no `node_modules`/`dist` staged.
+
+- Commits: `866175c` (fix) + docs. Pushed to origin/feature/hermes-full-completion.
+- PR #8 open. Main: NOT MERGED — awaiting human approval.
