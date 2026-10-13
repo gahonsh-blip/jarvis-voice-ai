@@ -4,6 +4,20 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-14 02:35 IST (2026-10-13 21:05 UTC) — window slot 10: the Telegram Gateway test banner stops claiming a delivery it did not confirm
+
+### Fixed
+- **`src/components/TelegramGatewayModal.tsx` — the "Test Connection" banner drew a green "✅ Live Bot Verified!" from its own boolean.** `handleTestLiveConnection` rendered the banner locally: the `data.success` branch printed `'✅ Live Bot Verified! Ping notification sent to your Telegram app on mobile.'` whenever `notificationSent` was true, and `✅ Connected to ${data.bot?.username || 'Telegram'}.` otherwise. The route `POST /api/telegram/test-live` defines `success` as a Telegram-confirmed delivery (`delivery.delivered`) and reports `botReachable: true` separately from `success: false` when `getMe` answered but no delivery was confirmed — so a reachable-but-undelivered result could still read as a live verified connection.
+
+### Added
+- `telegramTestBanner()` in `src/utils/telegramGatewayTruth.ts` renders only what the server observed: `success: true` and `notificationSent: true` → a confirmed-delivery success; `success: true` without that proof → "reported success but did not confirm a delivery … treat this as unverified"; `botReachable: true` with no confirmed delivery → a warning naming the bot and whether a chat id is registered; otherwise a failure. The banner's `tone` (`success`/`warn`/`fail`) drives the colour and icon, so a warning and a failure no longer share one amber style.
+- `POST /api/telegram/test-live` now returns `botUsername` from the username the API actually returned, so the panel names the bot without the server's template default.
+
+### Tests
+- `src/tests/telegramTestBannerTruth.test.ts` (8 cases): the confirmed-delivery success, success-without-delivery staying non-success, the reachable/registered and reachable/unregistered warnings, the failure inputs including `null`, no invented bot name, plus source guards that the component renders via `telegramTestBanner(data)` and the old literals are gone. Negative-validated: restoring the pre-fix banner expression failed exactly the new source guard (`1 failed | 7 passed`); restored → 8/8. Lint (`tsc --noEmit`) exit 0; full suite 237 files / 2643 tests passed; build exit 0 (`dist/server.cjs` 1088751 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-14 02:05 IST (2026-10-13 20:35 UTC) — window slot 9: the Computer Operator reports the steps it executed, not the plan length
 
 ### Fixed
