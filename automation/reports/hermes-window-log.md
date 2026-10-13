@@ -16968,3 +16968,39 @@ nothing; no `node_modules`/`dist` staged.
   origin/feature/hermes-full-completion. State pushed to
   origin/automation/hermes-state (`3d431b6`, slots_completed=5).
 - PR #8 open. Main: NOT MERGED — awaiting human approval.
+
+---
+
+## Slot 6 — 2026-10-13 23:36 IST (WORK) · window date 2026-10-13 · slots completed: 6
+
+Item #13 `Zero-fake-success for all tools` (PARTIAL — long-tail audit).
+
+**Fixed.** `src/components/ActiveCallHUD.tsx` — the AI Briefing Summary rendered
+`activeCall.summary || 'Call concluded normally.'`. `App.tsx` stores an **empty**
+summary on the declined / spam-filter path, so a call the summariser never
+summarised — nothing to conclude — was shown to the operator as a call that
+concluded normally. New `describeCallSummary()` + `NO_CALL_SUMMARY_NOTE` in
+`src/utils/hardening/callSummaryTruth.ts` passes a real summary through unchanged
+and renders an absent one as `No summary was recorded for this call — the
+outcome was not observed.` The HUD routes the field through it; the pre-fix
+literal is gone.
+
+**Evidence.** `src/tests/callSummaryTruth.test.ts` — 5 new cases: a real summary
+round-trips; empty / whitespace / null / undefined all map to
+`NO_CALL_SUMMARY_NOTE`; the note never says "concluded normally"; plus source
+guards pinning the HUD render site and the absence of the old literal. 49 tests
+in the file, all passing. Negative-validated: restoring only the old literal
+failed exactly 2 of the new guards (`2 failed | 47 passed`); restored → 49/49.
+
+**Gates (observed).** Lint `tsc --noEmit` exit 0. Targeted 1 file / 49 passed.
+Full `npx vitest run` 236 files / 2626 tests passed (77.99 s, 0 failed). Build
+exit 0, `dist/server.cjs` 1088323 bytes. E2E: NOT RUN (no browser/handset).
+Deploy: NOT_CONFIGURED.
+
+**Security.** `git check-ignore -v .env` → `.gitignore:4:.env`. Working tree
+clean; no token/key in the branch diff; no `node_modules`/`dist` staged.
+
+- Commits: `ac4f42a` (fix) · `856fa43` (docs). Both pushed to
+  origin/feature/hermes-full-completion. State pushed to
+  origin/automation/hermes-state (`8b8242a`, slots_completed=6).
+- PR #8 open. Main: NOT MERGED — awaiting human approval.
