@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-13 21:36 IST — **WORK SLOT 2 of the
+Last cycle: 2026-10-13 22:06 IST — **WORK SLOT 3 of the
+2026-10-13 → 2026-10-14 window (22:06 IST fire; state `slots_completed: 14`
+before this fire — the previous window was finalized `finalized: true`).** Item
+13 (`Zero-fake-success for all tools`) / Item 26 (`Social Automation`) —
+**fixed a real fake-success site: the Social Hub publish badge asserted a
+public audience nobody measured.** For every post the server reported
+`VERIFIED`, `SocialMediaModal.tsx` rendered `'Uploaded & Verified Live on
+YouTube'`, asserting public reach. But a YouTube upload is **PRIVATE unless
+public is applied**, and the server's own success message already says so
+(`verifyAndPublishToYouTube`, `server.ts` ~2700: "visible only to the channel
+owner"). The panel overrode the server's honest wording with a blanket "Live".
+New truth helper `publishedPostReachLabel()` in
+`src/utils/socialPublishHonesty.ts` reads the `privacyStatus` the server
+recorded (`post.privacyStatus`, set at `server.ts` 2706 from
+`uploadData.status.privacyStatus`) and renders the reach actually confirmed:
+`Uploaded & Verified Public/Unlisted/Private on YouTube`, or `Uploaded &
+Verified — visibility not recorded` when the field is absent; non-YouTube
+platforms keep the generic `Live & Verified`. Regression guard:
+`src/tests/socialPublishHonesty.test.ts` (6 new tests; suite now 30) —
+negative-validated by disabling the privacy branch and observing **4 of the
+new tests fail**, then restoring the fix (30/30). Items 13 and 26 stay
+`PARTIAL` (item 26's social automation remains an ongoing honesty sweep).
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted `npx vitest
+run src/tests/socialPublishHonesty.test.ts` **1 file / 30 tests passed**; full
+`npx vitest run` and `npm run build` run below. E2E: NOT RUN (no
+browser/handset). Deploy: NOT_CONFIGURED. Main **NOT MERGED** (awaiting human
+approval).
+
+Earlier cycle (slot 2): 2026-10-13 21:36 IST — **WORK SLOT 2 of the
 2026-10-13 → 2026-10-14 window (21:36 IST fire; state `slots_completed: 14`
 before this fire — the previous window was finalized `finalized: true`).** Item
 13 (`Zero-fake-success for all tools`) — **fixed a real fake-success site: the

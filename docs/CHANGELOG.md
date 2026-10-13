@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 22:06 IST (2026-10-13 16:36 UTC) — window slot 3: the publish badge stops claiming a public audience it never measured
+
+### Fixed
+- **`src/components/SocialMediaModal.tsx` — the published-post badge rendered `'Uploaded & Verified Live on YouTube'` for every post the server reported `VERIFIED`, asserting public reach.** A YouTube upload is **PRIVATE unless public is applied**, and the server's own success message already states the privacy actually applied (`verifyAndPublishToYouTube`, `server.ts` ~2700: "visible only to the channel owner" for a private upload). The panel overrode that honest wording with a blanket "Live", claiming an audience nobody observed.
+
+### Added
+- **`publishedPostReachLabel()` in `src/utils/socialPublishHonesty.ts`** — reads the `privacyStatus` the server recorded (`post.privacyStatus`, set at `server.ts` 2706 from `uploadData.status.privacyStatus`) and renders the reach actually confirmed: `Uploaded & Verified Public/Unlisted/Private on YouTube`, or `Uploaded & Verified — visibility not recorded` when the field is absent. Non-YouTube platforms keep the generic `Live & Verified`.
+
+### Tests
+- `src/tests/socialPublishHonesty.test.ts`: 6 new cases — a PRIVATE upload never says "Live" or "Public", an unlisted upload says "Unlisted", only a recorded public upload says "Public", a missing privacy says "visibility not recorded", and non-YouTube / empty posts keep the generic label. Negative-validated: disabling the privacy branch failed exactly 4 of the new tests; restored → 30/30. Lint (`tsc --noEmit`) exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-13 21:36 IST (2026-10-13 16:06 UTC) — window slot 2: the GitHub banner stops asserting an unobserved connection
 
 ### Fixed
