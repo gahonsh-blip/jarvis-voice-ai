@@ -17058,3 +17058,35 @@ full `npx vitest run` 236 files / 2635 tests passed (0 failed); `npm run build`
 exit 0 (`dist/server.cjs` 1.0mb). E2E: NOT RUN (no browser/handset). Security:
 `.env` ignored, tree clean, no real secret in the diff. Deploy: NOT_CONFIGURED.
 Commit `5bc4a21`. Item 13 stays `PARTIAL`.
+
+
+---
+
+## Slot 10 — WORK — 2026-10-14 02:35 IST (window 2026-10-13)
+
+Item 13 (`Zero-fake-success for all tools`) — fixed the Telegram Gateway
+"Test Connection" banner. `handleTestLiveConnection`
+(`src/components/TelegramGatewayModal.tsx`) built its banner from its own
+boolean: the `data.success` branch printed a green "Live Bot Verified! Ping
+notification sent..." whenever `notificationSent` was true, and
+"Connected to <bot|Telegram>." otherwise. `POST /api/telegram/test-live`
+(`server.ts`) defines `success` as a Telegram-confirmed delivery
+(`delivery.delivered`) and reports `botReachable: true` separately from
+`success: false` when `getMe` answered but no delivery was confirmed — so a
+reachable-but-undelivered result could read as a live verified connection. New
+`telegramTestBanner()` (`src/utils/telegramGatewayTruth.ts`) renders only the
+observed fields (confirmed delivery → success; `success` without that proof →
+unverified; `botReachable` without a confirmed delivery → a warning naming the
+bot and whether a chat id is registered; otherwise failure), and the route now
+returns `botUsername` from the API-returned username. Guarded by
+`src/tests/telegramTestBannerTruth.test.ts` (8 cases). Negative-validated:
+restoring the pre-fix banner failed the new source guard exactly
+(1 failed | 7 passed); restored → 8/8.
+
+Gates (observed): lint (`tsc --noEmit`) exit 0; targeted 2 files / 20 passed;
+full `npx vitest run` 237 files / 2643 tests passed (0 failed, 78.44 s);
+`npm run build` exit 0 (`dist/server.cjs` 1088751 bytes). E2E: NOT RUN (no
+browser/handset). Security: `.env` ignored, tree clean, no real secret in the
+diff. Deploy: NOT_CONFIGURED. Commit `a451643` (+ docs `9bb18cc`). Item 13
+stays `PARTIAL` — the long tail of unclassified `success: true` /
+discarded-`persistMemory()` sites remains.
