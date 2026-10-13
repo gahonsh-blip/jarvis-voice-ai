@@ -4909,6 +4909,9 @@ app.post('/api/telegram/test-live', async (req: Request, res: Response) => {
         success: delivery.delivered,
         botReachable: true,
         bot: botInfo,
+        // The username the API actually returned, so the client can name the
+        // bot without rendering the server's template default.
+        botUsername: typeof botInfo?.username === 'string' ? botInfo.username : undefined,
         notificationSent: delivery.delivered,
         deliveryOutcome: delivery.outcome,
         messageId: delivery.messageId,
