@@ -4,7 +4,35 @@ Authoritative status of the 60-item backlog. A feature is only marked
 `VERIFIED` when it is implemented, integrated, tested, and confirmed with real
 evidence. Anything simulated or hardware-dependent is marked accordingly.
 
-Last cycle: 2026-10-14 01:35 IST — **WORK SLOT 8 of the
+Last cycle: 2026-10-14 02:05 IST — **WORK SLOT 9 of the
+2026-10-13 → 2026-10-14 window (02:05 IST fire; state `slots_completed: 8`
+before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
+real fake-success site: the Computer Operator reported the *planned* step
+count, not the steps it executed.** `executeOperatorTask` in
+`src/utils/computerOperatorEngine.ts` announced
+`'COMPLETED' + '_' + String(plan.actions.length) + '_STEPS'`, and its loop cap
+read `options.maxSteps ?? Math.min(plan.actions.length, 8)`. Two defects
+followed: (1) a run capped by `maxSteps` still printed the full plan length, so
+a truncated task was presented as a full-plan COMPLETED task; (2) the `??`
+default made `maxSteps` a *replacement* for the plan length, so the loop
+executed **every** planned action whenever the caller passed a cap — the cap
+was silently ignored. The loop now executes `Math.min(plan.actions.length,
+options.maxSteps ?? MAX_PLAN_STEPS)` actions, counts the actions that actually
+ran and verified, reports `'COMPLETED_<executed>_STEPS'`, and emits a final
+`onProgress` terminal task that a capped run previously skipped (so the UI
+never rendered COMPLETED). Guarded by two new cases in
+`src/tests/computerOperatorEngine.test.ts` (24 in the file, up from 22).
+Negative-validated — restoring only the two old lines
+(`options.maxSteps ?? Math.min(plan.actions.length, 8)` and
+`String(plan.actions.length)`) failed exactly 2 of the 24
+(`2 failed | 22 passed`); restored → 24/24. Gates (observed this fire): lint
+(`tsc --noEmit`) exit 0; targeted 3 files / 55 passed; full `npx vitest run`
+**236 files / 2635 tests passed** (0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1.0mb). E2E: NOT RUN (no browser/handset). Deploy:
+NOT_CONFIGURED. Commit `5bc4a21`. Item 13 stays `PARTIAL` — the long tail of
+unclassified `success: true` / discarded-`persistMemory()` sites remains.
+
+Last cycle (previous slot): 2026-10-14 01:35 IST — **WORK SLOT 8 of the
 2026-10-13 → 2026-10-14 window (01:35 IST fire; state `slots_completed: 7`
 before this fire).** Item 13 (`Zero-fake-success for all tools`) — **fixed a
 real fake-success site: the Social Hub connected-account banners named an

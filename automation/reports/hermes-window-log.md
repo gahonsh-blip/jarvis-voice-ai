@@ -17034,3 +17034,27 @@ clean; no token/key in the branch diff; no `node_modules`/`dist` staged.
 
 - Commits: `866175c` (fix) + docs. Pushed to origin/feature/hermes-full-completion.
 - PR #8 open. Main: NOT MERGED — awaiting human approval.
+
+---
+
+## Slot 9 — WORK — 2026-10-14 02:05 IST (window 2026-10-13)
+
+Item 13 (`Zero-fake-success for all tools`) — fixed a real fake-success site in
+the Computer Operator. `executeOperatorTask` (`src/utils/computerOperatorEngine.ts`)
+announced `'COMPLETED' + '_' + String(plan.actions.length) + '_STEPS'` and capped
+its loop with `options.maxSteps ?? Math.min(plan.actions.length, 8)`. A run capped
+by `maxSteps` therefore reported the full plan length (a truncated task read as a
+full-plan COMPLETED task), and because `??` replaced the plan length, a
+caller-supplied cap silently ran every planned action. The loop now executes
+`Math.min(plan.actions.length, options.maxSteps ?? MAX_PLAN_STEPS)` actions and
+reports `'COMPLETED_<executed>_STEPS'`; a capped run also emits the terminal
+`onProgress` it previously skipped. Guarded by two new cases in
+`src/tests/computerOperatorEngine.test.ts` (24, up from 22). Negative-validated:
+restoring only the two old lines failed exactly 2 of 24 (2 failed | 22 passed);
+restored → 24/24.
+
+Gates (observed): lint (`tsc --noEmit`) exit 0; targeted 3 files / 55 passed;
+full `npx vitest run` 236 files / 2635 tests passed (0 failed); `npm run build`
+exit 0 (`dist/server.cjs` 1.0mb). E2E: NOT RUN (no browser/handset). Security:
+`.env` ignored, tree clean, no real secret in the diff. Deploy: NOT_CONFIGURED.
+Commit `5bc4a21`. Item 13 stays `PARTIAL`.

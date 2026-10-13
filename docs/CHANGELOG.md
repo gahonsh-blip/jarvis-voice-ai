@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-14 02:05 IST (2026-10-13 20:35 UTC) — window slot 9: the Computer Operator reports the steps it executed, not the plan length
+
+### Fixed
+- **`src/utils/computerOperatorEngine.ts` — `executeOperatorTask` announced the planned step count, not the executed one, and silently ignored a caller's step cap.** The terminal result was `'COMPLETED' + '_' + String(plan.actions.length) + '_STEPS'`, and the loop cap defaulted as `options.maxSteps ?? Math.min(plan.actions.length, 8)`. A run capped by `maxSteps` therefore printed the full plan length (a truncated task read as a full-plan COMPLETED task), and because `??` replaced rather than capped the plan length, the loop ran **every** planned action whenever a cap was passed. The loop now executes `Math.min(plan.actions.length, options.maxSteps ?? MAX_PLAN_STEPS)` actions and reports `'COMPLETED_<executed>_STEPS'`.
+
+### Fixed (UI)
+- A capped run returns before the loop's last `onProgress`; the terminal `onProgress(task)` is now emitted before returning, so the operator UI renders the COMPLETED status instead of the last in-flight step.
+
+### Tests
+- `src/tests/computerOperatorEngine.test.ts` (24 in the file, up from 22): one case pins a 3-action plan capped at `maxSteps: 2` (2 clicks, `COMPLETED_2_STEPS`, terminal update delivered); one pins a 10-action plan capped at the engine maximum (`COMPLETED_8_STEPS`, 8 clicks). Negative-validated: restoring only the two old lines failed exactly 2 of the 24 (`2 failed | 22 passed`); restored → 24/24. Lint (`tsc --noEmit`) exit 0; full suite 236 files / 2635 tests passed; build exit 0 (`dist/server.cjs` 1.0mb).
+
+---
+
 ## [Unreleased] - 2026-10-14 01:35 IST (2026-10-13 20:05 UTC) — window slot 8: the Social Hub connected banners stop naming an account the provider never returned
 
 ### Fixed
