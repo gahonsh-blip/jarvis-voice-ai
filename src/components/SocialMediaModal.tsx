@@ -52,6 +52,7 @@ import {
   socialApprovalPostureLabel,
   describeGrantedScopes,
   youtubeCanPublishMeasured,
+  publishedPostReachLabel,
 } from '../utils/socialPublishHonesty';
 import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 import { socialRejectOutcome } from '../utils/hardening/socialActionCommandTruth';
@@ -1245,7 +1246,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     {selectedPost.status === 'published' || selectedPost.finalTruthState === 'VERIFIED' ? (
                       <span className="text-emerald-400 font-bold flex items-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4" />
-                        {selectedPost.platform === 'YouTube' ? 'Uploaded & Verified Live on YouTube' : 'Live & Verified'}
+                        {publishedPostReachLabel(selectedPost)}
                       </span>
                     ) : selectedPost.status === 'not_published' || selectedPost.finalTruthState === 'NOT_PUBLISHED' ? (
                       <span className="text-amber-400 font-bold flex items-center gap-1.5">

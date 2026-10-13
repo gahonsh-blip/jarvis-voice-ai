@@ -224,3 +224,32 @@ export function socialApprovalPostureLabel(
   if (level >= 4) return `Level ${level} approval required for external posts`;
   return `Permission level ${level} — NOT a Level 4 gate`;
 }
+
+/**
+ * The reach label for a post the server reported as published / VERIFIED.
+ *
+ * The server distinguishes an upload anyone can watch from one only the owner
+ * can see: a YouTube upload is PRIVATE unless public is applied, and its
+ * message states the privacy actually applied. The panel used to print
+ * "Uploaded & Verified Live on YouTube" for every verified upload, asserting a
+ * public audience the server never measured. This reads the privacy the server
+ * recorded instead, and says so when none was recorded.
+ */
+export function publishedPostReachLabel(post: {
+  platform?: string;
+  privacyStatus?: 'private' | 'unlisted' | 'public';
+}): string {
+  if ((post?.platform ?? '') === 'YouTube') {
+    switch (post?.privacyStatus) {
+      case 'public':
+        return 'Uploaded & Verified Public on YouTube';
+      case 'unlisted':
+        return 'Uploaded & Verified Unlisted on YouTube';
+      case 'private':
+        return 'Uploaded & Verified Private on YouTube';
+      default:
+        return 'Uploaded & Verified — visibility not recorded';
+    }
+  }
+  return 'Live & Verified';
+}

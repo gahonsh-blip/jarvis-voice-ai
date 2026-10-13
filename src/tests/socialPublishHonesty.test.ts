@@ -13,6 +13,7 @@ import {
   publishScopeGranted,
   describeGrantedScopes,
   youtubeCanPublishMeasured,
+  publishedPostReachLabel,
 } from '../utils/socialPublishHonesty';
 
 describe('social publish honesty — the Hub must not claim an unmeasured connection', () => {
@@ -184,5 +185,40 @@ describe('social publish honesty — YouTube read access is not upload access', 
     ).toBe(true);
     expect(youtubeCanPublishMeasured({ status: 'CONNECTED', canPublish: true })).toBe(false);
     expect(youtubeCanPublishMeasured(null)).toBe(false);
+  });
+});
+
+describe('social publish honesty — a verified upload must not claim a public audience', () => {
+  it('never says "Live" for a PRIVATE YouTube upload — only the owner can see it', () => {
+    const label = publishedPostReachLabel({ platform: 'YouTube', privacyStatus: 'private' });
+    expect(label).toMatch(/Private/);
+    expect(label).not.toMatch(/Live/);
+    expect(label).not.toMatch(/Public/);
+  });
+
+  it('says Unlisted for an unlisted YouTube upload rather than Live', () => {
+    const label = publishedPostReachLabel({ platform: 'YouTube', privacyStatus: 'unlisted' });
+    expect(label).toMatch(/Unlisted/);
+    expect(label).not.toMatch(/Live/);
+    expect(label).not.toMatch(/Public/);
+  });
+
+  it('says Public only when the server recorded a public upload', () => {
+    const label = publishedPostReachLabel({ platform: 'YouTube', privacyStatus: 'public' });
+    expect(label).toMatch(/Public/);
+  });
+
+  it('refuses to assert visibility when the server recorded no privacy', () => {
+    const label = publishedPostReachLabel({ platform: 'YouTube' });
+    expect(label).toMatch(/visibility not recorded/);
+    expect(label).not.toMatch(/Live/);
+  });
+
+  it('leaves non-YouTube platforms on the generic verified label', () => {
+    expect(publishedPostReachLabel({ platform: 'LinkedIn', privacyStatus: 'public' })).toBe('Live & Verified');
+  });
+
+  it('is safe on an empty post', () => {
+    expect(publishedPostReachLabel({})).toBe('Live & Verified');
   });
 });
