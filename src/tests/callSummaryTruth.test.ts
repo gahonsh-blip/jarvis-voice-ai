@@ -15,6 +15,8 @@ import {
   formatLocalTurnReply,
   LOCAL_TURN_ACTION_ITEM_NOTE,
   LOCAL_TURN_REPLY_NOTE,
+  describeCallSummary,
+  NO_CALL_SUMMARY_NOTE,
 } from '../utils/hardening/callSummaryTruth';
 import { generateLocalCallTurn, summarizeCallTranscript } from '../utils/telephonyEngine';
 import type { CallTurn } from '../types/telephony';
@@ -358,5 +360,47 @@ describe('telephonyEngine routes the offline turn through the truth helpers', ()
     expect(engineSource).not.toContain('I have locked this into Alex');
     expect(engineSource).not.toContain('adding your caller ID to our blocked directory');
     expect(engineSource).not.toContain('Medical appointment confirmed for Friday 3:00 PM');
+  });
+});
+
+// item 13, continued — the post-call HUD summary fallback. `App.tsx` stores an
+// empty `summary` for the declined/spam-filter path, and `ActiveCallHUD.tsx`
+// rendered `activeCall.summary || 'Call concluded normally.'` — an assurance
+// about the outcome of a call the system never summarised. The HUD now routes
+// the field through `describeCallSummary()`, which passes a real summary through
+// and reports an absent one as absent.
+describe('describeCallSummary asserts nothing the summariser did not observe', () => {
+  it('passes a real summary through unchanged', () => {
+    const real = describeOutboundCall('Dr. Mehta');
+    expect(describeCallSummary(real)).toBe(real);
+  });
+
+  it('reports an empty summary as absent, not as a normal conclusion', () => {
+    expect(describeCallSummary('')).toBe(NO_CALL_SUMMARY_NOTE);
+    expect(describeCallSummary('   ')).toBe(NO_CALL_SUMMARY_NOTE);
+    expect(describeCallSummary(null)).toBe(NO_CALL_SUMMARY_NOTE);
+    expect(describeCallSummary(undefined)).toBe(NO_CALL_SUMMARY_NOTE);
+  });
+
+  it('never substitutes "concluded normally" for a missing summary', () => {
+    expect(describeCallSummary('')).not.toMatch(/concluded normally/i);
+    expect(NO_CALL_SUMMARY_NOTE).toMatch(/not observed/i);
+  });
+});
+
+describe('ActiveCallHUD renders the summary through describeCallSummary', () => {
+  const hudSource = fs.readFileSync(
+    path.resolve(__dirname, '../components/ActiveCallHUD.tsx'),
+    'utf8'
+  );
+
+  it('imports and uses describeCallSummary for the summary field', () => {
+    expect(hudSource).toContain('describeCallSummary');
+    expect(hudSource).toContain('describeCallSummary(activeCall.summary)');
+  });
+
+  it('no longer substitutes the "Call concluded normally." assurance', () => {
+    expect(hudSource).not.toContain("|| 'Call concluded normally.'");
+    expect(hudSource).not.toMatch(/Call concluded normally/);
   });
 });

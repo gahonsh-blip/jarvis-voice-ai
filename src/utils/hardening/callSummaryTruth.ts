@@ -110,6 +110,26 @@ export function describeInboundCall(counterpart: string): string {
 }
 
 /**
+ * Note rendered when a completed call carries no summary text. `App.tsx` stores
+ * an empty summary for the "declined by user or spam filter" path; the post-call
+ * HUD used to substitute "Call concluded normally." for that empty value — an
+ * assurance about how the call went that nothing observed.
+ */
+export const NO_CALL_SUMMARY_NOTE =
+  'No call summary was recorded for this call — the outcome was not observed, so no conclusion is asserted.';
+
+/**
+ * Honest rendering of a completed call's summary field. A real summary (from
+ * `summarizeCallTranscript()`) passes through; an empty or whitespace-only value
+ * is reported as an absent summary rather than as a normal conclusion.
+ */
+export function describeCallSummary(summary: string | null | undefined): string {
+  const trimmed = (summary ?? '').trim();
+  if (!trimmed) return NO_CALL_SUMMARY_NOTE;
+  return trimmed;
+}
+
+/**
  * Marker for the offline (no-server) conversational turn. `processTelephonyTurn`
  * falls back to `generateLocalCallTurn` whenever `POST /api/telephony/handle-turn`
  * is unreachable — the exact offline-first case this app exists for. The
