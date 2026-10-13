@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-13 21:36 IST (2026-10-13 16:06 UTC) — window slot 2: the GitHub banner stops asserting an unobserved connection
+
+### Fixed
+- **`src/components/AutonomousToolsModal.tsx` — the Tools HUD GitHub banner rendered an unobserved connection state.** `githubStatus` was seeded to `null` and the badge and status line were drawn straight from it (`{githubStatus?.connected ? 'AUTHENTICATED' : 'NOT CONNECTED'}` and `{githubStatus?.message || 'Inspecting GitHub connection...'}`). Before `POST /api/tools/github/status` answered — and after a non-OK response or a network error, which `fetchGithubData` swallowed in a bare `catch` because it read `.json()` without checking `res.ok` — the banner read `NOT CONNECTED` and `Inspecting GitHub connection...` from a value nobody had observed.
+- **`fetchGithubData` now records whether the status endpoint actually answered.** A non-OK response or a thrown fetch marks the status unobserved and clears it, rather than leaving a value that the render turns into a claim.
+- **The public-repo count is gated on the same observation**, so it cannot render beside an unobserved status.
+
+### Added
+- **`src/utils/hardening/githubStatusDisplayTruth.ts`** (`githubStatusBadge` / `githubStatusMessage` / `githubStatusTone` / `GITHUB_STATUS_UNKNOWN_LABEL`) — renders only the observed verdict: `STATUS UNKNOWN` until the endpoint answers, `AUTHENTICATED` / `NOT CONNECTED` only from an observed boolean, and no pre-fetch `Inspecting` placeholder.
+
+### Tests
+- `src/tests/githubStatusDisplayTruth.test.ts`: 5 cases — UNKNOWN before the probe (even against a stale `true`), the observed boolean mapping, observed-but-missing state → UNKNOWN, no `Inspecting` literal, plus source guards that the pre-fix renders are gone and the fetch records the observation. Negative-validated: restoring the pre-fix `githubStatus?.connected ? 'AUTHENTICATED' : 'NOT CONNECTED'` render failed exactly the source guard (`1 failed | 4 passed`); restored → 5/5. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` 236 files / 2605 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,088,323 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-13 04:06 IST (2026-10-12 22:36 UTC) — window slot 13: the Security Matrix header stops asserting a level the probe never reported
 
 ### Fixed
