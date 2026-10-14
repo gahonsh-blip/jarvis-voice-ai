@@ -42,6 +42,11 @@ import {
   type CoordsSource,
 } from '../utils/locationService';
 import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import {
+  liveWatchBadge,
+  liveWatchToggleLabel,
+  type GeoWatchState,
+} from '../utils/hardening/liveGpsWatchTruth';
 
 interface LocationServicesModalProps {
   isOpen: boolean;
@@ -76,7 +81,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
     return cached?.address || null;
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isWatching, setIsWatching] = useState<boolean>(false);
+  const [watchState, setWatchState] = useState<GeoWatchState>('IDLE');
   const [highAccuracy, setHighAccuracy] = useState<boolean>(true);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [mapLayer, setMapLayer] = useState<'radar' | 'osm' | 'hybrid'>('radar');
@@ -152,18 +157,21 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
 
   // Toggle Live Watch Position
   const toggleLiveWatch = useCallback(() => {
-    if (isWatching) {
+    if (watchState !== 'IDLE') {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      setIsWatching(false);
+      setWatchState('IDLE');
     } else {
       if (!('geolocation' in navigator)) {
         setPermissionError('Geolocation API not supported.');
+        setWatchState('UNSUPPORTED');
         return;
       }
-      setIsWatching(true);
+      // Requesting the watch is not a live fix. Stay ACQUIRING — the streaming
+      // badge is only shown once the first real reading arrives below.
+      setWatchState('ACQUIRING');
       const id = navigator.geolocation.watchPosition(
         (pos) => {
           const updated: GeoCoordinates = {
@@ -178,12 +186,13 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           };
           setCoords(updated);
           setCoordsSource('live');
+          setWatchState('STREAMING');
           saveCachedLocation(updated, address);
           onCoordinatesUpdated?.(updated, address, 'live');
         },
         (err) => {
           setPermissionError(`Live tracking interrupted: ${err.message}`);
-          setIsWatching(false);
+          setWatchState('INTERRUPTED');
         },
         {
           enableHighAccuracy: highAccuracy,
@@ -193,7 +202,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
       );
       watchIdRef.current = id;
     }
-  }, [isWatching, highAccuracy, address, onCoordinatesUpdated]);
+  }, [watchState, highAccuracy, address, onCoordinatesUpdated]);
 
   // Clean up watch on unmount
   useEffect(() => {
@@ -420,10 +429,22 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {isWatching && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      STREAMING
+                  {liveWatchBadge(watchState).visible && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                        liveWatchBadge(watchState).tone === 'ok'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : liveWatchBadge(watchState).tone === 'wait'
+                            ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          liveWatchBadge(watchState).live ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+                        }`}
+                      />
+                      {liveWatchBadge(watchState).label}
                     </span>
                   )}
                   {coords && (
@@ -567,13 +588,13 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                   <button
                     onClick={toggleLiveWatch}
                     className={`w-full py-2 px-3 rounded-lg border font-mono text-xs flex items-center justify-center gap-2 transition-colors ${
-                      isWatching
+                      watchState !== 'IDLE'
                         ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/30'
                         : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
                     }`}
                   >
-                    <Radio className={`w-3.5 h-3.5 ${isWatching ? 'animate-pulse text-emerald-400' : ''}`} />
-                    <span>{isWatching ? 'Stop Live Tracking' : 'Start Live GPS Watch'}</span>
+                    <Radio className={`w-3.5 h-3.5 ${watchState === 'STREAMING' ? 'animate-pulse text-emerald-400' : ''}`} />
+                    <span>{liveWatchToggleLabel(watchState !== 'IDLE')}</span>
                   </button>
 
                   <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-950/60 border border-slate-800 text-xs font-mono">
