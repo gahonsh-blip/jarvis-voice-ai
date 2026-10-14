@@ -1,23 +1,24 @@
 {
   "window_date": "2026-10-14",
   "window_started_at": "2026-10-14T15:35:00Z",
-  "last_slot_at": "2026-10-14T15:36:00Z",
-  "slots_completed": 1,
-  "current_item": 51,
-  "current_item_title": "Complete security audit",
+  "last_slot_at": "2026-10-14T16:51:23Z",
+  "slots_completed": 2,
+  "current_item": 54,
+  "current_item_title": "Secret/token protection audit",
   "current_item_status": "PARTIAL",
-  "last_commit": "3c2e0b3",
+  "last_commit": "7a0f3d6",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    "1-8 Android bridge / real Android E2E / real screenshot — no physical handset",
-    "55 Real-device E2E — no hardware",
-    "54 live credential rotation — no live provider credentials"
+    "1-8 Android bridge / real Android E2E / real screenshot - no physical handset",
+    "55 Real-device E2E - no hardware",
+    "54 live credential rotation - no live provider credentials"
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "New window (2026-10-14 -> 2026-10-15) started at 21:06 IST. Prior window (start 2026-10-13T15:35:00Z) finalized at 04:35 IST 2026-10-14. Guard note: window_date is recorded as the window START IST date, not the write-time IST date; writing write-time IST date would make the idempotency guard (window_date == today AND finalized) false-positive after midnight IST.",
+  "notes": "New window (2026-10-14 -> 2026-10-15) started at 21:06 IST. Guard note: window_date is recorded as the window START IST date, not the write-time IST date; writing write-time IST date would make the idempotency guard (window_date == today AND finalized) false-positive after midnight IST.",
   "slot_log": [
-    "2026-10-14 21:06 IST (WORK slot 1): item 51 — applied deferred npm audit fix (express/qs/proxy-addr/body-parser/source-map-js), npm audit now 0 vulnerabilities; lint exit 0; 237 files/2655 tests passed; build exit 0. Commits 1d17469 (deps), 3c2e0b3 (docs)."
+    "2026-10-14 21:06 IST (WORK slot 1): item 51 - applied deferred npm audit fix (express/qs/proxy-addr/body-parser/source-map-js), npm audit now 0 vulnerabilities; lint exit 0; 237 files/2655 tests passed; build exit 0. Commits 1d17469 (deps), 3c2e0b3 (docs).",
+    "2026-10-14 21:35 IST (WORK slot 2): item 54 - fixed securityAudit false-negative where any placeholder hint ('where', 'here', '<') anywhere on a line suppressed a credential-shaped token; shaped tokens now judged on the matched token. Lint exit 0; targeted 17 passed; full 237 files/2657 tests passed; build exit 0 (1089969 bytes); npm audit 0 vulnerabilities. Commits 93da5f4 (fix+test), 7a0f3d6 (docs)."
   ]
 }
