@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-14 21:35 IST — window slot 2: the secret scan stops letting an unrelated word hide a real token
+
+### Fixed
+- **`src/utils/hardening/securityAudit.ts` — a credential-shaped token was skipped whenever any placeholder hint appeared elsewhere on the same line.** `runSecurityAudit` returned early on `isPlaceholder(line)`, whose hints include the bare substrings `'here'`, `'where'`, `'<'`, `'your_'`, `'example'`, `'placeholder'`, `'changeme'`, `'xxx'`. A comment such as `// where the token is read`, or a stray `if (n < 10)`, therefore hid a real `ghp_…` token from the audit. Probed on this head: a bare token was `FLAGGED`, the same token with `where` / `there` / `<` on the line was `MISSED`.
+
+### Changed
+- A shaped token is now judged on the **matched token itself** (`line.match(pattern)` → `isPlaceholder(match[0])`). The whole-line placeholder hint still applies to shapeless literal assignments, so a documented `"ghp_example…"` stand-in is still not flagged.
+
+### Verified
+- 2 new cases in `src/tests/securityAudit.test.ts` (17 in file). Negative-validated — reverting only `securityAudit.ts` failed exactly the new guard (`1 failed | 16 passed`), then 17/17 with the fix. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` **237 files / 2657 tests passed** (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1,089,969 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-14 21:06 IST — window slot 1: the deferred dependency-audit finding is resolved
 
 ### Fixed
