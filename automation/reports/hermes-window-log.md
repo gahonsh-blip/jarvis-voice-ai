@@ -17809,3 +17809,60 @@ Next Slot:
 
 Tests: NOT RUN - Lint: NOT RUN - Build: NOT RUN - E2E: NOT RUN - Security: NOT RUN
 Main merge: NOT MERGED - awaiting human approval.
+
+---
+
+## Slot — 2026-10-15 04:05 IST (WORK, second-to-last)
+
+Item #13 (`Zero-fake-success for all tools`) — **the Location Services modal
+showed a green `STREAMING` badge for a live GPS watch the device had not
+produced.** `LocationServicesModal.tsx` tracked the watch with a single
+`isWatching` boolean, set `true` the instant the operator clicked *Start Live
+GPS Watch* — before `navigator.geolocation.watchPosition` reported anything. The
+header rendered its `STREAMING` badge off that boolean, so an unanswered
+permission prompt, a device with no fix, or a watch cancelled before the first
+reading all read as a live streaming position. The watch is now tracked as an
+observed lifecycle (`IDLE` / `ACQUIRING` / `STREAMING` / `INTERRUPTED` /
+`UNSUPPORTED`) via `liveWatchBadge()` (`src/utils/hardening/liveGpsWatchTruth.ts`);
+`STREAMING` is emitted only from inside the success callback, an unfixed watch
+renders `ACQUIRING — NO FIX YET`, and a watch error keeps the badge as
+`WATCH INTERRUPTED`.
+
+Bugs Fixed:
+- Replaced the click-intent boolean with the observed lifecycle. Negative-validated
+  — re-injecting the pre-fix `isWatching` boolean failed exactly the source guard
+  (`1 failed | 10 passed`); restored → 11/11.
+
+Tests:    243 files / 2710 passed, 0 failed (80.96 s) — observed.
+          Targeted: 2 files / 29 passed — observed.
+Lint:     `npm run lint` (tsc --noEmit) exit 0 — observed.
+Build:    `npm run build` exit 0; `dist/server.cjs` 1,091,088 bytes — observed.
+E2E:      NOT RUN (no browser/handset in this sandbox).
+Security: No `.env`, token, key, `node_modules`, or `dist` staged. Permission
+          gateway untouched. No new outbound action introduced.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, this report.
+Branch:  feature/hermes-full-completion
+Commit:  40b4e08 (fix) · 67243ef (docs)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (existing, open, non-draft) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; `dist/server.cjs` is the artifact.
+
+Blocked:
+- #1–#8 Android bridge / real Android E2E / real screenshot — requires a handset.
+- #54 live credential rotation — requires live provider credentials.
+- #55 real-device E2E — requires hardware.
+
+Human Approval Required:
+- Merge of PR #8 to `main` — human review of the window verification report.
+
+Next Slot:
+- 04:35 IST FINALIZATION slot — run the full gate set, refresh the PR #8 body
+  with the exact observed results, persist window state (`finalized: true`), and
+  leave PR #8 one-click mergeable. No new development.
+
+हिंदी सारांश (एक पंक्ति):
+- Location Services मॉडल अब GPS वॉच को निगरानी-अवस्था से दिखाता है और केवल वास्तविक fix
+  मिलने पर STREAMING दिखाता है; लक्षित टेस्ट 11/11, पूरा सूट 243 फ़ाइलें / 2710 टेस्ट पास।
