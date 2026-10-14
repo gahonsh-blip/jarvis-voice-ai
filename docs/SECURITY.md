@@ -519,3 +519,7 @@ returns the state with the classified fields applied and the route echoes that (
 `levels`/`auditLogs` from live state) with `applied: true`. Guarded by
 `src/tests/securityMatrixUpdateTruth.test.ts` (23 tests); negative-validated
 (`1 failed | 22 passed` with the snapshot echo restored).
+
+
+## Dependency audit (2026-10-14 21:06 IST)
+`npm audit --omit=dev` reported 4 vulnerabilities (3 moderate, 1 critical) in the transitive `qs` ← `body-parser` ← `express` chain; `npm audit` additionally flagged a high-severity `source-map-js` advisory. The previous window's finalization slot left the lockfile frozen and recorded the finding for the next window. The non-breaking `npm audit fix` moved `express` 4.22.2 → 4.22.3 (same major), `qs` 6.15.3 → 6.16.0, `proxy-addr` 2.0.7 → 2.0.8, `body-parser` 1.20.6 → 1.20.8 and `source-map-js` 1.2.1 → 1.2.2. Observed after: `npm audit` and `npm audit --omit=dev` both report **0 vulnerabilities**. Only `package-lock.json` changed; no credential, no `.env`, and no source file was touched. This is a registry/dependency scan, not a penetration test.

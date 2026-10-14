@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-14 21:06 IST — window slot 1: the deferred dependency-audit finding is resolved
+
+### Fixed
+- **Transitive dependency advisories in the `express` chain.** `npm audit --omit=dev` reported 4 vulnerabilities (3 moderate, 1 critical) in `qs` ← `body-parser` ← `express`, and `npm audit` also flagged a high-severity `source-map-js` advisory. The previous window's finalization slot deliberately left the lockfile frozen and recorded the finding for this window.
+
+### Changed
+- `package-lock.json` only (no source change). Applied the non-breaking `npm audit fix`: `express` 4.22.2 → 4.22.3 (same major), `qs` 6.15.3 → 6.16.0, `proxy-addr` 2.0.7 → 2.0.8, `body-parser` 1.20.6 → 1.20.8, `source-map-js` 1.2.1 → 1.2.2.
+
+### Verified
+- `npm audit` and `npm audit --omit=dev` both report **0 vulnerabilities**. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` **237 files / 2655 tests passed** (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1,089,856 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-14 04:05 IST — window slot 13: the recorded-call transcript heading stops claiming a verification nobody performed
 
 ### Fixed
