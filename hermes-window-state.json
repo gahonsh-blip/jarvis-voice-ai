@@ -1,15 +1,23 @@
 {
   "window_date": "2026-10-14",
-  "window_started_at": "2026-10-13T15:35:00Z",
-  "last_slot_at": "2026-10-13T23:09:00Z",
-  "slots_completed": 14,
-  "current_item": 13,
-  "current_item_title": "Zero-fake-success for all tools",
+  "window_started_at": "2026-10-14T15:35:00Z",
+  "last_slot_at": "2026-10-14T15:36:00Z",
+  "slots_completed": 1,
+  "current_item": 51,
+  "current_item_title": "Complete security audit",
   "current_item_status": "PARTIAL",
-  "last_commit": "10b9a14",
+  "last_commit": "3c2e0b3",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "VERIFIED: lint exit 0; 237 files/2655 tests passed; build exit 0 (dist/server.cjs 1089856 bytes). PR #8 open non-draft mergeable=true (unstable checks). NOT MERGED - awaiting human approval. Deploy NOT_CONFIGURED. New finding: npm audit --omit=dev 4 vulns (3 moderate, 1 critical) in qs<-body-parser<-express, fix available, deferred to next window.",
-  "blocked_items": [],
-  "last_report_path": "/tmp/hermes-window-report.md"
+  "finalized": false,
+  "finalization_result": null,
+  "blocked_items": [
+    "1-8 Android bridge / real Android E2E / real screenshot — no physical handset",
+    "55 Real-device E2E — no hardware",
+    "54 live credential rotation — no live provider credentials"
+  ],
+  "last_report_path": "/tmp/hermes-window-report.md",
+  "notes": "New window (2026-10-14 -> 2026-10-15) started at 21:06 IST. Prior window (start 2026-10-13T15:35:00Z) finalized at 04:35 IST 2026-10-14. Guard note: window_date is recorded as the window START IST date, not the write-time IST date; writing write-time IST date would make the idempotency guard (window_date == today AND finalized) false-positive after midnight IST.",
+  "slot_log": [
+    "2026-10-14 21:06 IST (WORK slot 1): item 51 — applied deferred npm audit fix (express/qs/proxy-addr/body-parser/source-map-js), npm audit now 0 vulnerabilities; lint exit 0; 237 files/2655 tests passed; build exit 0. Commits 1d17469 (deps), 3c2e0b3 (docs)."
+  ]
 }
