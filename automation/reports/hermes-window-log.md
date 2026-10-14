@@ -17368,3 +17368,56 @@ Next Slot:
   टेस्ट, build) हरे हैं। किसी नए फ़ीचर का दावा नहीं, केवल असली और सत्यापित सुधार।
 
 **Addendum 2026-10-14 21:06 IST (WORK slot 1):** PR #8 re-checked via the GitHub API this slot — open, `draft: false`, `mergeable: true`, `mergeable_state: unstable`, head `3c2e0b3` (this slot's docs commit), base `main`. Main **NOT MERGED** (awaiting human approval). Window state published on `automation/hermes-state` (commit `ae295f0`): `window_date 2026-10-14`, `window_started_at 2026-10-14T15:35:00Z`, `slots_completed 1`, `finalized false`. Guard note recorded in the state: `window_date` must be the window START IST date, not the write-time IST date, or the idempotency guard (`window_date == today AND finalized`) false-positives after IST midnight.
+
+---
+
+**Slot 2026-10-14 21:35 IST (WORK slot 2 of the 2026-10-14 -> 2026-10-15 window; state `slots_completed: 1`, `finalized: false`)**
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:35
+Window date: 2026-10-14   Window slots completed so far: 2
+
+Completed:
+- #54 Secret/token protection audit — fixed a false negative in the repository's own secret scan. `runSecurityAudit` (`src/utils/hardening/securityAudit.ts`) returned early whenever `isPlaceholder(line)` matched, and the placeholder hints include the bare substrings `'here'`, `'where'`, `'<'`, `'your_'`, `'example'`, `'placeholder'`, `'changeme'`, `'xxx'`. An unrelated word anywhere on the line (a comment `// where the token is read`, a stray `if (n < 10)`) therefore hid a real `ghp_…` token. Probed on this head: a bare token was `FLAGGED`; the same token with `where` / `there` / `<` on the line was `MISSED`. Evidence: `src/tests/securityAudit.test.ts` new cases `still flags a shaped token when the line contains an unrelated placeholder word` and `does not flag a shaped token that is itself a placeholder` (file total 17, observed 17 passed). Fix commit `93da5f4`; docs commit `7a0f3d6`.
+
+In Progress:
+- #54 stays PARTIAL — the audit is a pattern scan over known surfaces, not a proof of absence; no live credential rotation was performed (no live provider credentials in this sandbox).
+
+Bugs Found:
+- securityAudit.ts false negative (above). Found by reading the placeholder-hint list and probing a shaped token on lines carrying unrelated hints.
+
+Bugs Fixed:
+- A shaped token is now judged on the matched token itself (`line.match(pattern)` -> `isPlaceholder(match[0])`); the whole-line hint still applies to shapeless literal assignments, so a documented `"ghp_example…"` stand-in stays unflagged. Negative-validated: reverting only `securityAudit.ts` failed exactly the new guard (`1 failed | 16 passed`); restored -> 17/17.
+
+Tests:    full `npx vitest run` 237 files / 2657 tests passed (80.13 s, 0 failed); targeted `securityAudit.test.ts` 17 passed.
+Lint:     `npm run lint` (tsc --noEmit) exit 0.
+Build:    `npm run build` exit 0; `dist/server.cjs` 1,089,969 bytes.
+E2E:      NOT RUN (no browser/handset).
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status --short` clean; ignored paths only `dist/` and `node_modules/`; `npm audit --omit=dev` -> 0 vulnerabilities.
+
+Documentation: docs/COMPLETION_STATUS.md (item 54 row + Last cycle), docs/CHANGELOG.md (slot 2 section).
+Branch:  feature/hermes-full-completion
+Commit:  7a0f3d6 (docs) / 93da5f4 (fix+test)
+Push:    succeeded -> origin/feature/hermes-full-completion (`93da5f4..7a0f3d6`); state branch pushed (`ae295f0..1e65fe8`).
+
+PR:         #8 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 — open, draft=false, mergeable=true, mergeable_state=unstable, head 7a0f3d6, base main.
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present; `dist/server.cjs` is the verified artifact.
+
+CI note:    The `typecheck · tests · build` check on the head commit reports FAILURE, but the run did NOT execute. GitHub annotation: "The job was not started because your account is locked due to a billing issue." (`gh run view 38601605103`). This is an account/billing condition, NOT a code or test failure; the same gates pass locally (lint exit 0, 2657 tests, build exit 0). Recorded honestly rather than reported as a code failure.
+
+Blocked:
+- #1/#2/#5/#55 (real Android device legs) — require a physical handset; no hardware in this sandbox.
+- #8 (real Windows screenshot) — requires a Windows host.
+- #54 live credential rotation — requires live provider credentials.
+- CI green check — blocked on the repository owner resolving the GitHub account billing lock.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (human review only).
+- Resolve the GitHub account billing lock so Actions can run (owner action).
+
+Next Slot:
+- Continue item #13 (`Zero-fake-success for all tools`) or #60 (`Final documentation`) — item #13 is the highest-value open sweep and #54 is now well-covered. Item #51/#54 external legs remain blocked.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में सीक्रेट-स्कैन की एक असली false-negative गड़बड़ी ठीक की गई — किसी भी अन्य शब्द (जैसे `where`, `<`) की मौजूदगी असली टोकन को छिपा देती थी; अब टोकन की अपनी शक्ल से जाँच होती है, सभी गेट्स (lint, 2657 टेस्ट, build) हरे हैं, और CI का failure केवल GitHub बिलिंग लॉक के कारण है, कोड की गलती से नहीं।
