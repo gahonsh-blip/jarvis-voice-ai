@@ -17366,3 +17366,5 @@ Next Slot:
 - इस स्लॉट में express की ट्रांज़िटिव डिपेंडेंसी की 4 कमज़ोरियाँ (1 क्रिटिकल सहित)
   ठीक की गईं; अब `npm audit` में 0 vulnerabilities हैं, और सभी गेट्स (lint, 2655
   टेस्ट, build) हरे हैं। किसी नए फ़ीचर का दावा नहीं, केवल असली और सत्यापित सुधार।
+
+**Addendum 2026-10-14 21:06 IST (WORK slot 1):** PR #8 re-checked via the GitHub API this slot — open, `draft: false`, `mergeable: true`, `mergeable_state: unstable`, head `3c2e0b3` (this slot's docs commit), base `main`. Main **NOT MERGED** (awaiting human approval). Window state published on `automation/hermes-state` (commit `ae295f0`): `window_date 2026-10-14`, `window_started_at 2026-10-14T15:35:00Z`, `slots_completed 1`, `finalized false`. Guard note recorded in the state: `window_date` must be the window START IST date, not the write-time IST date, or the idempotency guard (`window_date == today AND finalized`) false-positives after IST midnight.
