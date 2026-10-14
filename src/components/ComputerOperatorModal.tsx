@@ -43,6 +43,7 @@ import {
   screenSyncLabel,
   screenSyncState,
 } from '../utils/computerOperator/observationTruth';
+import { classifyHostObservation } from '../utils/hardening/computerOperatorObservationTruth';
 import {
   operatorGuardBadge,
   OperatorGuardSnapshot,
@@ -80,9 +81,10 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   /**
    * Observes the screen.
    *
-   * The agent host owns the real screen, so it gets asked first. The browser's
-   * own observer can only render an illustrative workspace view, so whatever it
-   * returns is marked as a preview and never presented as live screen state.
+   * The agent host owns the real screen, so it gets asked first. The route
+   * reports `observed: false` when the host desktop could not be observed, so
+   * the preview flag comes from that verdict — never from the mere presence of
+   * an observation body, which the built-in illustrative view also carries.
    */
   const observeScreen = useCallback(async (app: string) => {
     try {
@@ -93,8 +95,9 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
       });
       if (res.ok) {
         const body = await res.json();
-        if (body.observation) {
-          return { observation: body.observation as ScreenObservation, isPreview: false };
+        const verdict = classifyHostObservation(body);
+        if (verdict.observation) {
+          return verdict;
         }
       }
     } catch {
