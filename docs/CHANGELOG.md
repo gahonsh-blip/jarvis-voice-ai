@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 00:35 IST — window slot 5: the Computer Operator footer stops asserting a guard posture it never read
+
+### Fixed
+- **`src/components/ComputerOperatorModal.tsx` — the footer printed a fixed line, `Level 1-4 Guard Active: Financial exclusions hard-locked | Secrets & tokens redacted`, on every render.** None of those clauses was measured. The three gates it named (`humanApprovalForExternal`, `maskSensitiveData`, `credentialLeakProtection`) are operator-flippable through `POST /api/security/update`, so a router with the external-action approval gate or the credential masking turned off was still shown as enforcing both, under a green shield.
+
+### Changed
+- The footer now reads `/api/security` and renders `operatorGuardBadge(guardPosture)` (`src/utils/hardening/computerOperatorGuardTruth.ts`). The level comes from the observed `currentLevel` via `securityMatrixLevelBadge` (`Level 2 Active`, or `Level UNKNOWN`); each gate is named `external actions require human approval` / `… DISABLED` / `UNKNOWN` from its observed boolean. Before the probe answers, the line reads `Guard posture UNKNOWN — /api/security did not respond`. The shield is green only when every gate was observed and enforcing; an unknown or disabled posture shows the amber alert icon.
+
+### Verified
+- `src/tests/computerOperatorGuardTruth.test.ts` — 7 cases: the unknown label, disabled gates named DISABLED, unobserved gates named UNKNOWN, the all-on clauses, the absence of the pre-fix literals, the `fetch('/api/security')` read, and the green-shield gate. Negative-validated — restoring the pre-fix footer literal failed the source guard exactly (`1 failed | 6 passed`), then 7/7 with the fix. Lint (`tsc --noEmit`) exit 0; full `npx vitest run` **239 files / 2674 tests passed** (0 failed); `npm run build` exit 0 (`dist/server.cjs` 1.0mb).
+
+---
+
 ## [Unreleased] - 2026-10-14 22:35 IST — window slot 3: the morning briefing stops claiming a device it never saw
 
 ### Fixed
