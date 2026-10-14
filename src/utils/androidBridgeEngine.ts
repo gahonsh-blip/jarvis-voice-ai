@@ -478,8 +478,15 @@ export class AndroidBridgeManager {
   }
 
   public updatePermission(key: keyof MobilePermissionMatrix, state: AndroidPermissionState): boolean {
+    // Snapshot before mutating: a durable store that refuses the write must not
+    // be contradicted by the in-memory matrix, because callers read the store
+    // echo (`getPermissions()`) as authoritative and would then report a
+    // permission that silently reverts on reload.
+    const previous = this.permissions[key];
     this.permissions[key] = state;
-    return this.saveState();
+    if (this.saveState()) return true;
+    if (this.hasStorage()) this.permissions[key] = previous;
+    return false;
   }
 
   public getSettings(): AndroidBridgeSettings {
@@ -487,8 +494,22 @@ export class AndroidBridgeManager {
   }
 
   public updateSettings(updates: Partial<AndroidBridgeSettings>): boolean {
+    // Same rule as `updatePermission`.
+    const previous = this.settings;
     this.settings = { ...this.settings, ...updates };
-    return this.saveState();
+    if (this.saveState()) return true;
+    if (this.hasStorage()) this.settings = previous;
+    return false;
+  }
+
+  /**
+   * True when a durable store is present. A refused write means something
+   * different in each case: with no store the in-memory matrix is the only
+   * state and stands; with a store present the in-memory value must be reverted
+   * so it never disagrees with what the store actually holds.
+   */
+  private hasStorage(): boolean {
+    return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
   }
 
   public setEmergencyStop(active: boolean): void {

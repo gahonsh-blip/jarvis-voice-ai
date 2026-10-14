@@ -803,6 +803,36 @@ describe('Android bridge persistence reports real durability (zero fake success)
     expect(reloaded.getPermissions().call_answer).toBe(before);
   });
 
+  it('updatePermission does not leave the in-memory echo claiming a refused grant', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const before = mgr.getPermissions().call_answer;
+    refuseWrites();
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(false);
+    // The read path is documented as authoritative for callers that render the
+    // badge from it, so a refused write must not surface the requested value.
+    expect(mgr.getPermissions().call_answer).toBe(before);
+  });
+
+  it('updateSettings does not leave the in-memory echo claiming a refused write', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const before = mgr.getSettings().autoAnswerEnabled;
+    refuseWrites();
+    expect(mgr.updateSettings({ autoAnswerEnabled: !before })).toBe(false);
+    expect(mgr.getSettings().autoAnswerEnabled).toBe(before);
+  });
+
+  it('with no durable store the in-memory matrix is the only state and stands', () => {
+    (globalThis as any).window = undefined;
+    (globalThis as any).localStorage = undefined;
+    const mgr = new AndroidBridgeManager();
+    // The write cannot be persisted, so it is reported as not durable, but the
+    // in-memory matrix (the only state that exists here) still holds the value.
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(false);
+    expect(mgr.getPermissions().call_answer).toBe('GRANTED');
+  });
+
   it('updateSettings reports the real persistence verdict', () => {
     installStorage();
     const mgr = new AndroidBridgeManager();
