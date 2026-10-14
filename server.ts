@@ -29,6 +29,7 @@ import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUp
 import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel, resolveLinkedInAuthorUrn, AUTHOR_URN_NOT_RECORDED_LABEL } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
+import { briefingFallbackText } from './src/utils/hardening/briefingFallbackTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
@@ -9204,29 +9205,20 @@ Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hin
     }
 
     // Default bilingual briefing fallback. Reports only what the device actually
-    // sent; absent fields are named as unavailable instead of defaulted.
-    const batteryLvl = mobileData?.battery?.levelPercent;
-    const temp = mobileData?.weather?.temperatureC;
-    const notifs = mobileData?.notifications?.unreadCount;
-    const cal = mobileData?.calendar?.todayEventsCount;
-    const mail = mobileData?.email?.unreadCount;
-    const anyTelemetry = [batteryLvl, temp, notifs, cal, mail].some((v) => v != null);
-
-    if (!anyTelemetry) {
-      const spokenText = language === 'hindi'
-        ? `सुप्रभात सर। इस समय कोई मोबाइल डिवाइस जुड़ा नहीं है, इसलिए बैटरी, मौसम, notifications, कैलेंडर और ईमेल का डेटा उपलब्ध नहीं है।`
-        : `Good morning, Sir. No mobile device is currently connected, so battery, weather, notification, calendar and email data are unavailable.`;
-      return res.json({
-        success: true,
-        spokenText,
-        source: 'autonomous_local_engine',
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const spokenText = language === 'hindi'
-      ? `सुप्रभात सर। ${batteryLvl != null ? `आपके मोबाइल की बैटरी ${batteryLvl} प्रतिशत है। ` : 'बैटरी डेटा उपलब्ध नहीं है। '}${temp != null ? `तापमान ${temp} डिग्री है। ` : 'मौसम डेटा उपलब्ध नहीं है। '}${notifs != null ? `${notifs} notifications, ` : ''}${cal != null ? `${cal} शेड्यूल्ड मीटिंग्स, ` : ''}${mail != null ? `और ${mail} नए ईमेल्स पेंडिंग हैं।` : ''}`
-      : `Good morning, Sir. ${batteryLvl != null ? `Your device battery is at ${batteryLvl} percent. ` : 'Battery data is unavailable. '}${temp != null ? `The temperature is ${temp} degrees. ` : 'Weather data is unavailable. '}${notifs != null ? `${notifs} notifications, ` : ''}${cal != null ? `${cal} calendar events, ` : ''}${mail != null ? `and ${mail} emails are waiting.` : ''}`;
+    // sent; absent fields are named as unavailable instead of defaulted. A
+    // snapshot that carried none of the fields this server reads must not be
+    // read as "no device is connected" — that is a connectivity claim nobody
+    // observed here.
+    const spokenText = briefingFallbackText(
+      {
+        batteryLevelPercent: mobileData?.battery?.levelPercent,
+        temperatureC: mobileData?.weather?.temperatureC,
+        unreadNotifications: mobileData?.notifications?.unreadCount,
+        todayEvents: mobileData?.calendar?.todayEventsCount,
+        unreadEmails: mobileData?.email?.unreadCount,
+      },
+      language
+    );
 
     res.json({
       success: true,
