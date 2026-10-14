@@ -17421,3 +17421,81 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में सीक्रेट-स्कैन की एक असली false-negative गड़बड़ी ठीक की गई — किसी भी अन्य शब्द (जैसे `where`, `<`) की मौजूदगी असली टोकन को छिपा देती थी; अब टोकन की अपनी शक्ल से जाँच होती है, सभी गेट्स (lint, 2657 टेस्ट, build) हरे हैं, और CI का failure केवल GitHub बिलिंग लॉक के कारण है, कोड की गलती से नहीं।
+
+================================================================================
+SLOT REPORT — 2026-10-14 22:35 IST (WORK slot 3; fired 22:05 IST)
+================================================================================
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:35 (fired 22:05 IST)
+Window date: 2026-10-14   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools (slice) — POST /api/mobile/briefing/generate
+  no longer asserts a device connection nobody observed. When a mobileData
+  snapshot was supplied but carried none of the fields this server reads, the
+  local fallback said "No mobile device is currently connected". New
+  briefingFallbackText() (src/utils/hardening/briefingFallbackTruth.ts) renders
+  only the observed fields, or an explicit "snapshot carried no ... reading"
+  note. Evidence: src/tests/briefingFallbackTruth.test.ts 10/10 passed;
+  negative-validated (pre-fix sentence -> 2 failed | 8 passed); lint exit 0.
+
+In Progress:
+- #13 — the long tail of unclassified `success: true` / discarded-persistMemory()
+  sites remains; the sweep is not exhausted.
+
+Remaining:
+- #1-#8 Android bridge / real E2E / real screenshot — BLOCKED (no handset/host).
+- #54 secret audit — PARTIAL; live credential rotation BLOCKED (no creds).
+- #55 real-device E2E — BLOCKED (no hardware).
+- #60 final documentation — open.
+
+Bugs Found:
+- The briefing fallback conflated "no recognised telemetry field present" with
+  "no device connected", producing an unobserved connectivity claim. Found by
+  reading the POST /api/mobile/briefing/generate fallback branch in server.ts.
+
+Bugs Fixed:
+- Replaced the two-script boolean fallback with briefingFallbackText(), which
+  names only observed readings and states the reason when there are none.
+  Verification: the new source guard + no-claim assertions fail on the pre-fix
+  literal (2 failed | 8 passed) and pass with the fix (10/10).
+
+Tests:    238 files / 2667 tests passed (0 failed, 78.43 s)
+Lint:     exit 0 (tsc --noEmit)
+Build:    exit 0 — dist/server.cjs 1,090,429 bytes
+E2E:      NOT RUN (no browser/handset)
+Security: `.env` git-ignored (.gitignore:4); `git status --short` clean;
+          diff vs origin/main touches no secret; dist/ and node_modules/ ignored.
+          npm audit: NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 + Last cycle), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  168328a (fix+test), a3fdb4d (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+            (open, non-draft, mergeable=true, mergeable_state=unstable)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            dist/server.cjs is the verified artifact.
+
+Blocked:
+- #1/#2/#5/#55 (real Android device legs) — require a physical handset.
+- #8 (real Windows screenshot) — requires a Windows host.
+- #54 live credential rotation — requires live provider credentials.
+- CI green check — blocked on the repository owner resolving the GitHub account
+  billing lock (run not started: "account is locked due to a billing issue").
+
+Human Approval Required:
+- Merge of PR #8 to `main` (human review only).
+- Resolve the GitHub account billing lock so Actions can run (owner action).
+
+Next Slot:
+- Continue item #13 (the next unclassified `success: true` / discarded-persistMemory()
+  site) — highest-value open sweep; #54 external legs remain blocked.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में मॉर्निंग-ब्रिफ़िंग का fallback ठीक किया गया — जब टेलीमेट्री भेजी गई हो
+  पर कोई पहचाना गया फ़ील्ड न हो, अब झूठा दावा "कोई डिवाइस जुड़ा नहीं है" नहीं होता;
+  सभी गेट्स (lint, 2667 टेस्ट, build) हरे हैं, कमिट 168328a पुश हो चुका है।
+
