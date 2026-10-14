@@ -46,6 +46,12 @@ import {
   replyEventStatusForOutcome,
   replyAuditProjection,
 } from '../utils/mobileReplyDispatchTruth';
+import { androidBridgeEngine } from '../utils/androidBridgeEngine';
+import {
+  permissionMatrixKey,
+  nextToggleState,
+  permissionWriteOutcome,
+} from '../utils/hardening/mobilePermissionToggleTruth';
 
 const EVENT_STATUS_LABEL: Record<string, string> = {
   PENDING_APPROVAL: 'PENDING APPROVAL',
@@ -124,10 +130,25 @@ export const MobileBridgeModal: React.FC<Props> = ({
   // LIMITED_CAPABILITY and PERMISSION_REQUIRED are degraded (amber), not "live".
   const bridgeTone = bridgeStatusTone(bridgeState);
 
+  // A permission only shows GRANTED when the bridge store actually holds it.
+  // The store echo (`getPermissions()`) is authoritative, so a refused write
+  // reverts the badge and reports the refusal instead of the requested grant.
+  const commitPermissionState = (uiKey: string, requested: MobilePermissionState) => {
+    const persisted = androidBridgeEngine.updatePermission(permissionMatrixKey(uiKey), requested);
+    const storeState = androidBridgeEngine.getPermissions()[permissionMatrixKey(uiKey)];
+    const outcome = permissionWriteOutcome(uiKey, requested, persisted, storeState);
+    setPermState((prev) => ({ ...prev, [uiKey]: outcome.state }));
+    setSimNotice(outcome.message);
+  };
+
+  const togglePermissionState = (uiKey: string) => {
+    commitPermissionState(uiKey, nextToggleState(permState[uiKey] ?? 'NOT_CONFIGURED'));
+  };
+
   const grantNotificationAccess = () => {
     if (typeof window === 'undefined') return;
     if (window.confirm('\u091c\u093e\u0930\u094d\u0935\u093f\u0938 \u0915\u094b \u0906\u092a\u0915\u0947 notifications \u092a\u0922\u093c\u0928\u0947 \u0915\u0940 \u0905\u0928\u0941\u092e\u0924\u093f \u091a\u093e\u0939\u093f\u090f \u0924\u093e\u0915\u093f \u0935\u0939 \u0906\u092a\u0915\u094b incoming notifications \u0915\u0947 \u092c\u093e\u0930\u0947 \u092e\u0947\u0902 \u092c\u0924\u093e \u0938\u0915\u0947\u0964')) {
-      setPermState((prev) => ({ ...prev, NOTIFICATION_ACCESS: 'ASK' }));
+      commitPermissionState('NOTIFICATION_ACCESS', 'ASK');
     }
   };
 
@@ -346,10 +367,12 @@ export const MobileBridgeModal: React.FC<Props> = ({
         <p className="text-[11px] text-slate-400 mb-2">{"JARVIS \u0915\u094b\u0902 \u0906\u092a\u0915\u0947 notifications \u092a\u0922\u093c\u0928\u0947 \u0915\u0940 \u0905\u0928\u0941\u092e\u0924\u093f \u091a\u093e\u0939\u093f\u090f \u0924\u093e\u0915\u093f \u0935\u0939 \u0906\u092a\u0915\u094b incoming notifications \u0915\u0947 \u092c\u093e\u0930\u0947 \u092e\u0947\u0902 \u092c\u0924\u093e \u0938\u0915\u0947\u0964"}</p>
         <div className="flex items-center gap-2">
           <button onClick={grantNotificationAccess} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-amber-500 hover:bg-amber-400 text-slate-950">ASK FOR ACCESS</button>
-          <button onClick={() => { setPermState((prev) => ({ ...prev, NOTIFICATION_ACCESS: 'GRANTED' })); }} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-600/40">MARK GRANTED*</button>
+          <button onClick={() => commitPermissionState('NOTIFICATION_ACCESS', 'GRANTED')} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-600/40">MARK GRANTED*</button>
         </div>
         <p className="text-[9px] text-slate-500 mt-1.5 font-mono">*Only mark granted after the Android system actually granted Notification Listener access.</p>
       </div>
+
+      {simNotice && <p className="text-[10px] text-amber-300 font-mono">⚠ {simNotice}</p>}
 
       <div className="space-y-2">
         <h3 className="text-[11px] font-mono font-bold text-cyan-300 tracking-wider">MOBILE PERMISSION CENTER</h3>
@@ -363,7 +386,7 @@ export const MobileBridgeModal: React.FC<Props> = ({
               <span className={`text-[9px] px-2 py-0.5 rounded font-mono font-bold ${permState[def.key] === 'GRANTED' ? 'bg-emerald-900/60 text-emerald-300' : permState[def.key] === 'ASK' ? 'bg-amber-900/50 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
                 {permState[def.key] || 'NOT_CONFIGURED'}
               </span>
-              <button onClick={() => { setPermState((prev) => ({ ...prev, [def.key]: prev[def.key] === 'GRANTED' ? 'NOT_CONFIGURED' : 'GRANTED' })); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">TOGGLE</button>
+              <button onClick={() => togglePermissionState(def.key)} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">TOGGLE</button>
             </div>
           </div>
         ))}
