@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 04:05 IST — window slot 10: the Location Services modal stops claiming a live GPS stream the device never produced
+
+### Fixed
+- **`src/components/LocationServicesModal.tsx` — the "Start Live GPS Watch" control tracked the watch with a single `isWatching` boolean, set `true` the instant the operator clicked.** The header rendered its green `STREAMING` badge off that boolean, before `navigator.geolocation.watchPosition` had reported anything, so an unanswered permission prompt, a device with no fix, or a watch cancelled before the first reading all read as a live streaming position.
+
+### Changed
+- The watch is now tracked as an observed lifecycle (`IDLE` / `ACQUIRING` / `STREAMING` / `INTERRUPTED` / `UNSUPPORTED`) via `liveWatchBadge()` in `src/utils/hardening/liveGpsWatchTruth.ts`. `STREAMING` is emitted only from inside the `watchPosition` success callback; a requested-but-unfixed watch renders `ACQUIRING — NO FIX YET`; a watch error keeps the badge visible as `WATCH INTERRUPTED`.
+
+### Verified
+- `src/tests/liveGpsWatchTruth.test.ts` — 11 cases: only the `STREAMING` state is `live`; acquiring/interrupted never read as a stream; idle/unsupported render nothing; the toggle label; and source guards that no `isWatching`/`setIsWatching` remains, that the watch starts `ACQUIRING` before it can reach `STREAMING`, that the badge renders from `liveWatchBadge(watchState)`, that the initial state is `IDLE`, and that a watch error sets `INTERRUPTED`. Negative-validated — re-injecting the pre-fix `isWatching` boolean failed exactly the source guard (`1 failed | 10 passed`), then 11/11 with the fix. Lint (`tsc --noEmit`) exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-15 03:05 IST — window slot 8: the Android bridge stops echoing a permission the durable store refused
 
 ### Fixed
