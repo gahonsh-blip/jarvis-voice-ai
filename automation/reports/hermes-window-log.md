@@ -17560,3 +17560,79 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में कोई कोड-परिवर्तन नहीं किया गया; समय रिकॉन में चला गया, इसलिए कुछ भी ईमानदारी से "VERIFIED" घोषित नहीं किया गया।
+
+
+----------------------------------------------------------------------
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35 (2026-10-15)
+Window date: 2026-10-14 (window START IST)   Window slots completed so far: 5
+
+Completed:
+- #13 Zero-fake-success for all tools — Computer Operator footer now derives its
+  guard posture from real Security Matrix state instead of a fixed literal.
+  Evidence: src/utils/hardening/computerOperatorGuardTruth.ts (new);
+  src/components/ComputerOperatorModal.tsx (reads /api/security, renders
+  operatorGuardBadge); src/tests/computerOperatorGuardTruth.test.ts (7 tests).
+  Observed: targeted 2 files / 15 passed; lint (tsc --noEmit) exit 0;
+  full npx vitest run 239 files / 2674 tests passed (0 failed); npm run build
+  exit 0 (dist/server.cjs 1.0mb). Commit 54ea3a1.
+
+In Progress:
+- #13 Zero-fake-success for all tools — item stays PARTIAL; the long tail of
+  unclassified `success: true` / discarded-`persistMemory()` sites remains.
+
+Remaining:
+- #1-8 Android bridge / real Android E2E / real screenshot — blocked, no handset.
+- #55 Real-device E2E — blocked, no hardware.
+- #54 live credential rotation — blocked, no live provider credentials.
+- Items 14+ (Computer Operator -> GitHub -> Social -> Communication -> AI/Memory ->
+  Autonomous -> Voice -> Wake Word -> Production Hardening) remain; next slot picks
+  the highest non-VERIFIED item that is not hardware-blocked.
+
+Bugs Found:
+- ComputerOperatorModal.tsx footer printed a compile-time guard sentence
+  ("Level 1-4 Guard Active: Financial exclusions hard-locked | Secrets & tokens
+  redacted") while all three named gates are operator-flippable via
+  POST /api/security/update. Found by reading the footer render against the
+  Security Matrix state source.
+
+Bugs Fixed:
+- Footer guard posture is now observed, not asserted. Negative-validated:
+  temporarily restoring the pre-fix footer literal failed the source-scan guard
+  exactly (1 failed | 6 passed); fix restored -> 7/7.
+
+Tests:    239 files / 2674 tests passed (npx vitest run, 77.44 s, 0 failed)
+Lint:     tsc --noEmit exit 0
+Build:    npm run build exit 0 (dist/server.cjs 1.0mb)
+E2E:      NOT RUN (no browser/handset)
+Security: no .env staged; tree clean apart from the two docs edits; no token in
+          the diff (not separately audited this slot)
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 row + Last cycle header),
+          docs/CHANGELOG.md (slot 5 section)
+Branch:  feature/hermes-full-completion
+Commit:  54ea3a1 (fix) + b366211 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion (fb52218..54ea3a1)
+
+PR:         #8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; dist/server.cjs is the
+            verified artifact
+
+Blocked:
+- #1-8 Android bridge / real Android E2E / real screenshot — requires a physical
+  Android handset.
+- #55 Real-device E2E — requires hardware.
+- #54 live credential rotation — requires live provider credentials.
+
+Human Approval Required:
+- Merge of PR #8 to main (owner decision only).
+
+Next Slot:
+- Continue the item 13 sweep: pick the next render that asserts a posture/state
+  it never read (Computer Operator or adjacent modal), unless a higher-priority
+  non-blocked item is available.
+
+हिंदी सारांश (एक पंक्ति):
+- कंप्यूटर ऑपरेटर का फुटर अब असली सिक्योरिटी मैट्रिक्स से गार्ड पोस्चर दिखाता है,
+  पहले से लिखा हुआ झूठा वाक्य नहीं; सभी टेस्ट और लिंट पास।
