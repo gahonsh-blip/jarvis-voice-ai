@@ -60,6 +60,11 @@ import {
   telegramBroadcastTransportFailure,
 } from '../utils/hardening/telegramBroadcastNotice';
 import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import {
+  mobileConsentFooterLine,
+  mobileConsentFooterHealthy,
+  type MobileConsentSnapshot,
+} from '../utils/hardening/mobileConsentFooterTruth';
 
 interface Props {
   isOpen: boolean;
@@ -99,6 +104,8 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   const [telegramSending, setTelegramSending] = useState<boolean>(false);
   const [telegramNotice, setTelegramNotice] = useState<string | null>(null);
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
+  // Consent posture is read, never assumed: null until /api/security answers.
+  const [consentPosture, setConsentPosture] = useState<MobileConsentSnapshot | null>(null);
 
   const refreshData = async () => {
     setLoading(true);
@@ -127,6 +134,24 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       refreshData();
     }
   }, [isOpen, userName]);
+
+  // The footer's consent line is read from /api/security, never assumed. A
+  // failed read leaves the footer saying UNKNOWN rather than claiming a posture.
+  useEffect(() => {
+    if (!isOpen) return;
+    let mounted = true;
+    fetch('/api/security')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (mounted && data) setConsentPosture(data as MobileConsentSnapshot);
+      })
+      .catch(() => {
+        if (mounted) setConsentPosture(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
 
   const handleToggleAndroidBridgePerm = (key: 'notification' | 'call' | 'contacts' | 'reply') => {
     const current = { ...androidPerms };
@@ -259,6 +284,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   };
 
   if (!isOpen) return null;
+
+  const consentLine = mobileConsentFooterLine(consentPosture);
+  const consentHealthy = mobileConsentFooterHealthy(consentPosture);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-sans">
@@ -1158,8 +1186,12 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
         {/* Modal Footer */}
         <div className="px-5 py-3 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-400">
           <span className="flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Zero Unsolicited Data Access • Human Consent Active</span>
+            {consentHealthy ? (
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+            )}
+            <span>{consentLine}</span>
           </span>
 
           <div className="flex items-center gap-2">
