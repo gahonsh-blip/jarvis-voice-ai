@@ -17708,3 +17708,91 @@ discarded-`persistMemory()` sites remains. PR #8 open, non-draft. Main NOT MERGE
 हिंदी सारांश (एक पंक्ति):
 - Computer Operator पैनल अब सर्वर की `observed` रिपोर्ट से ही "लाइव स्क्रीन" तय
   करता है, इसलिए असत्यापित स्क्रीन को लाइव बताना बंद हो गया; lint/test/build हरे।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:05
+Window date: 2026-10-14 (window start IST)   Window slots completed so far: 8
+
+Completed:
+- #13 Zero-fake-success for all tools — `AndroidBridgeManager.updatePermission()`
+  wrote the in-memory permission matrix before calling `saveState()`, and kept
+  the new value when the durable `localStorage` write was refused (quota,
+  private browsing). `getPermissions()` is the authoritative store echo that
+  `MobileBridgeModal` renders each badge from, so a refused write left the badge
+  reading `GRANTED` for a permission that was never persisted — the next reload
+  silently restored the old value. `updatePermission()` and `updateSettings()`
+  now snapshot the previous value and revert it when a store is present and
+  refuses the write; the boolean return still reports the true durability
+  verdict. When no store exists at all (SSR / non-browser host) the in-memory
+  matrix is the only state and stands.
+  Evidence: `src/utils/androidBridgeEngine.ts` (`updatePermission`,
+  `updateSettings`, new private `hasStorage()`);
+  `src/tests/androidMobileBridge.test.ts` — 3 new cases:
+  "updatePermission does not leave the in-memory echo claiming a refused grant",
+  "updateSettings does not leave the in-memory echo claiming a refused write",
+  "with no durable store the in-memory matrix is the only state and stands".
+  Observed: targeted file 51/51 passed; full suite 242 files / 2699 passed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the long tail of unclassified
+  `success: true` / discarded-`persistMemory()` sites remains. Item stays PARTIAL.
+
+Remaining:
+- #1–#8 Android bridge / real Android E2E / real screenshot — hardware blocked.
+- #54 live credential rotation — no live provider credentials.
+- #55 real-device E2E — no hardware.
+- Higher-numbered backlog items (voice, wake word, production hardening) —
+  not yet reached in this window.
+
+Bugs Found:
+- In-memory permission matrix / settings echoed a value the durable store never
+  accepted when `localStorage.setItem` threw (quota or private mode). Found by
+  reading `updatePermission()` against the slot-6 contract that
+  `getPermissions()` is authoritative.
+
+Bugs Fixed:
+- `updatePermission()` / `updateSettings()` now revert the in-memory value on a
+  refused durable write when a store exists. Negative-validated: reverting
+  `src/utils/androidBridgeEngine.ts` failed exactly the two refused-write echo
+  cases (`2 failed | 49 passed`); restored → 51/51. The no-store semantics case
+  guards that the four capability scenarios (16, 21, 22, 23) stay truthful.
+
+Tests:    242 files / 2699 passed, 0 failed (78.67 s) — observed.
+Lint:     `npm run lint` (tsc --noEmit) exit 0 — observed.
+Build:    `npm run build` exit 0; `dist/server.cjs` 1,091,088 bytes — observed.
+E2E:      NOT RUN (no browser/handset in this sandbox).
+Security: No `.env`, token, key, `node_modules`, or `dist` staged. Permission
+          gateway untouched. No new outbound action introduced.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, this report.
+Branch:  feature/hermes-full-completion
+Commit:  64bbb55b (fix) · 89c6a11f (docs)
+Push:    succeeded → origin/feature/hermes-full-completion (and state branch
+         automation/hermes-state @ 56d3678c)
+
+PR:         #8 (existing, open, non-draft) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified artifact (`dist/server.cjs`)
+            is the deployment unit available.
+
+Blocked:
+- #1–#8 Android bridge / real Android E2E / real screenshot — requires a
+  physical Android handset.
+- #54 live credential rotation — requires live provider credentials.
+- #55 real-device E2E — requires hardware.
+
+Human Approval Required:
+- Merge of PR #8 to `main` — human review of the window verification report.
+
+Next Slot:
+- Continue #13 (highest-priority non-VERIFIED, non-blocked item): sweep the next
+  unclassified `success: true` site, e.g. remaining bridge/server routes that
+  return success without a durability verdict.
+
+हिंदी सारांश (एक पंक्ति):
+- Android bridge अब मना किए गए localStorage लिखावट पर in-memory permission को
+  वापस पलट देता है, इसलिए GRANTED का झूठा दावा नहीं दिखेगा; लक्षित टेस्ट 51/51,
+  पूरा सूट 242 फ़ाइलें / 2699 टेस्ट पास, lint व build exit 0।
