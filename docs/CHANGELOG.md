@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 01:35 IST — window slot 7: the Computer Operator panel stops claiming a live screen the server denied observing
+
+### Fixed
+- **`src/components/ComputerOperatorModal.tsx` — `observeScreen()` returned `{ observation: body.observation, isPreview: false }` for any 200 response carrying an observation body.** But `POST /api/computer-operator/observe` returns a *full* observation even when the host desktop could not be observed: it serves the built-in illustrative view and reports `observed: false` (derived from `observationPerformed(observation, ScreenObserver.isHostBacked())`, added in slot 4). The modal ignored that verdict, forced `screenSyncState` to `OBSERVED`, and rendered `SCREEN OBSERVED FROM HOST` plus a live `ACTIVE APP` / resolution readout for a frame the server had just said was not observed. The same path backs `handleRefreshScreen` and `handleSwitchTarget`.
+
+### Changed
+- New `classifyHostObservation()` in `src/utils/hardening/computerOperatorObservationTruth.ts` derives `isPreview` from the server's own `observed` flag. A response that omits or denies it can only render as an illustrative preview, never a live screen.
+
+### Verified
+- `src/tests/computerOperatorModalObserveTruth.test.ts` — 7 cases: explicit host observation → non-preview; server-denied observation with a full body → preview; missing flag → preview; empty body → no observation; null/undefined body; and source guards that the modal calls `classifyHostObservation(body)` and contains no `isPreview: false`. Negative-validated — restoring the naive body check failed exactly the two source guards (`2 failed | 5 passed`), then 7/7 with the fix. Lint (`tsc --noEmit`) exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-15 01:05 IST — window slot 6: the Mobile Bridge permission toggles stop showing a grant the store never held
 
 ### Fixed
