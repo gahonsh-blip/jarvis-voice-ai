@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 01:05 IST — window slot 6: the Mobile Bridge permission toggles stop showing a grant the store never held
+
+### Fixed
+- **`src/components/MobileBridgeModal.tsx` — the `MARK GRANTED*` button and the per-row `TOGGLE` button flipped the permission badge through `setPermState(...)` alone.** They never called `androidBridgeEngine.updatePermission(...)`, the only path that persists the permission matrix and reports whether the store accepted the write. The screen announced a GRANTED permission the bridge store did not contain, and the next reload silently restored the previous value.
+
+### Changed
+- Both buttons now route through a persisting handler that calls `androidBridgeEngine.updatePermission(...)`, reads the authoritative store echo from `getPermissions()`, and sets the badge from that echo. On a refused write the badge stays at the stored state and the panel shows `PERMISSION NOT SAVED — … stays at … (requested …) and this change reverts on reload.` The classifier lives in `src/utils/hardening/mobilePermissionToggleTruth.ts` (`permissionWriteOutcome`, `nextToggleState`, `permissionMatrixKey`).
+
+### Verified
+- `src/tests/mobilePermissionToggleTruth.test.ts` — 7 cases: accepted write echoes the store, refused write reverts + warns, UI-key→matrix-key mapping, toggle transitions, and source guards that both buttons use the persisting handlers, that no bare `onClick={() => { setPermState(...` remains, and that the store echo is read. Negative-validated — restoring the state-only click failed exactly the two source guards (`2 failed | 5 passed`), then 7/7 with the fix. Lint (`tsc --noEmit`) exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-15 00:35 IST — window slot 5: the Computer Operator footer stops asserting a guard posture it never read
 
 ### Fixed
