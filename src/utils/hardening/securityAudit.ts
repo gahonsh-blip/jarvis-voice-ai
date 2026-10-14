@@ -111,17 +111,27 @@ export function runSecurityAudit(files: AuditInputFile[]): AuditReport {
       scannedLines += lines.length;
 
       lines.forEach((line, index) => {
-        if (isPlaceholder(line)) return;
-
-        if (HIGH_CONFIDENCE_TOKENS.some((t) => t.test(line))) {
-          findings.push({
-            severity: 'CRITICAL',
-            file: file.path,
-            line: index + 1,
-            message: 'Contains a string shaped like a live credential.',
-          });
+        // A token with an unmistakable credential shape is judged on the token
+        // itself, not the surrounding line. Checking the whole line let an
+        // unrelated word ("where", "here") or a stray "<" elsewhere on the line
+        // suppress a real leak — the exact false negative this audit exists to
+        // prevent. The placeholder hint is therefore applied to the match only.
+        const shaped = HIGH_CONFIDENCE_TOKENS.map((t) => line.match(t)).find((m) => m);
+        if (shaped) {
+          if (!isPlaceholder(shaped[0])) {
+            findings.push({
+              severity: 'CRITICAL',
+              file: file.path,
+              line: index + 1,
+              message: 'Contains a string shaped like a live credential.',
+            });
+          }
           return;
         }
+
+        // A literal assignment has no fixed shape, so a placeholder hint
+        // anywhere on the line still counts as an example rather than a secret.
+        if (isPlaceholder(line)) return;
 
         const literal = LITERAL_ASSIGNMENT.exec(line);
         if (literal) {
