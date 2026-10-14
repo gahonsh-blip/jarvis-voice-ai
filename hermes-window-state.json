@@ -1,12 +1,12 @@
 {
   "window_date": "2026-10-14",
   "window_started_at": "2026-10-14T15:35:00Z",
-  "last_slot_at": "2026-10-14T19:40:00Z",
-  "slots_completed": 6,
+  "last_slot_at": "2026-10-14T20:49:15Z",
+  "slots_completed": 7,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "e03add4",
+  "last_commit": "8f816c636efe5c7e505939ef1315f2469ac892eb",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -16,13 +16,14 @@
     "54 live credential rotation - no live provider credentials"
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Guard note: window_date is the window START IST date (2026-10-14). Slot 6 (01:05 IST 2026-10-15): item 13 - MobileBridgeModal permission toggles (MARK GRANTED* + per-row TOGGLE) now persist via androidBridgeEngine.updatePermission and render the store echo, instead of faking a GRANTED badge with setPermState alone. New src/utils/hardening/mobilePermissionToggleTruth.ts + src/tests/mobilePermissionToggleTruth.test.ts (7 tests). Commits 05b1e09 (fix), d54345e (docs), e03add4 (report).",
+  "notes": "Guard note: window_date is the window START IST date (2026-10-14). Slot 7 (01:35 IST 2026-10-15): item 13 - ComputerOperatorModal.observeScreen() now derives isPreview from the server's observed verdict via classifyHostObservation, instead of forcing isPreview:false for any observation body (which printed SCREEN OBSERVED FROM HOST for a frame the server denied observing). New src/utils/hardening/computerOperatorObservationTruth.ts + src/tests/computerOperatorModalObserveTruth.test.ts (7 tests). Commits dda79a2 (fix), 8f816c6 (docs).",
   "slot_log": [
     "2026-10-14 21:06 IST (WORK slot 1): item 51 - npm audit fix, 0 vulnerabilities; lint exit 0; 237 files/2655 tests passed; build exit 0. Commits 1d17469, 3c2e0b3.",
     "2026-10-14 21:35 IST (WORK slot 2): item 54 - securityAudit false-negative fix; lint exit 0; targeted 17 passed; full 237 files/2657 tests passed; build exit 0. Commits 93da5f4, 7a0f3d6.",
     "2026-10-14 22:35 IST (WORK slot 3): item 13 - briefing fallback truth fix; lint exit 0; targeted 10 passed; full 238 files/2667 tests passed; build exit 0. Commits 168328a, a3fdb4d.",
     "2026-10-15 00:05 IST (WORK slot 4): reconnaissance only, no source change; report committed fb52218. No item advanced; tests/lint/build NOT RUN.",
     "2026-10-15 00:35 IST (WORK slot 5): item 13 - Computer Operator footer guard-posture truth fix; lint exit 0; targeted 2 files/15 passed; full 239 files/2674 tests passed; build exit 0 (dist/server.cjs 1.0mb). Commits 54ea3a1, b366211, b6d80fe.",
-    "2026-10-15 01:05 IST (WORK slot 6): item 13 - Mobile Bridge permission-toggle truth fix; lint exit 0; targeted 4 files/32 passed; full 240 files/2681 tests passed; build exit 0 (dist/server.cjs 1,090,429 bytes). Commits 05b1e09, d54345e, e03add4."
+    "2026-10-15 01:05 IST (WORK slot 6): item 13 - Mobile Bridge permission-toggle truth fix; lint exit 0; targeted 4 files/32 passed; full 240 files/2681 tests passed; build exit 0 (dist/server.cjs 1,090,429 bytes). Commits 05b1e09, d54345e, e03add4.",
+    "2026-10-15 01:35 IST (WORK slot 7): item 13 - Computer Operator observe-screen truth fix; lint exit 0; targeted 3 files/22 passed; full 241 files/2688 tests passed; build exit 0 (dist/server.cjs 1,090,429 bytes). Commits dda79a2, 8f816c6."
   ]
 }
