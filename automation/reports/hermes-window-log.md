@@ -17906,3 +17906,19 @@ Next Slot: next window opens 21:05 IST. Highest-priority non-blocked item is #13
 हिंदी सारांश: यह window 2026-10-14/15 का finalization slot था — tip `b8d75962`
 पर lint exit 0, 243 फ़ाइलें / 2710 टेस्ट पास, build exit 0, security साफ़;
 कोई नया development नहीं, PR #8 खुला, main अभी merge नहीं हुआ।
+
+### Finalization addendum — 2026-10-15 04:4x IST
+
+Corrections and close-out for the finalization slot above:
+
+- Diff stat corrected: **141 files changed, +16,682 / -1,440** vs `origin/main`
+  (the entry above said +16611; recomputed with `git diff --shortstat origin/main`).
+- PR #8 body **refreshed** with the exact observed finalization results
+  (tests 243 files / 2710; audit **CLEAN, 0 vulnerabilities** — superseding the
+  earlier "4 vulns deferred" note, which no longer reproduces).
+- Window state persisted on `automation/hermes-state`: `finalized: true`,
+  `slots_completed: 11`, `last_commit e1b057e2b`, `finalization_result` set
+  (commit `ed0287b`, pushed).
+- Branch tip pushed: `origin/feature/hermes-full-completion` = `e1b057e2b`.
+
+Main merge: NOT MERGED — awaiting human approval. Deploy: NOT_CONFIGURED.
