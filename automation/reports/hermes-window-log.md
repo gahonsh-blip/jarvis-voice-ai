@@ -17636,3 +17636,38 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - कंप्यूटर ऑपरेटर का फुटर अब असली सिक्योरिटी मैट्रिक्स से गार्ड पोस्चर दिखाता है,
   पहले से लिखा हुआ झूठा वाक्य नहीं; सभी टेस्ट और लिंट पास।
+
+---
+
+## Slot 6 — 2026-10-15 01:05 IST (WORK) — item 13: Mobile Bridge permission toggles stop faking a grant
+
+Item 13 (`Zero-fake-success for all tools`). In `src/components/MobileBridgeModal.tsx`
+the `MARK GRANTED*` button and the per-row `TOGGLE` button each flipped the permission
+badge with `setPermState((prev) => ({ ...prev, [key]: 'GRANTED' }))` and nothing else.
+They never called `androidBridgeEngine.updatePermission(...)` — the only path that
+persists the permission matrix and reports whether the store accepted the write. So the
+screen announced a GRANTED permission the bridge store did not hold, and the next reload
+silently restored the previous value.
+
+Fix: both buttons now route through a persisting handler that calls
+`androidBridgeEngine.updatePermission(...)`, reads the authoritative store echo from
+`getPermissions()`, and sets the badge from that echo. On a refused write the badge stays
+at the stored state and the panel shows "PERMISSION NOT SAVED — … stays at … (requested …)
+and this change reverts on reload." Classifier:
+`src/utils/hardening/mobilePermissionToggleTruth.ts`. Guard:
+`src/tests/mobilePermissionToggleTruth.test.ts` (7 cases).
+
+Negative validation: restoring the state-only click failed exactly the two source guards
+(`2 failed | 5 passed`); restored → 7/7.
+
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 4 files / 32 passed;
+full `npx vitest run` 240 files / 2681 tests passed (0 failed); `npm run build` exit 0
+(`dist/server.cjs` 1,090,429 bytes); `npm audit --omit=dev` 0 vulnerabilities.
+E2E: NOT RUN (no browser/handset). Deploy: NOT_CONFIGURED. Commits 05b1e09 (fix+test),
+d54345e (docs). Item 13 stays `PARTIAL`. PR #8 open, non-draft. Main NOT MERGED.
+
+हिंदी सारांश (एक पंक्ति):
+- मोबाइल ब्रिज के permission टॉगल अब असली bridge store में सेव होते हैं और store के
+  echo से बैज दिखाते हैं, पहले केवल UI state बदलकर झूठा GRANTED दिखाते थे; सभी टेस्ट और
+  लिंट पास।
+
