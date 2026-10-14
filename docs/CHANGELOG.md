@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 03:05 IST — window slot 8: the Android bridge stops echoing a permission the durable store refused
+
+### Fixed
+- **`src/utils/androidBridgeEngine.ts` — `AndroidBridgeManager.updatePermission()` wrote the in-memory permission matrix *before* calling `saveState()`, and kept the new value when the durable write was refused.** `getPermissions()` is the authoritative store echo that `MobileBridgeModal` renders each badge from (slot 6), so a write refused for quota or private-browsing left the badge reading `GRANTED` for a permission that was never persisted; the next reload silently restored the old value. The same held for `updateSettings()`.
+
+### Changed
+- `updatePermission()` and `updateSettings()` now snapshot the previous value and revert it when a store is present and refuses the write, while still returning `false` to report the true durability verdict. When **no** store exists at all (SSR / non-browser host) the in-memory matrix is the only state there is, so it stands and only the return value reports non-durability.
+
+### Verified
+- `src/tests/androidMobileBridge.test.ts` — three new cases: refused-write rollback for the permission matrix, refused-write rollback for settings, and no-store semantics. Negative-validated — reverting the engine failed exactly the two refused-write echo cases (`2 failed | 49 passed`), then 51/51 with the fix. Lint (`tsc --noEmit`) exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-15 01:35 IST — window slot 7: the Computer Operator panel stops claiming a live screen the server denied observing
 
 ### Fixed
