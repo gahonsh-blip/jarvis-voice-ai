@@ -17671,3 +17671,40 @@ d54345e (docs). Item 13 stays `PARTIAL`. PR #8 open, non-draft. Main NOT MERGED.
   echo से बैज दिखाते हैं, पहले केवल UI state बदलकर झूठा GRANTED दिखाते थे; सभी टेस्ट और
   लिंट पास।
 
+
+---
+
+## Slot 7 — WORK — 2026-10-15 01:35 IST (window 2026-10-14, slots_completed 7)
+
+Item 13 (`Zero-fake-success for all tools`) — **the Computer Operator panel
+claimed a live screen the server had just denied observing.**
+`ComputerOperatorModal.observeScreen()` returned
+`{ observation: body.observation, isPreview: false }` for ANY 200 response
+carrying an observation body. But `POST /api/computer-operator/observe` returns a
+*full* observation even when the host desktop could not be observed — it serves
+the built-in illustrative view and reports `observed: false` (derived from
+`observationPerformed(observation, ScreenObserver.isHostBacked())`, added in slot
+4). The modal ignored that verdict, forced `screenSyncState` to `OBSERVED`, and
+rendered `SCREEN OBSERVED FROM HOST` plus a live `ACTIVE APP` / resolution readout
+for a frame the server had just said was not observed. The same path backs
+`handleRefreshScreen` and `handleSwitchTarget`. New `classifyHostObservation()`
+(`src/utils/hardening/computerOperatorObservationTruth.ts`) derives `isPreview`
+from the server's own `observed` flag, so a response that omits or denies it can
+only render as an illustrative preview. Guarded by
+`src/tests/computerOperatorModalObserveTruth.test.ts` (7 cases: host-observed →
+non-preview; server-denied full body → preview; missing flag → preview; empty
+body → no observation; null/undefined body; and source guards that the modal
+calls `classifyHostObservation(body)` and contains no `isPreview: false`).
+Negative-validated — restoring the naive body check failed exactly the two source
+guards (`2 failed | 5 passed`); restored → 7/7.
+
+Gates (observed this fire): lint (`tsc --noEmit`) exit 0; targeted 3 files / 22
+passed; full `npx vitest run` 241 files / 2688 tests passed (0 failed, 77.27 s);
+`npm run build` exit 0 (`dist/server.cjs` 1,090,429 bytes). E2E: NOT RUN (no
+browser/handset). Deploy: NOT_CONFIGURED. Commits dda79a2 (fix+test), 8f816c6
+(docs). Item 13 stays `PARTIAL` — the long tail of unclassified `success: true` /
+discarded-`persistMemory()` sites remains. PR #8 open, non-draft. Main NOT MERGED.
+
+हिंदी सारांश (एक पंक्ति):
+- Computer Operator पैनल अब सर्वर की `observed` रिपोर्ट से ही "लाइव स्क्रीन" तय
+  करता है, इसलिए असत्यापित स्क्रीन को लाइव बताना बंद हो गया; lint/test/build हरे।
