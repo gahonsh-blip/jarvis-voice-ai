@@ -1,12 +1,12 @@
 {
   "window_date": "2026-10-14",
   "window_started_at": "2026-10-14T15:35:00Z",
-  "last_slot_at": "2026-10-14T17:15:00Z",
-  "slots_completed": 3,
+  "last_slot_at": "2026-10-14T18:35:00Z",
+  "slots_completed": 4,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "a3fdb4d",
+  "last_commit": "fb52218",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -16,10 +16,11 @@
     "54 live credential rotation - no live provider credentials"
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "New window (2026-10-14 -> 2026-10-15) started at 21:06 IST. Guard note: window_date is recorded as the window START IST date, not the write-time IST date; writing write-time IST date would make the idempotency guard (window_date == today AND finalized) false-positive after midnight IST.",
+  "notes": "Guard note: window_date is the window START IST date (2026-10-14), not write-time IST date. Slot 4 (00:05 IST) was reconnaissance-only: no source change, no item advanced; report committed fb52218.",
   "slot_log": [
-    "2026-10-14 21:06 IST (WORK slot 1): item 51 - applied deferred npm audit fix (express/qs/proxy-addr/body-parser/source-map-js), npm audit now 0 vulnerabilities; lint exit 0; 237 files/2655 tests passed; build exit 0. Commits 1d17469 (deps), 3c2e0b3 (docs).",
-    "2026-10-14 21:35 IST (WORK slot 2): item 54 - fixed securityAudit false-negative where any placeholder hint ('where', 'here', '<') anywhere on a line suppressed a credential-shaped token; shaped tokens now judged on the matched token. Lint exit 0; targeted 17 passed; full 237 files/2657 tests passed; build exit 0 (1089969 bytes); npm audit 0 vulnerabilities. Commits 93da5f4 (fix+test), 7a0f3d6 (docs).",
-    "2026-10-14 22:35 IST (WORK slot 3): item 13 - briefing fallback (POST /api/mobile/briefing/generate) no longer asserts 'No mobile device is currently connected' when telemetry was supplied but carried no recognised field; new briefingFallbackTruth.ts renders only observed fields. Lint exit 0; targeted 10 passed (negative-validated 2 failed|8 passed pre-fix); full 238 files/2667 tests passed; build exit 0 (1090429 bytes). Commits 168328a (fix+test), a3fdb4d (docs)."
+    "2026-10-14 21:06 IST (WORK slot 1): item 51 - npm audit fix, 0 vulnerabilities; lint exit 0; 237 files/2655 tests passed; build exit 0. Commits 1d17469, 3c2e0b3.",
+    "2026-10-14 21:35 IST (WORK slot 2): item 54 - securityAudit false-negative fix; lint exit 0; targeted 17 passed; full 237 files/2657 tests passed; build exit 0. Commits 93da5f4, 7a0f3d6.",
+    "2026-10-14 22:35 IST (WORK slot 3): item 13 - briefing fallback truth fix; lint exit 0; targeted 10 passed; full 238 files/2667 tests passed; build exit 0. Commits 168328a, a3fdb4d.",
+    "2026-10-15 00:05 IST (WORK slot 4): reconnaissance only, no source change; report committed fb52218. No item advanced; tests/lint/build NOT RUN."
   ]
 }
