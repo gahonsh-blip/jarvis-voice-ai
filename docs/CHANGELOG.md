@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-14 22:35 IST — window slot 3: the morning briefing stops claiming a device it never saw
+
+### Fixed
+- **`server.ts` — `POST /api/mobile/briefing/generate` told the user "No mobile device is currently connected" on a path where no connection state was observed.** The local fallback (used when no model is available) chose between two fixed scripts on a single boolean — whether any recognised telemetry field was present. A request that did carry a `mobileData` snapshot but with none of the fields this server reads (different keys, or a partially-populated payload) fell into the "no telemetry" branch and was told the device was not connected. A connectivity claim nobody made.
+
+### Changed
+- The fallback now renders only what it can observe, via `briefingFallbackText()` in `src/utils/hardening/briefingFallbackTruth.ts`: readings from the recognised fields (battery, weather, notifications, calendar, email) and an explicit *"This snapshot carried no battery, weather, notification, calendar or email reading, so those figures are unavailable."* when there are none. No connection state is asserted in either language.
+
+### Verified
+- `src/tests/briefingFallbackTruth.test.ts` — 10 cases: empty and null-valued snapshots, key naming, the no-connection-claim assertion in both Hindi and English, real readings, absent fields named unavailable, and a source guard that the pre-fix literals are gone from the route. Negative-validated — restoring the pre-fix English sentence failed exactly the two claim guards (`2 failed | 8 passed`), then 10/10 with the fix. Lint (`tsc --noEmit`) exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-14 21:35 IST — window slot 2: the secret scan stops letting an unrelated word hide a real token
 
 ### Fixed
