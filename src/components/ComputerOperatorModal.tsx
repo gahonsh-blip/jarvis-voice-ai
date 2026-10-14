@@ -43,6 +43,10 @@ import {
   screenSyncLabel,
   screenSyncState,
 } from '../utils/computerOperator/observationTruth';
+import {
+  operatorGuardBadge,
+  OperatorGuardSnapshot,
+} from '../utils/hardening/computerOperatorGuardTruth';
 
 interface ComputerOperatorModalProps {
   isOpen: boolean;
@@ -67,6 +71,8 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   const [customDirective, setCustomDirective] = useState('');
   const [streamEvents, setStreamEvents] = useState<CommandStreamEvent[]>([]);
   const [observationIsPreview, setObservationIsPreview] = useState(false);
+  // Guard posture is read, never assumed: null until /api/security answers.
+  const [guardPosture, setGuardPosture] = useState<OperatorGuardSnapshot | null>(null);
   const streamEndRef = useRef<HTMLDivElement>(null);
 
   const isHindi = activeLanguage.startsWith('hi') || activeLanguage === 'hinglish';
@@ -131,6 +137,25 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
     };
   }, [isOpen, targetApp, observeScreen]);
 
+  // Read the real Security Matrix posture for the footer. Only an answered
+  // /api/security sets it; a failed read leaves the footer saying UNKNOWN
+  // rather than asserting the hard-coded guard line it used to print.
+  useEffect(() => {
+    if (!isOpen) return;
+    let mounted = true;
+    fetch('/api/security')
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((data) => {
+        if (mounted) setGuardPosture(data as OperatorGuardSnapshot);
+      })
+      .catch(() => {
+        if (mounted) setGuardPosture(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
+
   // Auto scroll stream
   useEffect(() => {
     if (streamEndRef.current) {
@@ -181,6 +206,14 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
   const syncState = screenSyncState(currentObservation, observationIsPreview);
   const ambiguityNotice = observationAmbiguityNotice(currentObservation, observationIsPreview);
   const interpretationNotice = observationInterpretationNotice(currentObservation, observationIsPreview);
+  const guardLine = operatorGuardBadge(guardPosture);
+  // A green shield is itself a claim: show it only when every gate was observed
+  // and is enforcing. An unknown or disabled posture gets the alert icon.
+  const guardHealthy =
+    guardPosture !== null &&
+    guardPosture.humanApprovalForExternal === true &&
+    guardPosture.maskSensitiveData === true &&
+    guardPosture.credentialLeakProtection === true;
 
   return (
     <div
@@ -632,10 +665,12 @@ export const ComputerOperatorModal: React.FC<ComputerOperatorModalProps> = ({
           className="flex items-center justify-between px-4 py-2.5 bg-slate-950 border-t border-slate-800/80 text-[11px] text-slate-400"
         >
           <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>
-              Level 1-4 Guard Active: Financial exclusions hard-locked | Secrets & tokens redacted
-            </span>
+            {guardHealthy ? (
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <ShieldAlert className="w-4 h-4 text-amber-400" />
+            )}
+            <span>{guardLine}</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="font-mono text-slate-500">
