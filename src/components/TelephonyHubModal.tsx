@@ -33,6 +33,7 @@ import {
   ShieldCheck,
   Calendar,
   Filter,
+  HardDrive,
 } from 'lucide-react';
 import {
   CallRecord,
@@ -57,6 +58,12 @@ import {
 } from '../utils/telephonyEndpointTruth';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
 import { ACOUSTIC_FILTER_STATUS, ACOUSTIC_FILTER_SPEC } from '../utils/hardening/acousticFilterTruth';
+import {
+  telephonyPersistenceBadge,
+  telephonyPersistenceBadgeTitle,
+  telephonyPersistenceTone,
+  type TelephonyPersistenceState,
+} from '../utils/hardening/telephonyPersistenceBadgeTruth';
 import {
   ACTION_ITEM_LIST_NOTE,
   TRANSCRIPT_NOT_VERIFIED_NOTE,
@@ -92,6 +99,13 @@ interface TelephonyHubModalProps {
   }) => void;
   onTriggerIncomingCall: (persona: SimulatedCallerPersona) => void;
   onClearHistory: () => void;
+  /**
+   * The observed verdict of the last telephony-store write — `true` when
+   * localStorage accepted it, `false` when it was refused, null before any
+   * write is observed. The header badge derives from this instead of asserting
+   * a durable local save for a store nothing measured.
+   */
+  persistenceState?: TelephonyPersistenceState;
 }
 
 export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
@@ -105,6 +119,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   onStartOutboundCall,
   onTriggerIncomingCall,
   onClearHistory,
+  persistenceState,
 }) => {
   const [activeTab, setActiveTab] = useState<'dialer' | 'receptionist' | 'logs' | 'gateway' | 'permissions' | 'test_suite'>('dialer');
   const [testResults, setTestResults] = useState<TestSuiteSummary | null>(null);
@@ -436,6 +451,21 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
             >
               <span className={`h-1.5 w-1.5 rounded-full ${engineIsLive ? 'bg-emerald-400' : engineMismatch ? 'bg-rose-400' : 'bg-amber-400 animate-ping'}`} />
               {gatewayBadgeText}
+            </span>
+            {/* Call-store persistence verdict — derived from the observed write,
+                not a compile-time claim (item 13). */}
+            <span
+              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${
+                telephonyPersistenceTone(persistenceState) === 'ok'
+                  ? 'bg-cyan-950 border border-cyan-500/40 text-cyan-300'
+                  : telephonyPersistenceTone(persistenceState) === 'warn'
+                    ? 'bg-amber-950 border border-amber-500/50 text-amber-300'
+                    : 'bg-slate-900 border border-slate-600/60 text-slate-300'
+              }`}
+              title={telephonyPersistenceBadgeTitle(persistenceState)}
+            >
+              <HardDrive className="h-2.5 w-2.5" />
+              {telephonyPersistenceBadge(persistenceState)}
             </span>
             {activeCall && (
               <span className="rounded-lg bg-cyan-950 px-2.5 py-1 text-xs font-mono text-cyan-300 border border-cyan-800">

@@ -9,6 +9,11 @@ import {
 } from '../utils/telephonyEngine';
 import { DEFAULT_TELEPHONY_SETTINGS } from '../types/telephony';
 import type { CallRecord } from '../types/telephony';
+import {
+  telephonyPersistenceBadge,
+  telephonyPersistenceBadgeTitle,
+  telephonyPersistenceTone,
+} from '../utils/hardening/telephonyPersistenceBadgeTruth';
 
 const APP_SOURCE = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
 
@@ -87,6 +92,8 @@ describe('Telephony storage key parity — engine round-trip', () => {
     expect(store.has(ENGINE_KEYS.calls)).toBe(true);
     expect(loadLocalCallHistory()).toHaveLength(1);
     expect(loadLocalCallHistory()[0].id).toBe('call-parity-1');
+
+
   });
 
   it('saveLocalTelephonySettings writes the engine key the loaders read', () => {
@@ -101,3 +108,84 @@ describe('Telephony storage key parity — engine round-trip', () => {
     expect(loadLocalCallHistory()).toEqual([]);
   });
 });
+
+const HUB_SOURCE = readFileSync(resolve(process.cwd(), 'src/components/TelephonyHubModal.tsx'), 'utf-8');
+
+// Item 13 (Zero-fake-success). The telephony writers returned `void` and
+// swallowed the storage error, so a refused write (quota, private mode, no
+// `localStorage`) was indistinguishable from a durable one: the operator read a
+// populated Call Logs tab that the next reload would silently drop. The writers
+// now report the real result and the Hub header badge branches on it.
+describe('Telephony writers report whether the write landed', () => {
+  const store = new Map<string, string>();
+  let failWrites = false;
+  const originalWindow = (globalThis as { window?: unknown }).window;
+
+  beforeEach(() => {
+    store.clear();
+    failWrites = false;
+    (globalThis as { window?: unknown }).window = globalThis;
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => {
+        if (failWrites) throw new DOMException('QuotaExceededError');
+        store.set(k, v);
+      },
+      removeItem: (k: string) => void store.delete(k),
+    };
+  });
+
+  afterEach(() => {
+    (globalThis as { window?: unknown }).window = originalWindow;
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+  });
+
+  it('returns true when the write is accepted', () => {
+    expect(saveLocalCallHistory([makeRecord()])).toBe(true);
+    expect(saveLocalTelephonySettings(DEFAULT_TELEPHONY_SETTINGS)).toBe(true);
+  });
+
+  it('returns false when localStorage refuses the write', () => {
+    failWrites = true;
+    expect(saveLocalCallHistory([makeRecord()])).toBe(false);
+    expect(saveLocalTelephonySettings(DEFAULT_TELEPHONY_SETTINGS)).toBe(false);
+  });
+
+  it('returns false when there is no browser window (SSR / Node)', () => {
+    delete (globalThis as { window?: unknown }).window;
+    expect(saveLocalCallHistory([makeRecord()])).toBe(false);
+    expect(saveLocalTelephonySettings(DEFAULT_TELEPHONY_SETTINGS)).toBe(false);
+  });
+});
+
+describe('Telephony Hub persistence badge states only the observed verdict', () => {
+  it('reads synced only for an observed accepted write', () => {
+    expect(telephonyPersistenceBadge(true)).toBe('CALL STORE SYNCED');
+    expect(telephonyPersistenceTone(true)).toBe('ok');
+  });
+
+  it('names the revert for a refused write', () => {
+    expect(telephonyPersistenceBadge(false)).toContain('NOT SAVED');
+    expect(telephonyPersistenceTone(false)).toBe('warn');
+    expect(telephonyPersistenceBadgeTitle(false)).toContain('revert on reload');
+  });
+
+  it('states unknown before any write is observed', () => {
+    expect(telephonyPersistenceBadge(null)).toContain('UNKNOWN');
+    expect(telephonyPersistenceTone(null)).toBe('unknown');
+    expect(telephonyPersistenceTone(undefined)).toBe('unknown');
+  });
+});
+
+describe('Telephony Hub surfaces the observed persistence verdict', () => {
+  it('renders the badge from the observed verdict instead of a fixed claim', () => {
+    expect(HUB_SOURCE).toContain('telephonyPersistenceBadge(persistenceState)');
+    expect(HUB_SOURCE).toContain('telephonyPersistenceBadgeTitle(persistenceState)');
+  });
+
+  it('App captures the writers verdict and passes it to the Hub', () => {
+    expect(APP_SOURCE).toContain('setTelephonyPersistenceState(');
+    expect(APP_SOURCE).toContain('persistenceState={telephonyPersistenceState}');
+  });
+});
+

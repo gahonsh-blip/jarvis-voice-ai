@@ -44,14 +44,21 @@ export function loadLocalCallHistory(): CallRecord[] {
 }
 
 /**
- * Save call history to local storage
+ * Save call history to local storage.
+ *
+ * Returns whether the record actually reached the store. It used to return
+ * `void` and swallow the storage error, so a refused write (quota, private
+ * mode, no `localStorage`) was indistinguishable from a durable one and the
+ * caller could announce a save the next reload would not find.
  */
-export function saveLocalCallHistory(calls: CallRecord[]): void {
-  if (typeof window === 'undefined') return;
+export function saveLocalCallHistory(calls: CallRecord[]): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(STORAGE_KEY_CALLS, JSON.stringify(calls.slice(0, 100)));
+    return true;
   } catch (err) {
     console.warn('Failed to save call history:', err);
+    return false;
   }
 }
 
@@ -72,14 +79,17 @@ export function loadLocalTelephonySettings(): TelephonySettings {
 }
 
 /**
- * Save telephony settings
+ * Save telephony settings. Returns whether the write reached the store; see
+ * `saveLocalCallHistory` for why the verdict is reported instead of swallowed.
  */
-export function saveLocalTelephonySettings(settings: TelephonySettings): void {
-  if (typeof window === 'undefined') return;
+export function saveLocalTelephonySettings(settings: TelephonySettings): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+    return true;
   } catch (err) {
     console.warn('Failed to save telephony settings:', err);
+    return false;
   }
 }
 

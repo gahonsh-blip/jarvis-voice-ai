@@ -132,6 +132,9 @@ export default function App() {
   // seen. The Memory Bank header badge derives from this instead of asserting a
   // fixed "LocalStorage Synced" for a store nothing measured (item 13).
   const [memoryPersistenceState, setMemoryPersistenceState] = useState<boolean | null>(null);
+  // Observed verdict of the last telephony-store write; the Telephony Hub header
+  // badge derives from this instead of asserting a durable local save.
+  const [telephonyPersistenceState, setTelephonyPersistenceState] = useState<boolean | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   // The backend's reachability is a separate observation from the browser's
   // network state; it stays null until a probe has actually answered.
@@ -965,14 +968,14 @@ export default function App() {
   // Auto-persist callHistory & telephonySettings. Both go through the shared
   // telephony engine so the App and every engine consumer read one key; the
   // literals previously used here diverged from the engine's `_v1` keys, so the
-  // engine saw a store that was never written.
+  // engine saw a store that was never written. The engine now reports whether
+  // each write landed, and the Hub header badge shows that verdict instead of
+  // leaving a refused write to look identical to a durable one (item 13).
   useEffect(() => {
-    saveLocalCallHistory(callHistory);
-  }, [callHistory]);
-
-  useEffect(() => {
-    saveLocalTelephonySettings(telephonySettings);
-  }, [telephonySettings]);
+    const saved = saveLocalCallHistory(callHistory);
+    const savedSettings = saveLocalTelephonySettings(telephonySettings);
+    setTelephonyPersistenceState(saved && savedSettings);
+  }, [callHistory, telephonySettings]);
 
   // Handle incoming call auto-answer
   useEffect(() => {
@@ -2086,6 +2089,7 @@ export default function App() {
         onUpdateSettings={(s) => setTelephonySettings(s)}
         onStartOutboundCall={handleStartOutboundCall}
         onTriggerIncomingCall={handleTriggerIncomingCall}
+        persistenceState={telephonyPersistenceState}
         onClearHistory={() => {
           setCallHistory([]);
         }}
