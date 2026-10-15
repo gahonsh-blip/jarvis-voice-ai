@@ -1,27 +1,19 @@
 {
   "window_date": "2026-10-16",
   "window_started_at": "2026-10-15T15:35:00Z",
-  "last_slot_at": "2026-10-15T22:15:00Z",
-  "slots_completed": 12,
+  "last_slot_at": "2026-10-15T22:36:00Z",
+  "slots_completed": 13,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "5f0bbc7",
+  "last_commit": "86d1eef",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "title": "Real Android Mobile Bridge connection",
-      "reason": "requires a physical paired handset"
-    },
-    {
-      "item": 2,
-      "title": "Android <-> JARVIS <-> Server E2E",
-      "reason": "requires physical device hardware"
-    }
+    {"item": 1, "title": "Real Android Mobile Bridge connection", "reason": "requires a physical paired handset"},
+    {"item": 2, "title": "Android <-> JARVIS <-> Server E2E", "reason": "requires physical device hardware"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 12 (03:05 IST fire) completed the item-13 slice the earlier phase only investigated. src/App.tsx telephony call-history and settings persistence now routes through the shared engine (loadLocalCallHistory/saveLocalCallHistory, loadLocalTelephonySettings/saveLocalTelephonySettings) so App and engine share one canonical key; the stale 'hermes_jarvis_call_history' literal and the direct localStorage.removeItem in onClearHistory are gone. New src/tests/telephonyStorageKeyParity.test.ts (5 cases) negative-validated (1 failed | 4 passed on revert; 5/5 restored). A typing defect in the first fixture draft (as-cast + wrong union members) broke the githubLocalHealth lint gate and was fixed in a second commit. Observed gates: tsc --noEmit exit 0; npx vitest run 254 files / 2782 tests passed, 0 failed; npm run build exit 0 (dist/server.cjs 1,094,784 bytes). Item 13 stays PARTIAL. Commits 2f041c4, 237e314, ea00352 (docs), 5f0bbc7 (report), pushed to feature/hermes-full-completion."
+  "notes": "Slot 13 (03:35 IST fire). Item 13 slice: telephony store persistence verdict. saveLocalCallHistory/saveLocalTelephonySettings in src/utils/telephonyEngine.ts returned void and swallowed the storage error, so a refused write (quota/private mode/no localStorage) was indistinguishable from a durable one. Both writers now return boolean; new src/utils/hardening/telephonyPersistenceBadgeTruth.ts derives the Hub header badge from that observed verdict; src/App.tsx captures telephonyPersistenceState and passes it to TelephonyHubModal. 8 new cases in src/tests/telephonyStorageKeyParity.test.ts (5 -> 13); negative-validated (2 failed | 11 passed on revert; 13/13 restored). Observed gates: tsc --noEmit exit 0; targeted 1 file / 13 passed; full npx vitest run 254 files / 2790 tests passed, 0 failed (79.71 s); npm run build exit 0, dist/server.cjs 1,094,784 bytes. Item 13 stays PARTIAL. Commits 01a6a04 (code+tests), 86d1eef (docs+report log), pushed to feature/hermes-full-completion. Next fire is the 04:05 IST slot (second-to-last); finalization is 04:35."
 }
