@@ -28,11 +28,20 @@ function makeRecord(): CallRecord {
   return {
     id: 'call-parity-1',
     direction: 'outbound',
-    contactName: 'Parity Check',
-    phoneNumber: '+10000000000',
+    callerNumber: '',
+    callerName: '',
+    recipientNumber: '+10000000000',
+    recipientName: 'Parity Check',
     startTime: '2026-10-16T00:00:00.000Z',
-    status: 'completed',
-  } as CallRecord;
+    durationSeconds: 0,
+    status: 'ended',
+    mode: 'ai_autonomous',
+    transcript: [],
+    summary: '',
+    sentiment: 'neutral',
+    intent: '',
+    followUpActions: [],
+  };
 }
 
 describe('Telephony storage key parity — App and engine share one store', () => {
