@@ -18572,3 +18572,47 @@ Next Slot:
   item 13 अभी भी PARTIAL है। (पूरा suite 251 files / 2761 tests पास, build पास।)
 
 ---
+
+---
+
+## Slot 10 — 2026-10-16 02:05 IST (WORK SLOT) — window 2026-10-15/16
+
+Item #13 — Zero-fake-success for all tools (`PARTIAL`, continuing the store-echo sweep).
+
+**Bug found & fixed.** `src/components/PermissionGateway.tsx` renders the "Mobile Data
+Category Permissions" rows (battery, weather, notifications, calendar, email, device
+health) from React state `mobilePerms`. The per-category toggle persisted correctly
+through `saveMobilePermissions()` and warned on a refused write, but it painted the row
+from the *requested* matrix — `setMobilePerms(updated)` ran before the store was read
+back — and the notice announced `updated[def.category]`. `saveMobilePermissions()`
+returns `false` on a refused write (quota, private mode, no `window`) and leaves the
+previous matrix in `localStorage`, so a refused toggle rendered `AUTHORIZED ✅` /
+`REVOKED 🔒` for a policy the next reload silently restored — a fake success the
+operator would trust. The handler now reads `loadMobilePermissions()` back after the
+write, renders that echo, and names the stored value in the refusal notice. This matches
+the fix already applied to the sibling `MobilePersonalStatusModal` (slot 8) and
+`AndroidPermissionCenter` (slot 9).
+
+**Evidence.**
+- `src/tests/permissionGatewayMobileEchoTruth.test.ts` (new, 6 cases) — observed
+  `Test Files 1 passed (1) / Tests 6 passed (6)`.
+- Negative validation — restoring `setMobilePerms(updated)` + `updated[def.category]`
+  failed exactly 3 assertions (observed `3 failed | 3 passed`); fix restored → 6/6.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0;
+  `npx vitest run` **252 files / 2767 tests passed** (81.43 s, 0 failed);
+  `npm run build` exit 0 (`dist/server.cjs` 1,094,784 bytes).
+- E2E: NOT RUN (no handset, no display session). Security: no secret printed, no `.env`
+  touched, no permission gate weakened; full `npm audit` NOT RUN this slot.
+- Commit `85d72d3` pushed to `origin/feature/hermes-full-completion` (d6edc22..85d72d3).
+
+**Remaining / next.** Item 13 stays `PARTIAL` — the long tail of unclassified
+`success: true` / discarded-`persistMemory()` sites remains. Next store-echo candidate:
+`SocialMediaModal.tsx` (`ytIsTestPayload`), then `AutonomousToolsModal` (`env.configured`),
+each verified against the route's real response before any change.
+
+PR: NONE this slot (finalization slot opens/refreshes it). Main merge: NOT MERGED —
+awaiting human approval. Deploy: NOT_CONFIGURED.
+
+हिंदी सारांश (एक पंक्ति):
+- Permission Gateway के mobile permission rows अब सहेजी गई (persisted) स्थिति दिखाते हैं,
+  अनुरोध की गई स्थिति नहीं; नया truth test जोड़ा गया और सभी gates हरे रहे।

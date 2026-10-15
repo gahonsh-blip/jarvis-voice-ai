@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-16 02:05 IST — window 2026-10-15/16 slot 10: Permission Gateway renders the persisted mobile policy, not the request
+
+### Fixed
+- **`PermissionGateway.tsx` painted the "Mobile Data Category Permissions" rows from the requested matrix.** The per-category toggle persisted through `saveMobilePermissions()` and warned on a refused write, but it set `mobilePerms` to the requested object before reading the store back and announced `updated[def.category]`. Because `saveMobilePermissions()` returns `false` on a refused write (quota, private mode, no `window`) and leaves the previous matrix in `localStorage`, a refused toggle showed `AUTHORIZED ✅` / `REVOKED 🔒` for a policy the next reload silently restored. The handler now renders `loadMobilePermissions()` and names the stored value in the refusal notice. Matches the fix already applied to `MobilePersonalStatusModal` and `AndroidPermissionCenter`.
+
+### Tests
+- `src/tests/permissionGatewayMobileEchoTruth.test.ts` — 6 cases: the handler reads the store back and never sets the requested object; the notice names the stored value, never the requested one; the refusal wording names the stored value and the revert; no `setMobilePerms(updated)` remains in the file; and two behavioural cases proving a refused `setItem` returns `false` **and** leaves the previous matrix in the store, while an accepted write is visible on read-back. Negative-validated: restoring the pre-fix state failed exactly 3 assertions (`3 failed | 3 passed`); restored → 6/6.
+- Full suite: **252 files / 2767 tests passed**; lint (`tsc --noEmit`) exit 0; `npm run build` exit 0.
+
+---
+
 ## [Unreleased] - 2026-10-16 01:35 IST — window 2026-10-15/16 slot 9: Android Permission Center renders the persisted policy, not the request
 
 ### Fixed
