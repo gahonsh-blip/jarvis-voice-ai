@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-16 02:35 IST — window 2026-10-15/16 slot 11: the YouTube staging panel stages the payload mode it displays
+
+### Fixed
+- **`SocialMediaModal.tsx` painted `Binary File Mode` and staged the real file's name for a payload whose bytes had not been read.** The panel derived both the displayed mode and the staged flag from the React boolean `ytIsTestPayload`, but `handleVideoFileSelect` cleared that flag *synchronously*, before the `FileReader` filling `ytVideoBase64` resolved, and registered no `onerror`. The stage handler sent `videoPayloadBase64: ytVideoBase64 || undefined` alongside `videoFileName: ytVideoFile?.name`. `POST /api/social/youtube/upload-draft` derives the mode from what arrived (`isTestUpload: !videoPayloadBase64 || isTestUpload`), so a failed or in-flight read staged a **SYNTHETIC** payload while the panel and the Level-4 authorization card both claimed a binary upload of the real file — a fake success an operator would authorize. A second file selected while the first read was pending could also stage file A's bytes under file B's name.
+- The panel now derives mode, request flag, file name, and the staging disabled state from one decision over the bytes that exist (`resolveYouTubePayloadMode()` / `youTubeStagedFileName()` in `src/utils/hardening/youtubePayloadModeTruth.ts`). A failed or empty read clears the payload and shows an explicit notice; staging is refused while the displayed payload is not the one that would be uploaded; a synthetic payload is labelled with `synthetic_jarvis_test.mp4`, never the selected file's name.
+
+### Tests
+- `src/tests/youtubePayloadModeTruth.test.ts` — 10 cases: helper unit tests for ready-binary, unread-binary (never `Binary File Mode`), nothing-selected, explicit-synthetic, deliberate-synthetic-with-file, and file-name labelling; plus source guards that the panel derives the staged flag from the same decision, contains no `isTestUpload: ytIsTestPayload` or raw `ytVideoFile?.name` staging, disables the button on `!ytPayloadDecision.ready`, and clears the payload on a failed read. Negative-validated: restoring the pre-fix wiring failed exactly 3 assertions (`3 failed | 7 passed`); restored → 10/10.
+- Full suite: **253 files / 2777 tests passed**; lint (`tsc --noEmit`) exit 0; `npm run build` exit 0; `npm audit` 0 vulnerabilities.
+
+---
+
 ## [Unreleased] - 2026-10-16 02:05 IST — window 2026-10-15/16 slot 10: Permission Gateway renders the persisted mobile policy, not the request
 
 ### Fixed
