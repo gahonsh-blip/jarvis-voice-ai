@@ -497,12 +497,17 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
                       <button
                         onClick={() => {
                           const updated = { ...mobilePerms, [def.category]: !mobilePerms[def.category] };
-                          setMobilePerms(updated);
                           const persisted = saveMobilePermissions(updated);
+                          // Render the durable store echo, not the request: on a
+                          // refused write the store still holds the previous
+                          // policy, so painting `updated` would light a row for
+                          // a permission that silently reverts on reload.
+                          const effective = loadMobilePermissions();
+                          setMobilePerms(effective);
                           showNotification(
                             persisted
-                              ? `Permission for "${def.nameEn}" updated to: ${updated[def.category] ? 'GRANTED' : 'REVOKED'}`
-                              : `Permission for "${def.nameEn}" NOT SAVED — local storage refused the write; this change reverts on reload.`,
+                              ? `Permission for "${def.nameEn}" updated to: ${effective[def.category] ? 'GRANTED' : 'REVOKED'}`
+                              : `Permission for "${def.nameEn}" NOT SAVED — local storage refused the write; the store still holds ${effective[def.category] ? 'GRANTED' : 'REVOKED'} and this change reverts on reload.`,
                             persisted ? 'info' : 'error'
                           );
                         }}
