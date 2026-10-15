@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 21:05 IST — window 2026-10-15/16 slot 1: OAuth connect no longer reports a security audit row that never reached disk
+
+### Fixed
+- **`server.ts` — both OAuth connect callbacks discarded the boolean from the security audit row they append, so a connect whose audit row never reached `jarvis_memory.json` still rendered the green "Connected!" card.** `/api/auth/linkedin/callback` and `/api/auth/youtube/callback` correctly gate the stored credential on the durable `persistMemory()` write (dropping the credential when it fails), but the `VERIFIED` audit row they append next is a *second* durable write through `addAuditLog()` → `recordDurableAuditRow()`, which returns `false` when the row never reached disk. That boolean was ignored, so an operator could believe the connection was recorded in the security log while the row lived only in process memory and vanished on the next boot.
+
+### Changed
+- Each callback now captures the boolean and renders `oauthConnectAuditNote(platform, recorded)` from `src/utils/hardening/oauthConnectDurabilityTruth.ts`, which names the one thing that did not land. The connection itself is real — its credential was persisted and read back — so the card is not turned into a failure; only the missing audit record is stated. A durable audit row renders the card unchanged.
+
+### Tests
+- `src/tests/oauthConnectDurabilityTruth.test.ts` (8 cases): the note is empty for a durable row; for both platforms the non-durable note names the audit row, says the connection is real, does not read as a connection failure, and is labelled per platform; plus source guards that the helper is imported, both audit booleans are captured, both cards render the note, and the credential gate (`if (!persistMemory())` with rollback) is still present. Negative-validated — reverting `server.ts` to the pre-fix state fails exactly the 3 wiring guards (`3 failed | 5 passed`); restored → 8/8.
+
 ## [Unreleased] - 2026-10-15 04:36 IST — window 2026-10-14/15 finalization slot (verification only, no code change)
 
 ### Verified
