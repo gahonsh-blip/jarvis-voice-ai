@@ -18407,3 +18407,87 @@ Next Slot:
 - #13, next un-audited false-success site in the item-13 tail — remaining
   success:true routes in server.ts / server_tools.ts that discard a
   persistMemory() / addAuditLog() boolean without claiming persisted.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35
+Window date: 2026-10-16   Window slots completed so far: 8
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL — one more slice closed) —
+  `MobilePersonalStatusModal.tsx` rendered the Android permission badge and the
+  local data-category rows from the *requested* matrix instead of the durable
+  store echo, so a refused write displayed a granted permission the store never
+  held. Evidence: `git diff` of the four handlers; the badge now derives from
+  `androidBridgeEngine.getPermissions()` and the rows from
+  `loadMobilePermissions()`; `src/tests/mobilePersonalStatusPermissionTruth.test.ts`
+  6/6 passed; targeted run 3 files / 20 passed; full `npx vitest run`
+  250 files / 2755 tests passed.
+
+In Progress:
+- #13 — the long tail of unclassified `success: true` /
+  discarded-`persistMemory()` sites. Not exhausted.
+
+Remaining:
+- #1-#8 Android bridge / real Android E2E / real screenshot — BLOCKED (no
+  physical handset).
+- #33 live call answering — BLOCKED (no carrier / telephony permission).
+- #54 live credential rotation — BLOCKED (no live provider credentials).
+- #55 real-device E2E — BLOCKED (no hardware).
+- #13, #51 and the rest of the 60-item backlog: see `docs/COMPLETION_STATUS.md`.
+
+Bugs Found:
+- The Android permission badge in `MobilePersonalStatusModal.tsx` was rendered
+  from the requested value while `androidBridgeEngine.updatePermission()` reverts
+  its in-memory matrix on a refused write — so the badge could read GRANTED for
+  a permission the store did not hold. Found by reading the four handlers
+  against the store-echo contract pinned in slot 7.
+- `handleGrantAll` also called `setPermissions(allTrue)` immediately before the
+  read-back that overwrites it (dead write, removed).
+
+Bugs Fixed:
+- All four permission handlers now derive the badge, the rows and the morning
+  briefing from the durable store echo. Negative-validated twice: restoring
+  `setAndroidPerms(current)` failed exactly 1 assertion (`1 failed | 5 passed`);
+  restoring `setPermissions(updated)` failed exactly 2 (`2 failed | 4 passed`);
+  both restored → 6/6.
+
+Tests:    250 files / 2755 tests passed (npx vitest run, 80.98 s, 0 failed)
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0
+Build:    `npm run build` exit 0 — dist/server.cjs 1,094,784 bytes
+E2E:      NOT RUN (no handset, no OAuth grant, no display session)
+Security: NOT RUN this slot beyond lint/build; no `.env`, no token, no
+          node_modules or dist staged in the commit.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row),
+               docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  695e202 (code+test), plus this slot's docs commit
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (existing, open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified dist/server.cjs artifact
+            is the deployment unit available.
+
+Blocked:
+- #1-#8 Android bridge / real Android E2E / real screenshot — requires a
+  physical handset.
+- #33 live call answering — requires a carrier / telephony permission.
+- #54 live credential rotation — requires live provider credentials.
+- #55 real-device E2E — requires hardware.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner approval only; this automation never merges).
+
+Next Slot:
+- Continue item 13: the next unclassified `success: true` /
+  discarded-`persistMemory()` site, and any remaining modal handler that renders
+  a requested state rather than the store echo (the class slots 5-8 repaired).
+
+हिंदी सारांश (एक पंक्ति):
+- Mobile Personal Status मॉडल अब परमिशन बैज और ब्रीफिंग दुकान (store) के
+  वास्तविक echo से बनाता है, अनुरोध से नहीं — इसलिए अस्वीकृत लेखन अब झूठा
+  "GRANTED" नहीं दिखाता; 2755 टेस्ट पास, lint और build हरे।

@@ -4,6 +4,14 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-16 00:35 IST — window 2026-10-15/16 slot 8: the Mobile Personal Status modal renders the persisted permission, not the request
+
+### Fixed
+- **`MobilePersonalStatusModal.tsx` rendered the Android permission badge and the local data-category rows from the requested matrix, so a refused write showed a granted permission the durable store never held.** The handlers persisted correctly and warned on a refused write, but the badge came from the request: `handleToggleAndroidBridgePerm` kept its local `current` snapshot even though `androidBridgeEngine.updatePermission()` reverts its in-memory matrix on a refused write (the store-echo contract pinned in slot 7), and `handleTogglePermission` / `handleGrantAll` / `handleRevokeAll` set the requested matrix and never read the store back, so *Grant All* lit every row green on a refused `localStorage` write and the morning briefing reported the unpersisted grants. All four handlers now derive the badge and the briefing from the durable store echo (`androidBridgeEngine.getPermissions()` / `loadMobilePermissions()`), matching the sibling `MobileBridgeModal` and `AndroidPermissionCenter`. The redundant pre-write `setPermissions(allTrue)` was dropped.
+
+### Tests
+- `src/tests/mobilePersonalStatusPermissionTruth.test.ts` (6 cases): the badge re-reads the bridge store and never re-uses `current`; the per-category toggle reads storage back and never sets `updated`; Grant All / Revoke All read the store back and warn; no bare `setPermissions(updated|allTrue|allFalse)` remains; plus two behavioural cases proving a refused `setItem` returns `false` **and** leaves the previous matrix in the store, while an accepted write is visible on read-back. Negative-validated twice — restoring `setAndroidPerms(current)` failed exactly 1 assertion (`1 failed | 5 passed`), restoring `setPermissions(updated)` failed exactly 2 (`2 failed | 4 passed`); both restored → 6/6.
+
 ## [Unreleased] - 2026-10-16 00:05 IST — window 2026-10-15/16 slot 7: the 10:30 PM nightly report no longer asserts work it never recorded
 
 ### Fixed
