@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 22:35 IST — window 2026-10-15/16 slot 4: the durability-claim invariant is pinned across every mutating route
+
+### Added
+- **`src/utils/hardening/durabilityClaimScan.ts` — a structural scanner for the item-13 invariant.** It slices every `app.<method>('<path>')` route out of `server.ts` (which binds a port on import, so it cannot be imported by a test) and reports each *mutating* route that answers `persisted: true` with neither a disk read-back (`emergencyStateOnDisk`, `actionRequestStatusOnDisk`, `diskHasAuditRow`, …) nor an explicit `persisted: false` refusal. A route that can only ever answer `persisted: true` cannot distinguish a durable write from a dropped one — the false success item 13 exists to remove.
+
+### Changed
+- No production route was changed. The audit the scanner performs found the invariant already holds: **21 mutating routes claim `persisted: true` and all 21 are backed.** The deliverable this slot is the guard that keeps it holding, so the next route cannot silently reintroduce the defect that slots 1-3 repaired one route at a time.
+
+### Tests
+- `src/tests/durabilityClaimInvariant.test.ts` (7 cases): the detector flags an unbacked claim, accepts a read-back route, accepts a `persisted: false` refusal, does not judge read routes, and bounds each slice at the next route so a guarded route cannot mask its neighbour; plus a real-file assertion that the 21 claiming routes are found and none is unbacked. Negative-validated — appending one unbacked `persisted: true` route to `server.ts` fails exactly the real-file assertion (`1 failed | 6 passed`); reverted → 7/7.
+
 ## [Unreleased] - 2026-10-15 22:05 IST — window 2026-10-15/16 slot 3: `/api/restore` no longer discards the durability verdict of its security audit row
 
 ### Fixed
