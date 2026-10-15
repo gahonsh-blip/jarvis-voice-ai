@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-16 03:05 IST — window 2026-10-15/16 slot 12: the App and the telephony engine now share one storage key
+
+### Fixed
+- **`src/App.tsx` persisted telephony call history and settings under keys the shared telephony engine never reads.** The App used the literals `'hermes_jarvis_call_history'` and `'hermes_jarvis_telephony_settings'`; `src/utils/telephonyEngine.ts` defines and reads `hermes_jarvis_telephony_calls_v1` and `hermes_jarvis_telephony_settings_v1`. The App was internally self-consistent, so the divergence was invisible from the UI: spam screening, call summaries, CSV export and contacts all read a store that was never written, and the `try/catch` around the write swallowed the outcome so a refused write could not be reported.
+- Load and save now route through `loadLocalCallHistory` / `saveLocalCallHistory` and `loadLocalTelephonySettings` / `saveLocalTelephonySettings`, so both sides share one canonical key. The redundant stale-key `localStorage.removeItem('hermes_jarvis_call_history')` in `onClearHistory` is removed — the persist effect writes the empty array through the engine.
+
+### Tests
+- `src/tests/telephonyStorageKeyParity.test.ts` — 5 cases: source guards that no stale non-`_v1` literal remains in `src/App.tsx` and that all four engine helpers are used; engine round-trip cases proving `saveLocalCallHistory` / `saveLocalTelephonySettings` write the key the loaders read; and a no-`window` no-op case. Negative-validated: restoring the stale `localStorage.setItem` failed exactly 1 assertion (`1 failed | 4 passed`); restored → 5/5.
+- Full suite: **254 files / 2782 tests passed**; lint (`tsc --noEmit`) exit 0; `npm run build` exit 0 (`dist/server.cjs` 1,094,784 bytes).
+
+---
+
 ## [Unreleased] - 2026-10-16 02:35 IST — window 2026-10-15/16 slot 11: the YouTube staging panel stages the payload mode it displays
 
 ### Fixed
