@@ -44,6 +44,7 @@ import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from
 import { describeStagedChannel } from '../utils/hardening/youtubeChannelTruth';
 import { connectedLinkedInIdentity, connectedYouTubeChannelId, linkedInAuthorUrnLabel } from '../utils/hardening/socialAccountIdTruth';
 import { oauthConnectionNotice } from '../utils/hardening/oauthAccountNoticeTruth';
+import { oauthDisconnectNotice } from '../utils/hardening/oauthDisconnectAuditTruth';
 import {
   classifyProviderTestResponse,
   verifiedAccountName,
@@ -535,8 +536,10 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         onSpeak('LinkedIn personal profile disconnected, Sir.');
       } else {
         // Nothing was linked, so nothing was disconnected — say so instead of
-        // rendering the success notice the server used to always return.
-        setOauthNotice(data.message || 'No LinkedIn account is connected.');
+        // rendering the success notice the server used to always return. A
+        // failed durable removal answers with `error` and no `message`, so the
+        // server's own explanation is preferred over the not-connected text.
+        setOauthNotice(oauthDisconnectNotice('linkedin', data));
         fetchPlatforms();
       }
     } catch (err) {
@@ -591,7 +594,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         fetchPlatforms();
         onSpeak('YouTube channel disconnected, Sir.');
       } else {
-        setOauthNotice(data.message || 'No YouTube channel is connected.');
+        setOauthNotice(oauthDisconnectNotice('youtube', data));
         fetchPlatforms();
       }
     } catch (err) {

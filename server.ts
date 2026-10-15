@@ -26,6 +26,7 @@ import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } f
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
 import { oauthConnectAuditNote } from './src/utils/hardening/oauthConnectDurabilityTruth';
+import { oauthDisconnectMessage } from './src/utils/hardening/oauthDisconnectAuditTruth';
 import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
 import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel, resolveLinkedInAuthorUrn, AUTHOR_URN_NOT_RECORDED_LABEL } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
@@ -6167,14 +6168,22 @@ app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  addAuditLog(
+  // The credential removal is durable, but the audit row is a second durable
+  // write whose boolean used to be discarded: a row that never reached disk was
+  // still announced as a clean disconnect. Carry the result so the reply names
+  // the unrecorded entry instead of implying the security log has it.
+  const linkedInDisconnectAuditRecorded = addAuditLog(
     `LinkedIn Personal Profile Disconnected (${prevMember})`,
     1,
     'HUMAN_CONFIRMATION',
     'VERIFIED'
   );
 
-  res.json({ success: true, message: 'LinkedIn disconnected successfully.' });
+  res.json({
+    success: true,
+    auditRecorded: linkedInDisconnectAuditRecorded,
+    message: oauthDisconnectMessage('linkedin', linkedInDisconnectAuditRecorded),
+  });
 });
 
 // ------------------------------------------------------------------------------
@@ -6679,14 +6688,21 @@ app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  addAuditLog(
+  // Same rule as LinkedIn: the removal is durable, but the audit row is a
+  // separate durable write. Report whether it landed instead of implying the
+  // security log recorded a disconnection it may not have.
+  const youTubeDisconnectAuditRecorded = addAuditLog(
     `YouTube Channel Disconnected (${prevChannel})`,
     1,
     'HUMAN_CONFIRMATION',
     'VERIFIED'
   );
 
-  res.json({ success: true, message: 'YouTube disconnected successfully.' });
+  res.json({
+    success: true,
+    auditRecorded: youTubeDisconnectAuditRecorded,
+    message: oauthDisconnectMessage('youtube', youTubeDisconnectAuditRecorded),
+  });
 });
 
 app.get('/api/social/platforms', (req: Request, res: Response) => {

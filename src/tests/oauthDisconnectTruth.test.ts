@@ -66,21 +66,25 @@ describe('social OAuth disconnect reports the real connection state', () => {
   });
 
   it('the Social Media Hub surfaces the not-connected outcome instead of a success notice', () => {
-    // Each handler must have an else branch that renders the server's message,
-    // so the UI never shows "disconnected" when nothing was disconnected.
+    // Each handler must have an else branch that renders the server's reply, so
+    // the UI never shows "disconnected" when nothing was disconnected. The reply
+    // now goes through oauthDisconnectNotice, which reads the server's message
+    // (and its error, for a failed durable removal) and only then falls back to
+    // the not-connected text; oauthDisconnectAuditDurabilityTruth.test.ts covers
+    // that helper directly.
     const linkedinHandler = modalFlat.slice(
       modalFlat.indexOf('const handleDisconnectLinkedIn'),
       modalFlat.indexOf('const handleConnectYouTube')
     );
     expect(linkedinHandler).toContain('} else {');
-    expect(linkedinHandler).toContain('data.message');
+    expect(linkedinHandler).toContain("oauthDisconnectNotice('linkedin', data)");
 
     const youtubeHandler = modalFlat.slice(
       modalFlat.indexOf('const handleDisconnectYouTube'),
       modalFlat.indexOf('const handleCopyRedirectUri')
     );
     expect(youtubeHandler).toContain('} else {');
-    expect(youtubeHandler).toContain('data.message');
+    expect(youtubeHandler).toContain("oauthDisconnectNotice('youtube', data)");
   });
 
   // A disconnect that never reaches disk is not a disconnect: the process drops
