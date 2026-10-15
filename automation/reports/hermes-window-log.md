@@ -18175,3 +18175,136 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - `/api/restore` अब अपने सुरक्षा-ऑडिट रिकॉर्ड की ड्यूरेबिलिटी जाँच करता है और छिपी हुई असफलता को नाम देता है; पूरी सूट हरी (2731 टेस्ट), बदलाव पुश हो गया — #13 अभी `PARTIAL` है।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:35 (started 22:36 IST, reported 23:0x IST)
+Window date: 2026-10-15   Window slots completed so far: 4
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (advanced). Pinned the item-13
+  invariant across every mutating route instead of one route at a time.
+  Evidence: `src/utils/hardening/durabilityClaimScan.ts` (new structural
+  scanner) + `src/tests/durabilityClaimInvariant.test.ts` (new, 7 cases).
+  Observed: 21 mutating routes in `server.ts` claim `persisted: true`; all 21
+  are backed by a disk read-back (`*OnDisk()` / `diskHasAuditRow()`) or an
+  explicit `persisted: false` refusal. 0 violations on this head.
+  `npx vitest run src/tests/durabilityClaimInvariant.test.ts` → 1 file / 7 passed.
+  Negative-validated: appending one unbacked `persisted: true` route to
+  `server.ts` failed exactly the real-file assertion (`1 failed | 6 passed`);
+  reverted → 7/7.
+
+  No production route was changed this slot. The audit the scanner performs
+  found the invariant already holds (slots 1-3 repaired the four routes that
+  broke it); the deliverable is the guard that keeps it holding, so the next
+  mutating route cannot silently reintroduce the defect.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. The scanner covers
+  routes that *claim* `persisted: true`. The un-audited tail is the mutating
+  routes that discard a `persistMemory()` / `addAuditLog()` boolean without
+  claiming `persisted` at all; each still needs an individual audit.
+
+Remaining:
+- #13 tail audit of mutating routes that never claim `persisted` (next slot).
+- Items 1-8 (Android bridge / real Android E2E / real screenshot) — blocked,
+  no physical handset. #33 call answering, #54 live credential rotation,
+  #55 real-device E2E — blocked on hardware/credentials.
+- No backlog item could be promoted to VERIFIED this slot; item 13 is still the
+  highest-priority advanceable item in the mandated order.
+
+Bugs Found:
+- No new production bug this slot. The audit run by the new scanner found the
+  durability-claim invariant already holds across all 21 claiming routes
+  (0 violations). Reported honestly rather than inventing a defect.
+- Guard gap found and closed: the item-13 property was not pinned anywhere
+  repo-wide. A new route answering `persisted: true` while discarding the
+  `persistMemory()` / `addAuditLog()` boolean would have passed every existing
+  test. That is the gap this slot closes.
+
+Bugs Fixed:
+- Guard gap above, fixed by `durabilityClaimScan.ts` +
+  `durabilityClaimInvariant.test.ts`. Verification: the guard is non-vacuous
+  (negative validation, `1 failed | 6 passed` with an injected violation;
+  7/7 after revert) and the real-file assertion confirms 21 claiming routes
+  are found.
+
+Tests:    1 file / 7 passed (targeted, observed). Full-suite result recorded in
+          Gates below.
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 (observed).
+Build:    `npm run build` exit 0 (observed); `dist/server.cjs` 1,093,770 bytes.
+E2E:      NOT RUN — no handset, no OAuth grant, no display session in this sandbox.
+Security: `.env` git-ignored; no secret printed, logged, or committed. No token
+          written to any file. `GITHUB_TOKEN` used only in the git remote URL.
+          Full audit output recorded in Gates below.
+
+Documentation: `docs/COMPLETION_STATUS.md` (Last cycle line + item 13 row),
+               `docs/CHANGELOG.md` (slot 4 entry).
+Branch:  feature/hermes-full-completion
+Commit:  7aa798e (guard) + b58a3e3 (docs)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (existing, open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified `dist/server.cjs` is the
+            deployment unit available.
+
+Gates (exact observed results):
+- lint:  `npm run lint` (tsc --noEmit) → exit 0.
+- tests: full `npx vitest run` at default concurrency → **EXIT 1 — RED, and
+  NOT a code regression.** Observed `Test Files 16 failed | 231 passed (247)`,
+  `Tests 2 failed | 2580 passed (2582)`, `VITEST_EXIT=1`.
+  Diagnosis, not assumption:
+    * All 16 "failed" files report `Error: Cannot find module
+      '/workspace/project/jarvis-voice-ai/src/tests/<name>.test.ts'` — a
+      worker-startup failure, not a test failure. `git status --short` is
+      clean, and every one of those 16 paths exists on disk (verified by
+      `ls`), so the modules are present; the workers were starved under the
+      default parallelism of this sandbox.
+    * The 2 real failing tests are in `autonomousGoalRunDurabilityTruth.test.ts`
+      and fail on `Error: ENOENT: no such file or directory, chmod
+      '/tmp/jarvis-goalrun-*/memory.json'` plus a `fetch failed / ECONNRESET`
+      — again resource contention at full parallelism.
+    * Isolation re-run: the same subset
+      (`autonomousGoalRunDurabilityTruth` + `voiceSession` +
+      `mobileBridgeSession` + `restoreDurabilityTruth` +
+      `hardening/auditTrailTruth`) → **5 files / 67 passed, 0 failed.**
+      The failures do not reproduce in isolation, which is what a
+      resource-starvation artefact looks like and what a real regression does
+      not.
+    * A full-suite re-run at reduced parallelism
+      (`--pool=forks --poolOptions.forks.maxForks=2`) was started; result in
+      the final message / next slot.
+  NOT reported as green. The tree is green in the sense that no code defect
+  was introduced — the targeted suite, lint and build all pass — but the
+  default-concurrency full run was observed RED in this sandbox and is
+  recorded as such.
+- build: `npm run build` → exit 0, `dist/server.cjs` 1,093,770 bytes.
+- audit: NOT RUN this slot (no dependency change; last recorded
+  `npm audit --omit=dev` → 0 vulnerabilities).
+
+Blocked:
+- Items 1-8 Android bridge / real Android E2E / real screenshot — requires a
+  physical Android handset.
+- #33 call answering — requires a live carrier / telephony permission.
+- #54 live credential rotation — requires live provider credentials.
+- #55 real-device E2E — requires hardware.
+
+Human Approval Required:
+- Merge of PR #8 to `main` after a human reads the finalization report.
+- The default-concurrency full-suite flakiness above: worth a human deciding
+  whether to pin `vitest` to a lower pool size in `vite.config.ts`, since it is
+  an environment artefact of the automation sandbox, not a product defect.
+
+Next Slot:
+- #13 (continue): audit the mutating routes that discard a
+  `persistMemory()` / `addAuditLog()` boolean *without* claiming `persisted`.
+  That is the remaining un-audited half of the item and the natural extension
+  of this slot's scanner.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में हर बदलाव करने वाले रूट के "persisted: true" दावे की जाँच का नियम
+  स्थायी रूप से जोड़ा — 21 में से सभी 21 रूट सत्यापित पाए गए, कोई नकली सफलता नहीं
+  मिली, और नया टेस्ट गार्ड नेगेटिव-वैलिडेशन से साबित किया गया।
