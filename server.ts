@@ -25,6 +25,7 @@ import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
+import { oauthConnectAuditNote } from './src/utils/hardening/oauthConnectDurabilityTruth';
 import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
 import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel, resolveLinkedInAuthorUrn, AUTHOR_URN_NOT_RECORDED_LABEL } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
@@ -5997,13 +5998,18 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       return;
     }
 
-    // Log security audit entry
-    addAuditLog(
+    // Log security audit entry. The row is a second durable write whose boolean
+    // was discarded, so a connect whose audit row never reached disk still
+    // rendered the green "Connected!" card. The connection is real (its
+    // credential persisted and read back above); only the audit row may be
+    // missing, and the card now says so instead of implying it was recorded.
+    const linkedInAuditRecorded = addAuditLog(
       `LinkedIn Personal Profile Connected via OAuth 2.0 (${memberDisplay} - ${authorUrn})`,
       1,
       'HUMAN_CONFIRMATION',
       'VERIFIED'
     );
+    const linkedInAuditNote = oauthConnectAuditNote('linkedin', linkedInAuditRecorded);
 
     res.send(`<!DOCTYPE html>
 <html>
@@ -6022,6 +6028,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
     <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
       Target: Personal Member Profile (Real UGC Posts API Ready)
     </div>
+    ${linkedInAuditNote ? `<div style="padding: 10px; background: rgba(0,0,0,0.35); border: 1px solid #b45309; border-radius: 8px; color: #fcd34d; font-size: 12px; line-height: 1.4; margin-bottom: 20px;">${linkedInAuditNote}</div>` : ''}
     <button onclick="window.close()" style="background: #16a34a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;">Done</button>
   </div>
   <script>
@@ -6395,12 +6402,18 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       return;
     }
 
-    addAuditLog(
+    // The security audit row is a second durable write whose boolean was
+    // discarded (same fake success as the LinkedIn callback): a connect whose
+    // audit row never reached disk still rendered the green "Connected!" card.
+    // The connection is real — only the audit row may be missing, and the card
+    // now names that instead of implying it was recorded.
+    const youTubeAuditRecorded = addAuditLog(
       `YouTube Channel Connected via OAuth 2.0 (${channelDisplay} - ${channelId || 'Authenticated'})`,
       1,
       'HUMAN_CONFIRMATION',
       'VERIFIED'
     );
+    const youTubeAuditNote = oauthConnectAuditNote('youtube', youTubeAuditRecorded);
 
     res.send(`<!DOCTYPE html>
 <html>
@@ -6419,6 +6432,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
       Google Cloud & YouTube Data API v3 Ready
     </div>
+    ${youTubeAuditNote ? `<div style="padding: 10px; background: rgba(0,0,0,0.35); border: 1px solid #b45309; border-radius: 8px; color: #fcd34d; font-size: 12px; line-height: 1.4; margin-bottom: 20px;">${youTubeAuditNote}</div>` : ''}
     <button onclick="window.close()" style="background: #16a34a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;">Done</button>
   </div>
   <script>
