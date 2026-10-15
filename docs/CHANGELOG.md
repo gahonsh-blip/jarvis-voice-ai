@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-16 04:36 IST — window 2026-10-15/16 finalization slot: window closed, verified, awaiting human merge
+
+### Verified
+- **No new development.** This was the finalization slot of the 2026-10-15 → 2026-10-16 window (16th and last fire). The tip `86d1eef` on `feature/hermes-full-completion` — the output of **14 work slots** (162 files changed, +20094/−1523 vs `origin/main`) — was frozen and re-verified.
+- Gates observed this slot: `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run` **254 files / 2790 tests passed** (82.18 s, 0 failed); `npm run build` exit 0 with artifact `dist/server.cjs` **1,094,784 bytes**; `npm audit --omit=dev` **0 vulnerabilities**.
+- Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short` empty; no `node_modules/` or `dist/` tracked; the credential-pattern scan of `git diff origin/main` (162 files) matched nothing.
+
+### Notes
+- **CI is red for an infrastructure reason, not a code failure.** The check `typecheck · tests · build` on `86d1eef` failed with the check-run annotation *"The job was not started because your account is locked due to a billing issue."* — **zero steps executed**, job completed in 3 s. Read directly from the GitHub API (`/check-runs/{id}/annotations`). It is the sole cause of `mergeable_state: unstable`; the identical gates pass locally in this sandbox.
+- **PR #8** is open, non-draft, `mergeable: true`, head `86d1eef`. `main` is **NOT merged — awaiting human approval.** Deployment: `NOT_CONFIGURED` — no deployment target or hosting integration is present in this environment.
+
+---
+
 ## [Unreleased] - 2026-10-16 03:05 IST — window 2026-10-15/16 slot 12: the App and the telephony engine now share one storage key
 
 ### Fixed
