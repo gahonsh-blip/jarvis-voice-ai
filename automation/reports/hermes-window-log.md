@@ -18004,3 +18004,103 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - ओथ कनेक्ट (LinkedIn/YouTube) अब उस ऑडिट-रो को छुपाता नहीं जो डिस्क पर लिखी ही नहीं गई थी — कनेक्शन असली है, बस बिना-रिकॉर्ड ऑडिट रो अब साफ़ दिखता है; 8/8 टेस्ट पास, लिंट/बिल्ड हरे, item 13 अभी PARTIAL।
+
+
+================================================================================
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:35
+Window date: 2026-10-15   Window slots completed so far: 2
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL — one coherent slice closed) —
+  the OAuth *disconnect* half of the class slot 1 fixed for the connect callbacks.
+  `POST /api/auth/linkedin/disconnect` and `POST /api/auth/youtube/disconnect`
+  gated the credential removal on the durable `persistMemory()` write and rolled
+  it back on failure, but the `VERIFIED` "Disconnected" audit row appended next is
+  a *second* durable write through `addAuditLog()` → `recordDurableAuditRow()`,
+  which returns `false` when the row never reached `jarvis_memory.json`. That
+  boolean was discarded, so a disconnect whose audit row lived only in process
+  memory answered a bare "disconnected" while the row vanished on the next boot;
+  the LinkedIn route additionally answered `success: true` when nothing was
+  connected at all. Evidence: both routes now capture the boolean, carry it as
+  `auditRecorded`, and name the unrecorded entry via `oauthDisconnectMessage`
+  (`src/utils/hardening/oauthDisconnectAuditTruth.ts`); a not-connected request
+  answers `{ success: false, outcome: 'NOT_CONNECTED' }`; the YouTube failed-write
+  branch answers 500 `{ success: false, persisted: false }`. The Social Media Hub
+  failure branch reads the server's own `error`/`message` through
+  `oauthDisconnectNotice` (`src/components/SocialMediaModal.tsx`). Test:
+  `src/tests/oauthDisconnectAuditDurabilityTruth.test.ts` — 8 cases, all passed;
+  a real server runs against a memory file chmod'd read-only after boot (the
+  read-only mode is asserted first with a throwing `writeFileSync` probe), the
+  route's 500 + rollback + still-connected status is observed, and the happy path
+  proves the audit row lands on disk with `auditRecorded: true` and no caveat.
+
+In Progress:
+- #13 Zero-fake-success for all tools — still `PARTIAL`. The long tail of
+  unclassified `success: true` / discarded-`persistMemory()` sites in `server.ts`
+  and `server_tools.ts` is not yet individually audited.
+
+Remaining:
+- #13 tail (unclassified `success: true` sites).
+- Items 1-8 (Android bridge / real Android E2E / real screenshot) — BLOCKED, no
+  physical handset.
+- #33 call answering, #54 live credential rotation, #55 real-device E2E — BLOCKED
+  on live carrier/telephony permission / provider credentials / hardware.
+
+Bugs Found:
+- Both OAuth disconnect routes discarded the `addAuditLog()` boolean, so a
+  disconnect whose security audit row never reached disk was reported as a clean
+  disconnection (found by reading the routes against the durable-audit contract
+  used by `recordDurableAuditRow`).
+- `/api/auth/linkedin/disconnect` answered `success: true` even when no LinkedIn
+  account was connected — the UI announced a disconnection that removed nothing.
+- The Social Media Hub's failure branches ignored the server's `error` text and
+  always claimed nothing was connected, so a failed durable removal read the same
+  as a not-connected request.
+
+Bugs Fixed:
+- All three above. Verification: `src/tests/oauthDisconnectAuditDurabilityTruth.test.ts`
+  (8/8 passed) plus the repointed modal assertion in
+  `src/tests/oauthDisconnectTruth.test.ts` (14/14 across the two files).
+  Negative-validated: reverting the LinkedIn route to its pre-fix form failed
+  exactly 2 assertions (`2 failed | 6 passed`); restored → 8/8.
+
+Tests:    245 files / 2726 tests passed (0 failed), 78.41 s — `npx vitest run`
+          Targeted: 2 files / 14 passed.
+Lint:     pass — `npm run lint` (`tsc --noEmit`) exit 0
+Build:    pass — `npm run build` exit 0; artifact `dist/server.cjs` 1,093,294 bytes
+E2E:      NOT RUN — no handset, no OAuth grant, no display session
+Security: NOT RUN this slot (no new attack surface; permission gateway untouched)
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle entry), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  d05b16a (fix), b74bbbb (docs)
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified `dist/server.cjs` is the
+            deployment unit available.
+
+Blocked:
+- #1-8 Android bridge / real Android E2E / real screenshot — requires a physical
+  Android handset.
+- #33 call answering — requires live carrier/telephony permission.
+- #54 live credential rotation — requires live provider credentials.
+- #55 real-device E2E — requires hardware.
+
+Human Approval Required:
+- Merge of PR #8 to `main` — the owner's instruction is explicit that a human
+  reads the final verification report and approves before merge.
+
+Next Slot:
+- #13 tail: continue the zero-fake-success audit. Next concrete site is the
+  remaining unclassified `success: true` responses in `server.ts` /
+  `server_tools.ts` that discard a `persistMemory()` / `addAuditLog()` boolean —
+  the same class as slots 1-2, one route at a time.
+
+हिंदी सारांश (एक पंक्ति):
+- OAuth disconnect routes अब झूठी सफलता नहीं देते — audit row disk पर लिखी गई
+  या नहीं, यह सच-सच रिपोर्ट करते हैं (8/8 tests pass, negative-validated)।
