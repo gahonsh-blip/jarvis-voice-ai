@@ -52,7 +52,11 @@ import { telephonyAudio } from './utils/telephonyAudio';
 import {
   evaluateSpamScore,
   generateCallSummary,
+  loadLocalCallHistory,
+  loadLocalTelephonySettings,
   processCallTurnWithAi,
+  saveLocalCallHistory,
+  saveLocalTelephonySettings,
 } from './utils/telephonyEngine';
 import {
   CallRecord,
@@ -171,26 +175,13 @@ export default function App() {
   // Autonomous Voice AI Telephony State
   const [activeCall, setActiveCall] = useState<CallRecord | null>(null);
   const [callHistory, setCallHistory] = useState<CallRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('hermes_jarvis_call_history');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      return DEFAULT_CALL_RECORDS;
-    } catch {
-      return DEFAULT_CALL_RECORDS;
-    }
+    const stored = loadLocalCallHistory();
+    return stored.length > 0 ? stored : DEFAULT_CALL_RECORDS;
   });
   const [telephonyContacts] = useState<ContactItem[]>(DEFAULT_CONTACTS);
-  const [telephonySettings, setTelephonySettings] = useState<TelephonySettings>(() => {
-    try {
-      const saved = localStorage.getItem('hermes_jarvis_telephony_settings');
-      return saved ? { ...DEFAULT_TELEPHONY_SETTINGS, ...JSON.parse(saved) } : DEFAULT_TELEPHONY_SETTINGS;
-    } catch {
-      return DEFAULT_TELEPHONY_SETTINGS;
-    }
-  });
+  const [telephonySettings, setTelephonySettings] = useState<TelephonySettings>(() =>
+    loadLocalTelephonySettings()
+  );
   const [isCallMuted, setIsCallMuted] = useState(false);
   const [isCallOnHold, setIsCallOnHold] = useState(false);
   const [isAudioFilterActive, setIsAudioFilterActive] = useState(true);
@@ -971,21 +962,16 @@ export default function App() {
     [memory.name, telephonySettings, telephonyContacts]
   );
 
-  // Auto-persist callHistory & telephonySettings
+  // Auto-persist callHistory & telephonySettings. Both go through the shared
+  // telephony engine so the App and every engine consumer read one key; the
+  // literals previously used here diverged from the engine's `_v1` keys, so the
+  // engine saw a store that was never written.
   useEffect(() => {
-    try {
-      localStorage.setItem('hermes_jarvis_call_history', JSON.stringify(callHistory));
-    } catch (e) {
-      console.warn('Failed to save call history:', e);
-    }
+    saveLocalCallHistory(callHistory);
   }, [callHistory]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('hermes_jarvis_telephony_settings', JSON.stringify(telephonySettings));
-    } catch (e) {
-      console.warn('Failed to save telephony settings:', e);
-    }
+    saveLocalTelephonySettings(telephonySettings);
   }, [telephonySettings]);
 
   // Handle incoming call auto-answer
@@ -2102,9 +2088,6 @@ export default function App() {
         onTriggerIncomingCall={handleTriggerIncomingCall}
         onClearHistory={() => {
           setCallHistory([]);
-          try {
-            localStorage.removeItem('hermes_jarvis_call_history');
-          } catch {}
         }}
       />
 
