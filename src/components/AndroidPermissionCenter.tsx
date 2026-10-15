@@ -183,13 +183,19 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
   };
 
   const handleToggleCategory = (cat: NotificationCategory) => {
-    const next = { ...categories, [cat]: !categories[cat] };
-    setCategories(next);
+    const requested = !categories[cat];
+    const next = { ...categories, [cat]: requested };
     const persisted = androidBridgeEngine.updateSettings({ categoryPermissions: next });
+    // Render the durable store echo, never the request. `updateSettings()`
+    // reverts its in-memory settings on a refused write (the store-echo
+    // contract), so a row driven by `next` would show a category the store
+    // does not hold and the next reload would silently restore the old value.
+    const stored = androidBridgeEngine.getSettings().categoryPermissions;
+    setCategories(stored);
     setStatusMessage(
       persisted
-        ? `${cat} category set to ${next[cat] ? 'ALLOWED' : 'BLOCKED'}`
-        : `NOT SAVED: ${cat} category changed in memory only — the bridge store refused the write; it reverts on reload.`
+        ? `${cat} category set to ${stored[cat] ? 'ALLOWED' : 'BLOCKED'}`
+        : `NOT SAVED: ${cat} category is still ${stored[cat] ? 'ALLOWED' : 'BLOCKED'} (requested ${requested ? 'ALLOWED' : 'BLOCKED'}) — the bridge store refused the write; this change reverts on reload.`
     );
     setTimeout(() => setStatusMessage(null), 3000);
   };
@@ -197,16 +203,20 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
   const handleToggleAppRule = (pkg: string) => {
     const rule = appRules[pkg];
     if (!rule) return;
+    const requested = !rule.allowed;
     const next = {
       ...appRules,
-      [pkg]: { ...rule, allowed: !rule.allowed },
+      [pkg]: { ...rule, allowed: requested },
     };
-    setAppRules(next);
     const persisted = androidBridgeEngine.updateSettings({ privacyRules: next });
+    // Same store-echo rule as the category rows above.
+    const stored = androidBridgeEngine.getSettings().privacyRules;
+    setAppRules(stored);
+    const storedAllowed = stored[pkg]?.allowed;
     setStatusMessage(
       persisted
-        ? `${rule.appName} rule set to ${next[pkg].allowed ? 'ALLOWED' : 'BLOCKED'}`
-        : `NOT SAVED: ${rule.appName} rule changed in memory only — the bridge store refused the write; it reverts on reload.`
+        ? `${rule.appName} rule set to ${storedAllowed ? 'ALLOWED' : 'BLOCKED'}`
+        : `NOT SAVED: ${rule.appName} is still ${storedAllowed ? 'ALLOWED' : 'BLOCKED'} (requested ${requested ? 'ALLOWED' : 'BLOCKED'}) — the bridge store refused the write; this change reverts on reload.`
     );
     setTimeout(() => setStatusMessage(null), 3000);
   };
