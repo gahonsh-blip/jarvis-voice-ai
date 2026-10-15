@@ -26,6 +26,7 @@ import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } f
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
 import { oauthConnectAuditNote } from './src/utils/hardening/oauthConnectDurabilityTruth';
+import { restoreAuditNote } from './src/utils/hardening/restoreAuditDurabilityTruth';
 import { oauthDisconnectMessage } from './src/utils/hardening/oauthDisconnectAuditTruth';
 import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
 import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel, resolveLinkedInAuthorUrn, AUTHOR_URN_NOT_RECORDED_LABEL } from './src/utils/hardening/socialAccountIdTruth';
@@ -6931,13 +6932,17 @@ app.post('/api/restore', (req: Request, res: Response) => {
     });
   }
 
-  addAuditLog(
+  // The audit row is a second durable write; its boolean was discarded, so a
+  // restore whose security record never reached disk still answered an
+  // unqualified success. Capture it and name the gap in the response.
+  const auditRecorded = addAuditLog(
     `Memory restored from backup: ${result.restoredKeys.length} keys replaced, ${result.preservedKeys.length} preserved`,
     4,
     'HUMAN_OPERATOR',
     'VERIFIED'
   );
-  res.json({ success: true, persisted: true, ...result });
+  const auditNote = restoreAuditNote(auditRecorded);
+  res.json({ success: true, persisted: true, auditRecorded, ...(auditNote ? { auditNote } : {}), ...result });
 });
 
 /** Deployment readiness check. Observes this process's real configuration. */
