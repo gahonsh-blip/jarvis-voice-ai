@@ -17922,3 +17922,85 @@ Corrections and close-out for the finalization slot above:
 - Branch tip pushed: `origin/feature/hermes-full-completion` = `e1b057e2b`.
 
 Main merge: NOT MERGED — awaiting human approval. Deploy: NOT_CONFIGURED.
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK (slot 1)  |  IST time: 21:05
+Window date: 2026-10-15   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — closed the OAuth connect fake-success gap.
+  Evidence: `server.ts` `/api/auth/linkedin/callback` (~5997-6027) and
+  `/api/auth/youtube/callback` (~6401-6431) now capture the boolean from the
+  `VERIFIED` security audit row they append (`addAuditLog()` ->
+  `recordDurableAuditRow()`, a second durable write distinct from the credential
+  `persistMemory()` gate) and render `oauthConnectAuditNote(platform, recorded)`
+  from `src/utils/hardening/oauthConnectDurabilityTruth.ts`. Test:
+  `src/tests/oauthConnectDurabilityTruth.test.ts` — 8/8 passed (observed).
+  Negative validation: reverting `server.ts` to the pre-fix state -> 3 failed |
+  5 passed (the 3 wiring guards); restored -> 8/8 (observed).
+
+In Progress:
+- #13 remains PARTIAL — the long tail of unclassified `success: true` /
+  discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` is not
+  individually audited. The OAuth connect audit-durability site named open in
+  the 2026-10-15 04:05 IST cycle is now closed.
+
+Remaining:
+- #13 long tail (further unclassified success sites)
+- Hardware/credential-blocked: #1-#8 Android bridge / real Android E2E / real
+  screenshot; #54 live credential rotation; #55 real-device E2E; #33 call answering
+
+Bugs Found:
+- `server.ts` — both OAuth connect callbacks discarded the boolean returned by the
+  security audit row write, so a connect whose audit row never reached
+  `jarvis_memory.json` still rendered an unqualified green "Connected!" card; the
+  row lived only in process memory and vanished on the next boot. Found by reading
+  the connect routes' audit-write path against `recordDurableAuditRow`.
+
+Bugs Fixed:
+- Wired `oauthConnectAuditNote()` into both callbacks. Verified by
+  `oauthConnectDurabilityTruth.test.ts` 8/8 with the fix, and 3 failed | 5 passed
+  with the pre-fix `server.ts` restored (negative validation). The connection
+  itself was already real (credential persisted and read back); only the missing
+  audit record is now stated.
+
+Tests:    244 files / 2718 tests passed (79.06 s, 0 failed) — full `npx vitest run`, observed.
+          Targeted: `src/tests/oauthConnectDurabilityTruth.test.ts` 8/8 passed.
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 — observed.
+Build:    `npm run build` exit 0; artifact `dist/server.cjs` 1,092,259 bytes — observed.
+E2E:      NOT RUN — no handset, no emulator, no display session, no OAuth grant.
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status --short`
+          empty; no `node_modules/` or `dist/` tracked. Full credential-pattern
+          scan / `npm audit` NOT RUN this slot (not re-run; last observed
+          2026-10-15 04:36 IST: 0 vulnerabilities).
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 row), docs/CHANGELOG.md,
+               docs/SECURITY.md
+Branch:  feature/hermes-full-completion
+Commit:  e831424 (docs) on top of bc2fc46 (fix)
+Push:    succeeded -> origin/feature/hermes-full-completion (bc2fc46..e831424)
+
+PR:          #8 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (open, non-draft,
+             mergeable=true, mergeable_state=unstable = owner-account CI billing lock,
+             not a code failure; head e831424)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present in
+            this environment; the verified `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- #1-#8 Android bridge / real Android E2E / real screenshot — requires a physical handset
+- #54 live credential rotation — requires live provider credentials
+- #55 real-device E2E — requires hardware
+- #33 call answering — requires live carrier/telephony permission
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner reads the verification report and approves).
+
+Next Slot:
+- #13 long tail: audit the next unclassified `success: true` / discarded-`persistMemory()`
+  site in `server.ts` / `server_tools.ts`, smallest finished slice, negative-validated.
+
+हिंदी सारांश (एक पंक्ति):
+- ओथ कनेक्ट (LinkedIn/YouTube) अब उस ऑडिट-रो को छुपाता नहीं जो डिस्क पर लिखी ही नहीं गई थी — कनेक्शन असली है, बस बिना-रिकॉर्ड ऑडिट रो अब साफ़ दिखता है; 8/8 टेस्ट पास, लिंट/बिल्ड हरे, item 13 अभी PARTIAL।
