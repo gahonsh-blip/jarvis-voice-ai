@@ -18496,3 +18496,79 @@ Verification addendum (slot 8, observed in-run):
 - Remote refs confirmed: feature/hermes-full-completion=5ce1433, automation/hermes-state=9fa79c6.
 - Docs commit for this slot: 5ce1433 (report said "695e202 plus docs commit").
 - Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; nothing untracked/modified left in tree.
+
+## 2026-10-16 01:35 IST — WORK SLOT 9 (window 2026-10-15/16)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:35
+Window date: 2026-10-16   Window slots completed so far: 9
+
+Completed:
+- #13 Zero-fake-success for all tools — one finished slice. `AndroidPermissionCenter.tsx`
+  sections 2 and 3 (per-category notification policy rows, per-app allow/block rows) rendered
+  the *requested* object: `setCategories(next)` / `setAppRules(next)` ran before the store echo
+  was read, so a refused write still painted the requested policy while
+  `AndroidBridgeManager.updateSettings()` had reverted its in-memory settings and returned
+  false. Both handlers now render the durable echo (`androidBridgeEngine.getSettings()` →
+  `categoryPermissions` / `privacyRules`) and the refusal notice names the stored value and the
+  request. Evidence: `src/components/AndroidPermissionCenter.tsx`,
+  `src/utils/androidBridgeEngine.ts`, `src/tests/androidPermissionCenterSettingsEchoTruth.test.ts`.
+
+In Progress:
+- #13 — the long tail of unclassified `success: true` / discarded-`persistMemory()` sites in
+  `server.ts` / `server_tools.ts` is still not individually audited. Item stays PARTIAL.
+
+Remaining:
+- #1-8 Android bridge / real Android E2E / real screenshot — blocked, no handset.
+- #13 tail, then the rest of the backlog in the mandated order.
+
+Bugs Found:
+- `AndroidPermissionCenter.tsx` painted policy rows from the request, not from the durable store.
+  Found by continuing the item-13 store-echo sweep across the mobile/permission modals.
+
+Bugs Fixed:
+- Both `handleToggleCategory` and `handleToggleAppRule` now derive rendered state from the
+  persisted echo. Verified by `src/tests/androidPermissionCenterSettingsEchoTruth.test.ts`
+  (6/6 pass) and negative-validated: reverting the component failed exactly the 3 source guards
+  (`3 failed | 3 passed`); restored → 6/6.
+
+Tests:    251 files / 2761 tests passed (84.69 s, 0 failed) — observed this run.
+          Targeted 4 files / 24 passed — observed earlier this slot.
+Lint:     exit 0 (`tsc --noEmit`) — observed earlier this slot.
+Build:    exit 0 — `dist/server.cjs` 1.0mb — observed this run.
+E2E:      NOT RUN (no handset, no OAuth grant, no display session).
+Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short` empty;
+          0 tracked files under `node_modules/` or `dist/`; credential-pattern scan of
+          `git diff origin/main` (155 files) matched only the test fixture
+          `src/tests/securityAudit.test.ts:46` (`s3cr3t-value-1234`, not a real credential).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  19a00a0 (fix) · 5e54dd8 (docs) · state branch f4b0817
+Push:    succeeded — `a71da76..19a00a0`, then `19a00a0..5e54dd8`, then state `73e8dd5..f4b0817`
+
+PR:          #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (open, non-draft,
+             head 5e54dd8, mergeable_state `unstable` — repository CI billing lock, not a code failure)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present in this
+            environment; the verified `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- #1-8 Android bridge / real Android E2E / real screenshot — requires a physical handset.
+- #33 call answering — requires live carrier/telephony permission.
+- #54 live credential rotation — requires live provider credentials.
+- #55 real-device E2E — requires hardware.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner instruction: human reads the final verification report first).
+- Repository CI is not running (owner-account billing lock) — only the owner can clear it.
+
+Next Slot:
+- #13 — continue the store-echo / discarded-boolean sweep, next on the remaining unclassified
+  `success: true` sites in `server.ts` (rotation + voice routes), then the mandate order.
+
+हिंदी सारांश (एक पंक्ति):
+- Android Permission Center अब नीति पंक्तियाँ store के persisted echo से दिखाता है, request से नहीं;
+  item 13 अभी भी PARTIAL है। (पूरा suite 251 files / 2761 tests पास, build पास।)
+
+---
