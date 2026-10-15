@@ -34,6 +34,7 @@ import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
 import { briefingFallbackText } from './src/utils/hardening/briefingFallbackTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
+import { buildNightlyReportText } from './src/utils/hardening/nightlyReportTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
@@ -4345,7 +4346,17 @@ async function checkAndRunSchedulerJobs() {
       } else {
         let push: SchedulerPushOutcome = { attempted: false, delivered: false };
         if (activeTelegramChatId && getCleanTelegramToken()) {
-          const nightText = `🌙 *HERMES NIGHTLY WORK REPORT (10:30 PM)*\n\nSir, today's work summary has been recorded.\n• *Commands Executed*: ${memoryState.stats.totalCommands}\n• *Memory Persistence*: Synchronized\n• *Daemon Status*: Standby & Active`;
+          // The report is composed only from facts read back here. The previous
+          // fixed text claimed that the day's work summary had been recorded
+          // (no summary artifact is written) and that memory persistence was
+          // "Synchronized" (the store was never read), and it labelled a count
+          // of commands *received* as "Commands Executed" (item 13).
+          const nightText = buildNightlyReportText({
+            runMarkerDurable: routineMarkerOnDisk('lastNightRunDate', todayIST),
+            memoryStoreReadable: memoryStoreReadableOnDisk(),
+            daemonPid: DAEMON_PID,
+            commandsRecorded: memoryState.stats.totalCommands,
+          });
           const delivery = await deliverTelegramMessage(activeTelegramChatId, nightText);
           push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
         }
@@ -8164,6 +8175,21 @@ function routineMarkerOnDisk(marker: RoutineSchedulerMarker, date: string): bool
     const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
     const state = onDisk?.schedulerState as Record<string, string | undefined> | undefined;
     return state?.[marker] === date;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the memory store is present and parses. The nightly report used to
+ * assert "Memory Persistence: Synchronized" with no read of the store; this is
+ * the read-back that turns it into an observation, so an unwritable or absent
+ * store is reported as NOT VERIFIED (item 13).
+ */
+function memoryStoreReadableOnDisk(): boolean {
+  try {
+    JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    return true;
   } catch {
     return false;
   }
