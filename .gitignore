@@ -11,3 +11,6 @@ dist/
 
 
 .vite/
+
+# Per-run window state lives on the automation/hermes-state branch, not here.
+hermes-window-state.json
