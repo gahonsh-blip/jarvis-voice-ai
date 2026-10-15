@@ -18333,3 +18333,77 @@ no OAuth grant, no display session). Deploy: NOT_CONFIGURED. Security: NOT RUN t
 server SHA f93b5a2 and rebased onto it, no force-push). Item 13 stays PARTIAL — the long
 tail of unclassified success: true / discarded-persistMemory() sites remains.
 PR #8 remains open, non-draft. Main NOT MERGED — awaiting human approval.
+
+---
+
+# HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+
+Slot:        WORK  |  IST time: 00:05
+Window date: 2026-10-15 (window 2026-10-15 → 2026-10-16)   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools — the 10:30 PM IST Telegram nightly routine
+  pushed a fixed report asserting two things the process never observed.
+  Evidence: src/utils/hardening/nightlyReportTruth.ts (new) +
+  src/tests/nightlyReportTruth.test.ts (new, 6 cases) + server.ts nightly block
+  (~4345) now calls buildNightlyReportText(). Observed: targeted 2 files / 13
+  passed; negative validation 1 failed | 5 passed, restored 6/6; lint exit 0;
+  full suite 248 files / 2748 passed with 1 unrelated flake; build exit 0,
+  dist/server.cjs 1,094,784 bytes. Commit a05ce6b, pushed.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the long tail of unclassified
+  success:true / discarded-persistMemory() sites remains. Item stays PARTIAL.
+
+Remaining:
+- #1-#8 Android bridge / real Android E2E / real screenshot — BLOCKED (no handset).
+- #9+ Computer Operator -> GitHub -> Social -> Communication -> AI/Memory ->
+  Autonomous -> Voice -> Wake Word -> Production Hardening — in backlog order.
+
+Bugs Found:
+- The nightly routine report was a literal, not an observation: it claimed the
+  day work summary had been recorded (no summary artifact exists anywhere), and
+  claimed Memory Persistence: Synchronized without ever reading the store. It
+  also labelled a count of commands received as Commands Executed.
+
+Bugs Fixed:
+- Replaced the literal report with buildNightlyReportText(), composed from facts
+  the tick reads back: the per-day run marker
+  (routineMarkerOnDisk(lastNightRunDate, todayIST)), the store (new
+  memoryStoreReadableOnDisk()), and DAEMON_PID. Verification: negative
+  validation — forcing memoryStoreReadable true and restoring the Synchronized
+  wording failed exactly 1 assertion (1 failed | 5 passed); restored -> 6/6.
+
+Tests:    248 files / 2748 tests passed, 1 file / 1 test failed
+          (autonomousGoalRunDurabilityTruth.test.ts — ENOENT chmod on a temp
+          memory file under parallel load; passes 4/4 in isolation; unrelated to
+          this slot 3-file diff). Targeted nightlyReportTruth + schedulerRunTruth:
+          2 files / 13 passed.
+Lint:     npm run lint (tsc --noEmit) exit 0
+Build:    npm run build exit 0; dist/server.cjs = 1,094,784 bytes
+E2E:      NOT RUN (no handset, no OAuth grant, no display session)
+Security: NOT RUN this slot (npm audit not executed)
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  a05ce6b
+Push:    succeeded — origin/feature/hermes-full-completion (486329e..a05ce6b)
+
+PR:         #8 (open, non-draft) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present
+            in this environment; the verified dist/server.cjs is the deployment
+            unit available.
+
+Blocked:
+- #1-#8 Android bridge / real Android E2E / real screenshot — require a physical
+  handset; NOT_AVAILABLE in this sandbox.
+
+Human Approval Required:
+- Merge of PR #8 to main (owner instruction: merge only after a human reads the
+  final verification report).
+
+Next Slot:
+- #13, next un-audited false-success site in the item-13 tail — remaining
+  success:true routes in server.ts / server_tools.ts that discard a
+  persistMemory() / addAuditLog() boolean without claiming persisted.

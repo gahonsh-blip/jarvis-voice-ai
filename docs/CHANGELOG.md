@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-16 00:05 IST — window 2026-10-15/16 slot 7: the 10:30 PM nightly report no longer asserts work it never recorded
+
+### Fixed
+- **The nightly Telegram report claimed a stored work summary and a synchronized memory store it had never observed (`server.ts`, 10:30 PM IST routine in `checkAndRunSchedulerJobs()`).** The routine pushed a fixed three-line report — *"today's work summary has been recorded"*, *"Memory Persistence: Synchronized"*, *"Daemon Status: Standby & Active"* — whenever a Telegram chat was linked. No work-summary artifact is written anywhere in the project, so the first line asserted a record that does not exist; the memory store was never read, so the second asserted a durable write on a volume that may be read-only or full; and the third labelled a count of commands *received* as *"Commands Executed"*. The report is now built by `buildNightlyReportText()` from facts the tick reads back: the per-day run marker (`routineMarkerOnDisk('lastNightRunDate', todayIST)`), the store (new `memoryStoreReadableOnDisk()`, which parses `jarvis_memory.json` and returns `false` on `EACCES`/`ENOENT`), and the process's own `DAEMON_PID`. A marker that did not reach disk is reported as not durable; an unreadable store is reported as `NOT VERIFIED`, never as *Synchronized*.
+
+### Added
+- **`src/utils/hardening/nightlyReportTruth.ts` — the honest nightly report composer**, kept free of `server.ts` (which binds a port on import) so the wording is unit-testable.
+
+### Tests
+- `src/tests/nightlyReportTruth.test.ts` (6 cases): durable-marker and verified-store wording; a non-durable marker never reads as recorded; an unreadable store never reads as *Synchronized*; no stored-summary claim; and source guards that the three fabricated lines are gone and the report is composed from read-back facts. Negative-validated — forcing `memoryStoreReadable` and restoring the *Synchronized* wording failed exactly 1 assertion (`1 failed | 5 passed`); restored → 6/6.
+
 ## [Unreleased] - 2026-10-15 22:35 IST — window 2026-10-15/16 slot 4: the durability-claim invariant is pinned across every mutating route
 
 ### Added
