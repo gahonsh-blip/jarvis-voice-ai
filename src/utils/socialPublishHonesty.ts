@@ -22,15 +22,19 @@ export type ProviderVerdict =
   | 'NOT_CONFIGURED'
   | 'RECONNECT'
   | 'FAILED'
-  | 'UNCONFIRMED';
+  | 'UNCONFIRMED'
+  | 'VERIFIED_NOT_PERSISTED';
 
 /**
  * Classifies a raw `/api/social/platforms/test` response.
  *
- * The endpoint answers `{ success, status, accountName?, message }`. Only a
- * `success: true` paired with `status: 'VERIFIED'` **and** a reported account
- * name is a verification: `success: true` alone means the request completed,
- * not that the identity behind the credential was read.
+ * The endpoint answers `{ success, status, accountName?, message, persisted }`.
+ * Only a `success: true` paired with `status: 'VERIFIED'`, a reported account
+ * name **and** `persisted !== false` is a verification: `success: true` alone
+ * means the request completed, not that the identity behind the credential was
+ * read. `persisted: false` means the provider proved the account but the
+ * server could not cache it durably — the very next boot would not have it —
+ * so the probe is reported as verified-but-not-saved rather than a clean OK.
  */
 export function classifyProviderTestResponse(raw: unknown): ProviderVerdict {
   if (!raw || typeof raw !== 'object') return 'UNCONFIRMED';
@@ -38,7 +42,11 @@ export function classifyProviderTestResponse(raw: unknown): ProviderVerdict {
 
   if (data.success === true) {
     if (data.status !== 'VERIFIED') return 'UNCONFIRMED';
-    return verifiedAccountName(raw) ? 'OK' : 'UNCONFIRMED';
+    if (!verifiedAccountName(raw)) return 'UNCONFIRMED';
+    // A verified probe whose account cache did not reach durable storage is not
+    // a saved connection: it disappears on the next boot.
+    if (data.persisted === false) return 'VERIFIED_NOT_PERSISTED';
+    return 'OK';
   }
 
   switch (data.status) {
@@ -74,6 +82,10 @@ export function describeProviderVerdict(
   switch (verdict) {
     case 'OK':
       return account ? `Verified — live account: ${account}` : 'Verified by the provider.';
+    case 'VERIFIED_NOT_PERSISTED':
+      return account
+        ? `Verified live as ${account}, but the server could not save the connection — it will not survive a restart.`
+        : 'Verified by the provider, but the server could not save the connection.';
     case 'NOT_CONFIGURED':
       return 'Not configured — no credentials present.';
     case 'RECONNECT':

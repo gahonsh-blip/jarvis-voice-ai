@@ -628,6 +628,8 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       const account = verifiedAccountName(data);
       if (verdict === 'OK' && account) {
         onSpeak(`${platformKey} verified live against ${account}, Sir.`);
+      } else if (verdict === 'VERIFIED_NOT_PERSISTED') {
+        onSpeak(`${platformKey} verified live as ${account}, but the connection could not be saved and will not survive a restart, Sir.`);
       } else if (verdict === 'OK') {
         onSpeak(`${platformKey} answered, but did not name the account — unverified, Sir.`);
       } else {
@@ -2060,6 +2062,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                       const verdict = classifyProviderTestResponse(testResult);
                       const account = verifiedAccountName(testResult);
                       const isVerified = verdict === 'OK';
+                      const verifiedNotSaved = verdict === 'VERIFIED_NOT_PERSISTED';
                       return (
                         <div
                           className={`p-3 rounded-xl text-xs font-mono border ${
@@ -2071,7 +2074,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           <div className="flex items-center gap-2 font-bold mb-1">
                             {isVerified ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <ShieldAlert className="w-4 h-4 text-amber-400" />}
                             <span>
-                              Live Probe Result: {isVerified ? `VERIFIED — ${account}` : testResult.status || 'UNCONFIRMED'}
+                              {verifiedNotSaved
+                                ? `Live Probe Result: VERIFIED — ${account} (NOT SAVED)`
+                                : `Live Probe Result: ${isVerified ? `VERIFIED — ${account}` : testResult.status || 'UNCONFIRMED'}`}
                             </span>
                           </div>
                           <p className="text-[11px] leading-relaxed">{describeProviderVerdict(verdict, account, testResult.message)}</p>
