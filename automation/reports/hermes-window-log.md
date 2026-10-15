@@ -18104,3 +18104,74 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - OAuth disconnect routes अब झूठी सफलता नहीं देते — audit row disk पर लिखी गई
   या नहीं, यह सच-सच रिपोर्ट करते हैं (8/8 tests pass, negative-validated)।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:05
+Window date: 2026-10-15   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools (slice) — `POST /api/restore` now captures the
+  durability verdict of the security audit row it appends. Evidence:
+  `src/utils/hardening/restoreAuditDurabilityTruth.ts` (new `restoreAuditNote`);
+  `server.ts` `/api/restore` (~line 6938) captures `auditRecorded = addAuditLog(...)`,
+  returns it, and names the gap; `src/tests/restoreAuditDurabilityTruth.test.ts`
+  1 file / 5 passed (observed) — a real `tsx server.ts` process on a temp memory file
+  reports `auditRecorded: true` and the row is present on disk.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the long tail of unclassified `success: true` /
+  discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` is still not
+  individually audited. Item stays `PARTIAL`.
+
+Remaining:
+- #1 Real Android Mobile Bridge connection — PARTIAL (no handset)
+- #2 Android JARVIS Server E2E test — PARTIAL (no handset)
+- #54/#55 live credential rotation & real-device E2E — BLOCKED (no hardware/credentials)
+- #33 call answering — BLOCKED (no carrier/telephony permission)
+
+Bugs Found:
+- `/api/restore` answered an unqualified `success: true` while discarding the boolean
+  returned by `addAuditLog()` -> `recordDurableAuditRow()`. A restore whose audit row
+  never reached `jarvis_memory.json` still reported success, hiding a missing audit
+  trail for a Level-4 destructive operation. Found by auditing `addAuditLog` call sites
+  for discarded verdicts.
+
+Bugs Fixed:
+- `/api/restore` now captures the verdict, returns `auditRecorded`, and names the gap
+  via `restoreAuditNote(recorded)`. Negative-validated: reverting the route to its
+  pre-fix form failed exactly 2 assertions (`2 failed | 3 passed`); restored -> 5/5.
+
+Tests:    246 files / 2731 tests passed (80.36 s, 0 failed) — full `npx vitest run`, observed.
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 — observed.
+Build:    `npm run build` exit 0 — observed. `dist/server.cjs` 1,093,770 bytes.
+E2E:      NOT RUN — no handset, no OAuth grant, no display session.
+Security: `.env` ignored (`.gitignore`); no token/key staged; no `node_modules`/`dist` staged.
+          Observed via `git status --short` (clean tree at push).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  c79eecc (fix), 26809c4 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 (existing, open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present in
+            this environment; the verified artifact is the deployment unit available.
+
+Blocked:
+- #1/#2 Android bridge & real Android E2E — requires a physical handset
+- #54/#55 live credential rotation & real-device E2E — requires live provider credentials/hardware
+- #33 call answering — requires a live carrier / telephony permission
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner reads the verification report first).
+
+Next Slot:
+- #13 continue the sweep: audit the remaining `addAuditLog` call sites in `server.ts`
+  for discarded durability verdicts (e.g. the emergency-stop / call-summary audit rows),
+  one coherent slice at a time.
+
+हिंदी सारांश (एक पंक्ति):
+- `/api/restore` अब अपने सुरक्षा-ऑडिट रिकॉर्ड की ड्यूरेबिलिटी जाँच करता है और छिपी हुई असफलता को नाम देता है; पूरी सूट हरी (2731 टेस्ट), बदलाव पुश हो गया — #13 अभी `PARTIAL` है।
