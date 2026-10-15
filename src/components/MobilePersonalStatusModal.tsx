@@ -175,7 +175,11 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       current.message_reply = next;
       persisted = androidBridgeEngine.updatePermission('message_reply', next);
     }
-    setAndroidPerms(current);
+    // Render the bridge store's echo, never the requested value. A refused
+    // write reverts the engine's in-memory matrix, so `current` would show a
+    // permission the store does not hold — the same state-only mutation the
+    // sibling `MobileBridgeModal`/`AndroidPermissionCenter` already avoid.
+    setAndroidPerms({ ...androidBridgeEngine.getPermissions() });
     setBridgeStatus(androidBridgeEngine.getStatus());
     setPermissionNotice(
       persisted
@@ -186,9 +190,14 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
 
   const handleTogglePermission = (cat: MobilePermissionCategory) => {
     const updated = { ...permissions, [cat]: !permissions[cat] };
-    setPermissions(updated);
+    const persisted = saveMobilePermissions(updated);
+    // Read the durable store back instead of trusting `updated`: on a refused
+    // write the store still holds the previous matrix, and showing the request
+    // would display a permission that silently reverts on reload.
+    const effective = loadMobilePermissions();
+    setPermissions(effective);
     setPermissionNotice(
-      saveMobilePermissions(updated)
+      persisted
         ? null
         : 'PERMISSION NOT SAVED — local storage refused the write; this change reverts on reload.'
     );
@@ -196,7 +205,7 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
     if (statusData) {
       const updatedStatus = {
         ...statusData,
-        permissions: updated,
+        permissions: effective,
       };
       setStatusData(updatedStatus);
       const newBriefing = generateMorningBriefing(updatedStatus, userName);
@@ -213,12 +222,22 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       EMAIL_INBOX: true,
       DEVICE_HEALTH: true,
     };
-    setPermissions(allTrue);
+    const grantedPersisted = saveMobilePermissions(allTrue);
+    // The badge and the briefing must reflect what the store holds, not the
+    // all-true request: on a refused write every row would read granted while
+    // the next reload restores the previous matrix.
+    const effective = loadMobilePermissions();
+    setPermissions(effective);
     setPermissionNotice(
-      saveMobilePermissions(allTrue)
+      grantedPersisted
         ? null
         : 'PERMISSIONS NOT SAVED — local storage refused the write; these changes revert on reload.'
     );
+    if (statusData) {
+      const updatedStatus = { ...statusData, permissions: effective };
+      setStatusData(updatedStatus);
+      setBriefing(generateMorningBriefing(updatedStatus, userName));
+    }
     refreshData();
   };
 
@@ -231,12 +250,19 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       EMAIL_INBOX: false,
       DEVICE_HEALTH: false,
     };
-    setPermissions(allFalse);
+    const revokedPersisted = saveMobilePermissions(allFalse);
+    const effective = loadMobilePermissions();
+    setPermissions(effective);
     setPermissionNotice(
-      saveMobilePermissions(allFalse)
+      revokedPersisted
         ? null
         : 'PERMISSIONS NOT SAVED — local storage refused the write; these changes revert on reload.'
     );
+    if (statusData) {
+      const updatedStatus = { ...statusData, permissions: effective };
+      setStatusData(updatedStatus);
+      setBriefing(generateMorningBriefing(updatedStatus, userName));
+    }
     refreshData();
   };
 
