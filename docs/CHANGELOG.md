@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-16 01:35 IST — window 2026-10-15/16 slot 9: Android Permission Center renders the persisted policy, not the request
+
+### Fixed
+- **`AndroidPermissionCenter.tsx` painted the per-category notification policy and the per-application allow/block rules from the requested object, so a refused write showed a policy the durable store never held.** Section 2 and section 3 both called `setCategories(next)` / `setAppRules(next)` with the *requested* object and never read the store back. `AndroidBridgeManager.updateSettings()` reverts its in-memory settings on a refused write (`saveState()` false while `hasStorage()` is true) and returns false, so the row was rendered from the request while the store still held the old policy — the next reload silently restored it. Both handlers now read `androidBridgeEngine.getSettings()` back and render the durable echo (`categoryPermissions` / `privacyRules`), matching the store-echo contract already used by `MobileBridgeModal` and `MobilePersonalStatusModal`; the refusal notice now names the stored value and the request.
+
+### Tests
+- `src/tests/androidPermissionCenterSettingsEchoTruth.test.ts` — 6 cases: both handlers read the store echo and never set the requested object; the refusal notice names the stored value; plus three behavioural cases proving a refused `setItem` returns `false` **and** leaves the previous category policy and privacy rules in the store, while an accepted write is visible on read-back. Negative-validated: pre-fix component → `3 failed | 3 passed`; restored → 6/6.
+
+---
+
 ## [Unreleased] - 2026-10-16 00:35 IST — window 2026-10-15/16 slot 8: the Mobile Personal Status modal renders the persisted permission, not the request
 
 ### Fixed
