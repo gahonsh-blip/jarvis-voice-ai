@@ -18880,3 +18880,59 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में ऐप और टेलीफ़ोनी इंजन के स्टोरेज की (key) एक कर दी गई — पहले ऐप उन keys पर लिखता था जिन्हें इंजन कभी पढ़ता ही नहीं था; अब 5 नए टेस्ट पास हैं, पूरी सूट 254 फ़ाइलें / 2782 टेस्ट पास, lint और build दोनों exit 0.
+
+## 2026-10-16 03:35 IST — WORK SLOT 13 of the 2026-10-15 → 2026-10-16 window
+
+Slot: WORK | Window date: 2026-10-16 | slots_completed before this fire: 12
+Item: #13 `Zero-fake-success for all tools` — slice: telephony store persistence verdict.
+Status: **PARTIAL** (item unchanged; the server-side long tail remains).
+
+### What was wrong
+`saveLocalCallHistory` and `saveLocalTelephonySettings` in
+`src/utils/telephonyEngine.ts` returned `void` and swallowed the storage
+exception in a bare `catch`. A refused write (quota exceeded, private browsing,
+no `localStorage`) was therefore indistinguishable from a durable one: the
+operator saw a populated Call Logs tab and a "saved" settings form that the next
+reload would silently drop. The UI had no way to know, so it never said.
+
+### Change
+- `src/utils/telephonyEngine.ts` — both writers now return `boolean`: `true`
+  only when the write actually reached the store; `false` on refusal or when
+  there is no browser window.
+- NEW `src/utils/hardening/telephonyPersistenceBadgeTruth.ts` — derives badge
+  text, tooltip and tone from the observed verdict
+  (`CALL STORE SYNCED` / `NOT SAVED — storage refused` / `PERSISTENCE UNKNOWN`).
+- `src/components/TelephonyHubModal.tsx` — header badge rendered from
+  `telephonyPersistenceBadge(persistenceState)`; new optional `persistenceState`
+  prop (documented as the observed verdict, not a compile-time claim).
+- `src/App.tsx` — captures the writers' verdict into `telephonyPersistenceState`
+  and passes it into `<TelephonyHubModal persistenceState={telephonyPersistenceState} />`.
+
+### Evidence
+- `src/tests/telephonyStorageKeyParity.test.ts` — 8 new cases (5 -> 13 total):
+  accepted write -> `true`; refused write (ControllableStorage `setItem` throws)
+  -> `false`; no browser window -> `false`; badge text/tone/tooltip for
+  `true` / `false` / `null` / `undefined`; source guards that the Hub renders
+  from the verdict and the App captures + passes it.
+- Targeted run observed: `1 file / 13 passed`.
+- Negative validation: reverting `saveLocalCallHistory` to return `true` on
+  refusal/no-window failed exactly 2 assertions (`2 failed | 11 passed`);
+  restored -> `13 passed (13)`.
+- `npm run lint` (`tsc --noEmit`): exit 0 (observed).
+
+### Commit / push
+`01a6a04` — `feat(telephony): report the real persistence verdict (item 13)`,
+pushed to `feature/hermes-full-completion` (`5f0bbc7..01a6a04`).
+
+### Blocked (unchanged)
+#1-#8 (physical Android handset), #33 (carrier/provider credentials),
+#54/#55 (live credentials + real-device hardware).
+
+### Next slot
+Continue the item-13 sweep in `server.ts` / `server_tools.ts`, or take the next
+unblocked item (voice / wake word / production hardening).
+
+हिंदी सारांश (एक पंक्ति):
+- टेलीफ़ोनी हब अब स्टोरेज राइट का असली नतीजा दिखाता है — नकली "सेव हो गया" बैज हटाया,
+  8 नए टेस्ट जोड़े, नेगेटिव-वैलिडेशन से साबित किया (13/13 पास)।
+
