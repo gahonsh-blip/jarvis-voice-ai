@@ -18491,3 +18491,8 @@ Next Slot:
 - Mobile Personal Status मॉडल अब परमिशन बैज और ब्रीफिंग दुकान (store) के
   वास्तविक echo से बनाता है, अनुरोध से नहीं — इसलिए अस्वीकृत लेखन अब झूठा
   "GRANTED" नहीं दिखाता; 2755 टेस्ट पास, lint और build हरे।
+Verification addendum (slot 8, observed in-run):
+- PR #8: state=open, draft=false, mergeable_state=unstable (HTTP 200 via REST).
+- Remote refs confirmed: feature/hermes-full-completion=5ce1433, automation/hermes-state=9fa79c6.
+- Docs commit for this slot: 5ce1433 (report said "695e202 plus docs commit").
+- Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; nothing untracked/modified left in tree.
