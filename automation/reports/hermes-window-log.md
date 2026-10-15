@@ -18795,3 +18795,88 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में कोई बैकलॉग आइटम पूरा नहीं हुआ; टेलीफोनी स्टोरेज-की में असली विसंगति मिली (App और engine अलग-अलग key इस्तेमाल करते हैं), पर समय-सीमा के कारण ठीक नहीं की गई।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:05 (fire), finished ~03:40
+Window date: 2026-10-16   Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools (slice: telephony persistence key parity) —
+  evidence: `src/App.tsx` now loads/saves call history and settings through
+  `loadLocalCallHistory` / `saveLocalCallHistory` / `loadLocalTelephonySettings` /
+  `saveLocalTelephonySettings` from `src/utils/telephonyEngine.ts`; the stale
+  literals `'hermes_jarvis_call_history'` / `'hermes_jarvis_telephony_settings'`
+  are gone, and the direct `localStorage.removeItem('hermes_jarvis_call_history')`
+  in `onClearHistory` is removed. Test `src/tests/telephonyStorageKeyParity.test.ts`
+  → 1 file / 5 passed. Observed before the fix: the engine keys are
+  `hermes_jarvis_telephony_calls_v1` / `hermes_jarvis_telephony_settings_v1`, so
+  every engine consumer (spam screening, call summaries, CSV export, contacts)
+  read a store the App never wrote, while the App's own UI stayed consistent.
+
+In Progress:
+- #13 — the long tail of unclassified `success: true` / discarded-`persistMemory()`
+  sites remains. Item stays PARTIAL.
+
+Remaining:
+- #1-8 Android bridge / real Android E2E / real screenshot — BLOCKED (no handset).
+- #33 call answering — BLOCKED (no live carrier/telephony permission).
+- #54 live credential rotation — BLOCKED (no live provider credentials).
+- #55 real-device E2E — BLOCKED (no hardware).
+- #14+ GitHub / social / communication / AI-memory / autonomous-task / voice /
+  wake-word / production-hardening items — not yet started in this window.
+
+Bugs Found:
+- App-level telephony persistence diverged from the shared telephony engine's
+  storage keys (`hermes_jarvis_call_history` vs `..._calls_v1`). Found by reading
+  the persistence effects in `src/App.tsx` against the key constants in
+  `src/utils/telephonyEngine.ts`. Silent because the App was self-consistent and
+  the write's `try/catch` could not surface a refusal.
+- Latent typing defect introduced by this slot's first test draft: an `as CallRecord`
+  cast plus wrong `CallStatus` ('completed') / `CallHandlingMode` ('ai_agent') members.
+  Caught by `tsc --noEmit` (TS2352/TS2322) and by the `githubLocalHealth` test
+  (`check.exitCode` expected 0, got 2). Fixed by building a real `CallRecord`.
+
+Bugs Fixed:
+- Telephony storage key divergence — verified by
+  `src/tests/telephonyStorageKeyParity.test.ts` (5 passed) and by the full suite.
+- Test fixture typing — verified by `tsc --noEmit` exit 0 and the full suite
+  (the previously failing `githubLocalHealth` test now passes).
+
+Tests:    254 files / 2782 tests passed, 0 failed (80.61 s) — `npx vitest run`
+Lint:     exit 0 — `npx tsc --noEmit` (and the `githubLocalHealth` lint gate passes)
+Build:    exit 0 — `npm run build`; `dist/server.cjs` 1,094,784 bytes
+E2E:      NOT RUN (no handset, no OAuth grant, no display session)
+Security: NOT RUN this slot (no dependency change); no secret added to the tree,
+          no `.env` staged, no token written to any file
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  2f041c4 (fix+test), 237e314 (test typing fix), ea00352 (docs)
+Push:    succeeded — origin/feature/hermes-full-completion (ea00352)
+
+PR:         #8 (existing, open, non-draft) — branch pushed; PR body not refreshed this slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present
+            in this environment; the verified `dist/server.cjs` is the deployment
+            unit available.
+
+Blocked:
+- #1-8 Android bridge / real Android E2E / real screenshot — requires a physical handset.
+- #33 call answering — requires live carrier/telephony permission.
+- #54 live credential rotation — requires live provider credentials.
+- #55 real-device E2E — requires hardware.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner instruction: a human reads the final verification
+  report first).
+
+Next Slot:
+- #13 again: continue the item-13 sweep on the next un-audited surface (a mutating
+  UI handler or route that renders/claims a result without reading the durable
+  store back), or move to the next non-VERIFIED backlog item in the mandated order
+  if the sweep finds no exploitable candidate.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में ऐप और टेलीफ़ोनी इंजन के स्टोरेज की (key) एक कर दी गई — पहले ऐप उन keys पर लिखता था जिन्हें इंजन कभी पढ़ता ही नहीं था; अब 5 नए टेस्ट पास हैं, पूरी सूट 254 फ़ाइलें / 2782 टेस्ट पास, lint और build दोनों exit 0.
