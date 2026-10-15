@@ -18308,3 +18308,28 @@ Next Slot:
 - इस स्लॉट में हर बदलाव करने वाले रूट के "persisted: true" दावे की जाँच का नियम
   स्थायी रूप से जोड़ा — 21 में से सभी 21 रूट सत्यापित पाए गए, कोई नकली सफलता नहीं
   मिली, और नया टेस्ट गार्ड नेगेटिव-वैलिडेशन से साबित किया गया।
+
+## 2026-10-15 23:05 IST — WORK SLOT 5 (window 2026-10-15 to 2026-10-16)
+
+Item 13 (Zero-fake-success for all tools) — the Social Hub rendered a green VERIFIED
+badge and spoke "verified live" for a connection the server had just reported it could not save.
+/api/social/platforms/test already answers persisted: false when the provider proved the
+account but the profile-cache write did not reach durable storage. The Hub read that same
+response through classifyProviderTestResponse(), which ignored persisted and returned OK,
+so the probe card and the spoken reply announced a live, saved connection for one the next boot
+would not have. The classifier now returns a distinct VERIFIED_NOT_PERSISTED verdict; the card
+labels it (NOT SAVED) and the spoken line names the missing save. A response that omits
+persisted still reads OK; the account-name requirement is unchanged. Guarded by
+src/tests/socialPlatformVerifyPersistedTruth.test.ts (5 cases). Negative-validated — removing
+the persisted check failed exactly 2 assertions (2 failed | 3 passed); restored to 5/5.
+Related suites re-run green (4 files / 49 passed).
+
+Gates (observed this fire): lint (tsc --noEmit) exit 0; targeted 1 file / 5 passed;
+full npx vitest run 248 files / 2743 tests passed (80.38 s, 0 failed);
+npm run build exit 0 (dist/server.cjs 1,093,770 bytes). E2E: NOT RUN (no handset,
+no OAuth grant, no display session). Deploy: NOT_CONFIGURED. Security: NOT RUN this slot
+(no dependency change). Commit 6a093da, pushed to feature/hermes-full-completion
+(push initially rejected — another slot had advanced the remote tip; fetched the true
+server SHA f93b5a2 and rebased onto it, no force-push). Item 13 stays PARTIAL — the long
+tail of unclassified success: true / discarded-persistMemory() sites remains.
+PR #8 remains open, non-draft. Main NOT MERGED — awaiting human approval.
