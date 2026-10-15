@@ -4,6 +4,19 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 21:35 IST — window 2026-10-15/16 slot 2: OAuth disconnect no longer reports a security audit row that never reached disk
+
+### Fixed
+- **`server.ts` — both OAuth disconnect routes answered `success: true` while discarding the boolean from the security audit row they append, and the LinkedIn route answered `success: true` even when nothing was connected.** `/api/auth/linkedin/disconnect` and `/api/auth/youtube/disconnect` correctly gate the credential removal on the durable `persistMemory()` write (rolling it back when it fails), but the `VERIFIED` "Disconnected" audit row they append next is a *second* durable write through `addAuditLog()` → `recordDurableAuditRow()`, which returns `false` when the row never reached `jarvis_memory.json`. That boolean was ignored, so an operator could believe the disconnection was recorded in the security log while the row lived only in process memory and vanished on the next boot.
+
+### Changed
+- Each route now captures the boolean, carries it as `auditRecorded`, and names the unrecorded entry via `oauthDisconnectMessage(platform, recorded)` from `src/utils/hardening/oauthDisconnectAuditTruth.ts`. A request with nothing connected now answers `{ success: false, outcome: 'NOT_CONNECTED' }` instead of a false success, and the YouTube failed-write branch answers 500 `{ success: false, persisted: false }`.
+- `src/components/SocialMediaModal.tsx` — `handleDisconnectLinkedIn` / `handleDisconnectYouTube` read the server's own `error`/`message` through `oauthDisconnectNotice(platform, data)` instead of always claiming nothing was connected.
+
+### Tests
+- `src/tests/oauthDisconnectAuditDurabilityTruth.test.ts` (8 cases): a real server runs against a memory file made read-only after boot; the environment's read-only mode is asserted first, then the route's 500 + rollback + still-connected status is observed, and the happy path proves the audit row lands on disk with `auditRecorded: true` and no caveat. Source guards pin both routes' captured booleans and the retained credential gate. Negative-validated — reverting the LinkedIn route to its pre-fix form fails exactly 2 assertions (`2 failed | 6 passed`); restored → 8/8.
+- `src/tests/oauthDisconnectTruth.test.ts` — the stale modal assertion now points at the new helper (same intent, no weaker assertion).
+
 ## [Unreleased] - 2026-10-15 21:05 IST — window 2026-10-15/16 slot 1: OAuth connect no longer reports a security audit row that never reached disk
 
 ### Fixed
