@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
 import { describeStagedChannel } from '../utils/hardening/youtubeChannelTruth';
+import { resolveYouTubePayloadMode, youTubeStagedFileName } from '../utils/hardening/youtubePayloadModeTruth';
 import { connectedLinkedInIdentity, connectedYouTubeChannelId, linkedInAuthorUrnLabel } from '../utils/hardening/socialAccountIdTruth';
 import { oauthConnectionNotice } from '../utils/hardening/oauthAccountNoticeTruth';
 import { oauthDisconnectNotice } from '../utils/hardening/oauthDisconnectAuditTruth';
@@ -133,6 +134,16 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     videoId?: string;
     errorReason?: string;
   } | null>(null);
+
+  // The payload mode the panel shows and the mode the request stages must be the
+  // same value, derived from the bytes that actually exist. A flag flipped before
+  // the FileReader resolves let the panel read "Binary File Mode" while the
+  // server staged a synthetic payload under the real file's name.
+  const ytPayloadDecision = resolveYouTubePayloadMode({
+    fileSelected: ytVideoFile !== null,
+    base64Ready: Boolean(ytVideoBase64),
+    requestedSynthetic: ytIsTestPayload,
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -259,12 +270,23 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       setYtVideoTitle(cleanName.slice(0, 100));
     }
 
-    // Read base64 for upload payload
+    // Read base64 for upload payload. The bytes are what the server stages, so
+    // a read that fails must not leave the panel claiming binary mode: clear the
+    // payload and say so rather than staging a synthetic file under this name.
     const reader = new FileReader();
     reader.onload = () => {
       const res = reader.result as string;
       const base64Data = res.includes(',') ? res.split(',')[1] : res;
+      if (!base64Data) {
+        setYtVideoBase64(null);
+        setOauthError('The selected video file produced no payload bytes; it cannot be uploaded as a binary file.');
+        return;
+      }
       setYtVideoBase64(base64Data);
+    };
+    reader.onerror = () => {
+      setYtVideoBase64(null);
+      setOauthError('The selected video file could not be read; it cannot be uploaded as a binary file.');
     };
     reader.readAsDataURL(file);
   };
@@ -350,6 +372,13 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       setOauthError('Please enter a valid Video Title before staging.');
       return;
     }
+    // Refuse to stage a payload the panel is not showing: the server falls back to
+    // a synthetic file whenever the bytes are absent, so staging here would upload
+    // something other than the selected file and still answer success.
+    if (!ytPayloadDecision.ready) {
+      setOauthError(ytPayloadDecision.notice || 'The selected payload is not ready to stage.');
+      return;
+    }
     setYtIsStaging(true);
     setYtUploadResult(null);
 
@@ -359,9 +388,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         description: ytVideoDesc.trim(),
         privacyStatus: ytPrivacy,
         tags: ytVideoTags.map((t) => (t.startsWith('#') ? t : `#${t}`)),
-        videoFileName: ytVideoFile?.name || (ytIsTestPayload ? 'synthetic_jarvis_test.mp4' : 'uploaded_video.mp4'),
-        videoPayloadBase64: ytVideoBase64 || undefined,
-        isTestUpload: ytIsTestPayload,
+        videoFileName: youTubeStagedFileName(ytPayloadDecision, ytVideoFile?.name),
+        videoPayloadBase64: ytPayloadDecision.mode === 'binary' ? ytVideoBase64 || undefined : undefined,
+        isTestUpload: ytPayloadDecision.isTestUpload,
       };
 
       const res = await fetch('/api/social/youtube/upload-draft', {
@@ -1385,7 +1414,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                       <Film className="w-4 h-4" /> 1. Video Source Selection
                     </h4>
                     <span className="text-[10px] font-mono text-slate-400">
-                      {ytIsTestPayload ? 'Synthetic Test Mode' : 'Binary File Mode'}
+                      {ytPayloadDecision.label}
                     </span>
                   </div>
 
@@ -1488,12 +1517,12 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                       type="button"
                       onClick={handleUseSyntheticTestVideo}
                       className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
-                        ytIsTestPayload
+                        ytPayloadDecision.syntheticActive
                           ? 'bg-red-950 text-red-300 border border-red-800'
                           : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      {ytIsTestPayload ? '✓ Active Test Mode' : 'Use Test Mode'}
+                      {ytPayloadDecision.syntheticActive ? '✓ Active Test Mode' : 'Use Test Mode'}
                     </button>
                   </div>
                 </div>
@@ -1681,9 +1710,14 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
 
                   {/* Stage Action Button */}
                   <div className="pt-2">
+                    {ytPayloadDecision.notice && (
+                      <p className="mb-2 text-[10px] font-mono text-amber-300 leading-relaxed">
+                        {ytPayloadDecision.notice}
+                      </p>
+                    )}
                     <button
                       onClick={handleStageYouTubeVideo}
-                      disabled={ytIsStaging || !ytVideoTitle.trim()}
+                      disabled={ytIsStaging || !ytVideoTitle.trim() || !ytPayloadDecision.ready}
                       className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold font-mono flex items-center justify-center gap-2 transition-all shadow-xl shadow-red-950/60 disabled:opacity-50"
                     >
                       {ytIsStaging ? (
