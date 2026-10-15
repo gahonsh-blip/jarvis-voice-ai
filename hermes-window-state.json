@@ -1,20 +1,19 @@
 {
   "window_date": "2026-10-16",
   "window_started_at": "2026-10-15T15:35:00Z",
-  "last_slot_at": "2026-10-15T21:25:00Z",
-  "slots_completed": 11,
+  "last_slot_at": "2026-10-15T21:36:00Z",
+  "slots_completed": 12,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "5cc97021",
+  "last_commit": "f483b99",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    "1-8 Android bridge / real Android E2E / real screenshot (no physical handset)",
-    "54 live credential rotation (no live provider credentials)",
-    "55 real-device E2E (no hardware)",
-    "33 call answering (live carrier/telephony permission)"
+    {"item": 1, "title": "Real Android Mobile Bridge connection", "reason": "requires a physical paired handset"},
+    {"item": 2, "title": "Android <-> JARVIS <-> Server E2E", "reason": "requires physical device hardware"}
   ],
-  "last_report_path": "/tmp/hermes-window-report.md"
+  "last_report_path": "/tmp/hermes-window-report.md",
+  "notes": "Slot 12 (03:05 IST fire) advanced no backlog item. Investigation of item 13 found a real bug: src/App.tsx:977/985 persist telephony call history and settings under 'hermes_jarvis_call_history' / 'hermes_jarvis_telephony_settings' while src/utils/telephonyEngine.ts:26-27 defines and reads 'hermes_jarvis_telephony_calls_v1' / 'hermes_jarvis_telephony_settings_v1'. Next slot should route App persistence through saveLocalCallHistory/saveLocalTelephonySettings and pin with a test."
 }
