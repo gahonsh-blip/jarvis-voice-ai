@@ -18616,3 +18616,87 @@ awaiting human approval. Deploy: NOT_CONFIGURED.
 हिंदी सारांश (एक पंक्ति):
 - Permission Gateway के mobile permission rows अब सहेजी गई (persisted) स्थिति दिखाते हैं,
   अनुरोध की गई स्थिति नहीं; नया truth test जोड़ा गया और सभी gates हरे रहे।
+
+---
+
+## Slot 11 — 2026-10-16 02:35 IST (WORK slot)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:35
+Window date: 2026-10-16   Window slots completed so far: 11
+
+Completed:
+- #13 Zero-fake-success for all tools — the YouTube staging panel painted
+  `Binary File Mode` and staged the real file's name for a payload whose bytes had
+  not been read. Evidence: `src/utils/hardening/youtubePayloadModeTruth.ts`
+  (`resolveYouTubePayloadMode`, `youTubeStagedFileName`), wired into
+  `src/components/SocialMediaModal.tsx` (import; FileReader error + empty-read
+  handling; `ytPayloadDecision`; `handleStageYouTubeVideo` guard; mode label +
+  staging disabled state + notice), pinned by
+  `src/tests/youtubePayloadModeTruth.test.ts` — observed **1 file / 10 tests passed**.
+
+In Progress:
+- #13 — the long tail of unclassified `success: true` / discarded
+  `persistMemory()` sites in `server.ts` / `server_tools.ts` remains unaudited.
+
+Remaining:
+- #1-8 Android bridge / real Android E2E / real screenshot — BLOCKED (no handset).
+- #33 call answering — BLOCKED (no live carrier/telephony permission).
+- #54 live credential rotation — BLOCKED (no live provider credentials).
+- #55 real-device E2E — BLOCKED (no hardware).
+
+Bugs Found:
+- `SocialMediaModal.handleVideoFileSelect` cleared `ytIsTestPayload` synchronously,
+  before the `FileReader` filling `ytVideoBase64` resolved, and registered no
+  `onerror`. `POST /api/social/youtube/upload-draft` derives the mode from what
+  arrived (`isTestUpload: !videoPayloadBase64 || isTestUpload`), so a failed or
+  in-flight read staged a SYNTHETIC payload while the panel read `Binary File Mode`
+  and the Level-4 card carried the real file's name.
+- A second file selected while the first read was pending could stage file A's
+  bytes under file B's name (the `FileReader` callback never checked which file it
+  belonged to).
+
+Bugs Fixed:
+- The panel now derives mode, request flag, file name, and the disabled state from
+  one decision over the bytes that exist; a failed or empty read clears the payload
+  and says so; staging is refused while the displayed payload is not the one that
+  would be uploaded; a synthetic payload is labelled `synthetic_jarvis_test.mp4`.
+  Verification: negative-validated — restoring the pre-fix wiring failed exactly
+  the 3 source guards (`3 failed | 7 passed`); restored → 10/10.
+
+Tests:    253 files / 2777 tests passed (0 failed, 80.47 s) — `npx vitest run`
+Lint:     exit 0 — `npm run lint` (`tsc --noEmit`)
+Build:    exit 0 — `npm run build`; `dist/server.cjs` 1,094,784 bytes
+E2E:      NOT RUN (no handset, no OAuth grant, no display session)
+Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short`
+          clean of `.env`/`node_modules`/`dist`; `npm audit` → 0 vulnerabilities
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle), docs/CHANGELOG.md,
+automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  822f4914 (fix), d7c7ecdc (docs)
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; `dist/server.cjs` is the verified
+            deployment unit available.
+
+Blocked:
+- #1-8 Android bridge / real Android E2E / real screenshot — requires a physical handset.
+- #33 call answering — requires live carrier/telephony permission.
+- #54 live credential rotation — requires live provider credentials.
+- #55 real-device E2E — requires hardware.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner's explicit instruction: only after a human
+  reads the verification report and approves).
+
+Next Slot:
+- #13 Zero-fake-success for all tools — continue the sweep; next candidate is the
+  remaining `success: true` sites that discard a durability verdict.
+
+हिंदी सारांश (एक पंक्ति):
+- YouTube staging panel अब वही payload mode दिखाता और stage करता है जो असल में
+  upload होगा; पहले बिना पढ़ी गई फ़ाइल भी "Binary File Mode" दिखाती थी — यह ठीक किया गया।
