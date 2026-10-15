@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-15 22:05 IST — window 2026-10-15/16 slot 3: `/api/restore` no longer discards the durability verdict of its security audit row
+
+### Fixed
+- **`server.ts` — `POST /api/restore` answered an unqualified `success: true` while discarding the boolean from the security audit row it appends.** The route already refuses a restore whose `persistMemory()` write fails, but the `VERIFIED` audit row written afterwards is a *second* durable write through `addAuditLog()` → `recordDurableAuditRow()`, which returns `false` when the row never reached `jarvis_memory.json`. That boolean was ignored, so a restore applied durably whose security record did not land still reported success — hiding a missing audit trail for a Level-4 destructive operation.
+
+### Changed
+- The route now captures the verdict, returns it as `auditRecorded`, and names the gap via `restoreAuditNote(recorded)` from `src/utils/hardening/restoreAuditDurabilityTruth.ts`. A durable row leaves the response unchanged; a non-durable one carries an explicit note that does not read as a restore failure.
+
+### Tests
+- `src/tests/restoreAuditDurabilityTruth.test.ts` (5 cases): helper unit tests for both verdicts; a real `tsx server.ts` process on a temp memory file proves `auditRecorded: true` and that the row is present in the file on disk; plus source guards that the verdict is captured and the persist check still precedes the audit row. Negative-validated — reverting the route to its pre-fix form fails exactly 2 assertions (`2 failed | 3 passed`); restored → 5/5.
+
 ## [Unreleased] - 2026-10-15 21:35 IST — window 2026-10-15/16 slot 2: OAuth disconnect no longer reports a security audit row that never reached disk
 
 ### Fixed
