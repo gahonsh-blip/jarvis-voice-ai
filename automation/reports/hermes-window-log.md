@@ -19109,3 +19109,73 @@ PUSH EARLY before the full suite.
 असत्यापित राइटर-साइटें (saveCachedLocation, saveBridgeRegistration, persistDedupStore)
 सूचीबद्ध कीं; रन कैप के कारण फ़ुल सूट NOT RUN — कोई झूठा पास दर्ज नहीं।
 
+
+---
+
+## 2026-10-17 23:05 IST — WORK SLOT 3 (window 2026-10-16 → 2026-10-17)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:05
+Window date: 2026-10-17   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools (one more site closed; item stays PARTIAL)
+  — `saveCachedLocation` in `src/utils/locationService.ts` swallowed the storage
+  error in a bare `catch` and returned `void`. A refused write (quota, private
+  mode, no `window`) was indistinguishable from a durable one, so the Location
+  Services modal and the dashboard presented the position as cached while the
+  next load reverted to the previous entry — or to no fix at all.
+  Evidence: the writer now returns a boolean verdict (`true` only when the
+  serialised fix reads back with a `savedAt` stamp). `LocationServicesModal.tsx`
+  captures the verdict at all three write sites and renders `FIX NOT CACHED`;
+  `App.tsx` records `locationCacheRefused` and passes it into the modal as
+  `cacheWriteRefused`. New test file `src/tests/locationCacheDurabilityTruth.test.ts`
+  (6 cases). Observed: 2 files / 24 passed targeted; 256 files / 2799 tests
+  passed full suite; lint exit 0; build exit 0 (`dist/server.cjs` 1,094,784 bytes).
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. Enumerated next targets:
+  `saveBridgeRegistration` / `clearBridgeRegistration` (`mobileBridgeEngine.ts`),
+  `persistDedupStore` (`mobileNotificationPrivacy.ts`), the dead
+  `MOBILE_STATUS_CACHE_KEY` write (`mobileStatusEngine.ts`).
+
+Remaining:
+- #1 Real Android Mobile Bridge connection — BLOCKED (physical paired handset).
+- #2 Android <-> JARVIS <-> Server E2E — BLOCKED (physical device hardware).
+- #33 Telephony carrier dispatch — BLOCKED (carrier/provider credentials).
+- #54 Live provider credential items — BLOCKED (live provider credentials).
+- #55 Real-device hardware items — BLOCKED (real-device hardware).
+
+Bugs Found:
+- `saveCachedLocation` returned `void` and swallowed the `localStorage` error, so
+  a refused cache write was indistinguishable from a durable one.
+
+Bugs Fixed:
+- `saveCachedLocation` now returns a real durability verdict; both surfaces name
+  a refusal. Negative-validated — restoring the pre-fix swallow-the-error
+  behaviour failed exactly 2 assertions (`2 failed | 4 passed`); restored → 6/6.
+
+Tests:    256 files / 2799 tests passed (81.21 s, 0 failed)
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0
+Build:    `npm run build` exit 0 — `dist/server.cjs` 1,094,784 bytes
+E2E:      NOT RUN — no handset / emulator / display session
+Security: NOT RUN this slot (no security-sensitive change)
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  5538d42 (fix) → ece0d4b (docs)
+Push:    succeeded — 2f946cb..5538d42, then 5538d42..ece0d4b
+
+PR:         #8 — open, non-draft
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; `dist/server.cjs` is
+            the deployment unit available.
+
+Next Slot:
+- #13 — next untouched void/swallowed-error writer: `saveBridgeRegistration` /
+  `clearBridgeRegistration` (`mobileBridgeEngine.ts`), then `persistDedupStore`
+  (`mobileNotificationPrivacy.ts`).
+
+हिंदी सारांश: स्लॉट 3 में `saveCachedLocation` अब असली durability verdict लौटाता है
+— नाकाम कैश-राइट पर UI "FIX NOT CACHED" दिखाता है; lint/build हरे, 2799 टेस्ट पास,
+बदलाव push हो गया; item #13 अभी भी PARTIAL है।
