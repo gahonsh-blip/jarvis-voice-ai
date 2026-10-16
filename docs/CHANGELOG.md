@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-17 00:35 IST — window 2026-10-16/17 slot 5: chat-history write verdict is surfaced, not discarded
+
+### Fixed
+- **Four `src/App.tsx` sites called `saveLocalChatHistory` as a bare statement, discarding the boolean that reports whether the transcript reached `localStorage`.** The persist effect (`useEffect([messages])`) and three deferred `setMessages` updaters (the JARVIS reply in `pushJarvisMessage`, the user message in `handleSendCommand`, the backend reply) threw the verdict away. On a full disk, in private mode, or with no `localStorage` the conversation stayed on screen while the store held nothing, and nothing distinguished a durable transcript from an ephemeral one — the next reload silently dropped it.
+- The verdict is now classified by the new `src/utils/hardening/chatHistoryStoreTruth.ts` (`classifyChatHistoryWrite` / `flushChatHistoryNotice`), mirroring the existing `memoryStoreTruth` pattern. The persist effect surfaces a refusal directly; the three deferred updater sites capture the verdict into a variable and flush it on the next tick — the same deferred-capture pattern the App already uses for the memory-merge write — into the existing `memorySaveNotice` banner. An unobserved verdict is reported as unconfirmed, never upgraded to a save.
+
+### Tests
+- New `src/tests/chatHistoryStoreTruth.test.ts` (11 cases): classifier verdicts for landed / refused / unobserved writes and the blank-label fallback; the deferred flusher surfaces a refusal on the next tick and stays silent on a landed write; source guards that the import is present, no bare `saveLocalChatHistory(...);` discard remains, all four write sites capture the verdict, and the three deferred sites flush it. Negative-validated — stashing only `src/App.tsx` failed exactly the 5 source guards (`5 failed | 6 passed`); restored → 11/11.
+
+### Gates (observed this fire)
+- `npm run lint` (`tsc --noEmit`) exit 0; targeted `chatHistoryStoreTruth` 1 file / 11 passed; full `npx vitest run` **258 files / 2816 passed, 1 file / 2 tests failed** — the failure is `oauthDisconnectAuditDurabilityTruth.test.ts`, which **passes 8/8 in isolation both with and without this slot's diff** and is a pre-existing cross-file flake in an unrelated area, not a regression; `npm run build` exit 0 (`dist/server.cjs` 1,095,307 bytes).
+- E2E: NOT RUN (no handset / no display session). Deploy: `NOT_CONFIGURED`.
+
+---
+
 ## [Unreleased] - 2026-10-16 23:05 IST — window 2026-10-16/17 slot 3: `saveCachedLocation` now reports a real durability verdict
 
 ### Fixed

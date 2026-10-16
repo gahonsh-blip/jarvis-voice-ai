@@ -19267,3 +19267,70 @@ Next Slot:
 - इस स्लॉट में कोई सोर्स बदलाव नहीं किया गया — #13 के लिए स्कैन चलाकर तीन असली
   कमज़ोरियाँ (saveBridgeRegistration, setAppPolicy verdict discard, persistDedupStore)
   पहचानीं; समय-सीमा समाप्त होने के कारण टेस्ट/लिंट/बिल्ड NOT RUN रहे।
+
+## Slot 5 — 2026-10-17 00:35 IST (WORK)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35
+Window date: 2026-10-17   Window slots completed so far: 5 (this slot)
+
+Completed:
+- #13 Zero-fake-success for all tools — the App discarded the chat-history write
+  verdict at four sites. Evidence: new src/utils/hardening/chatHistoryStoreTruth.ts
+  (classifyChatHistoryWrite / flushChatHistoryNotice); src/App.tsx persist effect
+  (line ~264) now classifies saveLocalChatHistory(messages), and the three deferred
+  setMessages updaters (pushJarvisMessage, user message, backend reply) capture the
+  verdict into a variable and flush it on the next tick into the memorySaveNotice
+  banner. Test src/tests/chatHistoryStoreTruth.test.ts — 1 file / 11 tests passed.
+
+In Progress:
+- #13 — the tail of unclassified success:true / discarded-persistMemory() sites
+  remains (saveBridgeRegistration/clearBridgeRegistration, persistDedupStore,
+  computerOperatorEngine.ts 395/410, dead MOBILE_STATUS_CACHE_KEY write).
+
+Remaining:
+- #1/#2 Android bridge + real E2E — BLOCKED (physical handset).
+- #33 telephony carrier, #54 live provider credentials, #55 real-device hardware — BLOCKED.
+- The rest of the 60-item backlog is tracked in docs/COMPLETION_STATUS.md.
+
+Bugs Found:
+- App.tsx dropped the boolean returned by saveLocalChatHistory at four write sites,
+  so a transcript that never reached localStorage looked identical to a durable one
+  and reverted on the next reload.
+
+Bugs Fixed:
+- Those four sites now surface the verdict. Negative validation: stashing only
+  src/App.tsx failed exactly the 5 source guards (5 failed | 6 passed); restored → 11/11.
+
+Tests:    258 files / 2816 passed, 1 file / 2 tests failed (oauthDisconnectAuditDurabilityTruth,
+          a pre-existing cross-file flake: passes 8/8 in isolation with and without this diff)
+Lint:     npm run lint (tsc --noEmit) exit 0
+Build:    npm run build exit 0 (dist/server.cjs 1,095,307 bytes)
+E2E:      NOT RUN — no handset / emulator / display session
+Security: NOT RUN this slot (no audit invocation); no secret printed or committed
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  e04805a
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (existing, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; dist/server.cjs is the unit
+
+Blocked:
+- #1/#2 Android bridge & E2E — requires a physical paired handset
+- #33 telephony carrier dispatch — requires carrier/provider credentials
+- #54 live provider items — requires live provider credentials
+- #55 real-device hardware items — requires real-device hardware
+
+Human Approval Required:
+- Merge of feature/hermes-full-completion → main (owner decision).
+
+Next Slot:
+- #13, next enumerated target: saveBridgeRegistration / clearBridgeRegistration in
+  src/utils/mobileBridgeEngine.ts (void + swallowed catch, verdict unavailable to callers).
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में App.tsx के चार स्थानों पर छोड़े गए chat-history persistence verdict को सतह पर
+  लाया गया, नए हेल्पर और 11 टेस्ट के साथ; बाकी गेट हरे, main पर merge नहीं किया गया।
