@@ -2,21 +2,41 @@
   "window_date": "2026-10-17",
   "window_started_at": "2026-10-16T15:36:00Z",
   "last_slot_at": "2026-10-16T19:36:00Z",
-  "slots_completed": 5,
+  "slots_completed": 6,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "13c83f5",
+  "last_commit": "6916fdc",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    { "item": 1, "title": "Real Android Mobile Bridge connection", "reason": "requires a physical paired handset" },
-    { "item": 2, "title": "Android <-> JARVIS <-> Server E2E", "reason": "requires physical device hardware" },
-    { "item": 33, "title": "Telephony carrier dispatch", "reason": "requires carrier/provider credentials" },
-    { "item": 54, "title": "Live provider credential items", "reason": "requires live provider credentials" },
-    { "item": 55, "title": "Real-device hardware items", "reason": "requires real-device hardware" }
+    {
+      "item": 1,
+      "title": "Real Android Mobile Bridge connection",
+      "reason": "requires a physical paired handset"
+    },
+    {
+      "item": 2,
+      "title": "Android <-> JARVIS <-> Server E2E",
+      "reason": "requires physical device hardware"
+    },
+    {
+      "item": 33,
+      "title": "Telephony carrier dispatch",
+      "reason": "requires carrier/provider credentials"
+    },
+    {
+      "item": 54,
+      "title": "Live provider credential items",
+      "reason": "requires live provider credentials"
+    },
+    {
+      "item": 55,
+      "title": "Real-device hardware items",
+      "reason": "requires real-device hardware"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 5 (00:35 IST fire). Item 13 slice: the App discarded the saveLocalChatHistory verdict at four sites. Added src/utils/hardening/chatHistoryStoreTruth.ts (classifyChatHistoryWrite / flushChatHistoryNotice) and wired src/App.tsx: persist effect classifies saveLocalChatHistory(messages); the three deferred setMessages updaters (pushJarvisMessage, user message, backend reply) capture the verdict into a variable and flush on next tick into memorySaveNotice. New test src/tests/chatHistoryStoreTruth.test.ts 1 file / 11 passed. Negative-validated: stashing only src/App.tsx -> 5 failed | 6 passed; restored -> 11/11. Gates observed: lint exit 0; full npx vitest run 258 files / 2816 passed, 1 file / 2 tests failed (oauthDisconnectAuditDurabilityTruth - passes 8/8 in isolation with AND without this diff, pre-existing cross-file flake, unrelated area); npm run build exit 0 (dist/server.cjs 1,095,307 bytes). E2E NOT RUN (no handset/display). Deploy NOT_CONFIGURED. Commits e04805a (fix) + 13c83f5 (docs) pushed to feature/hermes-full-completion. Next target: saveBridgeRegistration/clearBridgeRegistration (src/utils/mobileBridgeEngine.ts:41,50). PR #8 open, non-draft. Main NOT merged - awaiting human approval."
+  "notes": "Slot 6 (01:05 IST fire). Item 13 slice: the App discarded the saveLocalVoiceSettings verdict in the persist effect. Added src/utils/hardening/voiceSettingsStoreTruth.ts (classifyVoiceSettingsWrite) and wired src/App.tsx useEffect([voiceSettings]) to classify the real verdict and surface a refusal via setMemorySaveNotice. New test src/tests/voiceSettingsStoreTruth.test.ts 1 file / 8 passed. Negative-validated: reverting only the App persist effect -> 3 failed | 5 passed; restored -> 8/8. Gates observed: lint exit 0; full npx vitest run 259 files / 2826 passed, 0 failed (the previous slot's oauthDisconnectAuditDurabilityTruth cross-file flake did not reproduce); npm run build exit 0 (dist/server.cjs 1,095,307 bytes). E2E NOT RUN (no handset/display). Deploy NOT_CONFIGURED. Commits 6e5bea0 (fix) + 6916fdc (docs) pushed to feature/hermes-full-completion. Next target: persistDedupStore (src/utils/mobileNotificationPrivacy.ts) or computerOperatorEngine.ts 395/410. Note: saveBridgeRegistration/clearBridgeRegistration (src/utils/mobileBridgeEngine.ts) have NO production callers (test-only). PR #8 open, non-draft. Main NOT merged - awaiting human approval."
 }
