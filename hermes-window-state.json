@@ -1,22 +1,42 @@
 {
-  "window_date": "2026-10-16",
-  "window_started_at": "2026-10-15T15:35:00Z",
-  "last_slot_at": "2026-10-15T23:13:00Z",
-  "slots_completed": 14,
+  "window_date": "2026-10-17",
+  "window_started_at": "2026-10-16T15:36:00Z",
+  "last_slot_at": "2026-10-16T15:36:00Z",
+  "slots_completed": 1,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "a15a93c9da9e1098a85a0f72c61de1e917b9930d",
+  "last_commit": "570a1ed8",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": true,
-  "finalization_result": "PASS_WITH_CAVEATS: lint exit 0; npx vitest run 254 files / 2790 tests passed (82.18 s, 0 failed); npm run build exit 0 (dist/server.cjs 1,094,784 bytes); npm audit --omit=dev 0 vulnerabilities. PR #8 open, non-draft, mergeable:true, mergeable_state:unstable. CI check 'typecheck . tests . build' is red for an infrastructure reason read from the GitHub API: 'The job was not started because your account is locked due to a billing issue.' (zero steps, 3 s) - not a code failure. NOT MERGED to main - awaiting human approval. Deploy NOT_CONFIGURED.",
+  "finalized": false,
+  "finalization_result": null,
   "blocked_items": [
-    {"item": 1, "title": "Real Android Mobile Bridge connection", "reason": "requires a physical paired handset"},
-    {"item": 2, "title": "Android <-> JARVIS <-> Server E2E", "reason": "requires physical device hardware"},
-    {"item": 33, "title": "Telephony carrier dispatch", "reason": "requires carrier/provider credentials"},
-    {"item": 54, "title": "Live provider credential items", "reason": "requires live provider credentials"},
-    {"item": 55, "title": "Real-device hardware items", "reason": "requires real-device hardware"}
+    {
+      "item": 1,
+      "title": "Real Android Mobile Bridge connection",
+      "reason": "requires a physical paired handset"
+    },
+    {
+      "item": 2,
+      "title": "Android <-> JARVIS <-> Server E2E",
+      "reason": "requires physical device hardware"
+    },
+    {
+      "item": 33,
+      "title": "Telephony carrier dispatch",
+      "reason": "requires carrier/provider credentials"
+    },
+    {
+      "item": 54,
+      "title": "Live provider credential items",
+      "reason": "requires live provider credentials"
+    },
+    {
+      "item": 55,
+      "title": "Real-device hardware items",
+      "reason": "requires real-device hardware"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "FINALIZATION slot (04:35/04:36 IST fire), 14th and last fire of the 2026-10-15 -> 2026-10-16 window. No new development. Window tip 86d1eef re-verified; docs commit a15a93c pushed to feature/hermes-full-completion (86d1eef..a15a93c). Diff vs main: 162 files, +20094/-1523. Observed: lint exit 0; full suite 254 files / 2790 tests passed, 0 failed (82.18 s); build exit 0, dist/server.cjs 1,094,784 bytes; audit 0 vulnerabilities. Security: .env ignored at .gitignore:4, no node_modules/dist tracked, status clean, credential scan of the diff matched nothing. CI red for the owner-account billing lock only (verified via check-run annotations: zero steps, 3 s). PR #8 body refreshed with the finalization results. Window CLOSED (finalized: true). Next window starts 21:05 IST 2026-10-16; resume the item-13 sweep in server.ts / server_tools.ts."
+  "notes": "New window 2026-10-16 -> 2026-10-17, slot 1 (21:05 IST). RECON ONLY, no code change: re-read the server.ts durability guard (findUnbackedDurabilityClaims) - sound; enumerated every discarded persist* return in server.ts (2117,2145,2152,2271,2595,2905,3927,7209,7382,9153) and judged each benign. Gates NOT RUN this slot - the run hit its 1800 s cap during recon. Nothing untested shipped. Next slot: harden saveLocalContacts() in src/utils/telephonyEngine.ts (returns void, swallows errors) with read-back verdict + test, and PUSH EARLY."
 }
