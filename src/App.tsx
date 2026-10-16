@@ -90,6 +90,7 @@ import {
 } from './utils/offlineStorage';
 import { classifyMemoryStoreWrite, classifySyncQueueWrite } from './utils/hardening/memoryStoreTruth';
 import { classifyChatHistoryWrite, flushChatHistoryNotice } from './utils/hardening/chatHistoryStoreTruth';
+import { classifyVoiceSettingsWrite } from './utils/hardening/voiceSettingsStoreTruth';
 import { processOfflineCommand } from './utils/localJarvisEngine';
 import {
   determineTtsLocale,
@@ -272,7 +273,10 @@ export default function App() {
   }, [memory]);
 
   useEffect(() => {
-    saveLocalVoiceSettings(voiceSettings);
+    // Capture the real verdict so a refused settings write is surfaced rather
+    // than discarded, matching the chat-history persist effect (item 13).
+    const voiceWrite = classifyVoiceSettingsWrite(saveLocalVoiceSettings(voiceSettings));
+    if (voiceWrite.notice) setMemorySaveNotice(voiceWrite.notice);
   }, [voiceSettings]);
 
   // Mirror the server kill-switch position so the Computer Operator HUD can show
