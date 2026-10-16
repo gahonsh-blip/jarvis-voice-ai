@@ -1,15 +1,20 @@
 {
   "window_date": "2026-10-17",
   "window_started_at": "2026-10-16T15:35:00Z",
-  "last_slot_at": "2026-10-16T22:36:00Z",
-  "slots_completed": 8,
+  "last_slot_at": "2026-10-16T23:25:00Z",
+  "slots_completed": 9,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "4c0e728",
+  "last_commit": "0c98956",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": false,
-  "finalization_result": null,
-  "blocked_items": ["real-android-e2e: no handset/emulator", "real-screenshot: no display session", "wake-word: no microphone device"],
+  "finalized": true,
+  "finalization_result": "VERIFIED_LOCAL — lint exit 0; 262 files / 2840 tests passed (81s, 0 failed); build exit 0 (dist/server.cjs 1,096,002 bytes); npm audit --omit=dev 0 vulnerabilities; .env gitignored; no node_modules/dist tracked; diff credential scan clean. CI: 0 green checks in 344 runs — jobs report 0 steps and no runner, failing in ~3s (owner-account/runner-allocation block, not a code failure). PR #8 open, non-draft, mergeable. main NOT merged — awaiting human approval.",
+  "blocked_items": [
+    "real-android-e2e: no handset/emulator",
+    "real-screenshot: no display session",
+    "wake-word: no microphone device",
+    "ci-green-check: no runner assigned to jobs (owner-account/runner block); job logs expired"
+  ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
