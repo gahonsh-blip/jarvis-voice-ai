@@ -38,21 +38,39 @@ export function loadBridgeRegistration(): BridgeRegistration | null {
   }
 }
 
-export function saveBridgeRegistration(reg: BridgeRegistration): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Persist a bridge registration and report whether it actually landed.
+ *
+ * Returns `true` only when the serialised registration reads back from the
+ * store. The previous `void` signature swallowed the storage error in an empty
+ * catch, so a refused write (quota, private mode, or no browser window) was
+ * indistinguishable from a durable one: the UI reported the handset as
+ * registered while `loadBridgeRegistration()` returned nothing on the next
+ * load. A silent no-op write (accepted call, dropped bytes) is also reported as
+ * a refusal, because only a read-back can tell the difference.
+ */
+export function saveBridgeRegistration(reg: BridgeRegistration): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(BRIDGE_STORAGE_KEY, JSON.stringify(reg));
+    return localStorage.getItem(BRIDGE_STORAGE_KEY) !== null;
   } catch {
-    // ignore
+    return false;
   }
 }
 
-export function clearBridgeRegistration(): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Remove the bridge registration and report whether the removal actually
+ * reached the store. A refused `removeItem` used to return `void`, so a
+ * disconnect that never happened still looked complete.
+ */
+export function clearBridgeRegistration(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.removeItem(BRIDGE_STORAGE_KEY);
+    return localStorage.getItem(BRIDGE_STORAGE_KEY) === null;
   } catch {
-    // ignore
+    return false;
   }
 }
 
