@@ -19409,3 +19409,84 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में App.tsx के voice-settings persistence verdict को सतह पर लाया गया
   (पहले चुपचाप नज़रअंदाज़ होता था), 8 टेस्ट के साथ; बाकी गेट हरे, main पर merge नहीं।
+
+---
+
+## Slot report — 2026-10-17 02:06 IST (WORK SLOT 7, window 2026-10-16 → 2026-10-17)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:06
+Window date: 2026-10-17   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL, advanced) — `saveBridgeRegistration`
+  / `clearBridgeRegistration` (`src/utils/mobileBridgeEngine.ts`) returned `void` and
+  swallowed the storage error in an empty catch. A refused write (quota, private
+  mode, no `localStorage`) was indistinguishable from a durable one: the bridge UI
+  reported the handset as registered while `loadBridgeRegistration()` returned
+  nothing on the next load, and a disconnect that never happened looked complete.
+  Both writers now return the real durability verdict — `true` only when the
+  serialised registration reads back from the store (save) / is gone from it
+  (clear), `false` on a thrown refusal, on a silent no-op write, and with no
+  browser window.
+  Evidence: `src/tests/bridgeRegistrationDurabilityTruth.test.ts` (7 cases) —
+  accepted save → `true` and readable back; thrown refusal → `false` with the store
+  left empty; silent no-op write → `false`; refused clear → `false` with the
+  registration still present; accepted clear → `true` and gone; no window → `false`;
+  source guard that no `: void` writer remains. Negative-validated — `git stash` of
+  `mobileBridgeEngine.ts` failed **7 of 7**; restored → 7/7. Targeted run
+  `bridgeRegistrationDurabilityTruth` + `mobileBridgeEngine` → **2 files / 38 passed**.
+
+In Progress:
+- #13 — the sweep is not exhausted. Next targets: `persistDedupStore`
+  (`mobileNotificationPrivacy.ts`), the discarded writes at `computerOperatorEngine.ts`
+  395 / 410, and the dead `MOBILE_STATUS_CACHE_KEY` write in `mobileStatusEngine.ts`.
+
+Remaining:
+- #13 tail (above); the rest of the 60-item backlog unchanged from `docs/COMPLETION_STATUS.md`.
+
+Bugs Found:
+- `saveBridgeRegistration` / `clearBridgeRegistration` discarded the storage verdict
+  (empty `catch`, `void` return). Found by grepping every `localStorage` writer whose
+  signature is `void` and whose callers report a connection state.
+
+Bugs Fixed:
+- Both writers now return the observed verdict; proven by the 7-case suite above,
+  negative-validated to 7/7 failures without the fix.
+
+Tests:    Targeted: 2 files / 38 passed (`bridgeRegistrationDurabilityTruth`,
+          `mobileBridgeEngine`). Full `npx vitest run`: NOT RUN (1800 s cap;
+          full suite deferred to protect the push).
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 (observed).
+Build:    NOT RUN (1800 s cap; full-suite leg deferred to protect the push).
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox.
+Security: No `.env` touched, no secret read, written, logged, or committed. Diff is
+          two source files + one test; no credential, token, or key present.
+          Permission gateway untouched and not weakened.
+
+Documentation: `automation/reports/hermes-window-log.md` (this section).
+Branch:  feature/hermes-full-completion
+Commit:  9214c94
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft; not refreshed this slot — see Next Slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified `dist/server.cjs` artifact is the deployment unit available.
+
+Blocked:
+- Real Android E2E / real screenshot / wake-word — require a physical handset or
+  emulator with a display session: NOT_AVAILABLE in this sandbox.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner approval only).
+
+Next Slot:
+- #13 continued — `persistDedupStore` in `mobileNotificationPrivacy.ts`: it returns
+  `void` today, so the dedup store's write verdict is discarded. Same pattern,
+  reachable and testable in-sandbox. Then refresh PR #8 body with the accumulated
+  gate results.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में mobile bridge registration के persistence verdict को सतह पर लाया गया
+  (पहले चुपचाप नज़रअंदाज़ होता था), 7 टेस्ट के साथ; lint हरा, main पर merge नहीं।
