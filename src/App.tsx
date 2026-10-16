@@ -89,6 +89,7 @@ import {
   clearPendingSyncQueue,
 } from './utils/offlineStorage';
 import { classifyMemoryStoreWrite, classifySyncQueueWrite } from './utils/hardening/memoryStoreTruth';
+import { classifyChatHistoryWrite, flushChatHistoryNotice } from './utils/hardening/chatHistoryStoreTruth';
 import { processOfflineCommand } from './utils/localJarvisEngine';
 import {
   determineTtsLocale,
@@ -256,9 +257,12 @@ export default function App() {
   const voiceSessionRef = useRef<VoiceSession>(new VoiceSession());
   const [pendingVoiceConfirm, setPendingVoiceConfirm] = useState<string | null>(null);
 
-  // Synchronize state changes to localStorage
+  // Synchronize state changes to localStorage. The writer reports whether the
+  // write reached storage; a refused write is surfaced rather than discarded, so
+  // an ephemeral transcript is never mistaken for a durable one (item 13).
   useEffect(() => {
-    saveLocalChatHistory(messages);
+    const chatWrite = classifyChatHistoryWrite(saveLocalChatHistory(messages), 'The latest chat message');
+    if (chatWrite.notice) setMemorySaveNotice(chatWrite.notice);
   }, [messages]);
 
   useEffect(() => {
@@ -1170,11 +1174,15 @@ export default function App() {
           actionExecuted,
           actionDetail,
         };
+        let historyPersisted: boolean | null = null;
         setMessages((prev) => {
           const next = [...prev, msg];
-          saveLocalChatHistory(next);
+          historyPersisted = saveLocalChatHistory(next);
           return next;
         });
+        // The updater may be deferred, so the captured verdict is flushed on the
+        // next tick instead of being discarded (item 13).
+        flushChatHistoryNotice(() => historyPersisted, setMemorySaveNotice, 'This reply');
       };
 
       // Announce a terminal operator run, naming the real persistence result so a
@@ -1313,11 +1321,13 @@ export default function App() {
         timestamp: new Date().toISOString(),
       };
 
+      let userMsgPersisted: boolean | null = null;
       setMessages((prev) => {
         const next = [...prev, userMsg];
-        saveLocalChatHistory(next);
+        userMsgPersisted = saveLocalChatHistory(next);
         return next;
       });
+      flushChatHistoryNotice(() => userMsgPersisted, setMemorySaveNotice, 'Your message');
 
       setIsProcessing(true);
       setStatusText(`ANALYZING COMMAND: "${text}"`);
@@ -1355,11 +1365,13 @@ export default function App() {
           actionDetail: data.actionDetail,
         };
 
+        let jarvisMsgPersisted: boolean | null = null;
         setMessages((prev) => {
           const next = [...prev, jarvisMsg];
-          saveLocalChatHistory(next);
+          jarvisMsgPersisted = saveLocalChatHistory(next);
           return next;
         });
+        flushChatHistoryNotice(() => jarvisMsgPersisted, setMemorySaveNotice, 'This reply');
 
         if (data.memory) {
           // The merged memory is written here; capture the storage verdict and
