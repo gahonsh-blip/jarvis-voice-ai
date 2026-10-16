@@ -34,7 +34,7 @@ import {
   oauthDisconnectNotice,
 } from '../utils/hardening/oauthDisconnectAuditTruth';
 
-const JARVIS_PORT = 4766;
+const JARVIS_PORT = 4770;
 let jarvis: ChildProcess | undefined;
 let memoryDir: string;
 let memoryFile: string;

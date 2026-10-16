@@ -21,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { restoreAuditNote } from '../utils/hardening/restoreAuditDurabilityTruth';
 
-const JARVIS_PORT = 4766;
+const JARVIS_PORT = 4769;
 let jarvis: ChildProcess | undefined;
 let memoryDir: string;
 let memoryFile: string;
