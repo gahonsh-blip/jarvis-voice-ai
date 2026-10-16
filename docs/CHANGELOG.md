@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-17 04:35 IST — finalization slot: server-spawning durability tests no longer share port 4766
+
+### Fixed
+- **Three test files that spawn a real `tsx server.ts` child all hardcoded `const JARVIS_PORT = 4766`, so under vitest's default file parallelism they raced for the port.** `autonomousGoalRunDurabilityTruth.test.ts`, `restoreAuditDurabilityTruth.test.ts` and `oauthDisconnectAuditDurabilityTruth.test.ts` each started a server on the same port. One file's child failed to bind (`EADDRINUSE`) while its `waitForServer` poll still succeeded — against the *other* file's server, which runs with a different `JARVIS_MEMORY_FILE`. The racing file's temp `memory.json` was therefore never created, and its `afterAll` `chmodSync(memoryFile, 0o644)` threw `ENOENT`. The failure looked like a cross-file flake because each file passed in isolation.
+- Each file now binds a distinct, previously-unused port: `autonomousGoalRunDurabilityTruth` keeps `4766`, `restoreAuditDurabilityTruth` uses `4769`, `oauthDisconnectAuditDurabilityTruth` uses `4770` — matching the repository's existing convention of one port per server-spawning test file.
+
+### Tests
+- Reproduction on the pre-fix tree: the three files run together reported `1 failed | 16 passed`; after the fix they report `17 passed`. Full suite: **262 files / 2840 tests passed** (81.08 s, 0 failed — previously `1 failed | 2839 passed`).
+
+### Gates (observed this fire)
+- `npm run lint` (`tsc --noEmit`) exit 0; `npm run build` exit 0 (`dist/server.cjs` 1,096,002 bytes).
+- E2E: NOT RUN (no handset / no display session). Deploy: `NOT_CONFIGURED`.
+
+---
+
+
 ## [Unreleased] - 2026-10-17 01:05 IST — window 2026-10-16/17 slot 6: voice-settings write verdict is surfaced, not discarded
 
 ### Fixed
