@@ -19179,3 +19179,91 @@ Next Slot:
 हिंदी सारांश: स्लॉट 3 में `saveCachedLocation` अब असली durability verdict लौटाता है
 — नाकाम कैश-राइट पर UI "FIX NOT CACHED" दिखाता है; lint/build हरे, 2799 टेस्ट पास,
 बदलाव push हो गया; item #13 अभी भी PARTIAL है।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:36
+Window date: 2026-10-17   Window slots completed so far: 3 (this is slot 4)
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (audit slice only; no source edit shipped).
+  Evidence (commands actually run this slot, real output observed):
+  * node /tmp/scan4.mjs  -> exit 0, 0 unguarded persist*() sites on mutating
+    success routes in server.ts. Every POST route carrying success: true either
+    reads its terminal state back from disk or carries no durability claim.
+  * node /tmp/scan5.mjs  -> saveBridgeRegistration (src/utils/mobileBridgeEngine.ts:41)
+    is the ONLY exported void-returning storage writer with a swallowed catch.
+  * node /tmp/scan6.mjs  -> enumerated ~80 exported boolean-returning persist helpers
+    and listed every call site that discards the verdict.
+
+In Progress:
+- #13 — concrete, evidence-backed targets identified for the next slot:
+  1. saveBridgeRegistration / clearBridgeRegistration
+     (src/utils/mobileBridgeEngine.ts:41,50) — void return, swallowed catch.
+     Caveat: no production caller exists (only the test file imports them), so a
+     fix here is truthfulness hardening, not a live-UI bug.
+  2. setAppPolicy (src/utils/mobileNotificationPrivacy.ts:428) discards the
+     saveMobileBridgePolicy verdict, while its sibling applyCategoryPolicy
+     (:457) returns { policy, persisted }. setAppPolicy is imported at
+     MobileBridgeModal.tsx:24 but has no call site — dead import, latent trap.
+  3. persistDedupStore (src/utils/mobileNotificationPrivacy.ts:209) — void,
+     swallowed catch, reached from isDuplicateNotification (:222).
+
+Remaining:
+- #13 remainder, then items 14+ per docs/COMPLETION_STATUS.md ordering.
+- Blocked (unchanged, recorded on the state branch): #1, #2 (physical handset),
+  #33 (carrier credentials), #54 (live provider credentials), #55 (real hardware).
+
+Bugs Found:
+- setAppPolicy silently discards the durability verdict its sibling
+  applyCategoryPolicy returns, and is imported but never called in
+  MobileBridgeModal.tsx. Found by reading mobileNotificationPrivacy.ts:414-464
+  and grepping call sites (/tmp/scan6.mjs DISCARDED output).
+- saveBridgeRegistration / clearBridgeRegistration swallow storage errors and
+  return void, so a refused write is indistinguishable from a saved one.
+  Found by /tmp/scan5.mjs.
+
+Bugs Fixed:
+- NONE this slot. No source file was modified, so there is nothing to claim.
+
+Tests:    NOT RUN — the 30-minute slot cap was reached during the audit; no test
+          output was observed this slot.
+Lint:     NOT RUN — same reason.
+Build:    NOT RUN — same reason.
+E2E:      NOT RUN.
+Security: NOT RUN — git check-ignore -v .env and the diff scan were not
+          executed this slot.
+
+Documentation: automation/reports/hermes-window-log.md (this report appended).
+Branch:  feature/hermes-full-completion
+Commit:  see the push line below
+Push:    see below
+
+PR:         #8 (opened in an earlier slot; not modified this slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment.
+
+Blocked:
+- #1 / #2 — require a physical paired Android handset.
+- #33 — requires carrier/provider credentials.
+- #54 — requires live provider credentials.
+- #55 — requires real-device hardware.
+
+Human Approval Required:
+- None new. PR #8 remains awaiting a human read plus a one-click merge.
+
+Next Slot:
+- #13 continued: change saveBridgeRegistration/clearBridgeRegistration to return
+  boolean, and give setAppPolicy an applyAppPolicy-style { policy, persisted }
+  verdict mirroring applyCategoryPolicy. Add regression tests in
+  src/tests/mobileNotificationPrivacy.test.ts and
+  src/tests/mobileBridgeEngine.test.ts, negative-validate by reverting the fix,
+  then run lint + targeted tests + full suite + build and push.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में कोई सोर्स बदलाव नहीं किया गया — #13 के लिए स्कैन चलाकर तीन असली
+  कमज़ोरियाँ (saveBridgeRegistration, setAppPolicy verdict discard, persistDedupStore)
+  पहचानीं; समय-सीमा समाप्त होने के कारण टेस्ट/लिंट/बिल्ड NOT RUN रहे।
