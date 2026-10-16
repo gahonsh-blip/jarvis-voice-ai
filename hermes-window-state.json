@@ -1,12 +1,12 @@
 {
   "window_date": "2026-10-17",
   "window_started_at": "2026-10-16T15:36:00Z",
-  "last_slot_at": "2026-10-16T17:55:00Z",
-  "slots_completed": 3,
+  "last_slot_at": "2026-10-16T18:39:00Z",
+  "slots_completed": 4,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "369e11b",
+  "last_commit": "b3a376c",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -18,5 +18,5 @@
     { "item": 55, "title": "Real-device hardware items", "reason": "requires real-device hardware" }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 3 (23:05 IST fire). Shipped the saveCachedLocation durability verdict (commit 5538d42) with LocationServicesModal FIX NOT CACHED notice and App locationCacheRefused wiring; new test src/tests/locationCacheDurabilityTruth.test.ts 6 cases, negative-validated (2 failed | 4 passed pre-fix). Gates observed: lint exit 0; targeted 2 files / 24 passed; full suite 256 files / 2799 tests passed (81.21 s, 0 failed); build exit 0 (dist/server.cjs 1094784 bytes). Item 13 stays PARTIAL. Next targets: saveBridgeRegistration/clearBridgeRegistration (mobileBridgeEngine.ts), persistDedupStore (mobileNotificationPrivacy.ts), dead MOBILE_STATUS_CACHE_KEY write (mobileStatusEngine.ts). Docs commits ece0d4b, 369e11b. PR #8 open non-draft. Main NOT merged."
+  "notes": "Slot 4 (23:35 IST fire, ran 23:36-00:09). AUDIT-ONLY slot: no source file was modified. Ran three ad-hoc scanners (/tmp/scan4.mjs exit 0 -> 0 unguarded persist*() sites on server.ts success routes; /tmp/scan5.mjs -> saveBridgeRegistration is the only exported void+swallowed-catch storage writer; /tmp/scan6.mjs -> enumerated ~80 boolean persist helpers and their verdict-discarding call sites). Item 13 remains PARTIAL with three concrete next targets: (1) saveBridgeRegistration/clearBridgeRegistration (src/utils/mobileBridgeEngine.ts:41,50) void + swallowed catch, no production caller; (2) setAppPolicy (src/utils/mobileNotificationPrivacy.ts:428) discards the saveMobileBridgePolicy verdict that sibling applyCategoryPolicy (:457) returns, imported-but-uncalled at MobileBridgeModal.tsx:24; (3) persistDedupStore (src/utils/mobileNotificationPrivacy.ts:209) void + swallowed catch via isDuplicateNotification (:222). Gates NOT RUN this slot (lint/tests/build) because the 30-minute cap was reached during the audit - recorded honestly as NOT RUN. CONCURRENCY NOTE: commits d0b3e29 (daemon refused-final-save fix), 82ac196 (full-suite 257 files / 2807 passed + build) and 5c3a582 landed on feature/hermes-full-completion from a concurrent run at this same fire; they self-label as 'slot 4'. This run's report commit b3a376c was rebased onto 5c3a582 (no force-push). Report appended to automation/reports/hermes-window-log.md. PR #8 open, non-draft. Main NOT merged - awaiting human approval."
 }
