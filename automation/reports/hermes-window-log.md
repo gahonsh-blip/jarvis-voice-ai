@@ -19032,3 +19032,31 @@ Next Slot:
   audit 0 vulns; CI का लाल होने का असली कारण — "account is locked due to a billing issue"
   (शून्य स्टेप, 3 सेकंड) — कोड की ग़लती नहीं; PR #8 खुला है, main पर मर्ज नहीं — इंसानी
   अनुमोदन बाक़ी।
+
+---
+
+## Slot 2026-10-17 21:05 IST — WORK (slot 1 of the 2026-10-16→17 window)
+
+Item #13 (zero fake success) — RECON ONLY. No code change shipped.
+
+- Re-read the server.ts durability guard (`findUnbackedDurabilityClaims` in
+  `src/utils/hardening/durabilityClaimScan.ts` + its invariant test): sound, no
+  violation. Every mutating route that claims `persisted: true` can either read
+  its state back from disk or refuse the claim.
+- Enumerated every *discarded* persistence return in server.ts and read each:
+  bare `persistMemory();` at lines 2117, 2145, 2152, 2271, 2595, 2905 (OAuth
+  cache refresh / already-refused branches), 3927 (telegram reply log);
+  `persistEmergencyState();` at 7209, 7382 (no-op refusal paths);
+  `persistScheduledGoals();` at 9153 (rollback after an honest 500). All benign
+  today — none is surfaced to a caller as a durability fact — but each is a
+  latent fake-success vector if a future change reports it.
+- Candidate for next slot: `saveLocalContacts()` in `src/utils/telephonyEngine.ts`
+  still returns `void` and swallows storage errors, unlike its already-hardened
+  peers (`saveLocalChatHistory`, `saveLocalVoiceSettings`, `queuePendingSync`).
+
+Gates this slot: Tests NOT RUN · Lint NOT RUN · Build NOT RUN — the run hit its
+1800 s cap (started 15:36 UTC) during recon, before a tested change could be
+committed. Nothing untested was shipped. No secret was printed or written.
+
+हिंदी सारांश: नई विंडो का पहला स्लॉट — केवल recon (#13 टर्मिनल-राइटर ऑडिट); रन कैप
+के कारण कोई कोड बदलाव टेस्ट-सहित पुश नहीं हो सका। कोई झूठा पास दर्ज नहीं किया गया।
