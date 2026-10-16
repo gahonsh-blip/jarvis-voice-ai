@@ -110,14 +110,19 @@ export function loadLocalContacts(): ContactItem[] {
 }
 
 /**
- * Save contacts
+ * Save contacts. Returns whether the write actually landed, mirroring
+ * `saveLocalCallHistory`: the previous `void` return swallowed the storage
+ * error in an empty catch, so a refused write (quota, private mode, no
+ * `localStorage`) was indistinguishable from a durable one.
  */
-export function saveLocalContacts(contacts: ContactItem[]): void {
-  if (typeof window === 'undefined') return;
+export function saveLocalContacts(contacts: ContactItem[]): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(STORAGE_KEY_CONTACTS, JSON.stringify(contacts));
+    return true;
   } catch (err) {
     console.warn('Failed to save contacts:', err);
+    return false;
   }
 }
 
