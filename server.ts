@@ -2271,6 +2271,7 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
     }
 
     // A rejected token must clear the connection so the UI asks for a reconnect.
+    let rejectedTokenDisconnectPersisted = true;
     if (publishOutcome.failureKind === 'AUTH' || publishOutcome.failureKind === 'PERMISSION') {
       if (oauthConn) {
         oauthConn.connected = false;
@@ -2278,9 +2279,16 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
           publishOutcome.failureKind === 'AUTH'
             ? 'OAuth token rejected. Please reconnect.'
             : 'OAuth token rejected or missing w_member_social scope. Please reconnect.';
-        persistMemory();
+        // Clearing the connection is only real once it reaches disk. The reply
+        // used to announce the reconnect while discarding this verdict, so a
+        // failed write left the durable state still reporting the account as
+        // connected.
+        rejectedTokenDisconnectPersisted = persistMemory();
       }
     }
+    const rejectedConnectionNote = rejectedTokenDisconnectPersisted
+      ? ''
+      : ' The rejected-connection marker could not be written to durable storage, so the saved state may still report this account as connected until it is reconnected.';
 
     const attempts = publishOutcome.attempts.length;
     const errDetail = publishOutcome.errorReason || 'unknown error';
@@ -2302,8 +2310,8 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
         executionStatus: 'FAILED',
         verificationStatus: 'PROVIDER_ERROR',
         finalTruthState: 'FAILED',
-        errorReason: `LinkedIn auth/permission error: ${errDetail}`,
-        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Ensure 'w_member_social' is approved, then reconnect.`,
+        errorReason: `LinkedIn auth/permission error: ${errDetail}` + rejectedConnectionNote,
+        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Ensure 'w_member_social' is approved, then reconnect.` + rejectedConnectionNote,
       };
     }
 
