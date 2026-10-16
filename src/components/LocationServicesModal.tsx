@@ -52,6 +52,8 @@ interface LocationServicesModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSpeak?: (text: string) => void;
+  /** True when the dashboard's own cache write for this fix was refused. */
+  cacheWriteRefused?: boolean;
   onCoordinatesUpdated?: (
     coords: GeoCoordinates,
     address: LocationAddress | null,
@@ -63,6 +65,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
   isOpen,
   onClose,
   onSpeak,
+  cacheWriteRefused = false,
   onCoordinatesUpdated,
 }) => {
   // State
@@ -88,6 +91,10 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(14);
   const [copiedCoords, setCopiedCoords] = useState<boolean>(false);
   const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
+  // Real verdict of this modal's own cache writes. A refused write must not
+  // present the fix as durably cached — it reverts on the next load.
+  const [cacheRefused, setCacheRefused] = useState<boolean>(false);
+  const cacheWriteRefusedEffective = cacheWriteRefused || cacheRefused;
   const [selectedWaypoint, setSelectedWaypoint] = useState<WaypointMarker>(TACTICAL_PRESETS[0]);
   const [customLat, setCustomLat] = useState<string>('');
   const [customLon, setCustomLon] = useState<string>('');
@@ -125,7 +132,9 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           setIsLoading(false);
           const addr = await reverseGeocodeCoordinates(newCoords.latitude, newCoords.longitude);
           setAddress(addr);
-          saveCachedLocation(newCoords, addr);
+          // Report the real durability of the cache write; a refused write must
+          // not leave the HUD claiming a cached fix that reverts on reload.
+          setCacheRefused(!saveCachedLocation(newCoords, addr));
           onCoordinatesUpdated?.(newCoords, addr, 'live');
         },
         (err) => {
@@ -187,7 +196,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           setCoords(updated);
           setCoordsSource('live');
           setWatchState('STREAMING');
-          saveCachedLocation(updated, address);
+          setCacheRefused(!saveCachedLocation(updated, address));
           onCoordinatesUpdated?.(updated, address, 'live');
         },
         (err) => {
@@ -288,7 +297,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
     const addr = await reverseGeocodeCoordinates(lat, lon);
     setAddress(addr);
     setIsLoading(false);
-    saveCachedLocation(customCoords, addr);
+    setCacheRefused(!saveCachedLocation(customCoords, addr));
     onCoordinatesUpdated?.(customCoords, addr, 'manual');
     setShowManualInput(false);
   };
@@ -389,6 +398,19 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                 <p className="font-semibold text-amber-300">{permissionError}</p>
                 <p className="text-amber-200/80 mt-1">
                   You can click any preset tactical node below or enter manual coordinates to simulate position tracking.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Cache durability alert — a refused write must not read as cached. */}
+          {cacheWriteRefusedEffective && (
+            <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs font-mono flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-rose-300">FIX NOT CACHED — local storage refused the write</p>
+                <p className="text-rose-200/80 mt-1">
+                  This position is shown for this session only. It is not persisted, so the next load reverts to the previous cached fix or no fix.
                 </p>
               </div>
             </div>

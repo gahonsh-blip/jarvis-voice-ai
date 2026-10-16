@@ -135,6 +135,9 @@ export default function App() {
   // Observed verdict of the last telephony-store write; the Telephony Hub header
   // badge derives from this instead of asserting a durable local save.
   const [telephonyPersistenceState, setTelephonyPersistenceState] = useState<boolean | null>(null);
+  // Observed verdict of the last location-cache write. `false` means the fix was
+  // shown but not persisted, so the HUD must not advertise a cached fix.
+  const [locationCacheRefused, setLocationCacheRefused] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   // The backend's reachability is a separate observation from the browser's
   // network state; it stays null until a probe has actually answered.
@@ -228,7 +231,9 @@ export default function App() {
         setIsLocationLoading(false);
         const addr = await reverseGeocodeCoordinates(c.latitude, c.longitude);
         setUserAddress(addr);
-        saveCachedLocation(c, addr);
+        // Record the real durability of the cache write so the location modal
+        // never presents an unpersisted fix as cached (item 13).
+        setLocationCacheRefused(!saveCachedLocation(c, addr));
       },
       () => {
         setIsLocationLoading(false);
@@ -2100,6 +2105,7 @@ export default function App() {
         isOpen={activeApp === 'location'}
         onClose={() => setActiveApp(null)}
         onSpeak={speakText}
+        cacheWriteRefused={locationCacheRefused}
         onCoordinatesUpdated={(c, a, source) => {
           setUserCoords(c);
           setUserAddress(a);

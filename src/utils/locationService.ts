@@ -177,9 +177,16 @@ export function isResolvedAddress(address: LocationAddress | null): boolean {
 }
 
 /**
- * Save coordinates to local storage for instant dashboard hydration
+ * Cache the last known fix. Returns the real verdict of the write: `true` only
+ * when the serialised fix is readable back from storage, `false` on a refused
+ * write (quota, private mode, no browser window) or a silent no-op.
+ *
+ * The caller must not report the fix as cached on a discarded error — a refused
+ * write leaves the previous entry (or nothing) in the store, so the HUD would
+ * advertise a fix that the next load silently drops.
  */
-export function saveCachedLocation(coords: GeoCoordinates, address: LocationAddress | null) {
+export function saveCachedLocation(coords: GeoCoordinates, address: LocationAddress | null): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(
       STORAGE_KEY,
@@ -189,7 +196,16 @@ export function saveCachedLocation(coords: GeoCoordinates, address: LocationAddr
         savedAt: new Date().toISOString(),
       })
     );
-  } catch {}
+    // A refused write can fail silently; confirm the bytes landed before
+    // reporting the fix as cached.
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return !!parsed && typeof parsed.savedAt === 'string';
+  } catch (err) {
+    console.warn('Failed to cache location fix:', err);
+    return false;
+  }
 }
 
 /**
