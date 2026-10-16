@@ -2110,18 +2110,29 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
 
   // Token expiration timestamp check
   if (oauthConn?.expiresAt && new Date(oauthConn.expiresAt).getTime() < Date.now()) {
+    let disconnectPersisted = true;
     if (oauthConn) {
       oauthConn.connected = false;
       oauthConn.errorReason = 'OAuth token expired. Please reconnect.';
-      persistMemory();
+      // Clearing the connection is only real once it reaches disk. The reply
+      // used to announce the expiry while discarding this verdict, so a failed
+      // write left the durable state still reporting the account as connected.
+      disconnectPersisted = persistMemory();
     }
+    const staleConnectionNote = disconnectPersisted
+      ? ''
+      : ' The expired-connection marker could not be written to durable storage, so the saved state may still report this account as connected until it is reconnected.';
     return {
       success: false,
       executionStatus: 'FAILED',
       verificationStatus: 'PROVIDER_ERROR',
       finalTruthState: 'FAILED',
-      errorReason: 'LinkedIn OAuth token has expired. Please reconnect your Personal Profile via the "Connect LinkedIn" button.',
-      userMessage: '❌ EXPIRED TOKEN: LinkedIn OAuth token has expired. Click "Connect LinkedIn" to refresh authorization.',
+      errorReason:
+        'LinkedIn OAuth token has expired. Please reconnect your Personal Profile via the "Connect LinkedIn" button.' +
+        staleConnectionNote,
+      userMessage:
+        '❌ EXPIRED TOKEN: LinkedIn OAuth token has expired. Click "Connect LinkedIn" to refresh authorization.' +
+        staleConnectionNote,
     };
   }
 
