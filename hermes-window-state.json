@@ -1,42 +1,22 @@
 {
   "window_date": "2026-10-17",
   "window_started_at": "2026-10-16T15:36:00Z",
-  "last_slot_at": "2026-10-16T17:03:00Z",
-  "slots_completed": 2,
+  "last_slot_at": "2026-10-16T17:55:00Z",
+  "slots_completed": 3,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "2f946cb",
+  "last_commit": "369e11b",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": 1,
-      "title": "Real Android Mobile Bridge connection",
-      "reason": "requires a physical paired handset"
-    },
-    {
-      "item": 2,
-      "title": "Android <-> JARVIS <-> Server E2E",
-      "reason": "requires physical device hardware"
-    },
-    {
-      "item": 33,
-      "title": "Telephony carrier dispatch",
-      "reason": "requires carrier/provider credentials"
-    },
-    {
-      "item": 54,
-      "title": "Live provider credential items",
-      "reason": "requires live provider credentials"
-    },
-    {
-      "item": 55,
-      "title": "Real-device hardware items",
-      "reason": "requires real-device hardware"
-    }
+    { "item": 1, "title": "Real Android Mobile Bridge connection", "reason": "requires a physical paired handset" },
+    { "item": 2, "title": "Android <-> JARVIS <-> Server E2E", "reason": "requires physical device hardware" },
+    { "item": 33, "title": "Telephony carrier dispatch", "reason": "requires carrier/provider credentials" },
+    { "item": 54, "title": "Live provider credential items", "reason": "requires live provider credentials" },
+    { "item": 55, "title": "Real-device hardware items", "reason": "requires real-device hardware" }
   ],
   "last_report_path": "/tmp/hermes-window-report.md",
-  "notes": "Slot 2 (22:05 IST fire). No new production change shipped. Verified previous fire's tip c8bb045 (saveLocalContacts durability verdict) with its targeted test: 1 file / 3 passed. Enumerated next untouched void/swallowed-error writers: saveCachedLocation (locationService.ts:182, live callers), saveBridgeRegistration/clearBridgeRegistration (mobileBridgeEngine.ts:41,50, latent), persistDedupStore (mobileNotificationPrivacy.ts:214), dead MOBILE_STATUS_CACHE_KEY write (mobileStatusEngine.ts:414). Full suite NOT RUN - run hit its 1800 s cap; no untested change committed. Next slot: harden saveCachedLocation + surface refusal, run targeted test, PUSH EARLY."
+  "notes": "Slot 3 (23:05 IST fire). Shipped the saveCachedLocation durability verdict (commit 5538d42) with LocationServicesModal FIX NOT CACHED notice and App locationCacheRefused wiring; new test src/tests/locationCacheDurabilityTruth.test.ts 6 cases, negative-validated (2 failed | 4 passed pre-fix). Gates observed: lint exit 0; targeted 2 files / 24 passed; full suite 256 files / 2799 tests passed (81.21 s, 0 failed); build exit 0 (dist/server.cjs 1094784 bytes). Item 13 stays PARTIAL. Next targets: saveBridgeRegistration/clearBridgeRegistration (mobileBridgeEngine.ts), persistDedupStore (mobileNotificationPrivacy.ts), dead MOBILE_STATUS_CACHE_KEY write (mobileStatusEngine.ts). Docs commits ece0d4b, 369e11b. PR #8 open non-draft. Main NOT merged."
 }
