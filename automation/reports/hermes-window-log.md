@@ -19060,3 +19060,52 @@ committed. Nothing untested was shipped. No secret was printed or written.
 
 हिंदी सारांश: नई विंडो का पहला स्लॉट — केवल recon (#13 टर्मिनल-राइटर ऑडिट); रन कैप
 के कारण कोई कोड बदलाव टेस्ट-सहित पुश नहीं हो सका। कोई झूठा पास दर्ज नहीं किया गया।
+
+---
+
+## Slot 2026-10-17 22:05 IST — WORK (slot 2 of the 2026-10-16→17 window)
+
+Item #13 (zero fake success) — audit + carry-forward verification. No new
+production change shipped this slot.
+
+- Read `origin/automation/hermes-state` before acting: `window_date: 2026-10-17`,
+  `slots_completed: 1`, `finalized: false`, `current_item: 13`, tip `570a1ed`.
+- The tip on `feature/hermes-full-completion` is `c8bb045`
+  (`fix(telephony): saveLocalContacts reports real durability verdict`), pushed at
+  21:59 IST by the previous fire, which the state file did not yet record.
+  **Verified this slot:** `npx vitest run src/tests/telephonyContactsDurabilityTruth.test.ts`
+  → 1 file / **3 passed** (220 ms). The change is real: `saveLocalContacts` now
+  returns `boolean` (`true` only when `localStorage.setItem` returned, `false` on
+  refusal and on no `window`), matching `saveLocalCallHistory` /
+  `saveLocalTelephonySettings`.
+- Continued the item-13 sweep and enumerated the next untouched writers that still
+  discard their durability verdict:
+  - `saveCachedLocation()` in `src/utils/locationService.ts:182` — `void`, bare
+    `catch {}`. Called from `LocationServicesModal.tsx` (128, 190, 291) and
+    `App.tsx:231`; the modal already *labels* cached coords as `cache`, but a
+    refused write is still indistinguishable from a durable one to any caller.
+  - `saveBridgeRegistration()` / `clearBridgeRegistration()` in
+    `src/utils/mobileBridgeEngine.ts:41,50` — both `void` with an empty catch. No
+    in-tree caller yet, so the fake-success risk is latent, not live.
+  - `persistDedupStore()` in `src/utils/mobileNotificationPrivacy.ts:214` — `void`,
+    swallows the error; the dedup bucket degrades silently.
+  - `mobileStatusEngine.ts:414` — the `MOBILE_STATUS_CACHE_KEY` write is a
+    bare `catch {}` with no reader anywhere in the tree (dead write).
+
+Gates this slot: targeted `telephonyContactsDurabilityTruth` **1 file / 3 passed**
+(observed). Full `npx vitest run` / `npm run lint` / `npm run build` — **NOT RUN**
+this slot: the run reached its 1800 s cap before the full suite could finish. No
+untested change was committed, so the branch tip is unchanged and green.
+Security: `git check-ignore -v .env` → `.gitignore:4:.env`; no secret printed or
+written. No `node_modules/` or `dist/` staged.
+
+Next Slot: harden `saveCachedLocation()` (`src/utils/locationService.ts`) with a
+read-back durability verdict + surface the refusal in `LocationServicesModal`, then
+`saveBridgeRegistration` / `persistDedupStore`; run the targeted test, commit and
+PUSH EARLY before the full suite.
+
+हिंदी सारांश: इस स्लॉट में कोई नया कोड नहीं भेजा गया — पिछले फ़ायर का टिप `c8bb045`
+(contacts durability) का टारगेटेड टेस्ट 3/3 पास सत्यापित किया, और #13 की अगली
+असत्यापित राइटर-साइटें (saveCachedLocation, saveBridgeRegistration, persistDedupStore)
+सूचीबद्ध कीं; रन कैप के कारण फ़ुल सूट NOT RUN — कोई झूठा पास दर्ज नहीं।
+
