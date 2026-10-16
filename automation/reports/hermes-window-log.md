@@ -19490,3 +19490,46 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में mobile bridge registration के persistence verdict को सतह पर लाया गया
   (पहले चुपचाप नज़रअंदाज़ होता था), 7 टेस्ट के साथ; lint हरा, main पर merge नहीं।
+
+---
+
+## 2026-10-17 04:05 IST — WORK SLOT 8 (2026-10-16 → 2026-10-17 window)
+
+Item 13 (`Zero-fake-success for all tools`) — **the LinkedIn rejected-token disconnect reported a
+credential removal that may never have reached disk.**
+
+In `publishToLinkedIn` (`server.ts`), when a publish failed with `failureKind` `AUTH` or `PERMISSION`,
+the publisher cleared `oauthConn.connected`, wrote an `errorReason`, then called a bare `persistMemory()`
+whose boolean nobody read. `persistMemory()` returns `false` when the write cannot reach disk, so the
+in-memory "disconnected" flag could be lost: after a restart the durable state still reported the account
+as connected while the reply had already told the operator to reconnect. This is the sibling branch of the
+expired-token path fixed in the previous slot (`6d512eb`), inside the same function.
+
+Fix: the verdict is captured in `rejectedTokenDisconnectPersisted`; when the write fails the
+AUTH/PERMISSION failure reply (both `errorReason` and `userMessage`) appends a note naming the durability
+gap, and the note is omitted when no `oauthConn` object is held (nothing to write, nothing to report).
+
+Test: `src/tests/linkedInRejectedTokenDisconnectPersistTruth.test.ts` — 4 cases (capture-not-discard; the
+note is conditional on the write failing; the default is `persisted` when no `oauthConn` is held; the note
+reaches the AUTH/PERMISSION reply).
+
+Negative validation: restoring the pre-fix `server.ts` failed exactly 4 of 4 assertions (`4 failed`);
+restored → 4/4.
+
+Gates (observed this fire):
+- `npm run lint` (`tsc --noEmit`) exit 0
+- targeted: `linkedInRejectedTokenDisconnectPersistTruth` + sibling `linkedInExpiryDisconnectPersistTruth`
+  → 2 files / 7 passed
+- full `npx vitest run` → **1 failed | 261 passed (262 files), 1 failed | 2839 passed (2840 tests)**.
+  The single failure is `src/tests/autonomousGoalRunDurabilityTruth.test.ts`
+  (`ENOENT: chmod /tmp/jarvis-goalrun-*/memory.json`) — a temp-file race under parallel load, **passes 4/4
+  in isolation**, untouched by this slot's 2-file diff, and already documented as a flake in prior slots.
+- `npm run build` → see report; run after the suite.
+
+Commit `c4da7dc` (fix+test), `dd09837` (docs), pushed to `feature/hermes-full-completion`.
+PR #8 open, non-draft. Main **NOT MERGED — awaiting human approval.**
+Deploy: NOT_CONFIGURED — the verified `dist/server.cjs` is the deployment unit available.
+E2E: NOT RUN (no handset, no OAuth grant).
+
+Next slot: `persistDedupStore` in `src/utils/mobileNotificationPrivacy.ts` (notification dedup persistence,
+same discarded-verdict class), then `computerOperatorEngine.ts` 395 / 410.
