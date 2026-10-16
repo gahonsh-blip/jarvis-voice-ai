@@ -4,6 +4,22 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-16 23:05 IST — window 2026-10-16/17 slot 3: `saveCachedLocation` now reports a real durability verdict
+
+### Fixed
+- **`saveCachedLocation` (`src/utils/locationService.ts`) swallowed the storage error in a bare `catch` and returned `void`, so a refused write read exactly like a durable one.** A write refused for quota, in private browsing, or with no `window` at all was indistinguishable from a successful cache: the Location Services modal and the dashboard presented the fix as cached while the next load reverted to the previous entry — or to no fix at all.
+- The writer now returns `boolean` — `true` only when the serialised fix reads back from the store with a `savedAt` stamp, `false` on a thrown refusal, on a silent no-op write, and when there is no browser window.
+- `LocationServicesModal.tsx` captures the verdict at all three write sites (live fix, watch position, custom coordinates) and renders a **`FIX NOT CACHED`** notice instead of staying silent. `App.tsx` records its own live-fix verdict in `locationCacheRefused` and passes it into the modal as `cacheWriteRefused`, so a refused dashboard write is not hidden by a modal that had not attempted one.
+
+### Tests
+- New `src/tests/locationCacheDurabilityTruth.test.ts` (6 cases): accepted write → `true` and readable back; refused write → `false`; silent no-op write → `false`; no window → `false`; plus source guards that no unguarded `saveCachedLocation(` call remains in the modal, that the refusal is rendered, and that the App captures and passes the verdict. Negative-validated — restoring the pre-fix swallow-the-error behaviour failed exactly 2 assertions (`2 failed | 4 passed`); restored → 6/6.
+
+### Gates (observed this fire)
+- `npm run lint` (`tsc --noEmit`) exit 0; targeted `locationCacheDurabilityTruth` + `locationServicesTruth` → 2 files / 24 passed; full `npx vitest run` **256 files / 2799 tests passed** (81.21 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1,094,784 bytes).
+- E2E: NOT RUN (no handset / no display session). Deploy: `NOT_CONFIGURED`.
+
+---
+
 ## [Unreleased] - 2026-10-16 04:36 IST — window 2026-10-15/16 finalization slot: window closed, verified, awaiting human merge
 
 ### Verified
