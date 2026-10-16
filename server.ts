@@ -27,6 +27,7 @@ import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardenin
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
 import { oauthConnectAuditNote } from './src/utils/hardening/oauthConnectDurabilityTruth';
 import { restoreAuditNote } from './src/utils/hardening/restoreAuditDurabilityTruth';
+import { shutdownOutcome } from './src/utils/hardening/daemonShutdownDurabilityTruth';
 import { oauthDisconnectMessage } from './src/utils/hardening/oauthDisconnectAuditTruth';
 import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
 import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel, resolveLinkedInAuthorUrn, AUTHOR_URN_NOT_RECORDED_LABEL } from './src/utils/hardening/socialAccountIdTruth';
@@ -297,18 +298,16 @@ process.on('unhandledRejection', (reason: any) => {
   console.warn('[Daemon Process Guard] Unhandled Rejection caught safely:', reason?.message || reason);
 });
 
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-  console.log('[Daemon] SIGTERM received. Persisting state and shutting down gracefully...');
-  persistMemory();
-  process.exit(0);
-});
+// Graceful shutdown handling. The final save's durability verdict decides the
+// exit code: a refused write must not be laundered into a clean exit.
+const handleShutdown = (signal: string) => {
+  const outcome = shutdownOutcome(signal, persistMemory());
+  console.log(outcome.logLine);
+  process.exit(outcome.exitCode);
+};
 
-process.on('SIGINT', () => {
-  console.log('[Daemon] SIGINT received. Persisting state and shutting down gracefully...');
-  persistMemory();
-  process.exit(0);
-});
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
