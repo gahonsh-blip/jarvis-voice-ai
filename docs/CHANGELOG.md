@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-17 01:05 IST — window 2026-10-16/17 slot 6: voice-settings write verdict is surfaced, not discarded
+
+### Fixed
+- **`src/App.tsx` called `saveLocalVoiceSettings(voiceSettings)` as a bare statement in its persist effect (`useEffect([voiceSettings])`), discarding the boolean that reports whether the settings reached `localStorage`.** `saveLocalVoiceSettings` already returns that verdict (`src/utils/offlineStorage.ts`). On a full disk, in private mode, or on a host with no `localStorage` the boolean was thrown away: the Settings modal still showed the new rate / pitch / volume / language as applied while the store held the previous values, and the next reload silently restored them — nothing distinguished a durable settings object from an ephemeral one.
+- The verdict is now classified by the new `src/utils/hardening/voiceSettingsStoreTruth.ts` (`classifyVoiceSettingsWrite`, mirroring the existing `chatHistoryStoreTruth` pattern) and a refusal is surfaced through the existing `memorySaveNotice` banner. An unobserved verdict (`null`/`undefined`) is reported as unconfirmed, never upgraded to a save.
+
+### Tests
+- New `src/tests/voiceSettingsStoreTruth.test.ts` (8 cases): landed write silent; refused write names what was lost and states the reload revert; `null`/`undefined` reported as unconfirmed, never as a save; blank-label fallback; and source guards that the import is present, no bare `saveLocalVoiceSettings(...);` discard remains, the persist effect classifies the real verdict, and the refusal reaches `setMemorySaveNotice`. Negative-validated — reverting only the `App.tsx` persist effect failed exactly the 3 wiring guards (`3 failed | 5 passed`); restored → 8/8.
+
+### Gates (observed this fire)
+- `npm run lint` (`tsc --noEmit`) exit 0; targeted `voiceSettingsStoreTruth` 1 file / 8 passed; full `npx vitest run` **259 files / 2826 tests passed** (81.95 s, 0 failed — the previous slot's `oauthDisconnectAuditDurabilityTruth` cross-file flake did not reproduce); `npm run build` exit 0 (`dist/server.cjs` 1,095,307 bytes).
+- E2E: NOT RUN (no handset / no display session). Deploy: `NOT_CONFIGURED`.
+
+---
+
 ## [Unreleased] - 2026-10-17 00:35 IST — window 2026-10-16/17 slot 5: chat-history write verdict is surfaced, not discarded
 
 ### Fixed

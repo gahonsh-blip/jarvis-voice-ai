@@ -19334,3 +19334,78 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में App.tsx के चार स्थानों पर छोड़े गए chat-history persistence verdict को सतह पर
   लाया गया, नए हेल्पर और 11 टेस्ट के साथ; बाकी गेट हरे, main पर merge नहीं किया गया।
+
+
+===== SLOT 2026-10-17 01:05 IST (WORK SLOT 6) =====
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:05
+Window date: 2026-10-17   Window slots completed so far: 6
+
+Completed:
+- #13 Zero-fake-success for all tools (slice: voice-settings persist verdict) —
+  src/App.tsx useEffect([voiceSettings]) called saveLocalVoiceSettings(...) as a
+  bare statement, discarding the boolean that reports whether the settings reached
+  localStorage. A refused write (full disk / private mode / no localStorage) looked
+  durable: the Settings modal showed the new rate/pitch/volume/language as applied
+  while the store held the previous values, reverting silently on reload. Now
+  classified by src/utils/hardening/voiceSettingsStoreTruth.ts
+  (classifyVoiceSettingsWrite) and surfaced through the memorySaveNotice banner.
+  Evidence: src/tests/voiceSettingsStoreTruth.test.ts — 8 passed (classifier +
+  source guards). Negative-validated: reverting only the App persist effect →
+  3 failed | 5 passed; restored → 8/8.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. Remaining tail:
+  saveBridgeRegistration / clearBridgeRegistration in mobileBridgeEngine.ts
+  (NO production callers — test-only, confirmed this slot), persistDedupStore in
+  mobileNotificationPrivacy.ts, discarded writes at computerOperatorEngine.ts
+  395 / 410, dead MOBILE_STATUS_CACHE_KEY write in mobileStatusEngine.ts.
+
+Remaining:
+- #13 tail above; then the backlog items after #13 in the mandated order, most
+  still BLOCKED on hardware/credentials.
+
+Bugs Found:
+- src/App.tsx (pre-fix) discarded the saveLocalVoiceSettings boolean — the same
+  defect class as the chat-history and memory-store sites repaired in slots 4-5.
+- saveBridgeRegistration / clearBridgeRegistration have no production callers
+  (only mobileBridgeEngine.test.ts) — not reachable fake-success paths; recorded,
+  not inflated into a fix.
+
+Bugs Fixed:
+- Voice-settings persistence verdict now captured and surfaced; proven by the
+  3 source guards failing on revert and passing on restore.
+
+Tests:    259 files / 2826 passed, 0 failed (full npx vitest run, 81.95 s).
+          Targeted voiceSettingsStoreTruth 1 file / 8 passed.
+Lint:     exit 0 (tsc --noEmit).
+Build:    exit 0 — dist/server.cjs 1,095,307 bytes.
+E2E:      NOT RUN — no handset / emulator / display session.
+Security: NOT RUN this slot (no .env/token touched; only source + tests changed).
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md, automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  6e5bea0 (fix+test) + docs commit this slot
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; dist/server.cjs is the
+            verified deployment unit available.
+
+Blocked:
+- Real Android E2E / Real Screenshot — require a physical handset or emulator.
+- Provider calls (OAuth connect), telephony — require credentials/grants not present.
+
+Human Approval Required:
+- Merge of PR #8 to main (owner instruction: human-only merge).
+
+Next Slot:
+- #13 tail: harden persistDedupStore in mobileNotificationPrivacy.ts (swallows the
+  storage-full error silently), or the discarded writes at computerOperatorEngine.ts
+  395 / 410. Both reachable and testable in-sandbox, matching this slot's pattern.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में App.tsx के voice-settings persistence verdict को सतह पर लाया गया
+  (पहले चुपचाप नज़रअंदाज़ होता था), 8 टेस्ट के साथ; बाकी गेट हरे, main पर merge नहीं।
