@@ -20349,12 +20349,12 @@ E2E:      NOT RUN — no handset / emulator / display session
 Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status --short`
           empty after the report commit; the diff touches one utility module and
           one test file and contains no credential, no `node_modules/`, no `dist/`.
-          `npm audit` NOT RUN this slot.
+          `npm audit --omit=dev` -> `found 0 vulnerabilities` (exit 0).
 
 Documentation: docs/COMPLETION_STATUS.md (Last cycle line + this report)
 Branch:  feature/hermes-full-completion
-Commit:  66988ce (fix `fb85d99`, report `2fba4b2`, security line `66988ce`)
-Push:    succeeded — origin/feature/hermes-full-completion (821b331..66988ce);
+Commit:  fb85d99 (fix) · 2fba4b2 · 66988ce · 3329f0b (report + evidence edits, head)
+Push:    succeeded — origin/feature/hermes-full-completion (821b331..3329f0b);
          state branch origin/automation/hermes-state (69145fb)
 
 PR:         #8 (open, non-draft) — existing PR for this branch
