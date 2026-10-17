@@ -20381,3 +20381,87 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - टेलीफ़ोनी के तीन लोकल राइटर चुपचाप गिराए गए लेखन को भी "सेव" बता रहे थे; अब वे बाइट्स
   वापस पढ़कर सत्यापित करते हैं, और चार नए टेस्ट इसकी रक्षा करते हैं।
+
+---
+
+## 2026-10-18 03:05 IST — WORK SLOT 12 (window 2026-10-17 → 2026-10-18)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 03:05 (03:13 at report)
+Window date: 2026-10-18   Window slots completed so far: 12
+
+Completed:
+- #13 Zero-fake-success for all tools — the Notification Privacy engine's two
+  writers reported a save whenever localStorage.setItem did not throw.
+  saveMobileBridgePolicy() and persistDedupStore()
+  (src/utils/mobileNotificationPrivacy.ts) each ran setItem(...) and then
+  return true. A store that accepts the call without throwing yet keeps the
+  previous bytes (private browsing, a frozen or quota-clamped store) therefore
+  read as a durable write: the operator saw the WhatsApp privacy filter flip to
+  ALLOW while hermes_jarvis_mobile_bridge_policy_v1 still held DENY and the next
+  reload silently restored it, and a delivered notification dedup record read as
+  stored while the key held nothing, so a re-delivery after a reload was
+  swallowed as a duplicate that was never written. Both writers now serialise
+  once, write, and read the bytes back, returning true only when the store holds
+  exactly what was written.
+  Evidence: src/utils/mobileNotificationPrivacy.ts (saveMobileBridgePolicy
+  ~line 446, persistDedupStore ~line 215); new cases in
+  src/tests/mobileNotificationPrivacy.test.ts — 52 -> 54 cases, all 54 pass.
+
+In Progress:
+- #13 stays PARTIAL — the tail of unclassified success: true /
+  discarded-persistMemory() sites is not exhausted.
+
+Remaining:
+- #13 (tail), then the wider backlog as listed in docs/COMPLETION_STATUS.md.
+  Items #1, #2 and #8 remain hardware-gated (PARTIAL).
+
+Bugs Found:
+- saveMobileBridgePolicy and persistDedupStore both returned a boolean but never
+  read the bytes back, so a silently-dropping store (accepts setItem, keeps the
+  previous bytes) read as durable. The pre-existing tests covered only a
+  *throwing* store and the no-window case, so the silent no-op was invisible.
+  Found by auditing the setItem sites enumerated for item 13.
+
+Bugs Fixed:
+- Both writers now serialise once, write, and read the bytes back
+  (localStorage.getItem(KEY) === serialized). Verification: four new cases on a
+  ControllableStorage refuseSilently stub. Negative-validated — reverting both
+  writers to the write-only return true failed exactly the four new cases
+  (4 failed | 50 passed); restored -> 54/54.
+
+Tests:    266 files / 2896 tests passed (83.54 s, 0 failed) — observed this fire
+Lint:     npm run lint (tsc --noEmit) exit 0 — observed this fire
+Build:    npm run build exit 0; dist/server.cjs 1,099,361 bytes — observed
+E2E:      NOT RUN — no handset / emulator / display session
+Security: 4 files touched (2 source/doc edits + test); no .env, no token, no
+          node_modules/dist staged. git check-ignore -v .env ->
+          .gitignore:4:.env (recorded in a prior fire this window).
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 row + Last cycle),
+               docs/CHANGELOG.md (new Unreleased section).
+Branch:  feature/hermes-full-completion
+Commit:  2291d9dd31bc8553ee34f272837959fd9db72f10
+Push:    succeeded -> origin/feature/hermes-full-completion (7277853..2291d9d)
+
+PR:         #8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified dist/server.cjs is the
+            deployment unit available.
+
+Blocked:
+- #1 Real Android Mobile Bridge connection — requires a paired physical handset.
+- #2 Android<->Server E2E — device-to-server leg requires hardware.
+- #8 Real Windows screenshot capture — requires a Windows host.
+
+Human Approval Required:
+- Merge of PR #8 to main (owner approval only; no automated merge).
+
+Next Slot:
+- #13 tail — continue auditing the unclassified success: true /
+  discarded-persistMemory() sites (next candidates in server.ts /
+  server_tools.ts), or rotate to the next non-VERIFIED backlog item.
+
+हिंदी सारांश (एक पंक्ति):
+- Notification Privacy के दोनों storage writers अब लिखे गए bytes वापस पढ़कर सच बताते हैं; चुपचाप drop होने वाला write अब "saved" नहीं दिखता (54/54 tests, lint/build green, commit 2291d9d pushed).
