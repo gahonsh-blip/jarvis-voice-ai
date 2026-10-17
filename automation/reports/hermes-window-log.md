@@ -20346,8 +20346,10 @@ Tests:    266 files / 2892 tests passed, 0 failed (81.06 s) — `npx vitest run`
 Lint:     `npm run lint` (`tsc --noEmit`) exit 0
 Build:    `npm run build` exit 0 — `dist/server.cjs` 1,099,361 bytes
 E2E:      NOT RUN — no handset / emulator / display session
-Security: NOT RUN this slot (no credential-bearing file touched; the diff is one
-          utility module and one test file)
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status --short`
+          empty after the report commit; the diff touches one utility module and
+          one test file and contains no credential, no `node_modules/`, no `dist/`.
+          `npm audit` NOT RUN this slot.
 
 Documentation: docs/COMPLETION_STATUS.md (Last cycle line + this report)
 Branch:  feature/hermes-full-completion
