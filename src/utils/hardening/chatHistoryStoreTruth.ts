@@ -46,6 +46,26 @@ export function classifyChatHistoryWrite(
 }
 
 /**
+ * Turn the real `clearLocalChatHistory` verdict into a notice. A refused clear
+ * leaves the stored transcript in place, and `loadLocalChatHistory` then falls
+ * back to the seeded transcript when the key is absent — so adopting the loaded
+ * value unconditionally showed a seeded conversation and hid the refusal.
+ */
+export function classifyChatHistoryClear(persisted: boolean | null | undefined): ChatHistoryWriteNotice {
+  if (persisted === true) return { persisted: true, notice: '' };
+  if (persisted === false) {
+    return {
+      persisted: false,
+      notice: 'The chat history could NOT be cleared from local storage; the stored transcript remains and will return on reload.',
+    };
+  }
+  return {
+    persisted: false,
+    notice: 'The chat history clear was not confirmed; the stored transcript may still return on reload.',
+  };
+}
+
+/**
  * Surface the verdict of a chat-history write that was captured inside a React
  * state updater. The updater may be deferred, so the captured value cannot be
  * read synchronously; it is flushed on the next tick, exactly as the App's

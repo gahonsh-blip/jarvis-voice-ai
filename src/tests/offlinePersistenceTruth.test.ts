@@ -169,3 +169,45 @@ describe('App.tsx sync flush observes the queue-clear result', () => {
     expect(appFlat).toContain('BACKEND RECONNECTED • MEMORY SYNCED${flushNotice}');
   });
 });
+
+// Item 13 (Zero-fake-success). `clearLocalChatHistory` returned `true` straight
+// after `removeItem`, so a store that reported success without deleting the key
+// (locked-down or quota-frozen storage) looked like an emptied history while the
+// transcript was still on disk. The sibling clears already read the key back;
+// this one now does too.
+describe('clearLocalChatHistory reports whether the key is actually gone', () => {
+  it('returns true when the key is confirmed removed', async () => {
+    const { saveLocalChatHistory, clearLocalChatHistory, loadLocalChatHistory } = await loadModule();
+    expect(saveLocalChatHistory([{ role: 'user', content: 'hi' }] as any)).toBe(true);
+    expect(clearLocalChatHistory()).toBe(true);
+    expect(store.getItem('hermes_jarvis_chat_history_v1')).toBeNull();
+    // With the key gone the loader falls back to the seeded transcript.
+    expect(Array.isArray(loadLocalChatHistory())).toBe(true);
+  });
+
+  it('returns false when the removal reports success but the key survives', async () => {
+    const { saveLocalChatHistory, clearLocalChatHistory } = await loadModule();
+    saveLocalChatHistory([{ role: 'user', content: 'keep me' }] as any);
+    store.ignoreRemoves = true;
+    // A bare `removeItem` reports success here; only reading the key back
+    // distinguishes "cleared" from "silently not cleared".
+    expect(clearLocalChatHistory()).toBe(false);
+    store.ignoreRemoves = false;
+    expect(store.getItem('hermes_jarvis_chat_history_v1')).not.toBeNull();
+  });
+
+  it('returns false when localStorage throws on removal', async () => {
+    const { saveLocalChatHistory, clearLocalChatHistory } = await loadModule();
+    saveLocalChatHistory([{ role: 'user', content: 'keep me' }] as any);
+    store.failRemoves = true;
+    expect(clearLocalChatHistory()).toBe(false);
+    store.failRemoves = false;
+    expect(store.getItem('hermes_jarvis_chat_history_v1')).not.toBeNull();
+  });
+
+  it('returns false when there is no browser window (SSR / Node)', async () => {
+    const { clearLocalChatHistory } = await loadModule();
+    vi.stubGlobal('window', undefined);
+    expect(clearLocalChatHistory()).toBe(false);
+  });
+});

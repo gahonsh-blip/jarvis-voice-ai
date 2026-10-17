@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   classifyChatHistoryWrite,
+  classifyChatHistoryClear,
   flushChatHistoryNotice,
 } from '../utils/hardening/chatHistoryStoreTruth';
 
@@ -101,5 +102,52 @@ describe('App.tsx no longer discards the chat-history write verdict', () => {
 
   it('reports a refused persist-effect write instead of dropping it', () => {
     expect(appSource).toMatch(/classifyChatHistoryWrite\(saveLocalChatHistory\(messages\)/);
+  });
+});
+
+// Item 13 (Zero-fake-success). The clear-history handler called
+// `clearLocalChatHistory()` as a bare statement, then adopted
+// `loadLocalChatHistory()`. Because the loader falls back to the seeded
+// transcript when the key survives, a refused clear showed a seeded
+// conversation and the stored transcript returned on reload with nothing said.
+describe('chat-history clear verdict is classified, not discarded', () => {
+  it('a landed clear is silent', () => {
+    expect(classifyChatHistoryClear(true)).toEqual({ persisted: true, notice: '' });
+  });
+
+  it('a refused clear states that the stored transcript remains', () => {
+    const r = classifyChatHistoryClear(false);
+    expect(r.persisted).toBe(false);
+    expect(r.notice).toContain('could NOT be cleared');
+    expect(r.notice).toContain('remains');
+    expect(r.notice).toContain('reload');
+  });
+
+  it('an unobserved clear is reported as unconfirmed, never as a clear', () => {
+    for (const unobserved of [null, undefined]) {
+      const r = classifyChatHistoryClear(unobserved);
+      expect(r.persisted).toBe(false);
+      expect(r.notice).toContain('not confirmed');
+      expect(r.notice).not.toContain('could NOT be cleared');
+    }
+  });
+});
+
+describe('App.tsx clear-history handler observes the clear result', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'App.tsx'), 'utf8');
+  const appFlat = appSource.replace(/\s+/g, ' ');
+
+  it('captures the clear verdict instead of discarding it', () => {
+    expect(appFlat).toMatch(/const cleared = clearLocalChatHistory\(\);/);
+  });
+
+  it('no longer calls clearLocalChatHistory as a bare statement', () => {
+    expect(appSource).not.toMatch(/\n\s*clearLocalChatHistory\(\);\n/);
+  });
+
+  it('surfaces a refused clear through the shared notice', () => {
+    expect(appFlat).toContain('classifyChatHistoryClear(cleared)');
   });
 });

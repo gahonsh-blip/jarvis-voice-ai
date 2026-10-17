@@ -86,11 +86,18 @@ export function saveLocalChatHistory(messages: ChatMessage[]): boolean {
   }
 }
 
+/**
+ * Erase the stored chat history. Returns the real verdict: `true` only when the
+ * key is confirmed gone from storage. It used to `return true` straight after
+ * `removeItem`, so a removal that reported success but left the key in place (a
+ * locked-down or quota-frozen store) looked like an emptied history while the
+ * transcript was still on disk.
+ */
 export function clearLocalChatHistory(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     localStorage.removeItem(CHAT_HISTORY_KEY);
-    return true;
+    return localStorage.getItem(CHAT_HISTORY_KEY) === null;
   } catch (err) {
     console.warn('[OfflineStorage] Error clearing chat history:', err);
     return false;

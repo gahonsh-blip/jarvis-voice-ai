@@ -89,7 +89,7 @@ import {
   clearPendingSyncQueue,
 } from './utils/offlineStorage';
 import { classifyMemoryStoreWrite, classifySyncQueueWrite } from './utils/hardening/memoryStoreTruth';
-import { classifyChatHistoryWrite, flushChatHistoryNotice } from './utils/hardening/chatHistoryStoreTruth';
+import { classifyChatHistoryWrite, classifyChatHistoryClear, flushChatHistoryNotice } from './utils/hardening/chatHistoryStoreTruth';
 import { classifyVoiceSettingsWrite } from './utils/hardening/voiceSettingsStoreTruth';
 import { processOfflineCommand } from './utils/localJarvisEngine';
 import {
@@ -1764,8 +1764,14 @@ export default function App() {
   };
 
   const handleClearChatHistory = () => {
-    clearLocalChatHistory();
+    // Capture the real clear verdict before adopting the reloaded transcript.
+    // The reload falls back to the seeded conversation when the key survives,
+    // so an unconditional adoption showed seeded messages and hid a refused
+    // clear (item 13).
+    const cleared = clearLocalChatHistory();
     setMessages(loadLocalChatHistory());
+    const clearWrite = classifyChatHistoryClear(cleared);
+    if (clearWrite.notice) setMemorySaveNotice(clearWrite.notice);
   };
 
   // Telephony Controls
