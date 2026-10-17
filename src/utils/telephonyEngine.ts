@@ -49,13 +49,16 @@ export function loadLocalCallHistory(): CallRecord[] {
  * Returns whether the record actually reached the store. It used to return
  * `void` and swallow the storage error, so a refused write (quota, private
  * mode, no `localStorage`) was indistinguishable from a durable one and the
- * caller could announce a save the next reload would not find.
+ * caller could announce a save the next reload would not find. A store that
+ * accepts `setItem` without throwing yet keeps the previous bytes is also a
+ * refusal, so the bytes are read back before the write is reported as landed.
  */
 export function saveLocalCallHistory(calls: CallRecord[]): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    localStorage.setItem(STORAGE_KEY_CALLS, JSON.stringify(calls.slice(0, 100)));
-    return true;
+    const serialized = JSON.stringify(calls.slice(0, 100));
+    localStorage.setItem(STORAGE_KEY_CALLS, serialized);
+    return localStorage.getItem(STORAGE_KEY_CALLS) === serialized;
   } catch (err) {
     console.warn('Failed to save call history:', err);
     return false;
@@ -80,13 +83,15 @@ export function loadLocalTelephonySettings(): TelephonySettings {
 
 /**
  * Save telephony settings. Returns whether the write reached the store; see
- * `saveLocalCallHistory` for why the verdict is reported instead of swallowed.
+ * `saveLocalCallHistory` for why the verdict is reported instead of swallowed
+ * and why a silent no-op write is reported as a refusal.
  */
 export function saveLocalTelephonySettings(settings: TelephonySettings): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-    return true;
+    const serialized = JSON.stringify(settings);
+    localStorage.setItem(STORAGE_KEY_SETTINGS, serialized);
+    return localStorage.getItem(STORAGE_KEY_SETTINGS) === serialized;
   } catch (err) {
     console.warn('Failed to save telephony settings:', err);
     return false;
@@ -113,13 +118,15 @@ export function loadLocalContacts(): ContactItem[] {
  * Save contacts. Returns whether the write actually landed, mirroring
  * `saveLocalCallHistory`: the previous `void` return swallowed the storage
  * error in an empty catch, so a refused write (quota, private mode, no
- * `localStorage`) was indistinguishable from a durable one.
+ * `localStorage`) was indistinguishable from a durable one. A silent no-op
+ * write is reported as a refusal too, via the read-back.
  */
 export function saveLocalContacts(contacts: ContactItem[]): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    localStorage.setItem(STORAGE_KEY_CONTACTS, JSON.stringify(contacts));
-    return true;
+    const serialized = JSON.stringify(contacts);
+    localStorage.setItem(STORAGE_KEY_CONTACTS, serialized);
+    return localStorage.getItem(STORAGE_KEY_CONTACTS) === serialized;
   } catch (err) {
     console.warn('Failed to save contacts:', err);
     return false;
