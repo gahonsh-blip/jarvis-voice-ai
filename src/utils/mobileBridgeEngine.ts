@@ -52,8 +52,12 @@ export function loadBridgeRegistration(): BridgeRegistration | null {
 export function saveBridgeRegistration(reg: BridgeRegistration): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    localStorage.setItem(BRIDGE_STORAGE_KEY, JSON.stringify(reg));
-    return localStorage.getItem(BRIDGE_STORAGE_KEY) !== null;
+    const serialized = JSON.stringify(reg);
+    localStorage.setItem(BRIDGE_STORAGE_KEY, serialized);
+    // A silent no-op store (private mode, quota-clamped, frozen) accepts the
+    // call but keeps the previous bytes, so a non-null check would read a stale
+    // registration as this one. Compare the bytes that are actually stored.
+    return localStorage.getItem(BRIDGE_STORAGE_KEY) === serialized;
   } catch {
     return false;
   }
@@ -203,10 +207,17 @@ function loadQueue(): PendingMobileEvent[] {
 }
 
 function persistQueue(queue: PendingMobileEvent[]): boolean {
- {
   if (typeof window === 'undefined') return false;
-   try { localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue)); return true; } catch { return false; }
-}
+  try {
+    const serialized = JSON.stringify(queue);
+    localStorage.setItem(QUEUE_STORAGE_KEY, serialized);
+    // Read the bytes back: a store that accepts `setItem` without throwing yet
+    // drops the write (private mode, quota-clamped) left the pending-approval
+    // queue reporting a persisted event the next load did not have.
+    return localStorage.getItem(QUEUE_STORAGE_KEY) === serialized;
+  } catch {
+    return false;
+  }
 }
 
 export function enqueuePendingEvent(event: PendingMobileEvent): boolean {
@@ -325,8 +336,12 @@ export function logMobileAudit(entry: Omit<MobileAuditEntry, 'id' | 'timestamp'>
     const sanitized = redactAuditSecrets(entry as unknown as Record<string, unknown>);
     list.unshift({ ...sanitized, id: auditId(), timestamp: new Date().toISOString() } as MobileAuditEntry);
     const trimmed = list.slice(0, MAX_AUDIT_ENTRIES);
-    localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(trimmed));
-    return true;
+    const serialized = JSON.stringify(trimmed);
+    localStorage.setItem(AUDIT_STORAGE_KEY, serialized);
+    // Read the bytes back: a store that accepts `setItem` without throwing yet
+    // keeps the previous bytes made the audit log report an entry that was never
+    // written, so the mobile bridge's security trail could silently drop rows.
+    return localStorage.getItem(AUDIT_STORAGE_KEY) === serialized;
   } catch {
     return false;
   }
