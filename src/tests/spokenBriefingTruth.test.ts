@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   speechReadiness,
   speechReadinessLabel,
+  speechEngineStatusLabel,
   briefingProvenance,
   briefingProvenanceLabel,
 } from '../utils/spokenBriefingTruth';
@@ -51,6 +52,31 @@ describe('briefingProvenance never collapses an unread snapshot into live teleme
     expect(briefingProvenance({ isSample: false })).toBe('LIVE');
     expect(briefingProvenanceLabel('SAMPLE')).toBe('Generated from sample fixtures');
     expect(briefingProvenanceLabel('LIVE')).toBe('Generated from live telemetry reads');
+  });
+});
+
+describe('speechEngineStatusLabel refuses a settled verdict before the engine is probed', () => {
+  it('treats an unobserved diagnostics snapshot as not probed, never "API Standby"', () => {
+    expect(speechEngineStatusLabel(null)).toBe('TTS ENGINE NOT PROBED');
+    expect(speechEngineStatusLabel(undefined)).toBe('TTS ENGINE NOT PROBED');
+    expect(speechEngineStatusLabel({})).toBe('TTS ENGINE NOT PROBED');
+  });
+
+  it('maps an observed boolean to the only two real verdicts', () => {
+    expect(speechEngineStatusLabel({ speechSynthesisAvailable: true })).toBe('Web Speech API Active');
+    expect(speechEngineStatusLabel({ speechSynthesisAvailable: false })).toBe('API Standby');
+  });
+});
+
+describe('the Settings TTS diagnostics row renders only an observed engine state', () => {
+  const settingsSource = fs.readFileSync(
+    path.resolve(__dirname, '../components/SettingsModal.tsx'),
+    'utf8'
+  );
+
+  it('no longer collapses an unobserved snapshot into "API Standby"', () => {
+    expect(settingsSource).not.toContain("? 'Web Speech API Active' : 'API Standby'");
+    expect(settingsSource).toContain('speechEngineStatusLabel(speechDiagnostics)');
   });
 });
 

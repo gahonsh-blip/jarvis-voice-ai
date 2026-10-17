@@ -13,8 +13,9 @@ import {
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react';
-import { SecurityMatrixState } from '../types';
+import { SecurityMatrixState, SecurityLevel } from '../types';
 import { normalizeAuditLog } from '../utils/hardening/auditTrailTruth';
+import { securityMatrixLevelBadge } from '../utils/hardening/securityMatrixTruth';
 
 interface Props {
   isOpen: boolean;
@@ -23,7 +24,11 @@ interface Props {
 
 export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [securityState, setSecurityState] = useState<SecurityMatrixState | null>(null);
-  const [activeLevel, setActiveLevel] = useState<1 | 2 | 3 | 4>(2);
+  // The observed active level. Seeded to null, never a literal, so the header
+  // badge can only claim a level that `/api/security` actually reported (or that
+  // a durable `/api/security/update` echoed) — the previous default of `2` drew
+  // "Level 2 Active" even on a load where the probe never answered.
+  const [activeLevel, setActiveLevel] = useState<SecurityLevel | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,11 +40,16 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const fetchSecurity = async () => {
     try {
       const res = await fetch('/api/security');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSecurityState(data);
-      if (data.currentLevel) setActiveLevel(data.currentLevel);
+      // Adopt only a level the response actually carried. A missing field clears
+      // the claim instead of leaving a stale level on screen.
+      setActiveLevel(typeof data?.currentLevel === 'number' ? (data.currentLevel as SecurityLevel) : null);
     } catch (err) {
       console.warn('Failed to fetch security state:', err);
+      setSecurityState(null);
+      setActiveLevel(null);
     }
   };
 
@@ -52,9 +62,12 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
         body: JSON.stringify({ currentLevel: level }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success && typeof data.securityState?.currentLevel === 'number') {
         setSecurityState(data.securityState);
-        setActiveLevel(level);
+        // Adopt the confirmed echo, not the requested value: a `success: true`
+        // whose snapshot disagrees with what we asked for must not be shown as
+        // applied.
+        setActiveLevel(data.securityState.currentLevel as SecurityLevel);
       } else {
         // The update did not take effect; resync to the server's real state so
         // the selector never displays a level that was not applied.
@@ -64,6 +77,7 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } catch (err) {
       console.warn('Update security level failed:', err);
       setNotice('Security level update failed; the server state is unchanged.');
+      await fetchSecurity();
     }
   };
 
@@ -79,7 +93,7 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success && data.securityState) {
         setSecurityState(data.securityState);
       } else {
         setNotice(data.message || 'Human approval gate was not changed.');
@@ -88,6 +102,7 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } catch (err) {
       console.warn('Toggle human approval failed:', err);
       setNotice('Human approval toggle failed; the server state is unchanged.');
+      await fetchSecurity();
     }
   };
 
@@ -105,8 +120,14 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-100">HERMES JARVIS Security Matrix</h2>
-                <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                  Level {activeLevel} Active
+                <span
+                  className={`px-2 py-0.5 text-[11px] font-mono rounded border ${
+                    typeof activeLevel === 'number'
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                      : 'bg-amber-950 text-amber-300 border-amber-800'
+                  }`}
+                >
+                  {securityMatrixLevelBadge(activeLevel)}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -297,7 +318,9 @@ export const SecurityMatrixModal: React.FC<Props> = ({ isOpen, onClose }) => {
         <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
           <span>
             {securityState
-              ? `Level ${activeLevel} of 4 active · permissions enforced by the gateway`
+              ? typeof activeLevel === 'number'
+                ? `Level ${activeLevel} of 4 active · permissions enforced by the gateway`
+                : 'Security level unknown — /api/security returned no current level'
               : 'Security state unavailable — /api/security did not respond'}
           </span>
           <button

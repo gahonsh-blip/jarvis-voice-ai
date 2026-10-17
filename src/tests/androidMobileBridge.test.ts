@@ -765,3 +765,172 @@ describe('Android Mobile Call & Notification Assistant Bridge', () => {
     expect(result.status).toBe('PERMISSION_REQUIRED');
   });
 });
+
+describe('Android bridge persistence reports real durability (zero fake success)', () => {
+  const installStorage = () => {
+    const store = new Map<string, string>();
+    (globalThis as any).window = globalThis;
+    (globalThis as any).localStorage = {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => store.set(k, v),
+      removeItem: (k: string) => store.delete(k),
+      clear: () => store.clear(),
+    };
+    return store;
+  };
+
+  const refuseWrites = () => {
+    (globalThis as any).localStorage.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+  };
+
+  // A store can accept `setItem` without throwing and still drop the bytes
+  // (private browsing, a frozen or quota-clamped store). Only a read-back can
+  // tell that apart from a landed write.
+  const silenceWrites = () => {
+    (globalThis as any).localStorage.setItem = () => {};
+  };
+
+  it('updatePermission returns true only when the write landed', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(true);
+    expect(mgr.getPermissions().call_answer).toBe('GRANTED');
+  });
+
+  it('updatePermission returns false and the change is not durable when storage refuses the write', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const before = mgr.getPermissions().call_answer;
+    refuseWrites();
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(false);
+    // A fresh manager loading from storage must not see the rejected change.
+    const reloaded = new AndroidBridgeManager();
+    expect(reloaded.getPermissions().call_answer).toBe(before);
+  });
+
+  it('updatePermission does not leave the in-memory echo claiming a refused grant', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const before = mgr.getPermissions().call_answer;
+    refuseWrites();
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(false);
+    // The read path is documented as authoritative for callers that render the
+    // badge from it, so a refused write must not surface the requested value.
+    expect(mgr.getPermissions().call_answer).toBe(before);
+  });
+
+  it('updateSettings does not leave the in-memory echo claiming a refused write', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const before = mgr.getSettings().autoAnswerEnabled;
+    refuseWrites();
+    expect(mgr.updateSettings({ autoAnswerEnabled: !before })).toBe(false);
+    expect(mgr.getSettings().autoAnswerEnabled).toBe(before);
+  });
+
+  it('with no durable store the in-memory matrix is the only state and stands', () => {
+    (globalThis as any).window = undefined;
+    (globalThis as any).localStorage = undefined;
+    const mgr = new AndroidBridgeManager();
+    // The write cannot be persisted, so it is reported as not durable, but the
+    // in-memory matrix (the only state that exists here) still holds the value.
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(false);
+    expect(mgr.getPermissions().call_answer).toBe('GRANTED');
+  });
+
+  it('updateSettings reports the real persistence verdict', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    expect(mgr.updateSettings({ autoAnswerEnabled: true })).toBe(true);
+    refuseWrites();
+    expect(mgr.updateSettings({ autoAnswerEnabled: false })).toBe(false);
+  });
+
+  it('recordAudit reports whether the audit entry was durably stored', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const log = {
+      eventType: 'ACTION_DENIED' as const,
+      application: 'WhatsApp',
+      actionRequested: 'Send Reply',
+      permissionState: 'DENIED' as const,
+      authorizationState: 'OWNER_DENIED',
+      result: 'REJECTED' as const,
+      notes: 'owner declined',
+    };
+    expect(mgr.recordAudit(log)).toBe(true);
+    refuseWrites();
+    expect(mgr.recordAudit({ ...log, notes: 'owner declined again' })).toBe(false);
+  });
+
+  it('saveState returns false when there is no browser storage to write to', () => {
+    const originalWindow = (globalThis as any).window;
+    const originalStorage = (globalThis as any).localStorage;
+    delete (globalThis as any).window;
+    delete (globalThis as any).localStorage;
+    try {
+      const mgr = new AndroidBridgeManager();
+      expect(mgr.saveState()).toBe(false);
+    } finally {
+      (globalThis as any).window = originalWindow;
+      (globalThis as any).localStorage = originalStorage;
+    }
+  });
+
+  it('saveState reads the bytes back and reports a silent no-op write as not saved', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    // Control: a real store reports the save as durable.
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(true);
+    // The store now holds the GRANTED bytes. The store accepts `setItem`
+    // without throwing and drops the bytes. The previous implementation
+    // returned `true` here, so the DENIED permission, the setting and the audit
+    // row all read as durable while the keys still held the GRANTED bytes and
+    // the next load silently restored them.
+    silenceWrites();
+    expect(mgr.updatePermission('call_answer', 'DENIED')).toBe(false);
+    const reloaded = new AndroidBridgeManager();
+    expect(reloaded.getPermissions().call_answer).toBe('GRANTED');
+  });
+
+  it('a silent no-op store does not let a permission grant look durable', () => {
+    const store = installStorage();
+    const mgr = new AndroidBridgeManager();
+    const before = mgr.getPermissions().call_answer;
+    silenceWrites();
+    expect(mgr.updatePermission('call_answer', 'GRANTED')).toBe(false);
+    // The store still holds the pre-write bytes, so a reload must show them.
+    const reloaded = new AndroidBridgeManager();
+    expect(reloaded.getPermissions().call_answer).toBe(before);
+    expect(store.get('hermes_jarvis_android_perms_v1')).toBeUndefined();
+  });
+
+  it('updateSettings reports a silent no-op write as not saved and reverts the echo', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const before = mgr.getSettings().autoAnswerEnabled;
+    silenceWrites();
+    expect(mgr.updateSettings({ autoAnswerEnabled: !before })).toBe(false);
+    expect(mgr.getSettings().autoAnswerEnabled).toBe(before);
+  });
+
+  it('recordAudit reports a silent no-op write as not saved', () => {
+    installStorage();
+    const mgr = new AndroidBridgeManager();
+    const log = {
+      eventType: 'ACTION_DENIED' as const,
+      application: 'WhatsApp',
+      actionRequested: 'Send Reply',
+      permissionState: 'DENIED' as const,
+      authorizationState: 'OWNER_DENIED',
+      result: 'REJECTED' as const,
+      notes: 'owner declined',
+    };
+    expect(mgr.recordAudit(log)).toBe(true);
+    silenceWrites();
+    expect(mgr.recordAudit({ ...log, notes: 'owner declined again' })).toBe(false);
+  });
+});
+

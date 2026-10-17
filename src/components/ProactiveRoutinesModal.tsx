@@ -15,7 +15,7 @@ import {
   Send,
 } from 'lucide-react';
 import { ProactiveReportItem } from '../types';
-import { telegramPushLabel, cronSchedulerLabel } from '../utils/checksumTruth';
+import { telegramPushLabel, cronSchedulerLabel, nextRoutineCronLabel } from '../utils/checksumTruth';
 
 interface Props {
   isOpen: boolean;
@@ -106,7 +106,7 @@ export const ProactiveRoutinesModal: React.FC<Props> = ({ isOpen, onClose, onSpe
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Self-initiating 4-times daily intelligence briefings delivered directly to your Android phone via Telegram
+                Four daily briefing templates. Delivery to your Android phone via Telegram is shown below, read live from the server.
               </p>
             </div>
           </div>
@@ -229,7 +229,7 @@ export const ProactiveRoutinesModal: React.FC<Props> = ({ isOpen, onClose, onSpe
             <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-800/40 text-xs font-mono text-blue-300 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-blue-400" />
-                Next automated cron broadcast: Scheduled at time slot
+                {nextRoutineCronLabel(telegramLive, currentRoutine?.titleEn ?? 'time slot')}
               </span>
               <span className={telegramLive === true ? 'text-emerald-400' : 'text-amber-400'}>
                 {telegramPushLabel(telegramLive !== null, telegramLive === true)}

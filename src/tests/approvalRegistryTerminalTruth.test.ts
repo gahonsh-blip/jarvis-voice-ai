@@ -95,8 +95,28 @@ describe('server.ts wires the guard into the approval surfaces', () => {
   it('does not claim a rejection when the Telegram re-tap changed nothing', () => {
     const branchStart = serverSource.indexOf("data.startsWith('reject_perm_')");
     expect(branchStart).toBeGreaterThan(-1);
-    const branch = serverSource.slice(branchStart, branchStart + 900);
+    const branch = serverSource.slice(branchStart, branchStart + 1800);
     expect(branch).toContain('updated\n      ?');
     expect(branch).toContain('was already processed or expired');
+  });
+
+  it('confirms each Telegram perm decision on disk before reporting it', () => {
+    // The mobile callback branches live outside `memoryState`, so
+    // `persistApprovalRegistry()` can return true without writing. Both branches
+    // must read the terminal status back from disk and refuse the claim when it
+    // is absent, otherwise a restart resurrects the request as pending.
+    const approveStart = serverSource.indexOf("data.startsWith('approve_perm_')");
+    expect(approveStart).toBeGreaterThan(-1);
+    const approveBranch = serverSource.slice(approveStart, approveStart + 1600);
+    expect(approveBranch).toContain("persistApprovalRegistry() && actionRequestStatusOnDisk(permId, 'EXECUTED')");
+    expect(approveBranch).toContain("liveReq.status = 'PENDING_APPROVAL'");
+    expect(approveBranch).toContain('APPROVAL NOT RECORDED');
+
+    const rejectStart = serverSource.indexOf("data.startsWith('reject_perm_')");
+    expect(rejectStart).toBeGreaterThan(-1);
+    const rejectBranch = serverSource.slice(rejectStart, rejectStart + 1800);
+    expect(rejectBranch).toContain("persistApprovalRegistry() && actionRequestStatusOnDisk(permId, 'REJECTED')");
+    expect(rejectBranch).toContain("liveReq.status = 'PENDING_APPROVAL'");
+    expect(rejectBranch).toContain('REJECTION NOT RECORDED');
   });
 });

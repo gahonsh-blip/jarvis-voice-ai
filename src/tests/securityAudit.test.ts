@@ -17,6 +17,30 @@ describe('runSecurityAudit', () => {
     expect(report.findings).toEqual([]);
   });
 
+  it('still flags a shaped token when the line contains an unrelated placeholder word', () => {
+    // "here"/"where" and a stray "<" elsewhere on the line are not part of the
+    // token. Judging the whole line against the placeholder hints let a real
+    // credential-shaped string through.
+    const token = `ghp_${'a'.repeat(40)}`;
+    for (const line of [
+      `const TOKEN = "${token}"; // where the token is read`,
+      `const TOKEN = "${token}"; // there`,
+      `const TOKEN = "${token}" as string; if (n < 10) {}`,
+    ]) {
+      const report = runSecurityAudit([{ path: 'src/config.ts', content: line, tracked: true }]);
+      expect(report.findings[0]?.severity).toBe('CRITICAL');
+    }
+  });
+
+  it('does not flag a shaped token that is itself a placeholder', () => {
+    // The match is credential-shaped (ghp_ + 37 alphanumerics) but its body
+    // spells "example", so it is a documentation stand-in, not a live key.
+    const report = runSecurityAudit([
+      { path: 'src/config.ts', content: `const TOKEN = "ghp_example${'a'.repeat(30)}";`, tracked: true },
+    ]);
+    expect(report.findings).toEqual([]);
+  });
+
   it('flags a hardcoded secret literal', () => {
     const report = runSecurityAudit([
       { path: 'src/config.ts', content: `const SECRET = "s3cr3t-value-1234";`, tracked: true },

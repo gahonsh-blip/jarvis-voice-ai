@@ -59,6 +59,12 @@ import {
   telegramBroadcastNotice,
   telegramBroadcastTransportFailure,
 } from '../utils/hardening/telegramBroadcastNotice';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import {
+  mobileConsentFooterLine,
+  mobileConsentFooterHealthy,
+  type MobileConsentSnapshot,
+} from '../utils/hardening/mobileConsentFooterTruth';
 
 interface Props {
   isOpen: boolean;
@@ -93,9 +99,13 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   );
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [activeTab, setActiveTab] = useState<'briefing' | 'telemetry' | 'privacy' | 'bridge'>('briefing');
   const [telegramSending, setTelegramSending] = useState<boolean>(false);
   const [telegramNotice, setTelegramNotice] = useState<string | null>(null);
+  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
+  // Consent posture is read, never assumed: null until /api/security answers.
+  const [consentPosture, setConsentPosture] = useState<MobileConsentSnapshot | null>(null);
 
   const refreshData = async () => {
     setLoading(true);
@@ -125,40 +135,77 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
     }
   }, [isOpen, userName]);
 
+  // The footer's consent line is read from /api/security, never assumed. A
+  // failed read leaves the footer saying UNKNOWN rather than claiming a posture.
+  useEffect(() => {
+    if (!isOpen) return;
+    let mounted = true;
+    fetch('/api/security')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (mounted && data) setConsentPosture(data as MobileConsentSnapshot);
+      })
+      .catch(() => {
+        if (mounted) setConsentPosture(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
+
   const handleToggleAndroidBridgePerm = (key: 'notification' | 'call' | 'contacts' | 'reply') => {
     const current = { ...androidPerms };
+    let persisted = true;
     if (key === 'notification') {
       const next: AndroidPermissionState = current.notification_access === 'GRANTED' ? 'DENIED' : 'GRANTED';
       current.notification_access = next;
-      androidBridgeEngine.updatePermission('notification_access', next);
+      persisted = androidBridgeEngine.updatePermission('notification_access', next);
     } else if (key === 'call') {
       const next: AndroidPermissionState = current.call_detection === 'GRANTED' ? 'DENIED' : 'GRANTED';
       current.call_detection = next;
       current.call_answer = next;
-      androidBridgeEngine.updatePermission('call_detection', next);
-      androidBridgeEngine.updatePermission('call_answer', next);
+      persisted = androidBridgeEngine.updatePermission('call_detection', next) && persisted;
+      persisted = androidBridgeEngine.updatePermission('call_answer', next) && persisted;
     } else if (key === 'contacts') {
       const next: AndroidPermissionState = current.contacts_lookup === 'GRANTED' ? 'DENIED' : 'GRANTED';
       current.contacts_lookup = next;
-      androidBridgeEngine.updatePermission('contacts_lookup', next);
+      persisted = androidBridgeEngine.updatePermission('contacts_lookup', next);
     } else if (key === 'reply') {
       const next: AndroidPermissionState = current.message_reply === 'GRANTED' ? 'DENIED' : 'GRANTED';
       current.message_reply = next;
-      androidBridgeEngine.updatePermission('message_reply', next);
+      persisted = androidBridgeEngine.updatePermission('message_reply', next);
     }
-    setAndroidPerms(current);
+    // Render the bridge store's echo, never the requested value. A refused
+    // write reverts the engine's in-memory matrix, so `current` would show a
+    // permission the store does not hold — the same state-only mutation the
+    // sibling `MobileBridgeModal`/`AndroidPermissionCenter` already avoid.
+    setAndroidPerms({ ...androidBridgeEngine.getPermissions() });
     setBridgeStatus(androidBridgeEngine.getStatus());
+    setPermissionNotice(
+      persisted
+        ? null
+        : 'ANDROID PERMISSION NOT SAVED — the bridge store refused the write; this change reverts on reload.'
+    );
   };
 
   const handleTogglePermission = (cat: MobilePermissionCategory) => {
     const updated = { ...permissions, [cat]: !permissions[cat] };
-    setPermissions(updated);
-    saveMobilePermissions(updated);
+    const persisted = saveMobilePermissions(updated);
+    // Read the durable store back instead of trusting `updated`: on a refused
+    // write the store still holds the previous matrix, and showing the request
+    // would display a permission that silently reverts on reload.
+    const effective = loadMobilePermissions();
+    setPermissions(effective);
+    setPermissionNotice(
+      persisted
+        ? null
+        : 'PERMISSION NOT SAVED — local storage refused the write; this change reverts on reload.'
+    );
 
     if (statusData) {
       const updatedStatus = {
         ...statusData,
-        permissions: updated,
+        permissions: effective,
       };
       setStatusData(updatedStatus);
       const newBriefing = generateMorningBriefing(updatedStatus, userName);
@@ -175,8 +222,22 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       EMAIL_INBOX: true,
       DEVICE_HEALTH: true,
     };
-    setPermissions(allTrue);
-    saveMobilePermissions(allTrue);
+    const grantedPersisted = saveMobilePermissions(allTrue);
+    // The badge and the briefing must reflect what the store holds, not the
+    // all-true request: on a refused write every row would read granted while
+    // the next reload restores the previous matrix.
+    const effective = loadMobilePermissions();
+    setPermissions(effective);
+    setPermissionNotice(
+      grantedPersisted
+        ? null
+        : 'PERMISSIONS NOT SAVED — local storage refused the write; these changes revert on reload.'
+    );
+    if (statusData) {
+      const updatedStatus = { ...statusData, permissions: effective };
+      setStatusData(updatedStatus);
+      setBriefing(generateMorningBriefing(updatedStatus, userName));
+    }
     refreshData();
   };
 
@@ -189,8 +250,19 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
       EMAIL_INBOX: false,
       DEVICE_HEALTH: false,
     };
-    setPermissions(allFalse);
-    saveMobilePermissions(allFalse);
+    const revokedPersisted = saveMobilePermissions(allFalse);
+    const effective = loadMobilePermissions();
+    setPermissions(effective);
+    setPermissionNotice(
+      revokedPersisted
+        ? null
+        : 'PERMISSIONS NOT SAVED — local storage refused the write; these changes revert on reload.'
+    );
+    if (statusData) {
+      const updatedStatus = { ...statusData, permissions: effective };
+      setStatusData(updatedStatus);
+      setBriefing(generateMorningBriefing(updatedStatus, userName));
+    }
     refreshData();
   };
 
@@ -205,15 +277,12 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
     onSpeak(textToSpeak);
   };
 
-  const handleCopyBriefing = () => {
+  const handleCopyBriefing = async () => {
     if (!briefing) return;
     const text = selectedLang === 'english' ? briefing.spokenTextEn : briefing.spokenTextHi;
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch((err) => {
-        console.warn('Clipboard write prevented:', err);
-      });
-    }
-    setCopied(true);
+    const outcome = await copyToClipboard(text, 'The briefing script');
+    setCopyOutcome(outcome);
+    setCopied(outcome.copied);
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -241,6 +310,9 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
   };
 
   if (!isOpen) return null;
+
+  const consentLine = mobileConsentFooterLine(consentPosture);
+  const consentHealthy = mobileConsentFooterHealthy(consentPosture);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-sans">
@@ -377,6 +449,16 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
           <div className="px-5 py-2 bg-blue-950/80 border-b border-blue-600 text-blue-200 text-xs font-mono flex items-center justify-between">
             <span>{telegramNotice}</span>
             <button onClick={() => setTelegramNotice(null)} className="text-blue-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Permission Durability Notice Banner */}
+        {permissionNotice && (
+          <div className="px-5 py-2 bg-amber-950/80 border-b border-amber-600 text-amber-200 text-xs font-mono flex items-center justify-between">
+            <span>{permissionNotice}</span>
+            <button onClick={() => setPermissionNotice(null)} className="text-amber-400 hover:text-white">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -729,10 +811,16 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
                   <button
                     onClick={handleCopyBriefing}
                     className="px-3 py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-300 rounded-xl text-xs font-mono flex items-center gap-1.5 transition-colors"
-                    title="Copy full speech script"
+                    title={copyOutcome?.detail || 'Copy full speech script'}
                   >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copied ? 'Copied' : 'Copy'}</span>
+                    {copied ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : copyOutcome?.tone === 'warn' ? (
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    <span>{copied ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy'}</span>
                   </button>
                 </div>
               </div>
@@ -1124,8 +1212,12 @@ export const MobilePersonalStatusModal: React.FC<Props> = ({
         {/* Modal Footer */}
         <div className="px-5 py-3 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-400">
           <span className="flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Zero Unsolicited Data Access • Human Consent Active</span>
+            {consentHealthy ? (
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+            )}
+            <span>{consentLine}</span>
           </span>
 
           <div className="flex items-center gap-2">

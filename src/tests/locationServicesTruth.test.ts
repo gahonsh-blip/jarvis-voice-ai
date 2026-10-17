@@ -110,6 +110,15 @@ describe('DashboardMapSnippet does not assert an active fix or measured accuracy
     expect(src).toContain('type CoordsSource');
   });
 
+  it('never defaults an unpassed source to a live GPS reading', () => {
+    // `source = 'live'` in the destructure made an unpassed prop — a caller
+    // that does not know the provenance, or any future one — read as a device
+    // GPS fix: CURRENT FIX, a live label and a non-null source downstream. The
+    // unknown default must be `null`, which every helper renders as NO FIX.
+    expect(src).not.toMatch(/source\s*=\s*'live'/);
+    expect(src).toMatch(/source\s*=\s*null/);
+  });
+
   it('only prints CURRENT FIX for a live reading, never for a simulated point', () => {
     // The radar pin label fell back to "CURRENT FIX" whenever no address was
     // resolved, even for a preset/manual/cached coordinate, so a simulated

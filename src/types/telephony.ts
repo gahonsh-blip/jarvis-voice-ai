@@ -83,6 +83,10 @@ export interface ContactItem {
   category: 'personal' | 'business' | 'medical' | 'service' | 'vip';
   notes: string;
   avatarColor?: string;
+  // True for the built-in placeholder contacts. They are fictional people and
+  // numbers with no device source behind them; a surface that lists them must
+  // not present them as verified/real numbers.
+  isSample?: boolean;
 }
 
 export interface CallScenarioPreset {
@@ -143,6 +147,7 @@ export const DEFAULT_CONTACTS: ContactItem[] = [
     category: 'medical',
     notes: 'Regular physician. Appointments usually on Tuesdays/Fridays.',
     avatarColor: 'bg-emerald-600',
+    isSample: true,
   },
   {
     id: 'c2',
@@ -153,6 +158,7 @@ export const DEFAULT_CONTACTS: ContactItem[] = [
     category: 'vip',
     notes: 'Lead series A investor. Prefers concise morning briefings.',
     avatarColor: 'bg-purple-600',
+    isSample: true,
   },
   {
     id: 'c3',
@@ -163,6 +169,7 @@ export const DEFAULT_CONTACTS: ContactItem[] = [
     category: 'service',
     notes: 'Gate access code: #4092. Leave packages at front reception.',
     avatarColor: 'bg-amber-600',
+    isSample: true,
   },
   {
     id: 'c4',
@@ -173,6 +180,7 @@ export const DEFAULT_CONTACTS: ContactItem[] = [
     category: 'business',
     notes: 'Infrastructure and Oracle Cloud cluster coordination.',
     avatarColor: 'bg-cyan-600',
+    isSample: true,
   },
   {
     id: 'c5',
@@ -183,6 +191,7 @@ export const DEFAULT_CONTACTS: ContactItem[] = [
     category: 'service',
     notes: 'High priority for network or server downtime inquiries.',
     avatarColor: 'bg-blue-600',
+    isSample: true,
   },
 ];
 

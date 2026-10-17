@@ -33,6 +33,7 @@ import {
   ShieldCheck,
   Calendar,
   Filter,
+  HardDrive,
 } from 'lucide-react';
 import {
   CallRecord,
@@ -57,7 +58,17 @@ import {
 } from '../utils/telephonyEndpointTruth';
 import { runTelephonyTestSuite, TestSuiteSummary } from '../utils/telephonyTestRunner';
 import { ACOUSTIC_FILTER_STATUS, ACOUSTIC_FILTER_SPEC } from '../utils/hardening/acousticFilterTruth';
-import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
+import {
+  telephonyPersistenceBadge,
+  telephonyPersistenceBadgeTitle,
+  telephonyPersistenceTone,
+  type TelephonyPersistenceState,
+} from '../utils/hardening/telephonyPersistenceBadgeTruth';
+import {
+  ACTION_ITEM_LIST_NOTE,
+  TRANSCRIPT_NOT_VERIFIED_NOTE,
+  callTranscriptHeadingLabel,
+} from '../utils/hardening/callSummaryTruth';
 import { formatDurationWords } from '../utils/hardening/callDurationTruth';
 import {
   downloadCallHistoryCsv,
@@ -88,6 +99,13 @@ interface TelephonyHubModalProps {
   }) => void;
   onTriggerIncomingCall: (persona: SimulatedCallerPersona) => void;
   onClearHistory: () => void;
+  /**
+   * The observed verdict of the last telephony-store write — `true` when
+   * localStorage accepted it, `false` when it was refused, null before any
+   * write is observed. The header badge derives from this instead of asserting
+   * a durable local save for a store nothing measured.
+   */
+  persistenceState?: TelephonyPersistenceState;
 }
 
 export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
@@ -101,6 +119,7 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
   onStartOutboundCall,
   onTriggerIncomingCall,
   onClearHistory,
+  persistenceState,
 }) => {
   const [activeTab, setActiveTab] = useState<'dialer' | 'receptionist' | 'logs' | 'gateway' | 'permissions' | 'test_suite'>('dialer');
   const [testResults, setTestResults] = useState<TestSuiteSummary | null>(null);
@@ -231,6 +250,11 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
 
   const effectiveContacts = contacts && contacts.length > 0 ? contacts : DEFAULT_CONTACTS;
   const maskUnknownEnabled = tempSettings.maskUnknownCallerId !== false;
+  // A contact is only "verified" when it came from a real device source. The
+  // built-in placeholders are fictional people and numbers with no source
+  // behind them, so counting them as verified would be a fabricated claim.
+  const savedContactCount = effectiveContacts.filter((c) => !c.isSample).length;
+  const sampleContactCount = effectiveContacts.length - savedContactCount;
 
   const handleToggleMaskUnknownCallerId = (checked: boolean) => {
     const updated = { ...tempSettings, maskUnknownCallerId: checked };
@@ -427,6 +451,21 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
             >
               <span className={`h-1.5 w-1.5 rounded-full ${engineIsLive ? 'bg-emerald-400' : engineMismatch ? 'bg-rose-400' : 'bg-amber-400 animate-ping'}`} />
               {gatewayBadgeText}
+            </span>
+            {/* Call-store persistence verdict — derived from the observed write,
+                not a compile-time claim (item 13). */}
+            <span
+              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border flex items-center gap-1.5 ${
+                telephonyPersistenceTone(persistenceState) === 'ok'
+                  ? 'bg-cyan-950 border border-cyan-500/40 text-cyan-300'
+                  : telephonyPersistenceTone(persistenceState) === 'warn'
+                    ? 'bg-amber-950 border border-amber-500/50 text-amber-300'
+                    : 'bg-slate-900 border border-slate-600/60 text-slate-300'
+              }`}
+              title={telephonyPersistenceBadgeTitle(persistenceState)}
+            >
+              <HardDrive className="h-2.5 w-2.5" />
+              {telephonyPersistenceBadge(persistenceState)}
             </span>
             {activeCall && (
               <span className="rounded-lg bg-cyan-950 px-2.5 py-1 text-xs font-mono text-cyan-300 border border-cyan-800">
@@ -807,7 +846,11 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     </div>
 
                     <div className="mt-2.5 pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] font-mono">
-                      <span className="text-slate-500">Contact list: {contacts.length} verified numbers</span>
+                      <span className="text-slate-500">
+                        {sampleContactCount > 0 && savedContactCount === 0
+                          ? `Contact list: ${sampleContactCount} SAMPLE contacts — no verified numbers saved`
+                          : `Contact list: ${savedContactCount} verified numbers`}
+                      </span>
                       <span className={maskUnknownEnabled ? 'text-cyan-400 font-semibold' : 'text-slate-500'}>
                         {maskUnknownEnabled ? '✓ Masking unknown numbers in UI' : 'Raw carrier names displayed'}
                       </span>
@@ -1245,8 +1288,9 @@ export const TelephonyHubModal: React.FC<TelephonyHubModalProps> = ({
                     {/* Full Transcript */}
                     <div className="mt-4 flex-1">
                       <div className="text-[11px] font-mono text-slate-400 uppercase mb-2">
-                        Complete Verified Transcript ({selectedLog.transcript.length} turns)
+                        {callTranscriptHeadingLabel(selectedLog.transcript.length)}
                       </div>
+                      <p className="text-[10px] text-slate-500 mb-2">{TRANSCRIPT_NOT_VERIFIED_NOTE}</p>
                       <div className="max-h-56 overflow-y-auto space-y-2 rounded-xl bg-slate-950 p-3 border border-slate-800 text-xs">
                         {selectedLog.transcript.map((t, idx) => {
                           let speakerLabel = 'JARVIS AI';

@@ -110,6 +110,26 @@ export function describeInboundCall(counterpart: string): string {
 }
 
 /**
+ * Note rendered when a completed call carries no summary text. `App.tsx` stores
+ * an empty summary for the "declined by user or spam filter" path; the post-call
+ * HUD used to substitute "Call concluded normally." for that empty value — an
+ * assurance about how the call went that nothing observed.
+ */
+export const NO_CALL_SUMMARY_NOTE =
+  'No call summary was recorded for this call — the outcome was not observed, so no conclusion is asserted.';
+
+/**
+ * Honest rendering of a completed call's summary field. A real summary (from
+ * `summarizeCallTranscript()`) passes through; an empty or whitespace-only value
+ * is reported as an absent summary rather than as a normal conclusion.
+ */
+export function describeCallSummary(summary: string | null | undefined): string {
+  const trimmed = (summary ?? '').trim();
+  if (!trimmed) return NO_CALL_SUMMARY_NOTE;
+  return trimmed;
+}
+
+/**
  * Marker for the offline (no-server) conversational turn. `processTelephonyTurn`
  * falls back to `generateLocalCallTurn` whenever `POST /api/telephony/handle-turn`
  * is unreachable — the exact offline-first case this app exists for. The
@@ -133,6 +153,33 @@ export function formatLocalTurnReply(replyText: string): string {
   }
   return `${trimmed} ${LOCAL_TURN_REPLY_NOTE}`;
 }
+
+/**
+ * Heading for the recorded-call transcript panel. `TelephonyHubModal` rendered
+ * `Complete Verified Transcript (N turns)` unconditionally. Nothing in the
+ * capture path verifies a turn: the agent turns are the scripted greeting and
+ * the model-authored reply (spoken through the browser synth, never read back),
+ * and the caller/callee turns come from the browser's own speech recognition.
+ * No transcription provider, per-turn confidence or speaker disambiguation was
+ * ever consulted, so the word "Verified" asserted a check nobody performed.
+ *
+ * The heading names the turns as recorded. A non-finite or absent count is
+ * reported explicitly rather than coerced to a measured-looking `0`.
+ */
+export function callTranscriptHeadingLabel(turns: number | null | undefined): string {
+  const count =
+    typeof turns === 'number' && Number.isFinite(turns) ? Math.max(0, Math.floor(turns)) : null;
+  return count === null
+    ? 'Recorded Call Transcript (turn count unmeasured)'
+    : `Recorded Call Transcript (${count} turn${count === 1 ? '' : 's'})`;
+}
+
+/**
+ * Note rendered beside the transcript so a recorded turn is not read as a
+ * provider-verified one.
+ */
+export const TRANSCRIPT_NOT_VERIFIED_NOTE =
+  'Recorded turns — not verified by a transcription provider and not speaker-confirmed.';
 
 /** Marker every offline-captured action item carries. */
 export const LOCAL_TURN_ACTION_ITEM_NOTE = 'captured offline — not confirmed as performed';

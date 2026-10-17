@@ -3,6 +3,7 @@ import { X, Sliders, Volume2, Mic, Globe, Zap, Check, Sparkles, MessageSquare, I
 import { VoiceSettings } from '../types';
 import { SUPPORTED_LANGUAGES, getLanguageOption, POPULAR_LANGUAGE_CODES, LanguageOption } from '../utils/languages';
 import { isHindiVoice, SpeechDiagnostics } from '../utils/speechTtsEngine';
+import { speechEngineStatusLabel } from '../utils/spokenBriefingTruth';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -292,7 +293,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 TTS Engine Diagnostics
               </span>
               <span className="text-[10px] font-mono text-cyan-400">
-                {speechDiagnostics?.speechSynthesisAvailable ? 'Web Speech API Active' : 'API Standby'}
+                {speechEngineStatusLabel(speechDiagnostics)}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">

@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { X, Database, Plus, Trash2, Edit3, User, BookOpen, Clock, Activity, Download, HardDrive, CheckCircle } from 'lucide-react';
 import { MemoryStore } from '../types';
+import {
+  memoryPersistenceBadge,
+  memoryPersistenceBadgeTitle,
+  memoryPersistenceTone,
+  type MemoryPersistenceState,
+} from '../utils/hardening/memoryPersistenceBadgeTruth';
 
 interface MemoryModalProps {
   isOpen: boolean;
@@ -9,6 +15,13 @@ interface MemoryModalProps {
   onUpdateName: (name: string) => void;
   onAddCustomKey: (key: string, value: string) => void;
   onDeleteNote: (id: string) => void;
+  /**
+   * The observed verdict of the last memory-store write — `true` when
+   * localStorage accepted it, `false` when it was refused, null before any
+   * write is observed. The header badge derives from this instead of asserting
+   * a fixed "LocalStorage Synced".
+   */
+  persistenceState?: MemoryPersistenceState;
 }
 
 export const MemoryModal: React.FC<MemoryModalProps> = ({
@@ -18,6 +31,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
   onUpdateName,
   onAddCustomKey,
   onDeleteNote,
+  persistenceState,
 }) => {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(memory.name || '');
@@ -72,9 +86,18 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
                 <h2 className="text-sm font-hud font-bold text-cyan-200 uppercase tracking-wider">
                   JARVIS MEMORY BANKS [memory.json]
                 </h2>
-                <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-mono">
+                <span
+                  className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-mono ${
+                    memoryPersistenceTone(persistenceState) === 'ok'
+                      ? 'bg-cyan-950 border border-cyan-500/40 text-cyan-300'
+                      : memoryPersistenceTone(persistenceState) === 'warn'
+                        ? 'bg-amber-950 border border-amber-500/50 text-amber-300'
+                        : 'bg-slate-900 border border-slate-600/60 text-slate-300'
+                  }`}
+                  title={memoryPersistenceBadgeTitle(persistenceState)}
+                >
                   <HardDrive className="w-2.5 h-2.5" />
-                  LocalStorage Synced
+                  {memoryPersistenceBadge(persistenceState)}
                 </span>
               </div>
               <span className="text-[11px] font-mono text-slate-400">

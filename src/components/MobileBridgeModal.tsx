@@ -20,7 +20,7 @@ import {
 import {
   loadMobileBridgePolicy,
   saveMobileBridgePolicy,
-  setCategoryPolicy,
+  applyCategoryPolicy,
   setAppPolicy,
   categoryLabel,
 } from '../utils/mobileNotificationPrivacy';
@@ -46,6 +46,12 @@ import {
   replyEventStatusForOutcome,
   replyAuditProjection,
 } from '../utils/mobileReplyDispatchTruth';
+import { androidBridgeEngine } from '../utils/androidBridgeEngine';
+import {
+  permissionMatrixKey,
+  nextToggleState,
+  permissionWriteOutcome,
+} from '../utils/hardening/mobilePermissionToggleTruth';
 
 const EVENT_STATUS_LABEL: Record<string, string> = {
   PENDING_APPROVAL: 'PENDING APPROVAL',
@@ -124,10 +130,25 @@ export const MobileBridgeModal: React.FC<Props> = ({
   // LIMITED_CAPABILITY and PERMISSION_REQUIRED are degraded (amber), not "live".
   const bridgeTone = bridgeStatusTone(bridgeState);
 
+  // A permission only shows GRANTED when the bridge store actually holds it.
+  // The store echo (`getPermissions()`) is authoritative, so a refused write
+  // reverts the badge and reports the refusal instead of the requested grant.
+  const commitPermissionState = (uiKey: string, requested: MobilePermissionState) => {
+    const persisted = androidBridgeEngine.updatePermission(permissionMatrixKey(uiKey), requested);
+    const storeState = androidBridgeEngine.getPermissions()[permissionMatrixKey(uiKey)];
+    const outcome = permissionWriteOutcome(uiKey, requested, persisted, storeState);
+    setPermState((prev) => ({ ...prev, [uiKey]: outcome.state }));
+    setSimNotice(outcome.message);
+  };
+
+  const togglePermissionState = (uiKey: string) => {
+    commitPermissionState(uiKey, nextToggleState(permState[uiKey] ?? 'NOT_CONFIGURED'));
+  };
+
   const grantNotificationAccess = () => {
     if (typeof window === 'undefined') return;
     if (window.confirm('\u091c\u093e\u0930\u094d\u0935\u093f\u0938 \u0915\u094b \u0906\u092a\u0915\u0947 notifications \u092a\u0922\u093c\u0928\u0947 \u0915\u0940 \u0905\u0928\u0941\u092e\u0924\u093f \u091a\u093e\u0939\u093f\u090f \u0924\u093e\u0915\u093f \u0935\u0939 \u0906\u092a\u0915\u094b incoming notifications \u0915\u0947 \u092c\u093e\u0930\u0947 \u092e\u0947\u0902 \u092c\u0924\u093e \u0938\u0915\u0947\u0964')) {
-      setPermState((prev) => ({ ...prev, NOTIFICATION_ACCESS: 'ASK' }));
+      commitPermissionState('NOTIFICATION_ACCESS', 'ASK');
     }
   };
 
@@ -137,7 +158,10 @@ export const MobileBridgeModal: React.FC<Props> = ({
 
   const tryAnswerCall = (ev: PendingMobileEvent) => {
     onSpeak(buildCallAnswerUnsupported(activeLanguage));
-    updatePendingEventStatus(ev.eventId, 'FAILED');
+    const persisted = updatePendingEventStatus(ev.eventId, 'FAILED');
+    if (!persisted) {
+      setSimNotice('STATUS NOT SAVED — local storage refused the write; this item stays in the queue.');
+    }
     refresh();
   };
 
@@ -200,22 +224,32 @@ export const MobileBridgeModal: React.FC<Props> = ({
     const outcome = replyDispatchOutcome(httpStatus, body);
     // A handed-off reply is not EXECUTED (the device has not confirmed it), and
     // an unconfirmed dispatch is not a SUCCESS in the audit log.
-    updatePendingEventStatus(ev.eventId, replyEventStatusForOutcome(outcome));
+    const statusPersisted = updatePendingEventStatus(ev.eventId, replyEventStatusForOutcome(outcome));
     const auditProjection = replyAuditProjection(outcome);
-    logMobileAudit({
+    const auditPersisted = logMobileAudit({
       application: ev.appLabel || ev.displaySubtitle,
       actionRequested: 'SEND_REPLY',
       permissionState: 'GRANTED',
       ...auditProjection,
     });
-    setSimNotice('REPLY ' + outcome + ' (HTTP ' + httpStatus + ')');
+    const persistNote = statusPersisted && auditPersisted
+      ? ''
+      : ' \u2014 STORAGE WRITE REFUSED: ' +
+        (!statusPersisted ? 'queue status not saved' : '') +
+        (!statusPersisted && !auditPersisted ? ' and ' : '') +
+        (!auditPersisted ? 'audit entry not saved' : '') +
+        ' (reverts on reload).';
+    setSimNotice('REPLY ' + outcome + ' (HTTP ' + httpStatus + ')' + persistNote);
     onSpeak(replyDispatchSpeech(outcome, activeLanguage));
     setReplyBusyId(null);
     refresh();
   };
 
   const dismissPending = (ev: PendingMobileEvent) => {
-    updatePendingEventStatus(ev.eventId, 'REJECTED');
+    const persisted = updatePendingEventStatus(ev.eventId, 'REJECTED');
+    if (!persisted) {
+      setSimNotice('DISMISS NOT SAVED — local storage refused the write; this item stays in the queue.');
+    }
     refresh();
   };
 
@@ -242,7 +276,7 @@ export const MobileBridgeModal: React.FC<Props> = ({
           <div className="flex items-center gap-2">
             <span className="text-[9px] font-mono text-slate-500">{queue.length} pending</span>
             {queue.length > 0 && (
-              <button onClick={() => { clearPendingQueue(); refresh(); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">CLEAR</button>
+              <button onClick={() => { setSimNotice(clearPendingQueue() ? null : 'QUEUE NOT CLEARED — local storage refused the write; these items stay in the queue.'); refresh(); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">CLEAR</button>
             )}
           </div>
         </div>
@@ -333,10 +367,12 @@ export const MobileBridgeModal: React.FC<Props> = ({
         <p className="text-[11px] text-slate-400 mb-2">{"JARVIS \u0915\u094b\u0902 \u0906\u092a\u0915\u0947 notifications \u092a\u0922\u093c\u0928\u0947 \u0915\u0940 \u0905\u0928\u0941\u092e\u0924\u093f \u091a\u093e\u0939\u093f\u090f \u0924\u093e\u0915\u093f \u0935\u0939 \u0906\u092a\u0915\u094b incoming notifications \u0915\u0947 \u092c\u093e\u0930\u0947 \u092e\u0947\u0902 \u092c\u0924\u093e \u0938\u0915\u0947\u0964"}</p>
         <div className="flex items-center gap-2">
           <button onClick={grantNotificationAccess} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-amber-500 hover:bg-amber-400 text-slate-950">ASK FOR ACCESS</button>
-          <button onClick={() => { setPermState((prev) => ({ ...prev, NOTIFICATION_ACCESS: 'GRANTED' })); }} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-600/40">MARK GRANTED*</button>
+          <button onClick={() => commitPermissionState('NOTIFICATION_ACCESS', 'GRANTED')} className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-600/40">MARK GRANTED*</button>
         </div>
         <p className="text-[9px] text-slate-500 mt-1.5 font-mono">*Only mark granted after the Android system actually granted Notification Listener access.</p>
       </div>
+
+      {simNotice && <p className="text-[10px] text-amber-300 font-mono">⚠ {simNotice}</p>}
 
       <div className="space-y-2">
         <h3 className="text-[11px] font-mono font-bold text-cyan-300 tracking-wider">MOBILE PERMISSION CENTER</h3>
@@ -350,7 +386,7 @@ export const MobileBridgeModal: React.FC<Props> = ({
               <span className={`text-[9px] px-2 py-0.5 rounded font-mono font-bold ${permState[def.key] === 'GRANTED' ? 'bg-emerald-900/60 text-emerald-300' : permState[def.key] === 'ASK' ? 'bg-amber-900/50 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
                 {permState[def.key] || 'NOT_CONFIGURED'}
               </span>
-              <button onClick={() => { setPermState((prev) => ({ ...prev, [def.key]: prev[def.key] === 'GRANTED' ? 'NOT_CONFIGURED' : 'GRANTED' })); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">TOGGLE</button>
+              <button onClick={() => togglePermissionState(def.key)} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">TOGGLE</button>
             </div>
           </div>
         ))}
@@ -364,7 +400,18 @@ export const MobileBridgeModal: React.FC<Props> = ({
             return (
               <div key={cat} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-between gap-2">
                 <span className="text-[10px] font-mono text-slate-300">{categoryLabel(cat)}</span>
-                <button onClick={() => { const next = setCategoryPolicy(policy, cat, nextPolicy(current)); setPolicy(next); }} className="text-[9px] px-2 py-1 rounded font-mono font-bold ${current === 'ALLOW' ? 'bg-emerald-900/60 text-emerald-300' : current === 'ASK' ? 'bg-amber-900/50 text-amber-300' : 'bg-rose-950/60 text-rose-300'}">({current})</button>
+                <button
+                  onClick={() => {
+                    const change = applyCategoryPolicy(policy, cat, nextPolicy(current));
+                    setPolicy(change.policy);
+                    if (!change.persisted) {
+                      setSimNotice('POLICY NOT SAVED — local storage refused the write; this change reverts on reload.');
+                    }
+                  }}
+                  className={`text-[9px] px-2 py-1 rounded font-mono font-bold ${current === 'ALLOW' ? 'bg-emerald-900/60 text-emerald-300' : current === 'ASK' ? 'bg-amber-900/50 text-amber-300' : 'bg-rose-950/60 text-rose-300'}`}
+                >
+                  ({current})
+                </button>
               </div>
             );
           })}
@@ -378,7 +425,7 @@ export const MobileBridgeModal: React.FC<Props> = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-[11px] font-mono font-bold text-cyan-300 tracking-wider">AUDIT LOG (METADATA ONLY)</h3>
-        <button onClick={() => { clearMobileAuditLog(); refresh(); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">CLEAR</button>
+        <button onClick={() => { setSimNotice(clearMobileAuditLog() ? null : 'AUDIT LOG NOT CLEARED — local storage refused the write; entries remain.'); refresh(); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">CLEAR</button>
       </div>
       {audit.length === 0 ? (
         <p className="text-xs text-slate-500 font-mono">No audit entries yet. Safe metadata only — never full private message content.</p>

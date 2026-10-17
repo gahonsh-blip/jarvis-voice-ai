@@ -22,15 +22,19 @@ export type ProviderVerdict =
   | 'NOT_CONFIGURED'
   | 'RECONNECT'
   | 'FAILED'
-  | 'UNCONFIRMED';
+  | 'UNCONFIRMED'
+  | 'VERIFIED_NOT_PERSISTED';
 
 /**
  * Classifies a raw `/api/social/platforms/test` response.
  *
- * The endpoint answers `{ success, status, accountName?, message }`. Only a
- * `success: true` paired with `status: 'VERIFIED'` **and** a reported account
- * name is a verification: `success: true` alone means the request completed,
- * not that the identity behind the credential was read.
+ * The endpoint answers `{ success, status, accountName?, message, persisted }`.
+ * Only a `success: true` paired with `status: 'VERIFIED'`, a reported account
+ * name **and** `persisted !== false` is a verification: `success: true` alone
+ * means the request completed, not that the identity behind the credential was
+ * read. `persisted: false` means the provider proved the account but the
+ * server could not cache it durably — the very next boot would not have it —
+ * so the probe is reported as verified-but-not-saved rather than a clean OK.
  */
 export function classifyProviderTestResponse(raw: unknown): ProviderVerdict {
   if (!raw || typeof raw !== 'object') return 'UNCONFIRMED';
@@ -38,7 +42,11 @@ export function classifyProviderTestResponse(raw: unknown): ProviderVerdict {
 
   if (data.success === true) {
     if (data.status !== 'VERIFIED') return 'UNCONFIRMED';
-    return verifiedAccountName(raw) ? 'OK' : 'UNCONFIRMED';
+    if (!verifiedAccountName(raw)) return 'UNCONFIRMED';
+    // A verified probe whose account cache did not reach durable storage is not
+    // a saved connection: it disappears on the next boot.
+    if (data.persisted === false) return 'VERIFIED_NOT_PERSISTED';
+    return 'OK';
   }
 
   switch (data.status) {
@@ -74,6 +82,10 @@ export function describeProviderVerdict(
   switch (verdict) {
     case 'OK':
       return account ? `Verified — live account: ${account}` : 'Verified by the provider.';
+    case 'VERIFIED_NOT_PERSISTED':
+      return account
+        ? `Verified live as ${account}, but the server could not save the connection — it will not survive a restart.`
+        : 'Verified by the provider, but the server could not save the connection.';
     case 'NOT_CONFIGURED':
       return 'Not configured — no credentials present.';
     case 'RECONNECT':
@@ -223,4 +235,78 @@ export function socialApprovalPostureLabel(
   }
   if (level >= 4) return `Level ${level} approval required for external posts`;
   return `Permission level ${level} — NOT a Level 4 gate`;
+}
+
+/**
+ * The reach label for a post the server reported as published / VERIFIED.
+ *
+ * The server distinguishes an upload anyone can watch from one only the owner
+ * can see: a YouTube upload is PRIVATE unless public is applied, and its
+ * message states the privacy actually applied. The panel used to print
+ * "Uploaded & Verified Live on YouTube" for every verified upload, asserting a
+ * public audience the server never measured. This reads the privacy the server
+ * recorded instead, and says so when none was recorded.
+ */
+export function publishedPostReachLabel(post: {
+  platform?: string;
+  privacyStatus?: 'private' | 'unlisted' | 'public';
+}): string {
+  if ((post?.platform ?? '') === 'YouTube') {
+    switch (post?.privacyStatus) {
+      case 'public':
+        return 'Uploaded & Verified Public on YouTube';
+      case 'unlisted':
+        return 'Uploaded & Verified Unlisted on YouTube';
+      case 'private':
+        return 'Uploaded & Verified Private on YouTube';
+      default:
+        return 'Uploaded & Verified — visibility not recorded';
+    }
+  }
+  return 'Live & Verified';
+}
+
+/** The status line the YouTube Studio banner shows for the current OAuth state. */
+export const YOUTUBE_STUDIO_UNKNOWN_STATUS =
+  'Status: UNKNOWN — the YouTube connection state has not been observed yet';
+
+/**
+ * Honest status line for the YouTube Data API v3 Studio banner.
+ *
+ * The banner used to fall through to
+ * `Status: Ready for YouTube Video File Selection & Level-4 Human Authorization`
+ * whenever `youTubeOAuthStatus` was absent — before the platforms probe
+ * answered, after a failed load, or on a response whose status the branches did
+ * not name. A green "Ready" over a value nobody observed reads as a live
+ * channel. This names only what the provider data shows: a verified upload
+ * grant, a read-only channel, configured-but-unverified credentials, a token
+ * error, or an explicit UNKNOWN when no status was recorded.
+ */
+export function youTubeStudioStatusLine(
+  oauth: {
+    status?: string;
+    connected?: boolean;
+    canPublish?: boolean;
+    authType?: string;
+    channelTitle?: string;
+    scopes?: string[];
+    diagnosticError?: string;
+  } | null | undefined
+): string {
+  if (!oauth || !oauth.status) {
+    return YOUTUBE_STUDIO_UNKNOWN_STATUS;
+  }
+  if (oauth.status === 'API_VERIFIED' || (oauth.connected && oauth.canPublish)) {
+    if (youtubeCanPublishMeasured(oauth)) {
+      return `Channel: ${oauth.channelTitle || 'Unnamed channel'} | Grant confirmed by the provider — scopes: ${describeGrantedScopes(oauth.scopes)}`;
+    }
+    return `Channel confirmed read-only: ${oauth.channelTitle || 'unnamed channel'} | Video upload is NOT authorized — granted scopes: ${describeGrantedScopes(oauth.scopes)}`;
+  }
+  if (oauth.status === 'CONFIGURED') {
+    return `Status: Configured (${oauth.authType || 'OAuth 2.0'}) — 1-Click OAuth Connect Required for Uploads`;
+  }
+  if (oauth.status === 'TOKEN_INVALID' || oauth.status === 'ERROR') {
+    return `Status: Token / Permission Error (${oauth.diagnosticError || 'Re-authentication required'})`;
+  }
+  return YOUTUBE_STUDIO_UNKNOWN_STATUS;
 }

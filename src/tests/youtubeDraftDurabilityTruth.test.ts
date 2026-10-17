@@ -213,4 +213,19 @@ describe('YouTube staging routes are guarded in source against a regression', ()
     // not return.
     expect(route).not.toMatch(/[^=] persistMemory\(\);/);
   });
+
+  it.each([
+    ["app.post('/api/social/youtube/upload-draft'", "app.post('/api/social/youtube/draft-test'"],
+    ["app.post('/api/social/youtube/draft-test'", "app.post('/api/social/youtube/update-draft'"],
+  ])('%s reads the staged gate back from disk and drops a phantom gate', (start, end) => {
+    const route = routeOf(start, end);
+    // `persistApprovalRegistry()` returns `persistMemory()`'s boolean, which is
+    // true when the file already holds identical bytes without a write. The
+    // staged gate must be read back from disk, not trusted from that boolean.
+    expect(route).toContain('actionRequestStatusOnDisk(');
+    expect(route).toContain("'PENDING_APPROVAL'");
+    // Both the non-durable rollback and the blocked branch must remove the
+    // request from the live registry so a later persist cannot resurrect it.
+    expect(route).toContain('removeActionRequest(');
+  });
 });

@@ -41,11 +41,19 @@ import {
   isResolvedAddress,
   type CoordsSource,
 } from '../utils/locationService';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import {
+  liveWatchBadge,
+  liveWatchToggleLabel,
+  type GeoWatchState,
+} from '../utils/hardening/liveGpsWatchTruth';
 
 interface LocationServicesModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSpeak?: (text: string) => void;
+  /** True when the dashboard's own cache write for this fix was refused. */
+  cacheWriteRefused?: boolean;
   onCoordinatesUpdated?: (
     coords: GeoCoordinates,
     address: LocationAddress | null,
@@ -57,6 +65,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
   isOpen,
   onClose,
   onSpeak,
+  cacheWriteRefused = false,
   onCoordinatesUpdated,
 }) => {
   // State
@@ -75,12 +84,17 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
     return cached?.address || null;
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isWatching, setIsWatching] = useState<boolean>(false);
+  const [watchState, setWatchState] = useState<GeoWatchState>('IDLE');
   const [highAccuracy, setHighAccuracy] = useState<boolean>(true);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [mapLayer, setMapLayer] = useState<'radar' | 'osm' | 'hybrid'>('radar');
   const [zoomLevel, setZoomLevel] = useState<number>(14);
   const [copiedCoords, setCopiedCoords] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
+  // Real verdict of this modal's own cache writes. A refused write must not
+  // present the fix as durably cached — it reverts on the next load.
+  const [cacheRefused, setCacheRefused] = useState<boolean>(false);
+  const cacheWriteRefusedEffective = cacheWriteRefused || cacheRefused;
   const [selectedWaypoint, setSelectedWaypoint] = useState<WaypointMarker>(TACTICAL_PRESETS[0]);
   const [customLat, setCustomLat] = useState<string>('');
   const [customLon, setCustomLon] = useState<string>('');
@@ -118,7 +132,9 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           setIsLoading(false);
           const addr = await reverseGeocodeCoordinates(newCoords.latitude, newCoords.longitude);
           setAddress(addr);
-          saveCachedLocation(newCoords, addr);
+          // Report the real durability of the cache write; a refused write must
+          // not leave the HUD claiming a cached fix that reverts on reload.
+          setCacheRefused(!saveCachedLocation(newCoords, addr));
           onCoordinatesUpdated?.(newCoords, addr, 'live');
         },
         (err) => {
@@ -150,18 +166,21 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
 
   // Toggle Live Watch Position
   const toggleLiveWatch = useCallback(() => {
-    if (isWatching) {
+    if (watchState !== 'IDLE') {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      setIsWatching(false);
+      setWatchState('IDLE');
     } else {
       if (!('geolocation' in navigator)) {
         setPermissionError('Geolocation API not supported.');
+        setWatchState('UNSUPPORTED');
         return;
       }
-      setIsWatching(true);
+      // Requesting the watch is not a live fix. Stay ACQUIRING — the streaming
+      // badge is only shown once the first real reading arrives below.
+      setWatchState('ACQUIRING');
       const id = navigator.geolocation.watchPosition(
         (pos) => {
           const updated: GeoCoordinates = {
@@ -176,12 +195,13 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
           };
           setCoords(updated);
           setCoordsSource('live');
-          saveCachedLocation(updated, address);
+          setWatchState('STREAMING');
+          setCacheRefused(!saveCachedLocation(updated, address));
           onCoordinatesUpdated?.(updated, address, 'live');
         },
         (err) => {
           setPermissionError(`Live tracking interrupted: ${err.message}`);
-          setIsWatching(false);
+          setWatchState('INTERRUPTED');
         },
         {
           enableHighAccuracy: highAccuracy,
@@ -191,7 +211,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
       );
       watchIdRef.current = id;
     }
-  }, [isWatching, highAccuracy, address, onCoordinatesUpdated]);
+  }, [watchState, highAccuracy, address, onCoordinatesUpdated]);
 
   // Clean up watch on unmount
   useEffect(() => {
@@ -210,11 +230,12 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
   }, [isOpen, coords, highAccuracy, fetchCurrentLocation]);
 
   // Copy coordinates
-  const handleCopyCoords = () => {
+  const handleCopyCoords = async () => {
     if (!coords) return;
     const text = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
-    navigator.clipboard.writeText(text);
-    setCopiedCoords(true);
+    const outcome = await copyToClipboard(text, 'The coordinates');
+    setCopyOutcome(outcome);
+    setCopiedCoords(outcome.copied);
     setTimeout(() => setCopiedCoords(false), 2000);
   };
 
@@ -276,7 +297,7 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
     const addr = await reverseGeocodeCoordinates(lat, lon);
     setAddress(addr);
     setIsLoading(false);
-    saveCachedLocation(customCoords, addr);
+    setCacheRefused(!saveCachedLocation(customCoords, addr));
     onCoordinatesUpdated?.(customCoords, addr, 'manual');
     setShowManualInput(false);
   };
@@ -382,6 +403,19 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
             </div>
           )}
 
+          {/* Cache durability alert — a refused write must not read as cached. */}
+          {cacheWriteRefusedEffective && (
+            <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs font-mono flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-rose-300">FIX NOT CACHED — local storage refused the write</p>
+                <p className="text-rose-200/80 mt-1">
+                  This position is shown for this session only. It is not persisted, so the next load reverts to the previous cached fix or no fix.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Top Row: Coordinates Telemetry Card & Controls */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Primary Coordinates HUD */}
@@ -417,19 +451,40 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {isWatching && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      STREAMING
+                  {liveWatchBadge(watchState).visible && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                        liveWatchBadge(watchState).tone === 'ok'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : liveWatchBadge(watchState).tone === 'wait'
+                            ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          liveWatchBadge(watchState).live ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+                        }`}
+                      />
+                      {liveWatchBadge(watchState).label}
                     </span>
                   )}
                   {coords && (
                     <button
                       onClick={handleCopyCoords}
+                      title={copyOutcome?.detail || 'Copy coordinates'}
                       className="flex items-center gap-1 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono text-cyan-300 border border-slate-700 transition-colors"
                     >
-                      {copiedCoords ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedCoords ? 'Copied' : 'Copy'}</span>
+                      {copiedCoords ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : copyOutcome?.tone === 'warn' ? (
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                      <span className={copyOutcome?.tone === 'warn' ? 'text-rose-400' : undefined}>
+                        {copiedCoords ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy'}
+                      </span>
                     </button>
                   )}
                 </div>
@@ -555,13 +610,13 @@ export const LocationServicesModal: React.FC<LocationServicesModalProps> = ({
                   <button
                     onClick={toggleLiveWatch}
                     className={`w-full py-2 px-3 rounded-lg border font-mono text-xs flex items-center justify-center gap-2 transition-colors ${
-                      isWatching
+                      watchState !== 'IDLE'
                         ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/30'
                         : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
                     }`}
                   >
-                    <Radio className={`w-3.5 h-3.5 ${isWatching ? 'animate-pulse text-emerald-400' : ''}`} />
-                    <span>{isWatching ? 'Stop Live Tracking' : 'Start Live GPS Watch'}</span>
+                    <Radio className={`w-3.5 h-3.5 ${watchState === 'STREAMING' ? 'animate-pulse text-emerald-400' : ''}`} />
+                    <span>{liveWatchToggleLabel(watchState !== 'IDLE')}</span>
                   </button>
 
                   <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-950/60 border border-slate-800 text-xs font-mono">

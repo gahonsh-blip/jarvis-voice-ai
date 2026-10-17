@@ -139,11 +139,20 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
     const nextIdx = (states.indexOf(current) + 1) % states.length;
     const nextState = states[nextIdx];
 
-    androidBridgeEngine.updatePermission(key, nextState);
+    const persisted = androidBridgeEngine.updatePermission(key, nextState);
     setPermissions(androidBridgeEngine.getPermissions());
     setBridgeStatus(androidBridgeEngine.getStatus());
 
-    setStatusMessage(`Updated ${key} to ${nextState}`);
+    // The store echo, not the request: `updatePermission` reverts the in-memory
+    // matrix on a refused write, so a message promising the value "in memory
+    // only" asserted a state that does not exist and the badge below it showed
+    // the old value. Name the value the store actually holds.
+    const stored = androidBridgeEngine.getPermissions()[key];
+    setStatusMessage(
+      persisted
+        ? `Updated ${key} to ${stored}`
+        : `NOT SAVED: ${key} stays at ${stored} (requested ${nextState}) — the bridge store refused the write; this change reverts on reload.`
+    );
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
@@ -158,31 +167,63 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
       notification_history: 'GRANTED',
       location_access: 'GRANTED',
     };
+    let persisted = true;
     for (const [k, v] of Object.entries(granted)) {
-      androidBridgeEngine.updatePermission(k as keyof MobilePermissionMatrix, v);
+      persisted = androidBridgeEngine.updatePermission(k as keyof MobilePermissionMatrix, v) && persisted;
     }
     setPermissions(androidBridgeEngine.getPermissions());
+    // This component wires only `simulatedAndroidAdapter` (the real adapter is
+    // never constructed here), so pairing registers the SIMULATION_ONLY testbed,
+    // not a live handset. The message must say so: a bare "paired" claim read as
+    // a real device connection on a screen whose whole purpose is hardware truth.
     simulatedAndroidAdapter.connect();
-    setBridgeStatus(androidBridgeEngine.getStatus());
-    setStatusMessage('All Android permissions set to GRANTED & Testbed paired');
+    const simStatus = androidBridgeEngine.getStatus();
+    setBridgeStatus(simStatus);
+    setStatusMessage(
+      !persisted
+        ? 'PARTIAL: some permissions were not saved — the bridge store refused the write; they stay at their stored values and revert on reload.'
+        : `Permissions set to GRANTED. Simulation testbed paired — status ${simStatus} (no live handset connected).`
+    );
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
   const handleToggleCategory = (cat: NotificationCategory) => {
-    const next = { ...categories, [cat]: !categories[cat] };
-    setCategories(next);
-    androidBridgeEngine.updateSettings({ categoryPermissions: next });
+    const requested = !categories[cat];
+    const next = { ...categories, [cat]: requested };
+    const persisted = androidBridgeEngine.updateSettings({ categoryPermissions: next });
+    // Render the durable store echo, never the request. `updateSettings()`
+    // reverts its in-memory settings on a refused write (the store-echo
+    // contract), so a row driven by `next` would show a category the store
+    // does not hold and the next reload would silently restore the old value.
+    const stored = androidBridgeEngine.getSettings().categoryPermissions;
+    setCategories(stored);
+    setStatusMessage(
+      persisted
+        ? `${cat} category set to ${stored[cat] ? 'ALLOWED' : 'BLOCKED'}`
+        : `NOT SAVED: ${cat} category is still ${stored[cat] ? 'ALLOWED' : 'BLOCKED'} (requested ${requested ? 'ALLOWED' : 'BLOCKED'}) — the bridge store refused the write; this change reverts on reload.`
+    );
+    setTimeout(() => setStatusMessage(null), 3000);
   };
 
   const handleToggleAppRule = (pkg: string) => {
     const rule = appRules[pkg];
     if (!rule) return;
+    const requested = !rule.allowed;
     const next = {
       ...appRules,
-      [pkg]: { ...rule, allowed: !rule.allowed },
+      [pkg]: { ...rule, allowed: requested },
     };
-    setAppRules(next);
-    androidBridgeEngine.updateSettings({ privacyRules: next });
+    const persisted = androidBridgeEngine.updateSettings({ privacyRules: next });
+    // Same store-echo rule as the category rows above.
+    const stored = androidBridgeEngine.getSettings().privacyRules;
+    setAppRules(stored);
+    const storedAllowed = stored[pkg]?.allowed;
+    setStatusMessage(
+      persisted
+        ? `${rule.appName} rule set to ${storedAllowed ? 'ALLOWED' : 'BLOCKED'}`
+        : `NOT SAVED: ${rule.appName} is still ${storedAllowed ? 'ALLOWED' : 'BLOCKED'} (requested ${requested ? 'ALLOWED' : 'BLOCKED'}) — the bridge store refused the write; this change reverts on reload.`
+    );
+    setTimeout(() => setStatusMessage(null), 3000);
   };
 
   // Test Simulation Actions

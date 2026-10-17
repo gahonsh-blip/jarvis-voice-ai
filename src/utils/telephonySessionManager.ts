@@ -710,6 +710,19 @@ export class TelephonySessionManager {
   }
 
   /**
+   * Drop a staged outbound request that could not be persisted. The stage route
+   * calls this only when the registry write did not reach disk: the pending
+   * request exists only in this process, so a restart would forget the approval
+   * card the operator was told to act on. Only a request still awaiting
+   * authorization is removed; anything already decided is left untouched.
+   */
+  static cancelOutboundRequest(id: string): boolean {
+    const req = this.pendingOutboundRequests.get(id);
+    if (!req || req.status !== 'PENDING_AUTHORIZATION') return false;
+    return this.pendingOutboundRequests.delete(id);
+  }
+
+  /**
    * Undo an authorization decision that could not be persisted. The authorize
    * route calls this only when the recorded decision did not reach disk: the
    * request returns to PENDING_AUTHORIZATION so a reboot cannot keep a decision
