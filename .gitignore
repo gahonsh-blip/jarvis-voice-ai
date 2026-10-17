@@ -1,0 +1,16 @@
+*.wav
+*.mp3
+__pycache__/
+.env
+
+node_modules/
+
+dist/
+.env.local
+.env.*.local
+
+
+.vite/
+
+# Per-run window state lives on the automation/hermes-state branch, not here.
+hermes-window-state.json
