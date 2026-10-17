@@ -206,22 +206,38 @@ function loadDedupStore(): DedupStore {
   return {};
 }
 
-function persistDedupStore(store: DedupStore): void {
-  if (typeof window === 'undefined') return;
+// Returns whether the dedup record actually reached storage. It used to return
+// `void` and swallow the storage error in an empty catch, so a refused write
+// (private mode, full disk, no window) was indistinguishable from a stored one.
+function persistDedupStore(store: DedupStore): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(DEDUP_STORAGE_KEY, JSON.stringify(store));
-  } catch {
+    return true;
+  } catch (err) {
     // storage full ? degrade gracefully, never crash the pipeline
+    console.warn('[NotificationPrivacy] Error saving dedup store to localStorage:', err);
+    return false;
   }
 }
 
+export interface DuplicateCheck {
+  // True when this identity was already seen within the dedup window.
+  duplicate: boolean;
+  // Whether the new identity reached the dedup store. False means the write was
+  // refused, so a re-delivery after a reload will not be recognised as a
+  // duplicate — the pipeline must not report this notification as de-duplicated.
+  persisted: boolean;
+}
+
 /**
- * Returns true if this notification identity was already processed
- * within the short-lived window (dedup). Also marks it processed.
+ * Classifies a notification identity against the dedup store and marks it
+ * processed. Returns both the duplicate verdict and whether the dedup record
+ * reached storage, so the caller can tell a durable dedup from a refused write.
  */
-export function isDuplicateNotification(identity: string): boolean {
+export function checkAndMarkDuplicate(identity: string): DuplicateCheck {
   const store = loadDedupStore();
-  if (store[identity]) return true;
+  if (store[identity]) return { duplicate: true, persisted: true };
   store[identity] = { expiresAt: Date.now() + DEDUP_TTL_MS };
   // Hard cap on dedup bucket size (privacy + memory hygiene)
   const keys = Object.keys(store);
@@ -231,8 +247,15 @@ export function isDuplicateNotification(identity: string): boolean {
       delete store[k];
     }
   }
-  persistDedupStore(store);
-  return false;
+  return { duplicate: false, persisted: persistDedupStore(store) };
+}
+
+/**
+ * Returns true if this notification identity was already processed
+ * within the short-lived window (dedup). Also marks it processed.
+ */
+export function isDuplicateNotification(identity: string): boolean {
+  return checkAndMarkDuplicate(identity).duplicate;
 }
 
 /** Reset dedup store (test helpers). */
@@ -354,7 +377,8 @@ export function ingestNotification(params: {
     bodyHash: contentHash(params.body),
   });
 
-  if (isDuplicateNotification(identity)) {
+  const dedup = checkAndMarkDuplicate(identity);
+  if (dedup.duplicate) {
     return null;
   }
 
@@ -380,6 +404,7 @@ export function ingestNotification(params: {
     permissionState: exposure.contentAvailable ? 'GRANTED' : sensitive ? 'GRANTED' : 'LIMITED',
     isSimulated: Boolean(params.isSimulated),
     simulationOnly: Boolean(params.isSimulated),
+    dedupPersisted: dedup.persisted,
   };
 }
 

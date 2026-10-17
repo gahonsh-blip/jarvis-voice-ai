@@ -14,6 +14,7 @@ import {
   setCategoryPolicy,
   applyCategoryPolicy,
   saveMobileBridgePolicy,
+  checkAndMarkDuplicate,
 } from '../utils/mobileNotificationPrivacy';
 import {
   DEFAULT_MOBILE_BRIDGE_POLICY,
@@ -441,6 +442,139 @@ describe('Notification Privacy Engine — policy writes report whether they land
     store.failWrites = true;
     const refused = applyCategoryPolicy(mkPolicy(), 'EMAIL', 'DENY');
     expect(refused.persisted).toBe(false);
+  });
+});
+
+// A dedup store that refuses the write is the same defect class as the policy
+// writer: the pipeline must not report a notification as de-duplicated when its
+// dedup record never reached storage.
+describe('Notification Privacy Engine — dedup writes report whether they landed', () => {
+  class ControllableStorage {
+    private store = new Map<string, string>();
+    failWrites = false;
+    get length() {
+      return this.store.size;
+    }
+    clear() {
+      this.store.clear();
+    }
+    getItem(key: string) {
+      return this.store.has(key) ? this.store.get(key)! : null;
+    }
+    setItem(key: string, value: string) {
+      if (this.failWrites) throw new DOMException('QuotaExceededError');
+      this.store.set(key, String(value));
+    }
+    removeItem(key: string) {
+      this.store.delete(key);
+    }
+  }
+
+  const store = new ControllableStorage();
+  const base = {
+    packageName: 'com.whatsapp',
+    appLabel: 'WhatsApp',
+    notificationId: 1,
+    key: 'k1',
+    eventId: 'evt-1',
+    receivedAt: '2026-09-20T12:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    store.clear();
+    store.failWrites = false;
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('localStorage', store);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('checkAndMarkDuplicate reports persisted=true and a real store record when the write lands', () => {
+    const res = checkAndMarkDuplicate('id-a');
+    expect(res.duplicate).toBe(false);
+    expect(res.persisted).toBe(true);
+    expect(store.getItem('hermes_jarvis_mobile_dedup_v1')).toContain('id-a');
+  });
+
+  it('checkAndMarkDuplicate reports persisted=false when the store refuses the write', () => {
+    store.failWrites = true;
+    const res = checkAndMarkDuplicate('id-b');
+    expect(res.duplicate).toBe(false);
+    expect(res.persisted).toBe(false);
+  });
+
+  it('a second sighting of a stored identity is a duplicate and needs no write', () => {
+    checkAndMarkDuplicate('id-c');
+    const again = checkAndMarkDuplicate('id-c');
+    expect(again.duplicate).toBe(true);
+    expect(again.persisted).toBe(true);
+  });
+
+  it('ingestNotification marks dedupPersisted=true when the dedup record reached storage', () => {
+    const e = ingestNotification({
+      ...base,
+      policy: mkPolicy({ categories: { WHATSAPP: 'ALLOW' } }),
+      title: 'Amit',
+      body: 'Hello there',
+    });
+    expect(e).not.toBeNull();
+    expect(e!.dedupPersisted).toBe(true);
+  });
+
+  it('ingestNotification marks dedupPersisted=false when the dedup store refused the write', () => {
+    store.failWrites = true;
+    const e = ingestNotification({
+      ...base,
+      policy: mkPolicy({ categories: { WHATSAPP: 'ALLOW' } }),
+      title: 'Amit',
+      body: 'Hello there',
+    });
+    expect(e).not.toBeNull();
+    expect(e!.dedupPersisted).toBe(false);
+  });
+
+  it('a refused dedup write means a re-delivery is ingested again, not silently dropped', () => {
+    store.failWrites = true;
+    const first = ingestNotification({
+      ...base,
+      policy: mkPolicy({ categories: { WHATSAPP: 'ALLOW' } }),
+      title: 'Amit',
+      body: 'Hello there',
+    });
+    expect(first).not.toBeNull();
+    const second = ingestNotification({
+      ...base,
+      policy: mkPolicy({ categories: { WHATSAPP: 'ALLOW' } }),
+      title: 'Amit',
+      body: 'Hello there',
+    });
+    // The refused write left no record, so the re-delivery is not recognised as
+    // a duplicate. This is the behaviour the flag exists to disclose.
+    expect(second).not.toBeNull();
+    expect(second!.dedupPersisted).toBe(false);
+  });
+});
+
+// Without a browser window the dedup writer must never claim a stored record.
+describe('Notification Privacy Engine — dedup write with no window', () => {
+  it('checkAndMarkDuplicate reports not-persisted and ingest marks the event', () => {
+    expect(typeof window).toBe('undefined');
+    expect(checkAndMarkDuplicate('id-nw').persisted).toBe(false);
+    const e = ingestNotification({
+      packageName: 'com.whatsapp',
+      appLabel: 'WhatsApp',
+      notificationId: 1,
+      key: 'k1',
+      eventId: 'evt-nw',
+      receivedAt: '2026-09-20T12:00:00.000Z',
+      policy: mkPolicy({ categories: { WHATSAPP: 'ALLOW' } }),
+      title: 'Amit',
+      body: 'Hello there',
+    });
+    expect(e).not.toBeNull();
+    expect(e!.dedupPersisted).toBe(false);
   });
 });
 

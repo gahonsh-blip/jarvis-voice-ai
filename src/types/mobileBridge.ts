@@ -196,6 +196,12 @@ export interface MobileNotificationEvent {
   permissionState: MobilePermissionState;
   isSimulated: boolean;
   simulationOnly?: boolean;
+  /**
+   * Whether the dedup record for this notification actually reached storage.
+   * False means the store refused the write, so a re-delivery of the same
+   * notification will not be recognised as a duplicate after a reload.
+   */
+  dedupPersisted?: boolean;
 }
 
 export type MobileEvent = MobileIncomingCallEvent | MobileNotificationEvent | MobileStateEvent | MobileActionResultEvent;

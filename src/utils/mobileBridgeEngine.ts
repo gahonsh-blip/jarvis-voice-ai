@@ -141,7 +141,7 @@ export function buildSensitiveAnnouncement(lang: string): string {
   return 'Sir, a sensitive notification arrived. I did not read its private details.';
 }
 
-export function buildNotificationAnnouncement(event: MobileNotificationEvent, lang: string): string {
+function buildNotificationAnnouncementBase(event: MobileNotificationEvent, lang: string): string {
   const sir = langIsHindi(lang) ? '\u0938\u0930,' : 'Sir,';
   const app = event.appLabel || categoryLabel(event.category);
   if (event.sensitive) return buildSensitiveAnnouncement(lang);
@@ -157,6 +157,20 @@ export function buildNotificationAnnouncement(event: MobileNotificationEvent, la
     return sir + ' ' + app + ' \u092a\u0930 ' + sender + ' \u0915\u093e \u0938\u0902\u0926\u0947\u0936 \u0906\u092f\u093e \u0939\u0948\u0964 \u0909\u0928\u094d\u0939\u094b\u0902\u0928\u0947 \u0932\u093f\u0916\u093e \u0939\u0948: ' + (event.body || event.bodyPreview || '') + '. \u0915\u094d\u092f\u093e \u092e\u0948\u0902 \u0907\u0938\u0915\u093e \u091c\u0935\u093e\u092c \u0926\u0942\u0902?';
   }
   return sir + ' A message arrived from ' + sender + ' on ' + app + ': ' + (event.body || event.bodyPreview || '') + '. Shall I reply?';
+}
+
+// Speaks a notification announcement, naming the dedup gap when the dedup
+// record never reached storage. Without this the caller would report the
+// notification as de-duplicated while a re-delivery after a reload would be
+// announced again as if new (item 13, zero fake success).
+export function buildNotificationAnnouncement(event: MobileNotificationEvent, lang: string): string {
+  const base = buildNotificationAnnouncementBase(event, lang);
+  if (event.dedupPersisted === false) {
+    return langIsHindi(lang)
+      ? base + ' (\u0938\u0942\u091a\u0928\u093e: \u092f\u0939 notification \u0921\u0941\u092a\u094d\u0932\u093f\u0915\u0947\u091f-\u0930\u093f\u0915\u0949\u0930\u094d\u0921 \u0938\u094d\u091f\u094b\u0930 \u092e\u0947\u0902 \u0938\u0939\u0947\u091c\u093e \u0928\u0939\u0940\u0902 \u091c\u093e \u0938\u0915\u093e\u0964)'
+      : base + ' (Note: this notification could not be recorded in the dedup store.)';
+  }
+  return base;
 }
 
 export function buildReplyAsk(lang: string): string {
