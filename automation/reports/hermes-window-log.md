@@ -20075,3 +20075,69 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - चैट-हिस्ट्री clear अब असली verdict read-back करके लौटाता है और App उसे सतह पर दिखाता है —
   refused clear पर अब झूठा "cleared" नहीं; आइटम 13 अभी भी PARTIAL है।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:05
+Window date: 2026-10-18   Window slots completed so far: 8 (this slot)
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL advanced) — `src/utils/computerOperatorEngine.ts`:
+  `saveOperatorTask()` and `recordOperatorAudit()` returned `true` whenever
+  `localStorage.setItem` did not throw. A storage that silently refuses the write
+  (private mode, quota) made `persistOperatorTaskState()` stamp `taskPersisted: true`
+  on a task list and audit row that were never written; `App.tsx` (~1208) gates its
+  missing-record notice on `taskPersisted !== true`, so a durable-looking run and a
+  refused owner denial both read as recorded. Both writers now read the bytes back
+  (task id present in `loadOperatorTasks()`; re-read audit row carries task id + status).
+  Evidence: `src/tests/operatorPersistenceTruth.test.ts` 11/11 passed (targeted run).
+
+In Progress:
+- #13 Zero-fake-success for all tools — remaining enumerated target: the dead
+  `MOBILE_STATUS_CACHE_KEY` write in `mobileStatusEngine.ts`, plus the wider tail of
+  unclassified `success: true` / discarded-`persistMemory()` sites.
+
+Remaining:
+- #13 tail (mobileStatusEngine dead write); items 14-60 unchanged this slot.
+
+Bugs Found:
+- Computer Operator false-durable verdict: `setItem`-without-throw treated as a landed
+  write in `computerOperatorEngine.ts`. Found by continuing the item 13 storage sweep
+  into the enumerated `computerOperatorEngine.ts` targets.
+
+Bugs Fixed:
+- `saveOperatorTask` / `recordOperatorAudit` now return the real storage verdict.
+  Verified by negative validation: reverting only the engine to its pre-fix form failed
+  exactly the silent-refusal case (`1 failed | 10 passed`); restored -> 11/11.
+
+Tests:    265 files / 2879 tests passed (81.62 s, 0 failed) — full `npx vitest run` observed this fire
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0
+Build:    `npm run build` exit 0 (`dist/server.cjs` 1,098,626 bytes)
+E2E:      NOT RUN — no handset / emulator / display session
+Security: `.env` git-ignored (`.gitignore:4:.env`); no token/key in the diff; no `node_modules`/`dist` staged. `npm audit` NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 row + Last cycle), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  631618a (code fix) + this docs commit
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (open, non-draft, mergeable)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present in
+            this environment; the verified `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- None newly blocked this slot.
+
+Human Approval Required:
+- Final merge of PR #8 to `main` (human-read final verification report required).
+- Repository CI has never produced a green check (runner-allocation block) — owner action.
+
+Next Slot:
+- #13 tail — the dead `MOBILE_STATUS_CACHE_KEY` write in `mobileStatusEngine.ts`, the last
+  enumerated item-13 target, to close the item if the wider tail is exhausted.
+
+हिंदी सारांश (एक पंक्ति):
+- Computer Operator अब task और audit row को तभी "saved" बताता है जब वे storage से वापस पढ़े जाएँ; पहले silent write-refusal को भी success मान लिया जाता था।

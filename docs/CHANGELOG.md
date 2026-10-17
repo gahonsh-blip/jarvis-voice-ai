@@ -4,6 +4,13 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 01:05 IST — window 2026-10-17/18 slot 8: the Computer Operator read-back verdict
+
+### Fixed
+- **`saveOperatorTask()` / `recordOperatorAudit()` (`src/utils/computerOperatorEngine.ts`) returned `true` whenever `localStorage.setItem` did not throw.** A storage that silently refuses the write (private mode, quota) made `persistOperatorTaskState()` stamp `taskPersisted: true` on a task list and audit row that were never written, so `App.tsx` (~1208) suppressed its missing-record notice and a refused owner denial read as audited. Both writers now read the bytes back — `saveOperatorTask` requires `loadOperatorTasks()` to contain the task id, `recordOperatorAudit` requires the re-read row to carry the task id and status.
+- **`test(operator)` — `src/tests/operatorPersistenceTruth.test.ts` (11 cases)** covers a silently refused write across all three writers, a landed write read back, a throwing write, and a no-`window` run. Negative-validated: reverting the engine failed exactly the silent-refusal case (`1 failed | 10 passed`); restored → 11/11.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; targeted `operatorPersistenceTruth` 1 file / 11 passed; full `npx vitest run` **265 files / 2879 tests passed** (81.62 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1,098,626 bytes).
+
 ## [Unreleased] - 2026-10-18 00:35 IST — window 2026-10-17/18 slot 7: the chat-history clear verdict is read back and surfaced
 
 - **`fix(offline)` — `clearLocalChatHistory()` no longer claims a removal it did not confirm.** The writer returned `true` straight after `localStorage.removeItem`, so a store that reports success without deleting the key (locked-down or quota-frozen storage) read as an emptied history while `hermes_jarvis_chat_history_v1` was still on disk. It now reads the key back and returns `true` only when the key is confirmed gone, matching `clearPendingSyncQueue` (slot 6) and the Mobile Bridge clears (slot 5).
