@@ -20547,3 +20547,38 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - Mobile Bridge के तीन storage writers (registration, queue, audit) अब लिखे गए bytes वापस पढ़कर सच बताते हैं; चुपचाप drop होने वाला write अब "saved" नहीं दिखता (38/38 tests, lint/build green, commit d664fe0 pushed).
+
+---
+
+## Slot 13 (cont.) — 2026-10-18 03:35 IST fire — verification addendum (03:56 IST)
+
+This run re-entered the 03:35 IST slot (the sandbox is fresh each fire; the code
+branch already carried slot 13's commits). No new source change was made in this
+run — the earlier attempt's work was verified, not repeated.
+
+Re-verified against the remote (not assumed):
+
+- Code branch in sync: local HEAD `5de1e1a` == `git ls-remote origin
+  feature/hermes-full-completion` `5de1e1a`. `git status -sb` clean.
+- Slot 13 commits present: `d664fe0` (fix: mobile-bridge write read-back),
+  `cfaa5bf` (docs: status + changelog), `5de1e1a` (window log).
+- PR #8 — `open`, `draft=false`, head `feature/hermes-full-completion` @ `5de1e1a`
+  -> base `main`; URL https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+  (observed via GitHub REST `pulls?state=all`). Mergeable state: NOT RUN in this
+  run (GitHub reported `mergeable: null`, still computing).
+- Full suite / lint / build from this slot: NOT RUN in this run. The counts in the
+  section above were observed in the earlier attempt of this same slot, not here.
+
+State-branch repair (this run): the first state commit of this run
+(`e87e77e`) accidentally captured the whole working tree (18 entries). A
+follow-up commit (`62f2c73`) removed every path except `hermes-window-state.json`,
+so `automation/hermes-state` again holds exactly one file. No history was
+rewritten; both commits remain.
+
+State now: `slots_completed: 13`, `window_date: 2026-10-18`, `finalized: false`,
+`current_item: 13` (`PARTIAL`).
+
+Bugs Found (this run): none in product code. Process bug found and fixed: the
+state-branch publish can capture the working tree if run from the code branch
+without explicit staging of only the state file; corrected by the cleanup commit
+above. Next slot must stage only the state file.
