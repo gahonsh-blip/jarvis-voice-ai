@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-17 22:35 IST — window 2026-10-17/18 slot 4: the notification dedup write verdict is surfaced, not swallowed
+
+### Fixed
+- **`persistDedupStore()` (`src/utils/mobileNotificationPrivacy.ts`) swallowed the `localStorage` refusal in an empty `catch` and returned `void`, so a dedup record that never reached storage was indistinguishable from a stored one.** On a quota refusal, in private browsing, or with no `window` the pipeline still treated the notification as de-duplicated, and a re-delivery after a reload was ingested again as if new. The writer now returns `true` only when `setItem` returned and `false` on a thrown refusal or with no window.
+- **`checkAndMarkDuplicate(identity)` now returns `{ duplicate, persisted }`** so callers can tell a durable dedup from a refused write; `isDuplicateNotification()` is retained as a thin wrapper over it. `ingestNotification()` carries `dedupPersisted` on the event (new optional field on `MobileNotificationEvent`) and `buildNotificationAnnouncement()` names the gap in English and Hindi when the record never landed.
+
+### Tests
+- 8 new cases in `src/tests/mobileNotificationPrivacy.test.ts` covering a landed write, a refused write, the duplicate path, both `ingestNotification` verdicts, the re-delivery consequence of a refused write, and the no-window behaviour. Negative-validated: forcing `dedupPersisted: true` failed 3 assertions.
+
+---
+
 ## [Unreleased] - 2026-10-17 22:05 IST — window 2026-10-17/18 slot 3: the scheduler tick's eleven audit-write verdicts are surfaced, not discarded
 
 ### Fixed

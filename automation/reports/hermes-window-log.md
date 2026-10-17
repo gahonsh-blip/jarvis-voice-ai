@@ -19783,3 +19783,76 @@ Next Slot:
   (पहले नज़रअंदाज़ होते थे); आइटम 13 अभी भी PARTIAL है।
 
 ---
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:36
+Window date: 2026-10-17   Window slots completed so far: 4
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL, one coherent slice finished) —
+  `persistDedupStore()` in `src/utils/mobileNotificationPrivacy.ts` swallowed the
+  `localStorage` refusal in an empty `catch` and returned `void`, so a dedup record
+  that never reached storage was indistinguishable from a stored one. The writer now
+  returns a boolean verdict; new `checkAndMarkDuplicate()` returns
+  `{ duplicate, persisted }`; `ingestNotification()` carries `dedupPersisted` on the
+  event; `buildNotificationAnnouncement()` names the gap in EN + HI.
+  Evidence: 8 new cases in `src/tests/mobileNotificationPrivacy.test.ts` — targeted run
+  `npx vitest run src/tests/mobileNotificationPrivacy.test.ts src/tests/mobileBridgeEngine.test.ts src/tests/durabilityClaimInvariant.test.ts`
+  -> 3 files / 88 passed. Negative validation: forcing `dedupPersisted: true` failed
+  3 of 50 (`3 failed | 47 passed`); restored -> 50/50.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remaining enumerated targets:
+  `computerOperatorEngine.ts` lines 395 / 410 (discarded write verdicts) and the dead
+  `MOBILE_STATUS_CACHE_KEY` write in `mobileStatusEngine.ts`.
+
+Remaining:
+- #13 tail of unclassified `success: true` / discarded-`persistMemory()` sites.
+- Blocked hardware items: real Android E2E, real screenshot, wake word, CI runner.
+
+Bugs Found:
+- `persistDedupStore()` discarded the storage write verdict (empty `catch`, `void`
+  return), so `ingestNotification()` reported a notification as de-duplicated while a
+  re-delivery after a reload was ingested again as new. Found by the item-13 sweep
+  enumerating discarded durability verdicts in the notification privacy pipeline.
+
+Bugs Fixed:
+- `persistDedupStore()` now returns the real verdict; `checkAndMarkDuplicate()` exposes
+  it; `ingestNotification()` surfaces `dedupPersisted`; the announcement discloses the
+  gap. Proven by the 8 new cases above and by the negative validation (3 failures with
+  the fix reverted).
+
+Tests:    3 files / 88 passed (targeted). Full `npx vitest run` recorded below.
+Lint:     `npm run lint` (tsc --noEmit) exit 0 — OBSERVED.
+Build:    `npm run build` exit 0 — recorded below.
+E2E:      NOT RUN — no handset / emulator / display session.
+Security: NOT RUN this slot (no dependency or credential change).
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle), docs/CHANGELOG.md.
+Branch:  feature/hermes-full-completion
+Commit:  37adbb6
+Push:    succeeded -> origin/feature/hermes-full-completion (f8b4cb6..37adbb6)
+
+PR:         #8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; the verified dist/server.cjs
+            is the deployment unit available.
+
+Blocked:
+- real-android-e2e — requires a physical handset or emulator.
+- real-screenshot — requires a display session.
+- wake-word — requires a microphone device.
+- ci-green-check — no runner assigned to jobs (owner-account/runner block).
+
+Human Approval Required:
+- Merge of PR #8 to main after a human reads this report.
+- Resolution of the CI runner-allocation block (owner account).
+
+Next Slot:
+- #13, continue the enumerated tail: the discarded write verdicts at
+  `computerOperatorEngine.ts` 395 / 410.
+
+हिंदी सारांश (एक पंक्ति):
+- नोटिफिकेशन डेडप स्टोर की लेख-विफलता अब छिपाई नहीं जाती — persistDedupStore verdict लौटाता है और announcement में gap बताया जाता है; आइटम 13 अभी भी PARTIAL है।
