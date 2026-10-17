@@ -85,3 +85,26 @@ describe('AndroidPermissionCenter "Grant All & Pair" names the simulation, not a
     expect(grantAllBody).toMatch(/androidBridgeEngine\.getStatus\(\)/);
   });
 });
+
+describe('AndroidPermissionCenter refusal notices name the stored value, never a memory-only one', () => {
+  // `updatePermission` and `updateSettings` revert their in-memory value when
+  // the durable store refuses the write. A refusal notice that promised the
+  // requested value "in memory only" therefore asserted a state that does not
+  // exist, while the row rendered right below it showed the old value.
+  it('never promises a permission value "in memory only"', () => {
+    expect(source).not.toMatch(/in memory only/);
+  });
+
+  it('names the stored value the permission row actually holds', () => {
+    const body = handlerBody('handleTogglePermState');
+    expect(body).toMatch(/androidBridgeEngine\.getPermissions\(\)\[key\]/);
+    expect(body).toMatch(/NOT SAVED/);
+    expect(body).toMatch(/reverts on reload/);
+  });
+
+  it('says the refused grant-all left the permissions at their stored values', () => {
+    const body = handlerBody('handleGrantAll');
+    expect(body).toMatch(/not saved/);
+    expect(body).toMatch(/revert on reload/);
+  });
+});

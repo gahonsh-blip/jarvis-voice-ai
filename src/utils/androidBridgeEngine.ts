@@ -448,14 +448,28 @@ export class AndroidBridgeManager {
    * Persist settings, permissions and audit logs. Returns `true` only when all
    * three writes landed; a refused write (quota exceeded, private mode, no
    * browser storage) must not look like a durable save.
+   *
+   * A store can also accept `setItem` without throwing and still drop the bytes
+   * (private browsing, a frozen or quota-clamped store). Returning `true` for
+   * that call reported a permission, a setting or an audit row as durable while
+   * the key still held the previous bytes, and the next `loadState()` silently
+   * restored them. Each write is read back and must hold exactly what was
+   * asked, so only a landed write reads as saved.
    */
   public saveState(): boolean {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return false;
+    const settingsBytes = JSON.stringify(this.settings);
+    const permsBytes = JSON.stringify(this.permissions);
+    const auditBytes = JSON.stringify(this.auditLogs.slice(0, 100));
     try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(this.settings));
-      localStorage.setItem(PERMS_STORAGE_KEY, JSON.stringify(this.permissions));
-      localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(this.auditLogs.slice(0, 100)));
-      return true;
+      localStorage.setItem(SETTINGS_STORAGE_KEY, settingsBytes);
+      localStorage.setItem(PERMS_STORAGE_KEY, permsBytes);
+      localStorage.setItem(AUDIT_STORAGE_KEY, auditBytes);
+      return (
+        localStorage.getItem(SETTINGS_STORAGE_KEY) === settingsBytes &&
+        localStorage.getItem(PERMS_STORAGE_KEY) === permsBytes &&
+        localStorage.getItem(AUDIT_STORAGE_KEY) === auditBytes
+      );
     } catch {
       return false;
     }

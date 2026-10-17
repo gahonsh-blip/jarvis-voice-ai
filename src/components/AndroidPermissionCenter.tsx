@@ -143,10 +143,15 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
     setPermissions(androidBridgeEngine.getPermissions());
     setBridgeStatus(androidBridgeEngine.getStatus());
 
+    // The store echo, not the request: `updatePermission` reverts the in-memory
+    // matrix on a refused write, so a message promising the value "in memory
+    // only" asserted a state that does not exist and the badge below it showed
+    // the old value. Name the value the store actually holds.
+    const stored = androidBridgeEngine.getPermissions()[key];
     setStatusMessage(
       persisted
-        ? `Updated ${key} to ${nextState}`
-        : `NOT SAVED: ${key} set to ${nextState} in memory only — the bridge store refused the write; it reverts on reload.`
+        ? `Updated ${key} to ${stored}`
+        : `NOT SAVED: ${key} stays at ${stored} (requested ${nextState}) — the bridge store refused the write; this change reverts on reload.`
     );
     setTimeout(() => setStatusMessage(null), 3000);
   };
@@ -176,7 +181,7 @@ export const AndroidPermissionCenter: React.FC<AndroidPermissionCenterProps> = (
     setBridgeStatus(simStatus);
     setStatusMessage(
       !persisted
-        ? 'PARTIAL: permissions changed in memory only — the bridge store refused the write; they revert on reload.'
+        ? 'PARTIAL: some permissions were not saved — the bridge store refused the write; they stay at their stored values and revert on reload.'
         : `Permissions set to GRANTED. Simulation testbed paired — status ${simStatus} (no live handset connected).`
     );
     setTimeout(() => setStatusMessage(null), 3000);
