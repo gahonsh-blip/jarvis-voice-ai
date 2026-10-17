@@ -19533,3 +19533,87 @@ E2E: NOT RUN (no handset, no OAuth grant).
 
 Next slot: `persistDedupStore` in `src/utils/mobileNotificationPrivacy.ts` (notification dedup persistence,
 same discarded-verdict class), then `computerOperatorEngine.ts` 395 / 410.
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK (slot 1 of the 2026-10-17 → 2026-10-18 window)  |  IST time: 21:05
+Window date: 2026-10-17   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools (slice) — closed the third and final
+  LinkedIn token-death disconnect site: the verify probe. Evidence: `server.ts`
+  `testPlatformConnection('linkedin')` (~L2919-2939, the branch behind
+  `POST /api/social/platforms/test`) now captures the `persistMemory()` verdict
+  into `expiredTokenDisconnectPersisted` when it clears `conn.connected` on a
+  provider 401/403, and appends `expiredConnectionNote` to the reply only when the
+  write failed. Test: `src/tests/linkedInVerifyDisconnectPersistTruth.test.ts` —
+  4/4 passed (observed). Negative validation: restoring the pre-fix `server.ts`
+  failed exactly 4/4 assertions; restored → 4/4 (observed).
+
+In Progress:
+- #13 remains PARTIAL — the tail of unclassified `success: true` /
+  discarded-`persistMemory()` sites is still not individually audited.
+  Enumerated next targets: `persistDedupStore` (`mobileNotificationPrivacy.ts`),
+  the discarded writes at `computerOperatorEngine.ts` 395 / 410, and the dead
+  `MOBILE_STATUS_CACHE_KEY` write (`mobileStatusEngine.ts`).
+
+Remaining:
+- #1 Real Android E2E, #2 Real screenshot — BLOCKED (no handset / emulator /
+  display session). #13 tail as above. Hardware/credential items beyond the
+  sandbox remain BLOCKED or NOT_AVAILABLE.
+
+Bugs Found:
+- The LinkedIn verify probe (`/api/social/platforms/test`) discarded the
+  `persistMemory()` boolean when it marked the connection disconnected on a
+  401/403. Found by grepping the persist sites inside `testPlatformConnection`:
+  the 401/403 branch was the only bare `persistMemory();` left in that function,
+  and it is the sibling of the two branches fixed in the prior window
+  (`linkedInExpiryDisconnectPersistTruth`, `linkedInRejectedTokenDisconnectPersistTruth`).
+
+Bugs Fixed:
+- Same site. Verified by negative validation: with the pre-fix `server.ts` the
+  new test reports `4 failed`; with the fix restored `4 passed` (observed).
+
+Tests:    Targeted: 4 files / 14 passed (linkedInVerifyDisconnectPersistTruth +
+          linkedInRejectedTokenDisconnectPersistTruth +
+          linkedInExpiryDisconnectPersistTruth + linkedinStatusTruth).
+          Full `npx vitest run`: 263 files / 2844 tests passed (81.33 s, 0 failed).
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 (observed).
+Build:    `npm run build` exit 0; artifact `dist/server.cjs` 1,096,351 bytes (observed).
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox.
+Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short`
+          empty; credential-pattern scan of commit `87e6895` matched nothing;
+          `npm audit --omit=dev` → 0 vulnerabilities. Permission gateway untouched.
+
+Documentation: `docs/COMPLETION_STATUS.md` (new "Last cycle" entry),
+          `automation/reports/hermes-window-log.md` (this section).
+Branch:  feature/hermes-full-completion
+Commit:  87e6895
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft; not refreshed this slot — refreshed in the prior
+            window's finalization slot; body updated on the next finalization slot)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present;
+            the verified `dist/server.cjs` artifact is the deployment unit available.
+
+Blocked:
+- #1 Real Android E2E / #2 Real screenshot / wake-word — require a physical
+  handset or emulator with a display session: NOT_AVAILABLE in this sandbox.
+- CI green check — the repo workflow has never produced a green run
+  (owner-account / runner-allocation block, not a code failure). UNKNOWN whether
+  the account block has cleared; not re-confirmed this fire.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner approval only).
+
+Next Slot:
+- #13 continued — `persistDedupStore` in `src/utils/mobileNotificationPrivacy.ts`
+  returns `void` today, so the notification dedup store's write verdict is
+  discarded; same pattern, reachable and testable in-sandbox. Then the discarded
+  writes at `computerOperatorEngine.ts` 395 / 410.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में LinkedIn verify probe के disconnect verdict को सतह पर लाया गया
+  (पहले चुपचाप नज़रअंदाज़ होता था), 4 टेस्ट + negative-validation के साथ; lint हरा,
+  full suite 2844 tests pass, build हरा, main पर merge नहीं।
+
+---
