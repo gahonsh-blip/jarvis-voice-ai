@@ -276,7 +276,7 @@ export const MobileBridgeModal: React.FC<Props> = ({
           <div className="flex items-center gap-2">
             <span className="text-[9px] font-mono text-slate-500">{queue.length} pending</span>
             {queue.length > 0 && (
-              <button onClick={() => { clearPendingQueue(); refresh(); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">CLEAR</button>
+              <button onClick={() => { setSimNotice(clearPendingQueue() ? null : 'QUEUE NOT CLEARED — local storage refused the write; these items stay in the queue.'); refresh(); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">CLEAR</button>
             )}
           </div>
         </div>
@@ -425,7 +425,7 @@ export const MobileBridgeModal: React.FC<Props> = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-[11px] font-mono font-bold text-cyan-300 tracking-wider">AUDIT LOG (METADATA ONLY)</h3>
-        <button onClick={() => { clearMobileAuditLog(); refresh(); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">CLEAR</button>
+        <button onClick={() => { setSimNotice(clearMobileAuditLog() ? null : 'AUDIT LOG NOT CLEARED — local storage refused the write; entries remain.'); refresh(); }} className="text-[9px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">CLEAR</button>
       </div>
       {audit.length === 0 ? (
         <p className="text-xs text-slate-500 font-mono">No audit entries yet. Safe metadata only — never full private message content.</p>

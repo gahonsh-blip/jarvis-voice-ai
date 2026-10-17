@@ -406,5 +406,33 @@ describe('Mobile Bridge Engine + Notification Privacy Suite', () => {
       };
       assert.equal(logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any), false);
     });
+
+    it('clearPendingQueue reports the real clear verdict, not a bare void', () => {
+      installMemoryStorage();
+      enqueuePendingEvent(makeCall() as any);
+      assert.equal(clearPendingQueue(), true);
+      assert.equal(getPendingQueue().length, 0);
+    });
+
+    it('clearPendingQueue returns false when storage refuses the removal', () => {
+      installMemoryStorage();
+      enqueuePendingEvent(makeCall() as any);
+      (globalThis as any).localStorage.removeItem = () => {
+        throw new Error('SecurityError');
+      };
+      assert.equal(clearPendingQueue(), false);
+    });
+
+    it('clearMobileAuditLog reports the real clear verdict and survives a refusal', () => {
+      installMemoryStorage();
+      logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any);
+      assert.equal(clearMobileAuditLog(), true);
+      assert.equal(getMobileAuditLog().length, 0);
+      logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any);
+      (globalThis as any).localStorage.removeItem = () => {
+        throw new Error('SecurityError');
+      };
+      assert.equal(clearMobileAuditLog(), false);
+    });
   });
 });

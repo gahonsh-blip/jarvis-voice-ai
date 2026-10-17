@@ -239,11 +239,20 @@ export function updatePendingEventStatus(eventId: string, status: PendingMobileE
 }
 }
 
-export function clearPendingQueue(): void {
- {
-  if (typeof window === 'undefined') return;
-   try { localStorage.removeItem(QUEUE_STORAGE_KEY); } catch {}
-}
+/**
+ * Empty the pending-approval queue. Returns the real verdict: `true` only when
+ * the key is confirmed gone from storage. The empty `catch` this replaces let a
+ * refused clear (private mode, full quota, no window) look like an emptied
+ * queue, so the UI announced a clear the next reload still showed.
+ */
+export function clearPendingQueue(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.removeItem(QUEUE_STORAGE_KEY);
+    return localStorage.getItem(QUEUE_STORAGE_KEY) === null;
+  } catch {
+    return false;
+  }
 }
 
 const CLEAR_NO = ['no', 'nahi', '\u0928\u0939\u0940\u0902', 'cancel', 'dismiss', 'decline', '\u092e\u0924 \u0909\u0920\u093e\u0913', '\u092e\u0924 \u092d\u0947\u091c\u094b'];
@@ -333,9 +342,19 @@ export function getMobileAuditLog(): MobileAuditEntry[] {
   }
 }
 
-export function clearMobileAuditLog(): void {
-  if (typeof window === 'undefined') return;
-  try { localStorage.removeItem(AUDIT_STORAGE_KEY); } catch {}
+/**
+ * Clear the mobile audit log. Returns `true` only when the key is confirmed
+ * gone from storage; the empty `catch` this replaces reported a cleared log
+ * even when the write was refused.
+ */
+export function clearMobileAuditLog(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.removeItem(AUDIT_STORAGE_KEY);
+    return localStorage.getItem(AUDIT_STORAGE_KEY) === null;
+  } catch {
+    return false;
+  }
 }
 
 export type MobileActionGate = { allowed: true } | { allowed: false; reason: 'KILL_SWITCH' | 'NO_BRIDGE' | 'NO_APPROVAL' | 'CAPABILITY_UNAVAILABLE' | 'PERMISSION_DENIED' };
