@@ -20211,3 +20211,87 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - Mobile permission change अब तभी "saved" बताया जाता है जब वह storage से वापस पढ़कर मिल जाए; पहले silent write-refusal भी success दिखता था, और एक बेकार status-cache write हटा दी गई।
+
+---
+
+## Slot 2026-10-18 02:05 IST - WORK SLOT 10 (item 13, Android permission screen + saveState)
+
+HERMES JARVIS - AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:05
+Window date: 2026-10-18   Window slots completed so far: 10
+
+Completed:
+- #13 Zero-fake-success for all tools - PARTIAL, two false claims removed on the
+  Android permission screen. (a) `src/components/AndroidPermissionCenter.tsx`
+  told the owner `NOT SAVED: <key> set to <value> in memory only` when
+  `updatePermission` refused the write, but that writer now REVERTS its
+  in-memory matrix on refusal (slot 9's store-echo contract), so the notice
+  asserted a state that does not exist while the row below it showed the old
+  value; the same phantom appeared in `handleGrantAll`'s `PARTIAL` branch. Both
+  notices now read the store echo (`androidBridgeEngine.getPermissions()[key]`)
+  and name the value the store actually holds, showing the request as
+  `(requested X)`. The granted path reads the same echo instead of echoing the
+  request back. (b) `saveState()` in `src/utils/androidBridgeEngine.ts` ran
+  three `localStorage.setItem` calls and returned `true` - a store that accepts
+  `setItem` without throwing yet drops the bytes (private mode, frozen or
+  quota-clamped store) read as a durable save, so a permission, a setting and an
+  audit row all looked durable while the keys held the previous bytes and the
+  next load silently restored them. `saveState()` now reads all three keys back
+  and returns `true` only when the store holds exactly the bytes written.
+
+In Progress:
+- #13 Zero-fake-success for all tools - the tail of unclassified `success: true`
+  / discarded-`persistMemory()` sites remains.
+
+Bugs Found:
+- `AndroidPermissionCenter.tsx` refusal notice promised a value "in memory only"
+  that the writer had already reverted - found by reading the writer contract
+  pinned in slot 9 against the notice text.
+- `androidBridgeEngine.saveState()` could not tell a landed write from a
+  silently dropped one - found by auditing the writer against the
+  silent-no-op-storage class already covered for the sibling stores.
+
+Bugs Fixed:
+- Both, above. Negative-validated: reverting `saveState()` to the write-only
+  `return true` failed exactly the four new behavioural cases
+  (`4 failed | 51 passed`); restored -> 55/55.
+
+Tests:    3 files / 68 passed targeted (androidMobileBridge 55,
+          androidPermissionCenterTruth 10, androidPermissionCenterSettingsEchoTruth
+          6). Full `npx vitest run`: 265 files / 2888 tests passed (81.59 s, 0 failed).
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 - clean.
+Build:    `npm run build` exit 0 - `dist/server.cjs` 1,099,361 bytes.
+E2E:      NOT RUN - no handset / emulator / display session.
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status --short`
+          empty; no `.env`, token or key in the diff.
+
+Documentation: docs/COMPLETION_STATUS.md
+Branch:  feature/hermes-full-completion
+Commit:  8f5bd27 (fix + tests), 64181a2 (docs)
+Push:    succeeded - origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft)
+Main merge: NOT MERGED - awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED - no deployment target or hosting integration is
+            present in this environment; the verified `dist/server.cjs` is the
+            deployment unit available.
+
+Blocked:
+- real-android-e2e - requires a handset/emulator
+- real-screenshot - requires a display session
+- wake-word - requires a microphone device
+- ci-green-check - no runner assigned to jobs (owner-account/runner block)
+
+Human Approval Required:
+- Merge of PR #8 to `main` after a human reads the final verification report.
+
+Next Slot:
+- #13 continues: the remaining enumerated targets are the discarded
+  `success: true` / `persistMemory()` sites in `server.ts` / `server_tools.ts`
+  (truthfulness still UNKNOWN), the next storage sibling after the Android
+  bridge writers.
+
+हिंदी सारांश (एक पंक्ति):
+- Android permission screen अब storage में जो वास्तव में सहेजा गया है वही बताता है
+  (झूठा "in memory only" संदेश हटाया), और `saveState()` अब लिखे गए bytes वापस
+  पढ़कर ही सफलता की पुष्टि करता है - silent write-drop अब पकड़ा जाता है।
