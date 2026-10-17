@@ -20295,3 +20295,85 @@ Next Slot:
 - Android permission screen अब storage में जो वास्तव में सहेजा गया है वही बताता है
   (झूठा "in memory only" संदेश हटाया), और `saveState()` अब लिखे गए bytes वापस
   पढ़कर ही सफलता की पुष्टि करता है - silent write-drop अब पकड़ा जाता है।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:35
+Window date: 2026-10-18   Window slots completed so far: 11
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL — one more class closed):
+  `saveLocalCallHistory`, `saveLocalTelephonySettings` and `saveLocalContacts`
+  (`src/utils/telephonyEngine.ts`) ran `localStorage.setItem(...)` and then
+  `return true`. A store that accepts the call without throwing but keeps the
+  previous bytes (private browsing, frozen or quota-clamped store) therefore
+  read as a durable save: the Telephony Hub badge showed `CALL STORE SYNCED`,
+  the panels rendered the new values, and the next reload restored the old
+  ones. Reproduced before the change with a `SilentDropStorage` stub — all
+  three writers returned `true` with the key holding `null`. Each writer now
+  serialises once, writes, and reads the bytes back, returning `true` only
+  when the store holds exactly what was written.
+  Evidence: `src/utils/telephonyEngine.ts`;
+  `src/tests/telephonyEngineWriteTruth.test.ts` (4 cases). Targeted run:
+  3 files / 20 passed. Negative-validation: reverting the writers to write-only
+  `return true` failed exactly the three silent-no-op cases
+  (`3 failed | 1 passed`); restored → 4/4.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the tail of unclassified
+  `success: true` / discarded-`persistMemory()` sites remains unaudited.
+
+Remaining:
+- #1 Real Android Mobile Bridge connection (PARTIAL — physical-device leg unverified)
+- #2 Real Android E2E / #3 Real Screenshot — hardware-blocked (no handset/emulator)
+- #13 continues to be the highest-value advanceable item each slot.
+
+Bugs Found:
+- `src/utils/telephonyEngine.ts`: `saveLocalCallHistory`,
+  `saveLocalTelephonySettings` and `saveLocalContacts` returned `true` for a
+  silently dropped write. Found by probing the writers against a storage stub
+  whose `setItem` accepts and discards the bytes (the earlier durability tests
+  only exercised a store that *throws*, plus the no-`window` case).
+
+Bugs Fixed:
+- The same three writers. Verification: the new
+  `src/tests/telephonyEngineWriteTruth.test.ts` fails 3/4 without the fix and
+  passes 4/4 with it; the throwing-store and no-`window` behaviour covered by
+  the sibling telephony suites still passes.
+
+Tests:    266 files / 2892 tests passed, 0 failed (81.06 s) — `npx vitest run`
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0
+Build:    `npm run build` exit 0 — `dist/server.cjs` 1,099,361 bytes
+E2E:      NOT RUN — no handset / emulator / display session
+Security: NOT RUN this slot (no credential-bearing file touched; the diff is one
+          utility module and one test file)
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle line + this report)
+Branch:  feature/hermes-full-completion
+Commit:  fb85d99
+Push:    succeeded — origin/feature/hermes-full-completion (821b331..fb85d99)
+
+PR:         #8 (open, non-draft) — existing PR for this branch
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present in this sandbox; the
+            verified `dist/server.cjs` is the deployment unit available
+
+Blocked:
+- #2 Real Android E2E — requires a physical handset or an emulator with a
+  display session.
+- #3 Real Screenshot capture — requires the same device surface.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner reads the finalization report and approves).
+
+Next Slot:
+- #13, next unaudited fake-success site. The telephony writers are now closed
+  for both refusal classes (throwing store, silent no-op store); the next
+  candidate is another local writer that still returns `true` without reading
+  its bytes back, chosen by a grep-and-probe pass at the start of the slot
+  rather than by assumption.
+
+हिंदी सारांश (एक पंक्ति):
+- टेलीफ़ोनी के तीन लोकल राइटर चुपचाप गिराए गए लेखन को भी "सेव" बता रहे थे; अब वे बाइट्स
+  वापस पढ़कर सत्यापित करते हैं, और चार नए टेस्ट इसकी रक्षा करते हैं।
