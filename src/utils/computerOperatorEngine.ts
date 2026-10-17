@@ -273,7 +273,9 @@ export function saveOperatorTask(task: OperatorTask): boolean {
     const list = loadOperatorTasks().filter((t) => t.taskId !== task.taskId);
     list.unshift(task);
     localStorage.setItem(OPERATOR_TASK_KEY, JSON.stringify(list.slice(0, 20)));
-    return true;
+    // A refused write can fail silently (private mode, quota); confirm the task
+    // reads back from the store before reporting the record as saved.
+    return loadOperatorTasks().some((t) => t.taskId === task.taskId);
   } catch {
     return false;
   }
@@ -294,7 +296,12 @@ export function recordOperatorAudit(task: OperatorTask): boolean {
       error: task.error ? redactSecrets(task.error) : undefined,
     });
     localStorage.setItem(OPERATOR_AUDIT_KEY, JSON.stringify(list.slice(0, 100)));
-    return true;
+    // Confirm the audit row reads back before reporting the denial/run as
+    // audited — a silently refused write must not read as a logged row.
+    const persisted = localStorage.getItem(OPERATOR_AUDIT_KEY);
+    if (!persisted) return false;
+    const rows = JSON.parse(persisted) as Record<string, unknown>[];
+    return rows.some((row) => row.taskId === task.taskId && row.status === task.status);
   } catch {
     return false;
   }

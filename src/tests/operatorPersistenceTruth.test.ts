@@ -29,6 +29,9 @@ import { executePlannedOperatorRun, planOperatorRun } from '../utils/operatorCha
 class ControllableStorage {
   private store = new Map<string, string>();
   failWrites = false;
+  // The refusal some browsers give in private mode or on quota: the write is
+  // dropped without throwing, so a bare `setItem` looks like a success.
+  refuseSilently = false;
   get length() {
     return this.store.size;
   }
@@ -40,6 +43,7 @@ class ControllableStorage {
   }
   setItem(key: string, value: string) {
     if (this.failWrites) throw new DOMException('QuotaExceededError');
+    if (this.refuseSilently) return;
     this.store.set(key, String(value));
   }
   removeItem(key: string) {
@@ -71,6 +75,7 @@ function terminalTask(overrides: Partial<OperatorTask> = {}): OperatorTask {
 beforeEach(() => {
   store.clear();
   store.failWrites = false;
+  store.refuseSilently = false;
   vi.stubGlobal('window', {});
   vi.stubGlobal('localStorage', store);
 });
@@ -103,6 +108,26 @@ describe('operator persistence writers report whether the write landed', () => {
     expect(recordOperatorAudit(task)).toBe(false);
     expect(persistOperatorTaskState(task)).toBe(false);
     expect(task.taskPersisted).toBe(false);
+  });
+
+  // A storage that drops the write without throwing is the hardest refusal to
+  // catch: a bare `setItem` looks like a success. The writers must read the
+  // bytes back, so a silent no-op is reported as not saved.
+  it('reports a silently refused write as not saved', () => {
+    const task = terminalTask();
+    store.refuseSilently = true;
+    expect(saveOperatorTask(task)).toBe(false);
+    expect(recordOperatorAudit(task)).toBe(false);
+    expect(persistOperatorTaskState(task)).toBe(false);
+    expect(task.taskPersisted).toBe(false);
+  });
+
+  it('reports the write as saved only once the bytes read back', () => {
+    const task = terminalTask();
+    expect(saveOperatorTask(task)).toBe(true);
+    expect(store.getItem('hermes_jarvis_operator_tasks_v1')).toContain('task-persist');
+    expect(recordOperatorAudit(task)).toBe(true);
+    expect(store.getItem('hermes_jarvis_operator_audit_v1')).toContain('task-persist');
   });
 });
 
