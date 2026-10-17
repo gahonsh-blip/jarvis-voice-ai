@@ -20141,3 +20141,73 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - Computer Operator अब task और audit row को तभी "saved" बताता है जब वे storage से वापस पढ़े जाएँ; पहले silent write-refusal को भी success मान लिया जाता था।
+
+---
+
+## 2026-10-18 01:35 IST — WORK SLOT 9 (window 2026-10-17 → 2026-10-18)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 01:35
+Window date: 2026-10-18   Window slots completed so far: 9 (clock-derived; state branch unreadable)
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL, advanced) — the Mobile Personal Status engine
+  reported a permission change as saved whenever `localStorage.setItem` did not throw, and its
+  status compile wrote a cache key nothing reads.
+  Evidence: `src/utils/mobileStatusEngine.ts` — `saveMobilePermissions()` now returns true only
+  when `localStorage.getItem(MOBILE_PERMISSIONS_STORAGE_KEY) === serialized` (read-back), and the
+  dead `MOBILE_STATUS_CACHE_KEY` write in `compileMobileStatusData()` (plus its constant) is
+  removed. `src/tests/mobileStatusEngine.test.ts` — two new cases: a silently no-op `setItem` is
+  reported false and the store still holds the pre-write matrix; a source guard that the engine no
+  longer contains `MOBILE_STATUS_CACHE_KEY`. Observed: 24/24 across the two mobile suites.
+
+In Progress:
+- #13 Zero-fake-success for all tools — the remaining tail of unclassified `success: true` /
+  discarded-`persistMemory()` sites beyond the storage writers repaired in slots 5–9.
+
+Bugs Found:
+- `saveMobilePermissions()` (`mobileStatusEngine.ts`) returned `true` unconditionally after
+  `setItem`. Found by auditing every writer in the mobile engine against the item-13 criterion
+  (a write reported durable without confirming the store accepted it).
+- `compileMobileStatusData()` wrote `MOBILE_STATUS_CACHE_KEY`
+  (`hermes_jarvis_mobile_status_cache_v1`) inside a `try {} catch {}` and no code in the repository
+  ever reads that key back — a dead, unverifiable write.
+
+Bugs Fixed:
+- `saveMobilePermissions()` reads the bytes back; a silently refusing store now reports false.
+  Proof: negative-validated — reverting the read-back to `return true` failed exactly the new
+  silent-no-op case (`1 failed | 17 passed`); restored → 18/18 in the file.
+- The dead `MOBILE_STATUS_CACHE_KEY` write and its constant removed; guarded by a source-level test.
+
+Tests:    265 files / 2881 tests passed (82.56 s, 0 failed) — full `npx vitest run` observed this fire
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0
+Build:    `npm run build` exit 0 (`dist/server.cjs`, 1,098,626 bytes)
+E2E:      NOT RUN — no handset / emulator / display session
+Security: `.env` git-ignored (`.gitignore:4:.env`); no token/key in the diff; no `node_modules`/`dist`
+          staged. `npm audit` NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md (item 13 row + Last cycle), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  7b3bafe (code + tests) + this docs commit
+Push:    succeeded -> origin/feature/hermes-full-completion (rebased onto 6140ccf; no force-push)
+
+PR:         8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is present in this
+            environment; the verified `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- None newly blocked this slot.
+
+Human Approval Required:
+- Final merge of PR #8 to `main` (human-read final verification report required).
+- Repository CI has never produced a green check (runner-allocation block) — owner action.
+
+Next Slot:
+- #13 tail — sweep the remaining unclassified `success: true` / discarded-`persistMemory()` sites
+  (the mobile permission *badges* still render the requested matrix rather than the accepted store
+  echo in `MobilePersonalStatusModal.tsx`; that is the next coherent item-13 slice), or move to the
+  next non-VERIFIED backlog item if the tail is judged exhausted.
+
+हिंदी सारांश (एक पंक्ति):
+- Mobile permission change अब तभी "saved" बताया जाता है जब वह storage से वापस पढ़कर मिल जाए; पहले silent write-refusal भी success दिखता था, और एक बेकार status-cache write हटा दी गई।

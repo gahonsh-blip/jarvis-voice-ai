@@ -4,6 +4,14 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 01:35 IST — window 2026-10-17/18 slot 9: the mobile permission-store verdict is read back
+
+### Fixed
+- **`saveMobilePermissions()` (`src/utils/mobileStatusEngine.ts`) returned `true` whenever `localStorage.setItem` did not throw.** A store that accepts the call without throwing yet keeps the previous bytes (private mode, quota-frozen) left `hermes_jarvis_mobile_permissions_v1` holding the old matrix, so a granted or revoked permission read as durable while `loadMobilePermissions()` returned the old value on the next reload. The writer now returns `true` only when the store holds exactly what was asked (`localStorage.getItem(MOBILE_PERMISSIONS_STORAGE_KEY) === serialized`).
+- **`compileMobileStatusData()` wrote `MOBILE_STATUS_CACHE_KEY` inside a `try {} catch {}` that discarded any refusal, and nothing in the repository reads the key back.** A write nobody reads is a fake success waiting to be trusted; the dead write and its constant are removed.
+- **`test(mobile)` — `src/tests/mobileStatusEngine.test.ts` +2 cases** cover a silently no-op `setItem` (reported false, store still holds the pre-write matrix) and a source guard that the engine no longer contains `MOBILE_STATUS_CACHE_KEY`. Negative-validated: reverting the read-back to `return true` failed exactly the silent-no-op case (`1 failed | 17 passed`); restored → 18/18 in the file, 24/24 across the two mobile suites.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run` **265 files / 2881 tests passed** (82.56 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1,098,626 bytes). Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 01:05 IST — window 2026-10-17/18 slot 8: the Computer Operator read-back verdict
 
 ### Fixed
