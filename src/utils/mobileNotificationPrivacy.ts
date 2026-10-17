@@ -209,11 +209,15 @@ function loadDedupStore(): DedupStore {
 // Returns whether the dedup record actually reached storage. It used to return
 // `void` and swallow the storage error in an empty catch, so a refused write
 // (private mode, full disk, no window) was indistinguishable from a stored one.
+// It also reads the bytes back now: a store that accepts `setItem` without
+// throwing yet drops the record must not read as durable, or a re-delivery
+// after a reload is silently swallowed as a duplicate that was never stored.
 function persistDedupStore(store: DedupStore): boolean {
   if (typeof window === 'undefined') return false;
+  const serialized = JSON.stringify(store);
   try {
-    localStorage.setItem(DEDUP_STORAGE_KEY, JSON.stringify(store));
-    return true;
+    localStorage.setItem(DEDUP_STORAGE_KEY, serialized);
+    return localStorage.getItem(DEDUP_STORAGE_KEY) === serialized;
   } catch (err) {
     // storage full ? degrade gracefully, never crash the pipeline
     console.warn('[NotificationPrivacy] Error saving dedup store to localStorage:', err);
@@ -439,11 +443,16 @@ export function loadMobileBridgePolicy(): MobileBridgePolicy {
 // Returns whether the policy actually reached storage. It used to return
 // `void` and swallow the storage error in an empty catch, so a refused write
 // (private mode, full disk, or no window) still looked like a saved change.
+// It now also reads the bytes back: a store that accepts `setItem` without
+// throwing yet keeps the previous bytes (frozen or quota-clamped store) must
+// not read as durable, or the privacy filter appears to flip and silently
+// reverts on the next reload.
 export function saveMobileBridgePolicy(policy: MobileBridgePolicy): boolean {
   if (typeof window === 'undefined') return false;
+  const serialized = JSON.stringify(policy);
   try {
-    localStorage.setItem(POLICY_STORAGE_KEY, JSON.stringify(policy));
-    return true;
+    localStorage.setItem(POLICY_STORAGE_KEY, serialized);
+    return localStorage.getItem(POLICY_STORAGE_KEY) === serialized;
   } catch (err) {
     console.warn('[NotificationPrivacy] Error saving mobile bridge policy to localStorage:', err);
     return false;

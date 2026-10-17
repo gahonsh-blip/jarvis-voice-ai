@@ -4,6 +4,13 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 03:05 IST — window 2026-10-17/18 slot 12: the Notification Privacy writers read their bytes back
+
+### Fixed
+- **`saveMobileBridgePolicy()` and `persistDedupStore()` (`src/utils/mobileNotificationPrivacy.ts`) returned `true` whenever `localStorage.setItem` did not throw.** A store that accepts the call without throwing yet keeps the previous bytes (private browsing, a frozen or quota-clamped store) therefore read as durable: the operator saw the WhatsApp privacy filter flip to `ALLOW` while `hermes_jarvis_mobile_bridge_policy_v1` still held `DENY` and the next reload silently restored it, and a delivered notification's dedup record read as stored while the key held nothing, so a re-delivery after a reload was swallowed as a duplicate that was never written. Both writers now serialise once, write, and read the bytes back, returning `true` only when the store holds exactly what was written. `persistDedupStore` and `saveMobileBridgePolicy` already returned a boolean for the *throwing* store (and the no-`window` case) but never read the bytes back, so the silent no-op was invisible — the same gap the slot 11 telephony repair closed.
+- **`test(mobile)` — `src/tests/mobileNotificationPrivacy.test.ts` 52 → 54 cases** cover a `ControllableStorage` `refuseSilently` stub: `saveMobileBridgePolicy` / `applyCategoryPolicy` report a silently dropped policy write as not saved/not persisted with the store still holding the previous policy and `loadMobileBridgePolicy()` still returning it; `checkAndMarkDuplicate` / `ingestNotification` report a silently dropped dedup write as not persisted with the dedup key still empty. Negative-validated: reverting both writers to the write-only `return true` failed exactly the four new cases (`4 failed | 50 passed`); restored → 54/54.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; targeted `mobileNotificationPrivacy` 1 file / 54 passed. Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 01:35 IST — window 2026-10-17/18 slot 9: the mobile permission-store verdict is read back
 
 ### Fixed

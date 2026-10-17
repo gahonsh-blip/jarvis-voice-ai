@@ -392,6 +392,10 @@ describe('Notification Privacy Engine — policy writes report whether they land
   class ControllableStorage {
     private store = new Map<string, string>();
     failWrites = false;
+    // A store that accepts setItem without throwing yet drops the bytes:
+    // private browsing, a frozen or quota-clamped store. The pre-fix writer
+    // could not see this because it never read the bytes back.
+    refuseSilently = false;
     get length() {
       return this.store.size;
     }
@@ -403,6 +407,7 @@ describe('Notification Privacy Engine — policy writes report whether they land
     }
     setItem(key: string, value: string) {
       if (this.failWrites) throw new DOMException('QuotaExceededError');
+      if (this.refuseSilently) return;
       this.store.set(key, String(value));
     }
     removeItem(key: string) {
@@ -415,6 +420,7 @@ describe('Notification Privacy Engine — policy writes report whether they land
   beforeEach(() => {
     store.clear();
     store.failWrites = false;
+    store.refuseSilently = false;
     vi.stubGlobal('window', {});
     vi.stubGlobal('localStorage', store);
   });
@@ -443,6 +449,24 @@ describe('Notification Privacy Engine — policy writes report whether they land
     const refused = applyCategoryPolicy(mkPolicy(), 'EMAIL', 'DENY');
     expect(refused.persisted).toBe(false);
   });
+
+  it('saveMobileBridgePolicy reports a silently dropped write as not saved', () => {
+    // Seed a policy so a dropped write can be told apart from "never written".
+    saveMobileBridgePolicy(mkPolicy({ categories: { WHATSAPP: 'DENY' } }));
+    store.refuseSilently = true;
+    expect(saveMobileBridgePolicy(mkPolicy({ categories: { WHATSAPP: 'ALLOW' } }))).toBe(false);
+    // The store still holds the previous bytes — the change did not land.
+    expect(JSON.parse(store.getItem('hermes_jarvis_mobile_bridge_policy_v1')!).categories.WHATSAPP).toBe('DENY');
+    expect(loadMobileBridgePolicy().categories.WHATSAPP).toBe('DENY');
+  });
+
+  it('applyCategoryPolicy reports a silently dropped write as not persisted', () => {
+    store.refuseSilently = true;
+    const change = applyCategoryPolicy(mkPolicy(), 'WHATSAPP', 'ALLOW');
+    expect(change.persisted).toBe(false);
+    // The reload the operator would see: the default, not the requested ALLOW.
+    expect(loadMobileBridgePolicy().categories.WHATSAPP).toBe(DEFAULT_MOBILE_BRIDGE_POLICY.categories.WHATSAPP);
+  });
 });
 
 // A dedup store that refuses the write is the same defect class as the policy
@@ -452,6 +476,7 @@ describe('Notification Privacy Engine — dedup writes report whether they lande
   class ControllableStorage {
     private store = new Map<string, string>();
     failWrites = false;
+    refuseSilently = false;
     get length() {
       return this.store.size;
     }
@@ -463,6 +488,7 @@ describe('Notification Privacy Engine — dedup writes report whether they lande
     }
     setItem(key: string, value: string) {
       if (this.failWrites) throw new DOMException('QuotaExceededError');
+      if (this.refuseSilently) return;
       this.store.set(key, String(value));
     }
     removeItem(key: string) {
@@ -483,6 +509,7 @@ describe('Notification Privacy Engine — dedup writes report whether they lande
   beforeEach(() => {
     store.clear();
     store.failWrites = false;
+    store.refuseSilently = false;
     vi.stubGlobal('window', {});
     vi.stubGlobal('localStorage', store);
   });
@@ -554,6 +581,27 @@ describe('Notification Privacy Engine — dedup writes report whether they lande
     // a duplicate. This is the behaviour the flag exists to disclose.
     expect(second).not.toBeNull();
     expect(second!.dedupPersisted).toBe(false);
+  });
+
+  it('checkAndMarkDuplicate reports a silently dropped write as not persisted', () => {
+    store.refuseSilently = true;
+    const res = checkAndMarkDuplicate('id-silent');
+    expect(res.duplicate).toBe(false);
+    // setItem did not throw, but the record never landed.
+    expect(res.persisted).toBe(false);
+    expect(store.getItem('hermes_jarvis_mobile_dedup_v1')).toBeNull();
+  });
+
+  it('ingestNotification marks dedupPersisted=false when the dedup store drops the write silently', () => {
+    store.refuseSilently = true;
+    const e = ingestNotification({
+      ...base,
+      policy: mkPolicy({ categories: { WHATSAPP: 'ALLOW' } }),
+      title: 'Amit',
+      body: 'Hello there',
+    });
+    expect(e).not.toBeNull();
+    expect(e!.dedupPersisted).toBe(false);
   });
 });
 
