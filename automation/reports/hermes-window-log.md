@@ -19856,3 +19856,72 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - नोटिफिकेशन डेडप स्टोर की लेख-विफलता अब छिपाई नहीं जाती — persistDedupStore verdict लौटाता है और announcement में gap बताया जाता है; आइटम 13 अभी भी PARTIAL है।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:35
+Window date: 2026-10-17   Window slots completed so far: 5
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL (slice advanced). Made
+  `clearPendingQueue()` and `clearMobileAuditLog()` (`src/utils/mobileBridgeEngine.ts`)
+  return a real clear verdict (`true` only when the key is confirmed gone from
+  storage) instead of `void` behind an empty `catch`. `MobileBridgeModal.tsx`
+  now surfaces a refusal (`QUEUE NOT CLEARED …` / `AUDIT LOG NOT CLEARED …`)
+  instead of re-rendering the unchanged list as if cleared. Evidence: 3 new
+  cases in `src/tests/mobileBridgeEngine.test.ts` → 34/34 passed.
+
+In Progress:
+- #13 — the tail of unclassified `success: true` / discarded-`persistMemory()`
+  sites remains: `clearNotificationDedupStore` / `clearPendingSyncQueue`,
+  `computerOperatorEngine.ts` 395 / 410, dead `MOBILE_STATUS_CACHE_KEY` write.
+
+Remaining:
+- #13 tail (above); then the mandated order (Real Android E2E, Real Screenshot,
+  Computer Operator, GitHub/Social/Communication/AI-Memory/Autonomous/Voice/
+  Wake Word, Production Hardening) — several hardware-blocked.
+
+Bugs Found:
+- `clearPendingQueue` / `clearMobileAuditLog` swallowed storage errors in an
+  empty `catch` and returned `void`; a refused clear looked like an emptied
+  queue/log. Found by the item-13 durability audit (grep for bare clear calls).
+
+Bugs Fixed:
+- Both writers now return the observed verdict and the modal renders a refusal.
+  Negative-validated: restoring the always-`true` clear failed exactly 2
+  assertions (`2 failed | 32 passed`); restored → 34/34.
+
+Tests:    265 files / 2861 tests passed (81.65 s, 0 failed)
+Lint:     `tsc --noEmit` exit 0
+Build:    exit 0 — dist/server.cjs 1,098,626 bytes
+E2E:      NOT RUN — no handset / emulator / display session
+Security: `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short` empty; no token/key in the diff
+
+Documentation: docs/COMPLETION_STATUS.md, automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  c47fd94
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target present; the verified
+            dist/server.cjs is the deployment unit available.
+
+Blocked:
+- real-android-e2e — requires a physical handset or emulator.
+- real-screenshot — requires a display session.
+- wake-word — requires a microphone device.
+- ci-green-check — no runner assigned to jobs (owner-account/runner block).
+
+Human Approval Required:
+- Merge of PR #8 to main after a human reads this report.
+- Resolution of the CI runner-allocation block (owner account).
+
+Next Slot:
+- #13, continue the enumerated tail: `clearNotificationDedupStore` /
+  `clearPendingSyncQueue`, then the discarded writes at
+  `computerOperatorEngine.ts` 395 / 410.
+
+हिंदी सारांश (एक पंक्ति):
+- मोबाइल ब्रिज की queue/audit CLEAR अब असली verdict लौटाती है — refused clear अब छिपता नहीं; आइटम 13 अभी भी PARTIAL है।
