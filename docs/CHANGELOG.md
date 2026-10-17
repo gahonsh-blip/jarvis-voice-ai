@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-17 21:35 IST — window 2026-10-17/18 slot 2: LinkedIn pre-flight auth-disconnect verdict is surfaced, not discarded
+
+### Fixed
+- **`publishToLinkedIn` (`server.ts`) called a bare `persistMemory()` in its pre-flight `/v2/userinfo` 401/403 branch, discarding the boolean that reports whether the cleared connection reached disk.** When the connection held no author URN the publisher probed `/v2/userinfo`; on HTTP 401/403 it set `oauthConn.connected = false` and wrote an `errorReason`, then called `persistMemory()` whose return value nobody read. `persistMemory()` returns `false` when the write cannot reach disk, so the in-memory "disconnected" flag could be lost: after a restart the durable state still reported the account as connected while the reply had already told the operator to reconnect.
+- The verdict is now captured in `preflightAuthDisconnectPersisted`; when the write fails both the `errorReason` and the `userMessage` name the durability gap instead of implying the disconnection was saved. The note is omitted when no `oauthConn` object is held (nothing to write, nothing to report). This is the fourth sibling of the expiry (`6d512eb`), rejected-token (`c4da7dc`) and verify-probe (`87e6895`) disconnect fixes.
+
+### Tests
+- New `src/tests/linkedInPreflightAuthDisconnectPersistTruth.test.ts` (4 cases): the boolean is captured not discarded; the durability note is conditional on the write failing; the default is `persisted` when no `oauthConn` is held; the note reaches both the errorReason and the userMessage. Negative-validated — stashing only the pre-fix `server.ts` failed exactly 4 of 4 assertions; restored → 4/4.
+
+### Gates (observed this fire)
+- `npm run lint` (`tsc --noEmit`) exit 0; targeted `linkedInPreflightAuthDisconnectPersistTruth` + 3 sibling LinkedIn suites 4 files / 15 passed; full `npx vitest run` **264 files / 2848 tests passed** (82.03 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1,096,746 bytes).
+- E2E: NOT RUN (no handset / no OAuth grant). Deploy: `NOT_CONFIGURED`.
+
+---
+
 ## [Unreleased] - 2026-10-17 04:35 IST — finalization slot: server-spawning durability tests no longer share port 4766
 
 ### Fixed

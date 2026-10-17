@@ -19617,3 +19617,84 @@ Next Slot:
   full suite 2844 tests pass, build हरा, main पर merge नहीं।
 
 ---
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:35
+Window date: 2026-10-17   Window slots completed so far: 2
+
+Completed:
+- #13 Zero-fake-success for all tools — the LinkedIn pre-publish auth probe
+  (`publishToLinkedIn`, `server.ts`) cleared `oauthConn.connected` on a
+  `/v2/userinfo` 401/403 and then called a bare `persistMemory()`, discarding
+  the boolean that reports whether the disconnect reached disk. Verdict is now
+  captured in `preflightAuthDisconnectPersisted`; when the write fails both the
+  `errorReason` and the `userMessage` name the durability gap. Evidence:
+  `src/tests/linkedInPreflightAuthDisconnectPersistTruth.test.ts` (4 cases,
+  4/4 pass); negative-validated (stash server.ts → 4/4 fail; restore → 4/4 pass).
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. The long tail of
+  unclassified `success: true` / discarded-`persistMemory()` sites is not
+  exhausted: `persistDedupStore` in `mobileNotificationPrivacy.ts`, the
+  discarded writes at `computerOperatorEngine.ts` 395 / 410, and the dead
+  `MOBILE_STATUS_CACHE_KEY` write in `mobileStatusEngine.ts` are the enumerated
+  next targets.
+
+Remaining:
+- #1 Real Android Mobile Bridge connection — PARTIAL, blocked by physical
+  hardware.
+- #2 Android JARVIS Server E2E test — PARTIAL, blocked by physical hardware.
+- #3–#8+ server-side items — VERIFIED.
+- Items 9–60 — rotate per `docs/COMPLETION_STATUS.md`; #13 is the
+  highest-priority non-VERIFIED workable item.
+
+Bugs Found:
+- The fourth sibling of the LinkedIn disconnect fake-success: the pre-flight
+  auth-disconnect branch announced the reconnect while discarding whether the
+  cleared connection reached durable storage. Found by grepping the
+  `persistMemory()` call sites after the prior slots fixed the expiry,
+  rejected-token and verify-probe siblings.
+
+Bugs Fixed:
+- `publishToLinkedIn` pre-flight `/v2/userinfo` 401/403 branch now captures the
+  persist verdict and names the durability gap in both `errorReason` and
+  `userMessage` when the write fails. Verified by the new test file (4/4 pass),
+  negative-validated against the pre-fix `server.ts` (4/4 fail).
+
+Tests:    264 files / 2848 tests passed (npx vitest run, 82.03 s, 0 failed).
+Lint:     npm run lint (tsc --noEmit) exit 0.
+Build:    npm run build exit 0; dist/server.cjs 1,096,746 bytes.
+E2E:      NOT RUN — no handset / emulator / display session.
+Security: NOT RUN this slot (no audit invoked); no secrets printed or committed;
+          remote URL uses the token only in the git remote, never a file.
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 cell),
+               docs/CHANGELOG.md, automation/reports/hermes-window-log.md.
+Branch:  feature/hermes-full-completion
+Commit:  54c5d64 (code + test)
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified dist/server.cjs is the
+            deployment unit available.
+
+Blocked:
+- #1 Real Android Mobile Bridge connection — requires a physical Android device.
+- #2 Android JARVIS Server E2E test — requires a physical Android device.
+
+Human Approval Required:
+- None this slot.
+
+Next Slot:
+- #13 — continue the sweep at the next enumerated target
+  (`persistDedupStore` in `mobileNotificationPrivacy.ts`, or the discarded
+  writes at `computerOperatorEngine.ts` 395 / 410), since #13 remains the
+  highest-priority non-VERIFIED item that is not hardware-blocked.
+
+हिंदी सारांश (एक पंक्ति):
+- LinkedIn के pre-publish auth probe में disconnect का durability verdict अब
+  रिकॉर्ड होता है और लिखने के फेल होने पर असली कारण बताया जाता है; टेस्ट 4/4 पास।
