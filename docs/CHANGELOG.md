@@ -4,6 +4,13 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 00:35 IST — window 2026-10-17/18 slot 7: the chat-history clear verdict is read back and surfaced
+
+- **`fix(offline)` — `clearLocalChatHistory()` no longer claims a removal it did not confirm.** The writer returned `true` straight after `localStorage.removeItem`, so a store that reports success without deleting the key (locked-down or quota-frozen storage) read as an emptied history while `hermes_jarvis_chat_history_v1` was still on disk. It now reads the key back and returns `true` only when the key is confirmed gone, matching `clearPendingSyncQueue` (slot 6) and the Mobile Bridge clears (slot 5).
+- **`fix(app)` — `handleClearChatHistory` consumes the real verdict.** `App.tsx` discarded the boolean and then called `loadLocalChatHistory()`, which falls back to the seeded transcript whenever the key is absent; a refused clear therefore rendered a seeded conversation and hid the failure, and the real transcript returned on the next reload. The verdict is now classified by the new `classifyChatHistoryClear` (`src/utils/hardening/chatHistoryStoreTruth.ts`, mirroring `classifyChatHistoryWrite`) and surfaced through the shared `memorySaveNotice` banner.
+- **`test(offline)` — `src/tests/offlinePersistenceTruth.test.ts` 12 → 16 cases** (a confirmed removal; a removal that reports success but leaves the key; a removal that throws; no browser window) and **`src/tests/chatHistoryStoreTruth.test.ts` 18 → 24 cases** (the three classifier verdicts and three source guards that the App captures the verdict, no longer discards it, and surfaces a refusal). Negative-validated: `return true` in place of the read-back failed exactly the silent-failure case (`1 failed | 15 passed`); restored → 33/33 across both files.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run` **265 files / 2877 tests passed** (81.59 s, 0 failed); `npm run build` exit 0 (`dist/server.cjs` 1,098,626 bytes). Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 00:05 IST — window 2026-10-17/18 slot 6: the pending-sync queue clear verdict is surfaced, not discarded
 
 ### Fixed

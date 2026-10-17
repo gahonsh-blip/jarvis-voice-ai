@@ -19990,3 +19990,88 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - ऑफ़लाइन pending-sync queue का clear अब असली verdict लौटाता है — refused clear पर अब झूठा MEMORY SYNCED नहीं; आइटम 13 अभी भी PARTIAL है।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 00:35
+Window date: 2026-10-17 (window opened 21:05 IST 2026-10-17)   Window slots completed so far: 7
+
+Completed:
+- #13 Zero-fake-success for all tools — advanced (still `PARTIAL`).
+  `clearLocalChatHistory()` (`src/utils/offlineStorage.ts`) returned `true` straight
+  after `localStorage.removeItem`, so a store that reports success without deleting
+  the key read as an emptied history while `hermes_jarvis_chat_history_v1` was still
+  on disk. It now reads the key back and returns `true` only when confirmed gone
+  (`getItem(...) === null`), `false` on a thrown refusal and when there is no window —
+  matching `clearPendingSyncQueue` (slot 6) and the Mobile Bridge clears (slot 5).
+  `App.tsx` (`handleClearChatHistory`) discarded the verdict and then called
+  `loadLocalChatHistory()`, which falls back to the seeded transcript when the key is
+  absent: a refused clear rendered a seeded conversation and hid the failure, and the
+  real transcript returned on the next reload. The verdict is now classified by the new
+  `classifyChatHistoryClear` (`src/utils/hardening/chatHistoryStoreTruth.ts`, mirroring
+  `classifyChatHistoryWrite`) and surfaced through the shared `memorySaveNotice` banner.
+  Evidence: `src/tests/offlinePersistenceTruth.test.ts` (16 cases, +4: confirmed removal;
+  removal that reports success but leaves the key; removal that throws; no window) and
+  `src/tests/chatHistoryStoreTruth.test.ts` (24 cases, +6: three classifier verdicts and
+  three source guards that the App captures the verdict, no longer discards it, and
+  surfaces a refusal).
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains `PARTIAL`. Remaining enumerated targets:
+  the discarded writes at `computerOperatorEngine.ts` 395 / 410 and the dead
+  `MOBILE_STATUS_CACHE_KEY` write in `mobileStatusEngine.ts`.
+
+Remaining:
+- #1-#12 Real Android E2E / Real Screenshot / Computer Operator — blocked or already
+  VERIFIED per `docs/COMPLETION_STATUS.md`.
+- #14-#60: rotate through the mandated order; most hardware-dependent items stay BLOCKED.
+
+Bugs Found:
+- `clearLocalChatHistory()` could report a successful clear it never confirmed (silent
+  no-op removal). Found by comparing it against its already-repaired siblings
+  (`clearPendingSyncQueue`, Mobile Bridge clears) while auditing the item-13 tail.
+- `App.tsx` `handleClearChatHistory` discarded that verdict and then adopted the seeded
+  fallback transcript, so a refused clear was indistinguishable from a real one.
+
+Bugs Fixed:
+- `clearLocalChatHistory()` now reads the key back and returns the real verdict.
+- `handleClearChatHistory` captures the verdict, classifies it, and surfaces a refusal.
+- Verification: negative-validated — replacing the post-removal read with `return true`
+  failed exactly the silent-failure case (`1 failed | 15 passed` in
+  `offlinePersistenceTruth.test.ts`); restored -> 33/33 across both targeted files.
+
+Tests:    265 files / 2877 tests passed (81.59 s, 0 failed) — full `npx vitest run`
+Lint:     PASS — `npm run lint` (`tsc --noEmit`) exit 0
+Build:    PASS — `npm run build` exit 0; artifact `dist/server.cjs` 1,098,626 bytes
+E2E:      NOT RUN — no handset / emulator / display session
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; no token/key printed or
+          committed this slot.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md,
+               automation/reports/hermes-window-log.md
+Branch:  feature/hermes-full-completion
+Commit:  2e012af9 (code+test), docs commit follows
+Push:    succeeded — origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration present; the
+            verified `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- Real Android E2E / Real Screenshot — requires a physical handset or emulator (NOT_AVAILABLE).
+- Wake word — requires a microphone device (NOT_AVAILABLE).
+- Any provider/social call — requires live credentials not present here.
+- CI green check — no runner assigned to jobs (owner-account/runner block); job logs expired.
+
+Human Approval Required:
+- Merge of PR #8 to main after a human reads this report.
+
+Next Slot:
+- #13 next enumerated target: the discarded writes at `computerOperatorEngine.ts` 395 / 410,
+  then the dead `MOBILE_STATUS_CACHE_KEY` write in `mobileStatusEngine.ts`.
+
+हिंदी सारांश (एक पंक्ति):
+- चैट-हिस्ट्री clear अब असली verdict read-back करके लौटाता है और App उसे सतह पर दिखाता है —
+  refused clear पर अब झूठा "cleared" नहीं; आइटम 13 अभी भी PARTIAL है।
