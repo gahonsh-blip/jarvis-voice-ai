@@ -2917,15 +2917,24 @@ async function testPlatformConnection(platformKey: string): Promise<{
             : `Live Verified: Connected to Personal Member Profile (${memberUrn}). The provider did not return an account name.`,
         };
       } else {
+        // The verify probe clears the connection on a rejected token; that clear
+        // is only real once it reaches disk. The reply used to announce the
+        // reconnect while discarding this verdict, so a failed write left the
+        // durable state still reporting the account as connected — the same fake
+        // success the publish path already refuses.
+        let expiredTokenDisconnectPersisted = true;
         if (conn) {
           conn.connected = false;
           conn.errorReason = `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked.`;
-          persistMemory();
+          expiredTokenDisconnectPersisted = persistMemory();
         }
+        const expiredConnectionNote = expiredTokenDisconnectPersisted
+          ? ''
+          : ' The expired-connection marker could not be written to durable storage, so the saved state may still report this account as connected until it is reconnected.';
         return {
           success: false,
           status: res.status === 401 ? 'EXPIRED' : 'ERROR',
-          message: `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked. Please click "Connect LinkedIn" to reconnect.`,
+          message: `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked. Please click "Connect LinkedIn" to reconnect.` + expiredConnectionNote,
         };
       }
     } catch (e: any) {
