@@ -337,6 +337,47 @@ describe('Mobile Personal Status Engine & Hindi Morning Briefing Suite', () => {
         (globalThis as any).window = originalWindow;
       }
     });
+
+    it('reports false for a silent no-op write that leaves the old value in the store', () => {
+      // The failure a bare `setItem` cannot see: storage accepts the call
+      // without throwing (private mode, quota-frozen) yet keeps the previous
+      // bytes. The verdict must come from reading the store back, not from the
+      // call having returned.
+      const backing = new Map<string, string>();
+      backing.set(
+        'hermes_jarvis_mobile_permissions_v1',
+        JSON.stringify({ ...DEFAULT_MOBILE_PERMISSIONS, NOTIFICATIONS: false })
+      );
+      (globalThis as any).window = {};
+      (globalThis as any).localStorage = {
+        getItem: (k: string) => backing.get(k) ?? null,
+        setItem: () => {
+          /* silently refuses the write */
+        },
+      };
+
+      expect(
+        saveMobilePermissions({ ...DEFAULT_MOBILE_PERMISSIONS, NOTIFICATIONS: true })
+      ).toBe(false);
+      // And the store still holds the pre-write matrix — which is exactly why
+      // the modal must render the echo, not the request.
+      expect(loadMobilePermissions().NOTIFICATIONS).toBe(false);
+    });
+
+    it('no longer writes the unread MOBILE_STATUS_CACHE_KEY, so no unverified cache is implied', () => {
+      // `compileMobileStatusData` wrote `hermes_jarvis_mobile_status_cache_v1`
+      // inside a `try {} catch {}` that discarded any refusal, and nothing in the
+      // repository ever read the key back. A write nobody reads is a fake success
+      // waiting to be trusted; the dead write and its constant are gone.
+      const fs = require('fs');
+      const path = require('path');
+      const engineSource = fs.readFileSync(
+        path.join(__dirname, '..', 'utils', 'mobileStatusEngine.ts'),
+        'utf8'
+      );
+      expect(engineSource).not.toContain('MOBILE_STATUS_CACHE_KEY');
+      expect(engineSource).not.toContain('hermes_jarvis_mobile_status_cache_v1');
+    });
   });
 });
 

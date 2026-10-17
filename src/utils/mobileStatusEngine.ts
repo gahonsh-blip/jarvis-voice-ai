@@ -9,7 +9,6 @@ import {
 } from '../types';
 
 const MOBILE_PERMISSIONS_STORAGE_KEY = 'hermes_jarvis_mobile_permissions_v1';
-const MOBILE_STATUS_CACHE_KEY = 'hermes_jarvis_mobile_status_cache_v1';
 
 export const DEFAULT_MOBILE_PERMISSIONS: Record<MobilePermissionCategory, boolean> = {
   BATTERY_STATUS: true,
@@ -115,8 +114,12 @@ export function loadMobilePermissions(): Record<MobilePermissionCategory, boolea
 export function saveMobilePermissions(perms: Record<MobilePermissionCategory, boolean>): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    localStorage.setItem(MOBILE_PERMISSIONS_STORAGE_KEY, JSON.stringify(perms));
-    return true;
+    const serialized = JSON.stringify(perms);
+    localStorage.setItem(MOBILE_PERMISSIONS_STORAGE_KEY, serialized);
+    // A refused write can fail silently (private mode, quota): `setItem` returns
+    // without throwing yet leaves the previous value. Confirm the store now holds
+    // exactly what we asked to save before reporting the change as durable.
+    return localStorage.getItem(MOBILE_PERMISSIONS_STORAGE_KEY) === serialized;
   } catch (err) {
     console.warn('[MobileEngine] Error saving mobile permissions:', err);
     return false;
@@ -408,12 +411,6 @@ export async function compileMobileStatusData(userLocation?: string): Promise<Mo
     permissions,
     isSample: true,
   };
-
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(MOBILE_STATUS_CACHE_KEY, JSON.stringify(data));
-    } catch {}
-  }
 
   return data;
 }
