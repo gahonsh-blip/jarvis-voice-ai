@@ -4,6 +4,13 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 04:05 IST — window 2026-10-17/18 slot 14: the offline storage writers read their bytes back
+
+### Fixed
+- **`saveLocalChatHistory()`, `saveLocalMemory()`, `saveLocalVoiceSettings()`, `saveLocalNotepadContent()` and `queuePendingSync()` (`src/utils/offlineStorage.ts`) returned `true` straight after `localStorage.setItem` without reading the bytes back.** A store that accepts the call without throwing yet keeps the previous bytes (private browsing, a frozen or quota-clamped store) therefore read as a durable save: the operator saw the transcript, memory store, voice settings, notepad draft or pending-sync queue as saved while the key still held the previous bytes and the next reload silently restored them. The earlier slot made these writers return a boolean for the *throwing* store and the no-`window` case, but none read the bytes back, so the silent no-op stayed invisible. All five writers now go through one `writeAndVerify()` helper that serialises once, writes, and compares the bytes read back against the bytes written, reporting a silent no-op as a refusal.
+- **`test(offline)` — `src/tests/offlinePersistenceTruth.test.ts` 16 → 21 cases** cover a `ControllableStorage.silentWrites` stub that accepts `setItem` but keeps the previous bytes: each of the five writers reports a silently dropped write as `false` with the loader still returning the previous value/bytes. Negative-validated: the five new assertions failed before the fix (`5 failed | 16 passed`); restored → `21/21` in the file (`29/29` with `offlineStorage.test.ts`).
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run` 266 files / 2905 tests passed; `npm run build` exit 0. Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 03:35 IST — window 2026-10-17/18 slot 13: the Mobile Bridge writers read their bytes back
 
 ### Fixed
