@@ -5,6 +5,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 class ControllableStorage {
   private store = new Map<string, string>();
   failWrites = false;
+  // A store that accepts `setItem` without throwing yet keeps the previous
+  // bytes — private browsing, a frozen or quota-clamped store. The silent
+  // failure a write-only `return true` cannot detect.
+  silentWrites = false;
   // Private mode / a locked-down storage throws `SecurityError` on removal as
   // well as on write, so the double models that separately from `failWrites`.
   failRemoves = false;
@@ -22,6 +26,7 @@ class ControllableStorage {
   }
   setItem(key: string, value: string) {
     if (this.failWrites) throw new DOMException('QuotaExceededError');
+    if (this.silentWrites) return;
     this.store.set(key, String(value));
   }
   removeItem(key: string) {
@@ -38,6 +43,7 @@ const store = new ControllableStorage();
 beforeEach(() => {
   store.clear();
   store.failWrites = false;
+  store.silentWrites = false;
   store.failRemoves = false;
   store.ignoreRemoves = false;
   vi.stubGlobal('window', {});
@@ -84,6 +90,59 @@ describe('offline writers report whether the write landed', () => {
     const { saveLocalMemory } = await loadModule();
     vi.stubGlobal('window', undefined);
     expect(saveLocalMemory({ notes: [], customKeyValues: {}, stats: { totalCommands: 0, actionsExecuted: 0, lastActive: '' } } as any)).toBe(false);
+  });
+
+  // A store that accepts `setItem` without throwing yet keeps the previous bytes
+  // is the silent no-op the write-only `return true` could not see: the writer
+  // reported a durable save while the key held the old bytes, and the next
+  // reload restored them. Each writer must read the bytes back and refuse.
+  it('reports a silently dropped chat-history write as not landed', async () => {
+    const { saveLocalChatHistory, loadLocalChatHistory } = await loadModule();
+    saveLocalChatHistory([{ role: 'user', content: 'first' }] as any);
+    store.silentWrites = true;
+    expect(saveLocalChatHistory([{ role: 'user', content: 'second' }] as any)).toBe(false);
+    store.silentWrites = false;
+    const stored = loadLocalChatHistory();
+    expect(stored[stored.length - 1].content).toBe('first');
+  });
+
+  it('reports a silently dropped memory-store write as not landed', async () => {
+    const { saveLocalMemory, loadLocalMemory } = await loadModule();
+    const seed = { notes: [], customKeyValues: { a: '1' }, stats: { totalCommands: 0, actionsExecuted: 0, lastActive: '' } } as any;
+    saveLocalMemory(seed);
+    store.silentWrites = true;
+    const next = { notes: [], customKeyValues: { a: '2' }, stats: { totalCommands: 0, actionsExecuted: 0, lastActive: '' } } as any;
+    expect(saveLocalMemory(next)).toBe(false);
+    store.silentWrites = false;
+    expect(loadLocalMemory().customKeyValues.a).toBe('1');
+  });
+
+  it('reports a silently dropped voice-settings write as not landed', async () => {
+    const { saveLocalVoiceSettings, loadLocalVoiceSettings } = await loadModule();
+    saveLocalVoiceSettings({ language: 'en' } as any);
+    store.silentWrites = true;
+    expect(saveLocalVoiceSettings({ language: 'hi' } as any)).toBe(false);
+    store.silentWrites = false;
+    expect(loadLocalVoiceSettings()?.language).toBe('en');
+  });
+
+  it('reports a silently dropped notepad write as not landed', async () => {
+    const { saveLocalNotepadContent, loadLocalNotepadContent } = await loadModule();
+    saveLocalNotepadContent('first draft');
+    store.silentWrites = true;
+    expect(saveLocalNotepadContent('second draft')).toBe(false);
+    store.silentWrites = false;
+    expect(loadLocalNotepadContent()).toBe('first draft');
+  });
+
+  it('reports a silently dropped pending-sync queue write as not landed', async () => {
+    const { queuePendingSync, getPendingSyncQueue } = await loadModule();
+    queuePendingSync('memory_sync', { a: 1 });
+    store.silentWrites = true;
+    expect(queuePendingSync('name', { name: 'x' })).toBe(false);
+    store.silentWrites = false;
+    // The queue still holds exactly the one item that was actually written.
+    expect(getPendingSyncQueue()).toHaveLength(1);
   });
 });
 

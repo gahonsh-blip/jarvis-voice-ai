@@ -72,18 +72,26 @@ export function loadLocalChatHistory(): ChatMessage[] {
  * Every writer returns whether the write actually landed. A caller that reports
  * "persisted" to the operator must be able to read this — the previous `void`
  * signature let a swallowed quota/storage error read as a completed save.
+ *
+ * A store can also accept `setItem` without throwing yet keep the previous
+ * bytes (private browsing, a frozen or quota-clamped store). Each writer
+ * therefore reads the bytes back and reports `true` only when the store holds
+ * exactly what was written, so a silent no-op cannot read as durable.
  */
-export function saveLocalChatHistory(messages: ChatMessage[]): boolean {
+function writeAndVerify(key: string, serialized: string): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    // Keep last 120 messages to prevent exceeding browser storage quota
-    const trimmed = messages.slice(-120);
-    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(trimmed));
-    return true;
+    localStorage.setItem(key, serialized);
+    return localStorage.getItem(key) === serialized;
   } catch (err) {
-    console.warn('[OfflineStorage] Error saving chat history to localStorage:', err);
+    console.warn(`[OfflineStorage] Error saving ${key} to localStorage:`, err);
     return false;
   }
+}
+
+export function saveLocalChatHistory(messages: ChatMessage[]): boolean {
+  // Keep last 120 messages to prevent exceeding browser storage quota
+  return writeAndVerify(CHAT_HISTORY_KEY, JSON.stringify(messages.slice(-120)));
 }
 
 /**
@@ -134,14 +142,7 @@ export function loadLocalMemory(): MemoryStore {
 }
 
 export function saveLocalMemory(memory: MemoryStore): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    localStorage.setItem(MEMORY_STORE_KEY, JSON.stringify(memory));
-    return true;
-  } catch (err) {
-    console.warn('[OfflineStorage] Error saving memory store to localStorage:', err);
-    return false;
-  }
+  return writeAndVerify(MEMORY_STORE_KEY, JSON.stringify(memory));
 }
 
 export function loadLocalVoiceSettings(): VoiceSettings | null {
@@ -157,14 +158,7 @@ export function loadLocalVoiceSettings(): VoiceSettings | null {
 }
 
 export function saveLocalVoiceSettings(settings: VoiceSettings): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings));
-    return true;
-  } catch (err) {
-    console.warn('[OfflineStorage] Error saving voice settings to localStorage:', err);
-    return false;
-  }
+  return writeAndVerify(VOICE_SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export function loadLocalNotepadContent(): string | null {
@@ -184,33 +178,20 @@ export function loadLocalNotepadContent(): string | null {
  * durable save the next reload would not find.
  */
 export function saveLocalNotepadContent(content: string): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    localStorage.setItem(NOTEPAD_CONTENT_KEY, content);
-    return true;
-  } catch (err) {
-    console.warn('[OfflineStorage] Error saving notepad content to localStorage:', err);
-    return false;
-  }
+  return writeAndVerify(NOTEPAD_CONTENT_KEY, content);
 }
 
 // Sync queue for offline mutations
 export function queuePendingSync(type: PendingSyncItem['type'], payload: any): boolean {
   if (typeof window === 'undefined') return false;
-  try {
-    const existing = getPendingSyncQueue();
-    const item: PendingSyncItem = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      type,
-      payload,
-      timestamp: new Date().toISOString(),
-    };
-    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify([...existing, item]));
-    return true;
-  } catch (err) {
-    console.warn('[OfflineStorage] Error queueing pending sync:', err);
-    return false;
-  }
+  const existing = getPendingSyncQueue();
+  const item: PendingSyncItem = {
+    id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    type,
+    payload,
+    timestamp: new Date().toISOString(),
+  };
+  return writeAndVerify(PENDING_SYNC_KEY, JSON.stringify([...existing, item]));
 }
 
 export function getPendingSyncQueue(): PendingSyncItem[] {
