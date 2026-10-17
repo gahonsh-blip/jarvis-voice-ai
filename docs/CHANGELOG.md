@@ -4,6 +4,13 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 03:35 IST — window 2026-10-17/18 slot 13: the Mobile Bridge writers read their bytes back
+
+### Fixed
+- **`saveBridgeRegistration()`, `persistQueue()` and `logMobileAudit()` (`src/utils/mobileBridgeEngine.ts`) reported a durable write after `setItem` without reading the bytes back.** `saveBridgeRegistration` only checked `localStorage.getItem(KEY) !== null`, and `persistQueue` / `logMobileAudit` each ran `setItem(...)` then `return true`. A store that accepts the call without throwing yet keeps the previous bytes (private browsing, a frozen or quota-clamped store) therefore read as a save: the handset looked registered while the store still held the *previous* registration (so `loadBridgeRegistration()` returned the stale device on the next load), a pending approval looked queued while `hermes_jarvis_mobile_bridge_queue_v1` held nothing, and the bridge's security audit trail looked recorded while the key held the prior rows. All three writers now serialise once, write, and compare the bytes read back from the store against the bytes written, reporting a silent no-op as a refusal — the bridge sibling of the slot 11 telephony and slot 12 notification-privacy repairs.
+- **`test(mobile-bridge)` — `src/tests/mobileBridgeEngine.test.ts` 34 → 38 cases** cover a `SilentStorage` stub that accepts `setItem` but keeps the previous bytes: a silently dropped `saveBridgeRegistration` is reported `false` with the store still holding the previous device; a control case on a store that keeps what it is given is reported `true`; a silently dropped `enqueuePendingEvent` is reported `false` with the queue still empty; a silently dropped `logMobileAudit` is reported `false` with the audit log still empty. Negative-validated: reverting the three writers to their pre-fix form failed exactly the three silent-no-op cases (`3 failed | 35 passed`); restored → 38/38.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; targeted `mobileBridgeEngine` 1 file / 38 passed. Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 03:05 IST — window 2026-10-17/18 slot 12: the Notification Privacy writers read their bytes back
 
 ### Fixed
