@@ -4,6 +4,21 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-17 22:05 IST — window 2026-10-17/18 slot 3: the scheduler tick's eleven audit-write verdicts are surfaced, not discarded
+
+### Fixed
+- **`checkAndRunSchedulerJobs()` (`server.ts`) called `addAuditLog()` at eleven sites as bare statements, discarding the boolean that reports whether the audit row reached disk.** `addAuditLog()` → `recordDurableAuditRow()` returns `false` when the row never reached `jarvis_memory.json` and drops the phantom row. The eleven sites wrote the durable evidence for the Morning Briefing, Midday Health Audit, Evening Social Pulse, Nightly Work Summary, GitHub nightly check, and the four scheduled-goal outcomes. A read-only volume or a full disk therefore produced a tick that logged success in-process while the security matrix held no row for it — the same fake success already repaired on the `/api/restore`, approval-decision, LinkedIn and OAuth paths.
+- Each of the eleven sites now binds the verdict and warns `audit row NOT durable - this tick is not recorded on disk (item 13)` when the write failed.
+
+### Tests
+- New `src/tests/schedulerAuditVerdictTruth.test.ts` (3 cases over the real tick body): no bare `addAuditLog()` call remains; all twelve captured verdicts (the eleven fixed plus the pre-existing `auditRecorded` on the GitHub nightly check) are read after binding; the pre-fix bare-statement shape is gone. Negative-validated — restoring the pre-fix `server.ts` failed exactly 3 of 3 assertions; restored → 3/3.
+
+### Gates (observed this fire)
+- `npm run lint` (`tsc --noEmit`) exit 0; targeted `schedulerAuditVerdictTruth` 1 file / 3 passed; full `npx vitest run` and `npm run build` recorded in the window report.
+- E2E: NOT RUN (no handset / no display session). Deploy: `NOT_CONFIGURED`.
+
+---
+
 ## [Unreleased] - 2026-10-17 21:35 IST — window 2026-10-17/18 slot 2: LinkedIn pre-flight auth-disconnect verdict is surfaced, not discarded
 
 ### Fixed
