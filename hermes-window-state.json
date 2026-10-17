@@ -1,24 +1,19 @@
 {
   "window_date": "2026-10-18",
   "window_started_at": "2026-10-17T15:35:00Z",
-  "last_slot_at": "2026-10-17T22:47:00Z",
-  "slots_completed": 14,
+  "last_slot_at": "2026-10-17T23:11:00Z",
+  "slots_completed": 15,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "da86b7d",
+  "last_commit": "be084ac",
   "last_branch": "feature/hermes-full-completion",
-  "finalized": false,
-  "finalization_result": null,
+  "finalized": true,
+  "finalization_result": "FINALIZED — tip be084ac re-verified: lint exit 0; 266 files / 2905 tests passed (84.24 s, 0 failed); build exit 0, dist/server.cjs 1,099,361 bytes; npm audit --omit=dev 0 vulnerabilities. PR #8 open, non-draft, mergeable=true, head da86b7d; mergeable_state=unstable only because GitHub Actions could not run (check-run annotation: 'The job was not started because your account is locked due to a billing issue.'). Main NOT merged — awaiting human approval. Deploy NOT_CONFIGURED. Item #13 remains PARTIAL (server.ts/server_tools.ts success:true tail unaudited).",
   "blocked_items": [
-    {
-      "item": "real-android-e2e",
-      "reason": "no handset/emulator"
-    },
-    {
-      "item": "real-screenshot",
-      "reason": "no device/display session"
-    }
+    {"item": "real-android-e2e", "reason": "no handset/emulator"},
+    {"item": "real-screenshot", "reason": "no device/display session"},
+    {"item": "github-actions-ci", "reason": "owner account locked due to a billing issue; jobs never start"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
