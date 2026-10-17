@@ -19698,3 +19698,88 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - LinkedIn के pre-publish auth probe में disconnect का durability verdict अब
   रिकॉर्ड होता है और लिखने के फेल होने पर असली कारण बताया जाता है; टेस्ट 4/4 पास।
+
+## 2026-10-17 22:05 IST — WORK SLOT 3 (window 2026-10-17/18)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:05
+Window date: 2026-10-17   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools — the scheduler tick discarded the
+  durability verdict of its own audit row at eleven call sites.
+  Evidence: `server.ts` `checkAndRunSchedulerJobs()` — eleven bare
+  `addAuditLog(...)` statements now bind the verdict and warn
+  `audit row NOT durable - this tick is not recorded on disk (item 13)` when
+  `addAuditLog()` returns false. New test
+  `src/tests/schedulerAuditVerdictTruth.test.ts` 1 file / 3 passed.
+  Negative-validated: pre-fix `server.ts` -> 3 failed of 3; restored -> 3/3.
+  Item remains PARTIAL (the tail is enumerated below).
+
+In Progress:
+- #13 — remaining discarded-verdict sites: `persistDedupStore`
+  (`src/utils/mobileNotificationPrivacy.ts`), `computerOperatorEngine.ts`
+  395 / 410, the dead `MOBILE_STATUS_CACHE_KEY` write
+  (`src/utils/mobileStatusEngine.ts`).
+
+Remaining:
+- #1, #2 Android Bridge / Real Android E2E — hardware-gated
+- #25, #26, #30-#34, #46-#48, #51, #54, #60 — various PARTIAL, see
+  docs/COMPLETION_STATUS.md
+- #33 PERMISSION_REQUIRED; #50, #55 NOT_AVAILABLE
+
+Bugs Found:
+- `addAuditLog()` returns the real verdict of the durable audit write
+  (`true` only once the row is read back from disk). Eleven scheduler-tick
+  call sites discarded it, so a tick whose audit row never reached
+  `jarvis_memory.json` (read-only volume, full disk) still passed as a
+  recorded run while the security matrix held no row for it. Found by
+  grepping the tick body for bare `addAuditLog(` statements after reading the
+  `addAuditLog` / `recordDurableAuditRow` implementation.
+
+Bugs Fixed:
+- All eleven discarded sites now capture the verdict and warn on a non-durable
+  write. Verification: `src/tests/schedulerAuditVerdictTruth.test.ts`
+  (3 assertions) fails 3/3 on the pre-fix source and passes 3/3 on the fixed
+  source.
+
+Tests:    1 file / 3 passed (targeted, observed). Full `npx vitest run`
+          **265 files / 2851 tests passed** (83.20 s, 0 failed), exit 0.
+Lint:     `npx tsc --noEmit` exit 0 (observed).
+Build:    `npm run build` exit 0 (observed); `dist/server.cjs` 1,098,626 bytes.
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox.
+Security: `git check-ignore -v .env` -> `.gitignore:4:.env`; `git status --short`
+          clean; no `node_modules/` or `dist/` tracked; no token/key in the diff.
+          `npm audit` NOT RUN this fire.
+
+Documentation: docs/COMPLETION_STATUS.md, docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  626c072 (fix), 1dbccbb (status doc), + changelog commit
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft) — refreshed at finalization slot
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified `dist/server.cjs` is the
+            deployment unit available.
+
+Blocked:
+- Real Android E2E (#2) — requires a handset or emulator
+- Real Screenshot (#25) — requires a display session
+- Wake Word (#54) — requires a microphone device
+- CI green check — owner-account / runner allocation block; not a code failure
+
+Human Approval Required:
+- Merge of PR #8 to `main` (absolute rule: never auto-merge)
+
+Next Slot:
+- #13 — `persistDedupStore` in `src/utils/mobileNotificationPrivacy.ts`:
+  capture the write verdict so a refused dedup-store write cannot pass as a
+  recorded notification dedup state. Same defect class, small and testable
+  inside one slot.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में शेड्यूलर टिक के ग्यारह ऑडिट-राइट वर्डिक्ट अब दर्ज किए जाते हैं
+  (पहले नज़रअंदाज़ होते थे); आइटम 13 अभी भी PARTIAL है।
+
+---
