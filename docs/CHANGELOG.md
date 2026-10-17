@@ -4,6 +4,17 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 00:05 IST — window 2026-10-17/18 slot 6: the pending-sync queue clear verdict is surfaced, not discarded
+
+### Fixed
+- **`clearPendingSyncQueue()` (`src/utils/offlineStorage.ts`) returned `void` and swallowed the `localStorage` refusal, so a queue that was never cleared was indistinguishable from an emptied one.** The function wrapped `localStorage.removeItem` in a `try/catch` that only logged a warning, so in private browsing, on a quota refusal, or with no `window` at all the key `hermes_jarvis_pending_sync_v1` stayed in storage while the caller carried on as though the flush had landed. The offline flush in `App.tsx` therefore announced `MEMORY SYNCED` over a queue still on disk, and the next reconnect re-posted items the UI had already reported as synced. The writer now returns `true` only when the key is confirmed gone (`getItem(...) === null`), `false` on a thrown refusal and when there is no browser window.
+- **`App.tsx` flushes the pending-sync queue only after the clear is confirmed**, and names a queue that could not be cleared instead of claiming a flush it did not verify.
+
+### Tests
+- `src/tests/offlinePersistenceTruth.test.ts` grew to 12 cases (+2): a removal that reports success but leaves the key in place (the silent failure a bare `removeItem` call cannot detect), and a removal that throws. Negative-validated — stubbing the post-removal read failed exactly the new silent-failure case (`1 failed | 11 passed`); restored → 12/12.
+
+---
+
 ## [Unreleased] - 2026-10-17 22:35 IST — window 2026-10-17/18 slot 4: the notification dedup write verdict is surfaced, not swallowed
 
 ### Fixed
