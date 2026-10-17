@@ -5,6 +5,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 class ControllableStorage {
   private store = new Map<string, string>();
   failWrites = false;
+  // Private mode / a locked-down storage throws `SecurityError` on removal as
+  // well as on write, so the double models that separately from `failWrites`.
+  failRemoves = false;
+  // A removal that reports success but leaves the key in place: the silent
+  // failure a bare `removeItem` call cannot detect.
+  ignoreRemoves = false;
   get length() {
     return this.store.size;
   }
@@ -19,6 +25,10 @@ class ControllableStorage {
     this.store.set(key, String(value));
   }
   removeItem(key: string) {
+    if (this.failRemoves) throw new DOMException('SecurityError');
+    // A storage that reports success without deleting is the silent-failure
+    // case the post-removal read exists to catch.
+    if (this.ignoreRemoves) return;
     this.store.delete(key);
   }
 }
@@ -28,6 +38,8 @@ const store = new ControllableStorage();
 beforeEach(() => {
   store.clear();
   store.failWrites = false;
+  store.failRemoves = false;
+  store.ignoreRemoves = false;
   vi.stubGlobal('window', {});
   vi.stubGlobal('localStorage', store);
 });
@@ -75,6 +87,46 @@ describe('offline writers report whether the write landed', () => {
   });
 });
 
+// Item 13 (Zero-fake-success). `clearPendingSyncQueue` returned `void` and
+// swallowed the storage error, so App.tsx announced "MEMORY SYNCED" after a
+// refused clear. The items were still on disk and the next reconnect re-posted
+// them, while the operator had been told the queue was gone.
+describe('clearPendingSyncQueue reports whether the queue actually emptied', () => {
+  it('returns true when the key is confirmed gone', async () => {
+    const { queuePendingSync, clearPendingSyncQueue, getPendingSyncQueue } = await loadModule();
+    expect(queuePendingSync('memory_sync', { a: 1 })).toBe(true);
+    expect(getPendingSyncQueue().length).toBe(1);
+    expect(clearPendingSyncQueue()).toBe(true);
+    expect(getPendingSyncQueue().length).toBe(0);
+  });
+
+  it('returns false when the removal reports success but the key survives', async () => {
+    const { queuePendingSync, clearPendingSyncQueue } = await loadModule();
+    queuePendingSync('memory_sync', { a: 1 });
+    store.ignoreRemoves = true;
+    // A bare `removeItem` would report success here; only reading the key back
+    // distinguishes "emptied" from "silently not emptied".
+    expect(clearPendingSyncQueue()).toBe(false);
+    store.ignoreRemoves = false;
+    expect(store.getItem('hermes_jarvis_pending_sync_v1')).not.toBeNull();
+  });
+
+  it('returns false when localStorage throws on removal', async () => {
+    const { queuePendingSync, clearPendingSyncQueue } = await loadModule();
+    queuePendingSync('memory_sync', { a: 1 });
+    store.failRemoves = true;
+    expect(clearPendingSyncQueue()).toBe(false);
+    store.failRemoves = false;
+    expect(store.getItem('hermes_jarvis_pending_sync_v1')).not.toBeNull();
+  });
+
+  it('returns false when there is no browser window (SSR / Node)', async () => {
+    const { clearPendingSyncQueue } = await loadModule();
+    vi.stubGlobal('window', undefined);
+    expect(clearPendingSyncQueue()).toBe(false);
+  });
+});
+
 // Pins the App.tsx fix so the unconditional "persisted" claim cannot silently
 // return. A source scan is used because App.tsx is a large React component that
 // the suite does not otherwise mount.
@@ -96,5 +148,24 @@ describe('offline status line does not claim a save it did not verify', () => {
 
   it('captures the chat-history write result before reporting', () => {
     expect(appSource).toMatch(/localWriteLanded\s*=\s*saveLocalChatHistory\(/);
+  });
+});
+
+// The sync flush announced "MEMORY SYNCED" while the queue-clear result was
+// dropped, so a refused clear still read as a flushed queue.
+describe('App.tsx sync flush observes the queue-clear result', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'App.tsx'), 'utf8');
+  const appFlat = appSource.replace(/\s+/g, ' ');
+
+  it('captures the queue-clear verdict instead of discarding it', () => {
+    expect(appFlat).toMatch(/const queueCleared = clearPendingSyncQueue\(\);/);
+    expect([...appFlat.matchAll(/clearPendingSyncQueue\(\)/g)].length).toBe(1);
+  });
+
+  it('discloses a queue that could not be cleared', () => {
+    expect(appSource).toContain('QUEUE NOT CLEARED (STORAGE UNAVAILABLE)');
+    expect(appFlat).toContain('BACKEND RECONNECTED • MEMORY SYNCED${flushNotice}');
   });
 });

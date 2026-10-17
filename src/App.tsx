@@ -312,15 +312,26 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        clearPendingSyncQueue();
+        // The queue is only flushed once the clear is confirmed. A refused
+        // clear (private mode, full quota) left the items on disk, so reporting
+        // "MEMORY SYNCED" would tell the operator a queue is gone that the next
+        // reconnect re-posts.
+        const queueCleared = clearPendingSyncQueue();
+        const flushNotice = queueCleared
+          ? ''
+          : ' • QUEUE NOT CLEARED (STORAGE UNAVAILABLE)';
         if (data.requiresAttention) {
           const count = (data.conflicts || []).filter((c: any) => c.resolution === 'flagged').length;
-          setStatusText(`SYNCED • ${count} MEMORY CONFLICT${count === 1 ? '' : 'S'} NEED REVIEW`);
+          setStatusText(`SYNCED • ${count} MEMORY CONFLICT${count === 1 ? '' : 'S'} NEED REVIEW${flushNotice}`);
           console.warn('[OfflineStorage] Memory conflicts need review:', data.conflicts);
         } else {
-          setStatusText('BACKEND RECONNECTED • MEMORY SYNCED');
+          setStatusText(`BACKEND RECONNECTED • MEMORY SYNCED${flushNotice}`);
         }
-        console.log('[OfflineStorage] Pending sync queue flushed successfully.');
+        if (queueCleared) {
+          console.log('[OfflineStorage] Pending sync queue flushed successfully.');
+        } else {
+          console.warn('[OfflineStorage] Server sync succeeded but the local queue could not be cleared; it will be re-sent on the next reconnect.');
+        }
       }
     } catch (err) {
       console.warn('[OfflineStorage] Retry flush failed, queued for next reconnect:', err);

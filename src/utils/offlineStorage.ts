@@ -218,11 +218,19 @@ export function getPendingSyncQueue(): PendingSyncItem[] {
   }
 }
 
-export function clearPendingSyncQueue(): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Empty the pending-sync queue. Returns the real verdict: `true` only when the
+ * key is confirmed gone from storage. It used to return `void` and swallow the
+ * error, so App.tsx announced "MEMORY SYNCED" after a refused clear and the
+ * next reconnect re-posted a queue the UI had reported as flushed.
+ */
+export function clearPendingSyncQueue(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.removeItem(PENDING_SYNC_KEY);
+    return localStorage.getItem(PENDING_SYNC_KEY) === null;
   } catch (err) {
     console.warn('[OfflineStorage] Error clearing sync queue:', err);
+    return false;
   }
 }
