@@ -4300,12 +4300,13 @@ async function checkAndRunSchedulerJobs() {
         const failEntry = `[${new Date().toISOString()}] Morning Briefing (09:00 AM IST) NOT run: the per-day marker could not be written to durable storage.`;
         schedulerRunLog.unshift(failEntry);
         console.warn('[Scheduler]', failEntry);
-        addAuditLog(
+        const morningBriefingMarkerAudit = addAuditLog(
           'Morning Briefing (09:00 AM IST) NOT run: the per-day marker could not be written to durable storage.',
           1,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!morningBriefingMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
       } else {
         let push: SchedulerPushOutcome = { attempted: false, delivered: false };
         if (activeTelegramChatId && getCleanTelegramToken()) {
@@ -4330,12 +4331,13 @@ async function checkAndRunSchedulerJobs() {
         const failEntry = `[${new Date().toISOString()}] Midday Health Audit (02:00 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
         schedulerRunLog.unshift(failEntry);
         console.warn('[Scheduler]', failEntry);
-        addAuditLog(
+        const middayHealthMarkerAudit = addAuditLog(
           'Midday Health Audit (02:00 PM IST) NOT run: the per-day marker could not be written to durable storage.',
           1,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!middayHealthMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
       } else {
         await recordSchedulerOutcome('Midday Health Audit (02:00 PM IST)', { attempted: false, delivered: false });
       }
@@ -4351,12 +4353,13 @@ async function checkAndRunSchedulerJobs() {
         const failEntry = `[${new Date().toISOString()}] Evening Social Pulse (06:30 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
         schedulerRunLog.unshift(failEntry);
         console.warn('[Scheduler]', failEntry);
-        addAuditLog(
+        const eveningPulseMarkerAudit = addAuditLog(
           'Evening Social Pulse (06:30 PM IST) NOT run: the per-day marker could not be written to durable storage.',
           1,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!eveningPulseMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
       } else {
         await recordSchedulerOutcome('Evening Social Pulse (06:30 PM IST)', { attempted: false, delivered: false });
       }
@@ -4372,12 +4375,13 @@ async function checkAndRunSchedulerJobs() {
         const failEntry = `[${new Date().toISOString()}] Nightly Work Summary (10:30 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
         schedulerRunLog.unshift(failEntry);
         console.warn('[Scheduler]', failEntry);
-        addAuditLog(
+        const nightlySummaryMarkerAudit = addAuditLog(
           'Nightly Work Summary (10:30 PM IST) NOT run: the per-day marker could not be written to durable storage.',
           1,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!nightlySummaryMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
       } else {
         let push: SchedulerPushOutcome = { attempted: false, delivered: false };
         if (activeTelegramChatId && getCleanTelegramToken()) {
@@ -4422,12 +4426,13 @@ async function checkAndRunSchedulerJobs() {
         const failEntry = `[${new Date().toISOString()}] Nightly Repository Check NOT started: the per-day marker could not be written to durable storage.`;
         schedulerRunLog.unshift(failEntry);
         console.warn('[Scheduler]', failEntry);
-        addAuditLog(
+        const githubCheckMarkerAudit = addAuditLog(
           'GitHub nightly check NOT started: the per-day marker could not be written to durable storage.',
           1,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!githubCheckMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
       } else {
         runNightlyCheck({ github: githubFetchOptions() })
           .then((result) => {
@@ -4460,12 +4465,13 @@ async function checkAndRunSchedulerJobs() {
           })
           .catch((err: any) => {
             console.warn('[Scheduler] Nightly repository check failed:', err?.message);
-            addAuditLog(
+            const githubCheckFailureAudit = addAuditLog(
               `GitHub nightly check FAILED: ${err?.message || 'unknown error'}`,
               1,
               'AUTOMATED_SCHEDULE',
               'FAILED'
             );
+            if (!githubCheckFailureAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
           });
       }
     }
@@ -4498,12 +4504,13 @@ async function checkAndRunSchedulerJobs() {
       // so this process does not claim a run the durable store lacks.
       if (!persistMemory() || !autonomousGoalMarkerOnDisk(goal.id, today)) {
         delete schedState.lastAutonomousGoalRuns[goal.id];
-        addAuditLog(
+        const scheduledGoalMarkerAudit = addAuditLog(
           `Scheduled autonomous task "${goal.name}" (${goal.id}) NOT run: the per-day marker could not be written to durable storage.`,
           2,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!scheduledGoalMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
         recordScheduledGoalRun({
           goalId: goal.id,
           ranDate: today,
@@ -4517,12 +4524,13 @@ async function checkAndRunSchedulerJobs() {
       }
 
       if (goal.requiresApproval) {
-        addAuditLog(
+        const scheduledGoalApprovalAudit = addAuditLog(
           `Scheduled autonomous task "${goal.name}" (${goal.id}) is due but requires human approval; it was NOT run unattended.`,
           3,
           'AUTOMATED_SCHEDULE',
           'PENDING'
         );
+        if (!scheduledGoalApprovalAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
         recordScheduledGoalRun({
           goalId: goal.id,
           ranDate: today,
@@ -4538,12 +4546,13 @@ async function checkAndRunSchedulerJobs() {
       const { buildGoalSteps } = await import('./src/utils/autonomous/stepLibrary');
       const { steps, rejected } = buildGoalSteps(goal.steps as StepDescriptor[]);
       if (rejected.length > 0) {
-        addAuditLog(
+        const scheduledGoalRejectedAudit = addAuditLog(
           `Scheduled autonomous task "${goal.name}" rejected: unsupported step kind(s) ${rejected.join(', ')}`,
           2,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!scheduledGoalRejectedAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
         recordScheduledGoalRun({
           goalId: goal.id,
           ranDate: today,
@@ -4568,12 +4577,13 @@ async function checkAndRunSchedulerJobs() {
           stepsTotal: result.steps.length,
           at: new Date().toISOString(),
         });
-        addAuditLog(
+        const scheduledGoalOutcomeAudit = addAuditLog(
           `Scheduled autonomous task "${goal.name}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
           2,
           'AUTOMATED_SCHEDULE',
           result.outcome === 'VERIFIED' ? 'VERIFIED' : 'FAILED'
         );
+        if (!scheduledGoalOutcomeAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
       } catch (err: any) {
         recordScheduledGoalRun({
           goalId: goal.id,
@@ -4584,12 +4594,13 @@ async function checkAndRunSchedulerJobs() {
           stepsTotal: steps.length,
           at: new Date().toISOString(),
         });
-        addAuditLog(
+        const scheduledGoalFailureAudit = addAuditLog(
           `Scheduled autonomous task "${goal.name}" FAILED: ${err?.message || 'unknown error'}`,
           2,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!scheduledGoalFailureAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
       }
     }
   }
