@@ -2156,18 +2156,26 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
           }
         }
       } else if (meRes.status === 401 || meRes.status === 403) {
+        // The pre-flight probe clears the connection on a rejected token; that
+        // clear is only real once it reaches disk. The reply used to announce
+        // the reconnect while discarding this verdict, so a failed write left
+        // the durable state still reporting the account as connected.
+        let preflightAuthDisconnectPersisted = true;
         if (oauthConn) {
           oauthConn.connected = false;
           oauthConn.errorReason = 'OAuth token invalid or expired. Reconnection required.';
-          persistMemory();
+          preflightAuthDisconnectPersisted = persistMemory();
         }
+        const preflightAuthConnectionNote = preflightAuthDisconnectPersisted
+          ? ''
+          : ' The rejected-connection marker could not be written to durable storage, so the saved state may still report this account as connected until it is reconnected.';
         return {
           success: false,
           executionStatus: 'FAILED',
           verificationStatus: 'PROVIDER_ERROR',
           finalTruthState: 'FAILED',
-          errorReason: 'LinkedIn authentication failed (HTTP 401/403). Token expired or revoked.',
-          userMessage: '❌ AUTHENTICATION ERROR: LinkedIn rejected the token (HTTP 401/403). Please reconnect via the Connect LinkedIn button.',
+          errorReason: 'LinkedIn authentication failed (HTTP 401/403). Token expired or revoked.' + preflightAuthConnectionNote,
+          userMessage: '❌ AUTHENTICATION ERROR: LinkedIn rejected the token (HTTP 401/403). Please reconnect via the Connect LinkedIn button.' + preflightAuthConnectionNote,
         };
       }
     }
