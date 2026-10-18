@@ -25,6 +25,10 @@ const APP_HANDLED = new Set(
  *  - `view`   — the intent opens a real in-app view (`App.tsx` has a case).
  *  - `tool`   — the case runs a real host tool (git, filesystem, web, search).
  *  - `memory` — the case performs a real persisted write.
+ *
+ * `set_name` is no longer listed: the executed flag now follows the durable
+ * write outcome (`actionExecuted = persisted;`), so it is not a literal
+ * `actionExecuted = true;` site. Its conditional form is pinned below.
  */
 const AUDITED_TRUE_SITES: Record<string, 'view' | 'tool' | 'memory'> = {
   open_computer_operator: 'view',
@@ -36,14 +40,12 @@ const AUDITED_TRUE_SITES: Record<string, 'view' | 'tool' | 'memory'> = {
   find_document: 'tool', // realFsSearch() with >=1 match; no view opens
   generate_quotation: 'view',
   security_audit: 'view',
-  set_name: 'memory', // memoryState.name + persistMemory(); no view opens
   telephony_hub: 'view',
   call_history: 'view',
   open_calculator: 'view',
   open_paint: 'view',
   open_chrome: 'view',
   open_chatgpt: 'view',
-  create_file: 'view', // also writes a note into memory
   morning_briefing: 'view',
   language_switch: 'view',
   math_computation: 'view', // also evaluates the expression
@@ -84,16 +86,24 @@ describe('item 13 — the actionExecuted = true sweep is enumerated and pinned',
     }
   });
 
-  it('the two non-view sites justify the flag with real host work', () => {
+  it('the non-view site justifies the flag with real host work', () => {
     const findDoc = sites.find((s) => s.intent === 'find_document')!;
     // find_document only counts when a real search returned matches.
     expect(findDoc.body).toContain('realFsSearch(');
     expect(findDoc.body).toContain('search.success && search.matches');
+  });
 
-    const setName = sites.find((s) => s.intent === 'set_name')!;
-    // set_name only counts after a validated name is persisted.
-    expect(setName.body).toContain('memoryState.name = verdict.name');
-    expect(setName.body).toContain('persistMemory();');
+  it('set_name credits execution only after a name is really persisted', () => {
+    // set_name is conditional now, so it is not a literal-true site; the flag
+    // must follow the durable write result rather than a bare `true`.
+    const label = serverFlat.indexOf("case 'set_name': {");
+    expect(label).toBeGreaterThan(-1);
+    const end = serverFlat.indexOf("case 'get_name':", label);
+    const body = serverFlat.slice(label, end);
+    expect(body).toContain('memoryState.name = verdict.name');
+    expect(body).toContain('persistMemory();');
+    expect(body).toContain('actionExecuted = persisted;');
+    expect(body).not.toContain('actionExecuted = true;');
   });
 
   it('no case sets the flag unconditionally (a bare assignment with no guard)', () => {

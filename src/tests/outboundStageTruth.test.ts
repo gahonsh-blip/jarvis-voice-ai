@@ -7,7 +7,10 @@ import {
   activateEmergencyKillSwitch,
   resumeSystemOperation,
   getEmergencyState,
+  getAllActionRequests,
+  removeActionRequest,
 } from '../../server_tools';
+import { TelephonySessionManager } from '../utils/telephonySessionManager';
 
 // Zero-fake-success guard for `POST /api/telephony/outbound/stage`.
 //
@@ -151,5 +154,79 @@ describe('POST /api/telephony/outbound/stage wiring (source guard)', () => {
   it('no longer answers a blanket success:true for the staged request', () => {
     const route = outboundStageRouteSource();
     expect(route).not.toContain('success: true,\n      request,\n      actionId: actionReq.request.id,');
+  });
+
+  it('rolls the blocked request out of the registry before answering', () => {
+    const route = outboundStageRouteSource();
+    // The blocked branch must drop the terminal request the gateway registered,
+    // so it can never be persisted later and re-offered after a restart.
+    expect(route).toContain('removeActionRequest(actionReq.request.id)');
+    expect(route).toContain('memoryState.permissionRequests = persistedActionRequests()');
+  });
+
+  it('honours the durable write instead of trusting the registry boolean', () => {
+    const route = outboundStageRouteSource();
+    // The staged request is real only once its approval row is on disk; the
+    // registry boolean alone is true without writing on identical bytes.
+    expect(route).toContain(
+      "persistApprovalRegistry() &&\n      actionRequestStatusOnDisk(actionReq.request.id, 'PENDING_APPROVAL')"
+    );
+    expect(route).toContain('if (!persisted)');
+    expect(route).toContain('TelephonySessionManager.cancelOutboundRequest(request.id)');
+    expect(route).toContain("outcome: 'NOT_DURABLE'");
+  });
+});
+
+describe('TelephonySessionManager.cancelOutboundRequest withdraws only a pending request', () => {
+  it('removes a request still awaiting authorization', () => {
+    const staged = TelephonySessionManager.stageOutboundRequest({
+      destinationNumber: '+919876543210',
+      purpose: 'unit test cancel',
+    });
+    expect(
+      TelephonySessionManager.getPendingOutboundRequests().some((r) => r.id === staged.id)
+    ).toBe(true);
+    expect(TelephonySessionManager.cancelOutboundRequest(staged.id)).toBe(true);
+    expect(
+      TelephonySessionManager.getPendingOutboundRequests().some((r) => r.id === staged.id)
+    ).toBe(false);
+  });
+
+  it('leaves a decided request untouched', () => {
+    const staged = TelephonySessionManager.stageOutboundRequest({
+      destinationNumber: '+919876543211',
+      purpose: 'unit test cancel decided',
+    });
+    TelephonySessionManager.authorizeOutboundRequest(staged.id, 'APPROVE', 'TEST');
+    expect(TelephonySessionManager.cancelOutboundRequest(staged.id)).toBe(false);
+  });
+
+  it('returns false for an unknown id', () => {
+    expect(TelephonySessionManager.cancelOutboundRequest('req_does_not_exist')).toBe(false);
+  });
+});
+
+describe('blocked gateway requests are dropped from the live registry', () => {
+  afterEach(() => {
+    resumeSystemOperation('TEST_CLEANUP');
+  });
+
+  it('removeActionRequest drops exactly the registered (emergency-blocked) request', () => {
+    activateEmergencyKillSwitch('TEST', 'unit test');
+    const before = getAllActionRequests().length;
+    const blocked = createPendingActionRequest({
+      exactAction: 'Outbound PSTN Call to +91 ••••• •3210',
+      target: '+91 ••••• •3210',
+      contentChanges: 'Purpose: confirm a dentist appointment',
+      level: 4,
+      source: 'Telephony Gateway',
+    });
+    expect(blocked.blockedByEmergency).toBe(true);
+    // The emergency branch unshifts the blocked request into the registry.
+    expect(getAllActionRequests().some((r) => r.id === blocked.request.id)).toBe(true);
+
+    removeActionRequest(blocked.request.id);
+    expect(getAllActionRequests().some((r) => r.id === blocked.request.id)).toBe(false);
+    expect(getAllActionRequests().length).toBe(before);
   });
 });

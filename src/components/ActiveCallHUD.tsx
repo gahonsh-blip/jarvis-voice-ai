@@ -33,7 +33,7 @@ import { telephonyAudio } from '../utils/telephonyAudio';
 import { resolveDisplayNumber, shouldMaskParty } from '../utils/telephonyPrivacyDisplay';
 import { callWaveformBars, callWaveformBarHeight } from '../utils/hardening/callWaveform';
 import { ACOUSTIC_FILTER_LABEL, acousticFilterToggleLabel } from '../utils/hardening/acousticFilterTruth';
-import { ACTION_ITEM_LIST_NOTE } from '../utils/hardening/callSummaryTruth';
+import { ACTION_ITEM_LIST_NOTE, describeCallSummary } from '../utils/hardening/callSummaryTruth';
 import { formatDurationWords } from '../utils/hardening/callDurationTruth';
 
 interface ActiveCallHUDProps {
@@ -256,7 +256,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({
         <div className="mt-3 space-y-3">
           <div className="rounded-xl bg-slate-900/90 border border-slate-800 p-3">
             <div className="text-[11px] font-mono text-cyan-400 uppercase tracking-wider mb-1">AI Briefing Summary</div>
-            <p className="text-xs text-slate-200 leading-relaxed">{activeCall.summary || 'Call concluded normally.'}</p>
+            <p className="text-xs text-slate-200 leading-relaxed">{describeCallSummary(activeCall.summary)}</p>
           </div>
 
           {activeCall.followUpActions && activeCall.followUpActions.length > 0 && (

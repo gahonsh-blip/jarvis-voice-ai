@@ -14,6 +14,7 @@
 // =============================================================================
 
 import type { FixPlan, FixStep, FixRisk } from '../github/fixPlanner';
+import { buildReceipt, makeEvidence } from '../executionTruth';
 
 export interface FixPlanCoverageInput {
   /** The account-wide scan, when one was attempted. */
@@ -130,6 +131,37 @@ export function reconcileFixPlanWithCoverage(
 
   const highestRisk = steps.reduce<FixRisk>((acc, s) => (rank(s.risk) > rank(acc) ? s.risk : acc), 'LOW');
 
+  // `buildFixPlan` stamps `receipt: VERIFIED` unconditionally, even over an empty
+  // or fully unreachable scan. The receipt is the field a caller reads to decide
+  // whether the plan "took effect", so a VERIFIED receipt over a scope that was
+  // never inspected is a fake success of exactly the class item 13 tracks. Derive
+  // the receipt from the same coverage verdict that reconciles `nothingToDo`: a
+  // fully covered run stays VERIFIED (recorded against the real source), an
+  // uncovered run reports the honest terminal outcome and names the gap. The
+  // detail is replaced so the lower state cannot read as "nothing to fix", which
+  // is the fabricated all-clear this reconciliation exists to prevent.
+  const receipt = coverage.covered
+    ? buildReceipt({
+        action: 'github.buildFixPlan',
+        target: plan.receipt.target,
+        outcome: 'VERIFIED',
+        detailEn: plan.receipt.detailEn,
+        detailHi: plan.receipt.detailHi,
+        evidence: makeEvidence('remote_http_response', 'Plan derived from a fully covered scan.', {
+          ref: plan.receipt.evidence?.ref,
+        }),
+      })
+    : buildReceipt({
+        action: 'github.buildFixPlan',
+        target: plan.receipt.target,
+        outcome: 'UNVERIFIED',
+        detailEn: `Coverage not established; no all-clear was claimed. ${reasons.join(' ')}`,
+        detailHi: 'कवरेज स्थापित नहीं हुई; कोई क्लीन-रिपोर्ट नहीं दी गई।',
+        evidence: makeEvidence('remote_http_response', `Plan derived from: ${reasons.join(' ')}`, {
+          ref: plan.receipt.evidence?.ref,
+        }),
+      });
+
   return {
     coverage,
     plan: {
@@ -138,6 +170,7 @@ export function reconcileFixPlanWithCoverage(
       affectedTargets: Array.from(new Set(steps.map((s) => s.target))),
       highestRisk,
       nothingToDo: false,
+      receipt,
     },
   };
 }

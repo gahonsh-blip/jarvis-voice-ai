@@ -52,7 +52,11 @@ import { telephonyAudio } from './utils/telephonyAudio';
 import {
   evaluateSpamScore,
   generateCallSummary,
+  loadLocalCallHistory,
+  loadLocalTelephonySettings,
   processCallTurnWithAi,
+  saveLocalCallHistory,
+  saveLocalTelephonySettings,
 } from './utils/telephonyEngine';
 import {
   CallRecord,
@@ -84,6 +88,9 @@ import {
   getPendingSyncQueue,
   clearPendingSyncQueue,
 } from './utils/offlineStorage';
+import { classifyMemoryStoreWrite, classifySyncQueueWrite } from './utils/hardening/memoryStoreTruth';
+import { classifyChatHistoryWrite, classifyChatHistoryClear, flushChatHistoryNotice } from './utils/hardening/chatHistoryStoreTruth';
+import { classifyVoiceSettingsWrite } from './utils/hardening/voiceSettingsStoreTruth';
 import { processOfflineCommand } from './utils/localJarvisEngine';
 import {
   determineTtsLocale,
@@ -100,6 +107,10 @@ import { recordedOwnNumber } from './utils/hardening/telephonyOwnNumberTruth';
 import { Mic, Volume2, ShieldAlert, Sparkles, Terminal, Smartphone, Cloud, Briefcase, Share2, Sunrise, Lock, Wifi, WifiOff } from 'lucide-react';
 import { MobileActionApprovalCard } from './components/MobileActionApprovalCard';
 import { androidBridgeEngine } from './utils/androidBridgeEngine';
+import {
+  mobileCallAnswerOutcome,
+  mobileMessageReplyOutcome,
+} from './utils/hardening/mobileBridgeSpokenOutcomeTruth';
 import { AndroidPendingEvent } from './types/mobileBridge';
 import { detectWakeWord } from './utils/voice/wakeWord';
 import { VoiceSession } from './utils/voice/voiceSession';
@@ -116,6 +127,19 @@ export default function App() {
   const [volumeLevel, setVolumeLevel] = useState<number>(0);
   const [statusText, setStatusText] = useState<string>('SYSTEM READY • OFFLINE-FIRST STORAGE ACTIVE');
   const [geminiConnected, setGeminiConnected] = useState<boolean>(false);
+  // Non-null only when a Memory Bank edit could not be persisted; a refused
+  // local write must not read as a completed save (item 13).
+  const [memorySaveNotice, setMemorySaveNotice] = useState<string | null>(null);
+  // The observed verdict of the last memory-store write, or null before one is
+  // seen. The Memory Bank header badge derives from this instead of asserting a
+  // fixed "LocalStorage Synced" for a store nothing measured (item 13).
+  const [memoryPersistenceState, setMemoryPersistenceState] = useState<boolean | null>(null);
+  // Observed verdict of the last telephony-store write; the Telephony Hub header
+  // badge derives from this instead of asserting a durable local save.
+  const [telephonyPersistenceState, setTelephonyPersistenceState] = useState<boolean | null>(null);
+  // Observed verdict of the last location-cache write. `false` means the fix was
+  // shown but not persisted, so the HUD must not advertise a cached fix.
+  const [locationCacheRefused, setLocationCacheRefused] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   // The backend's reachability is a separate observation from the browser's
   // network state; it stays null until a probe has actually answered.
@@ -159,26 +183,13 @@ export default function App() {
   // Autonomous Voice AI Telephony State
   const [activeCall, setActiveCall] = useState<CallRecord | null>(null);
   const [callHistory, setCallHistory] = useState<CallRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('hermes_jarvis_call_history');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      return DEFAULT_CALL_RECORDS;
-    } catch {
-      return DEFAULT_CALL_RECORDS;
-    }
+    const stored = loadLocalCallHistory();
+    return stored.length > 0 ? stored : DEFAULT_CALL_RECORDS;
   });
   const [telephonyContacts] = useState<ContactItem[]>(DEFAULT_CONTACTS);
-  const [telephonySettings, setTelephonySettings] = useState<TelephonySettings>(() => {
-    try {
-      const saved = localStorage.getItem('hermes_jarvis_telephony_settings');
-      return saved ? { ...DEFAULT_TELEPHONY_SETTINGS, ...JSON.parse(saved) } : DEFAULT_TELEPHONY_SETTINGS;
-    } catch {
-      return DEFAULT_TELEPHONY_SETTINGS;
-    }
-  });
+  const [telephonySettings, setTelephonySettings] = useState<TelephonySettings>(() =>
+    loadLocalTelephonySettings()
+  );
   const [isCallMuted, setIsCallMuted] = useState(false);
   const [isCallOnHold, setIsCallOnHold] = useState(false);
   const [isAudioFilterActive, setIsAudioFilterActive] = useState(true);
@@ -222,7 +233,9 @@ export default function App() {
         setIsLocationLoading(false);
         const addr = await reverseGeocodeCoordinates(c.latitude, c.longitude);
         setUserAddress(addr);
-        saveCachedLocation(c, addr);
+        // Record the real durability of the cache write so the location modal
+        // never presents an unpersisted fix as cached (item 13).
+        setLocationCacheRefused(!saveCachedLocation(c, addr));
       },
       () => {
         setIsLocationLoading(false);
@@ -245,17 +258,25 @@ export default function App() {
   const voiceSessionRef = useRef<VoiceSession>(new VoiceSession());
   const [pendingVoiceConfirm, setPendingVoiceConfirm] = useState<string | null>(null);
 
-  // Synchronize state changes to localStorage
+  // Synchronize state changes to localStorage. The writer reports whether the
+  // write reached storage; a refused write is surfaced rather than discarded, so
+  // an ephemeral transcript is never mistaken for a durable one (item 13).
   useEffect(() => {
-    saveLocalChatHistory(messages);
+    const chatWrite = classifyChatHistoryWrite(saveLocalChatHistory(messages), 'The latest chat message');
+    if (chatWrite.notice) setMemorySaveNotice(chatWrite.notice);
   }, [messages]);
 
   useEffect(() => {
-    saveLocalMemory(memory);
+    // Capture the real verdict so the Memory Bank header can report what was
+    // actually durable instead of a fixed "LocalStorage Synced" (item 13).
+    setMemoryPersistenceState(saveLocalMemory(memory));
   }, [memory]);
 
   useEffect(() => {
-    saveLocalVoiceSettings(voiceSettings);
+    // Capture the real verdict so a refused settings write is surfaced rather
+    // than discarded, matching the chat-history persist effect (item 13).
+    const voiceWrite = classifyVoiceSettingsWrite(saveLocalVoiceSettings(voiceSettings));
+    if (voiceWrite.notice) setMemorySaveNotice(voiceWrite.notice);
   }, [voiceSettings]);
 
   // Mirror the server kill-switch position so the Computer Operator HUD can show
@@ -291,15 +312,26 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        clearPendingSyncQueue();
+        // The queue is only flushed once the clear is confirmed. A refused
+        // clear (private mode, full quota) left the items on disk, so reporting
+        // "MEMORY SYNCED" would tell the operator a queue is gone that the next
+        // reconnect re-posts.
+        const queueCleared = clearPendingSyncQueue();
+        const flushNotice = queueCleared
+          ? ''
+          : ' • QUEUE NOT CLEARED (STORAGE UNAVAILABLE)';
         if (data.requiresAttention) {
           const count = (data.conflicts || []).filter((c: any) => c.resolution === 'flagged').length;
-          setStatusText(`SYNCED • ${count} MEMORY CONFLICT${count === 1 ? '' : 'S'} NEED REVIEW`);
+          setStatusText(`SYNCED • ${count} MEMORY CONFLICT${count === 1 ? '' : 'S'} NEED REVIEW${flushNotice}`);
           console.warn('[OfflineStorage] Memory conflicts need review:', data.conflicts);
         } else {
-          setStatusText('BACKEND RECONNECTED • MEMORY SYNCED');
+          setStatusText(`BACKEND RECONNECTED • MEMORY SYNCED${flushNotice}`);
         }
-        console.log('[OfflineStorage] Pending sync queue flushed successfully.');
+        if (queueCleared) {
+          console.log('[OfflineStorage] Pending sync queue flushed successfully.');
+        } else {
+          console.warn('[OfflineStorage] Server sync succeeded but the local queue could not be cleared; it will be re-sent on the next reconnect.');
+        }
       }
     } catch (err) {
       console.warn('[OfflineStorage] Retry flush failed, queued for next reconnect:', err);
@@ -413,6 +445,11 @@ export default function App() {
         // React may defer the state updater, so record what needs pushing up and
         // flush on the next tick rather than racing the commit.
         let localOnlyCount = 0;
+        // The queue and local-save results are captured here and read in the
+        // setTimeout below, the same way localOnlyCount is. A refused queue or a
+        // refused local write must not be announced as a sync in progress.
+        let memorySyncNotice: string | null = null;
+        let syncQueued = false;
 
         setMemory((prevLocal) => {
           // Merge server data with any existing local memory
@@ -441,16 +478,28 @@ export default function App() {
           // next sync. Without this they would stay local forever and reappear
           // on every reload as if the server had lost them.
           if (localOnlyNotes.length > 0) {
-            queuePendingSync('memory_sync', merged);
+            const queuedWrite = classifySyncQueueWrite(queuePendingSync('memory_sync', merged), `${localOnlyNotes.length} local note${localOnlyNotes.length === 1 ? '' : 's'}`);
+            syncQueued = queuedWrite.queued;
+            memorySyncNotice = queuedWrite.notice || null;
           }
-          saveLocalMemory(merged);
+          const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(merged), 'The merged memory');
+          if (mergeWrite.notice) {
+            memorySyncNotice = mergeWrite.notice;
+          }
           return merged;
         });
         // Flush after the updater has committed; flushing inside the same tick
-        // would read the pre-update local memory.
+        // would read the pre-update local memory. The sync announcement is gated
+        // on the real queue result: a refused queue is named instead of claiming
+        // the notes are on their way to the server.
         setTimeout(() => {
-          if (localOnlyCount > 0) {
+          if (localOnlyCount > 0 && syncQueued) {
             setStatusText(`SYNCING ${localOnlyCount} LOCAL NOTE${localOnlyCount === 1 ? '' : 'S'} TO SERVER`);
+          } else if (localOnlyCount > 0) {
+            setStatusText(`SYNC QUEUE REFUSED • ${localOnlyCount} LOCAL NOTE${localOnlyCount === 1 ? '' : 'S'} STAY ON THIS DEVICE`);
+          }
+          if (memorySyncNotice) {
+            setMemorySaveNotice(memorySyncNotice);
           }
           flushPendingSyncQueue();
         }, 0);
@@ -584,9 +633,9 @@ export default function App() {
     if (!capability.supported) {
       speakText('सर, इस Android device पर JARVIS को अभी call answer करने की अनुमति नहीं मिली है।');
     } else {
-      androidBridgeEngine.executeCallAnswer();
-      setPendingMobileEvent(null);
-      speakText('सर, कॉल उठा ली गई है।');
+      const outcome = mobileCallAnswerOutcome(androidBridgeEngine.executeCallAnswer());
+      if (outcome.consumed) setPendingMobileEvent(null);
+      speakText(outcome.spoken);
     }
   }, [speakText]);
 
@@ -597,9 +646,9 @@ export default function App() {
   }, [speakText]);
 
   const handleReplyMobileMessage = useCallback(() => {
-    androidBridgeEngine.executeMessageReply('Approved by user');
-    setPendingMobileEvent(null);
-    speakText('सर, संदेश का उत्तर सफलतापूर्वक भेज दिया गया है।');
+    const outcome = mobileMessageReplyOutcome(androidBridgeEngine.executeMessageReply('Approved by user'));
+    if (outcome.consumed) setPendingMobileEvent(null);
+    speakText(outcome.spoken);
   }, [speakText]);
 
   const handleOpenMobileApp = useCallback((pkg?: string) => {
@@ -940,22 +989,17 @@ export default function App() {
     [memory.name, telephonySettings, telephonyContacts]
   );
 
-  // Auto-persist callHistory & telephonySettings
+  // Auto-persist callHistory & telephonySettings. Both go through the shared
+  // telephony engine so the App and every engine consumer read one key; the
+  // literals previously used here diverged from the engine's `_v1` keys, so the
+  // engine saw a store that was never written. The engine now reports whether
+  // each write landed, and the Hub header badge shows that verdict instead of
+  // leaving a refused write to look identical to a durable one (item 13).
   useEffect(() => {
-    try {
-      localStorage.setItem('hermes_jarvis_call_history', JSON.stringify(callHistory));
-    } catch (e) {
-      console.warn('Failed to save call history:', e);
-    }
-  }, [callHistory]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('hermes_jarvis_telephony_settings', JSON.stringify(telephonySettings));
-    } catch (e) {
-      console.warn('Failed to save telephony settings:', e);
-    }
-  }, [telephonySettings]);
+    const saved = saveLocalCallHistory(callHistory);
+    const savedSettings = saveLocalTelephonySettings(telephonySettings);
+    setTelephonyPersistenceState(saved && savedSettings);
+  }, [callHistory, telephonySettings]);
 
   // Handle incoming call auto-answer
   useEffect(() => {
@@ -1145,11 +1189,31 @@ export default function App() {
           actionExecuted,
           actionDetail,
         };
+        let historyPersisted: boolean | null = null;
         setMessages((prev) => {
           const next = [...prev, msg];
-          saveLocalChatHistory(next);
+          historyPersisted = saveLocalChatHistory(next);
           return next;
         });
+        // The updater may be deferred, so the captured verdict is flushed on the
+        // next tick instead of being discarded (item 13).
+        flushChatHistoryNotice(() => historyPersisted, setMemorySaveNotice, 'This reply');
+      };
+
+      // Announce a terminal operator run, naming the real persistence result so a
+      // COMPLETED run that could not be written to local storage is not read as a
+      // durable record the next reload will find.
+      const announceOperatorResult = (task: OperatorTask, ok: boolean) => {
+        const persistNote =
+          task.status === 'COMPLETED' && task.taskPersisted !== true
+            ? ' • RUN RECORD NOT SAVED LOCALLY (STORAGE UNAVAILABLE)'
+            : '';
+        pushJarvisMessage(
+          formatOperatorTaskMessage(task) + persistNote,
+          undefined,
+          ok,
+          ok ? { status: task.status } : { status: task.status, error: task.error },
+        );
       };
 
       // Computer-Operator routing: only detected operator/research commands use the engine;
@@ -1179,12 +1243,7 @@ export default function App() {
             },
           });
           operatorRunActiveRef.current = false;
-          pushJarvisMessage(
-            formatOperatorTaskMessage(result.task),
-            undefined,
-            result.ok,
-            result.ok ? { status: result.task.status } : { status: result.task.status, error: result.task.error },
-          );
+          announceOperatorResult(result.task, result.ok);
           setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
           return;
         }
@@ -1203,8 +1262,14 @@ export default function App() {
             approvalState: 'REJECTED',
             error: 'ACTION_DENIED_BY_OWNER',
           };
-          recordOperatorAudit(rejectedTask);
-          pushJarvisMessage('COMPUTER OPERATOR • ACTION DENIED BY OWNER, SIR. Not executed.', undefined, false, undefined);
+          const denialAudited = recordOperatorAudit(rejectedTask);
+          pushJarvisMessage(
+            'COMPUTER OPERATOR • ACTION DENIED BY OWNER, SIR. Not executed.' +
+              (denialAudited ? '' : ' • DENIAL NOT AUDITED (STORAGE UNAVAILABLE)'),
+            undefined,
+            false,
+            undefined
+          );
           setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
           return;
         }
@@ -1259,12 +1324,7 @@ export default function App() {
           },
         });
         operatorRunActiveRef.current = false;
-        pushJarvisMessage(
-          formatOperatorTaskMessage(result.task),
-          undefined,
-          result.ok,
-          result.ok ? { status: result.task.status } : { status: result.task.status, error: result.task.error },
-        );
+        announceOperatorResult(result.task, result.ok);
         setStatusText('SYSTEM READY • AWAITING VOICE/TEXT INPUT');
         return;
       }
@@ -1276,11 +1336,13 @@ export default function App() {
         timestamp: new Date().toISOString(),
       };
 
+      let userMsgPersisted: boolean | null = null;
       setMessages((prev) => {
         const next = [...prev, userMsg];
-        saveLocalChatHistory(next);
+        userMsgPersisted = saveLocalChatHistory(next);
         return next;
       });
+      flushChatHistoryNotice(() => userMsgPersisted, setMemorySaveNotice, 'Your message');
 
       setIsProcessing(true);
       setStatusText(`ANALYZING COMMAND: "${text}"`);
@@ -1318,18 +1380,30 @@ export default function App() {
           actionDetail: data.actionDetail,
         };
 
+        let jarvisMsgPersisted: boolean | null = null;
         setMessages((prev) => {
           const next = [...prev, jarvisMsg];
-          saveLocalChatHistory(next);
+          jarvisMsgPersisted = saveLocalChatHistory(next);
           return next;
         });
+        flushChatHistoryNotice(() => jarvisMsgPersisted, setMemorySaveNotice, 'This reply');
 
         if (data.memory) {
+          // The merged memory is written here; capture the storage verdict and
+          // surface it on the next tick (the updater may be deferred, so it is
+          // not read synchronously) rather than discarding a refused write.
+          let mergeNotice: string | null = null;
           setMemory((prev) => {
             const merged = { ...prev, ...data.memory };
-            saveLocalMemory(merged);
+            const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(merged), 'The synced memory');
+            mergeNotice = mergeWrite.notice || null;
             return merged;
           });
+          setTimeout(() => {
+            if (mergeNotice) {
+              setMemorySaveNotice(mergeNotice);
+            }
+          }, 0);
         }
 
         if (data.actionExecuted && data.intent) {
@@ -1362,16 +1436,24 @@ export default function App() {
           actionDetail: localResult.actionDetail,
         };
 
-        setMessages((prev) => {
-          const next = [...prev, offlineJarvisMsg];
-          saveLocalChatHistory(next);
-          return next;
-        });
+        // Capture the real write results before touching state. The status line
+        // below used to assert "PERSISTED TO LOCAL STORAGE" unconditionally, so
+        // a swallowed quota or private-mode error read as a completed save the
+        // next reload would not find. Only a landed write may be announced.
+        const nextOfflineMessages = [...messages, offlineJarvisMsg];
+        let localWriteLanded = saveLocalChatHistory(nextOfflineMessages);
+        setMessages(nextOfflineMessages);
 
         if (localResult.updatedMemory) {
           setMemory(localResult.updatedMemory);
-          saveLocalMemory(localResult.updatedMemory);
-          queuePendingSync('memory_sync', localResult.updatedMemory);
+          const memorySaved = saveLocalMemory(localResult.updatedMemory);
+          const queued = queuePendingSync('memory_sync', localResult.updatedMemory);
+          localWriteLanded = memorySaved && localWriteLanded;
+          if (!memorySaved) {
+            console.warn('[Hermes Jarvis] Offline memory change could not be written to local storage.');
+          } else if (!queued) {
+            console.warn('[Hermes Jarvis] Offline memory change was saved but not queued for server sync.');
+          }
         }
 
         if (localResult.actionExecuted && localResult.intent) {
@@ -1385,7 +1467,11 @@ export default function App() {
         }
 
         speakText(localResult.reply, offlineTargetLang);
-        setStatusText('LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE');
+        setStatusText(
+          localWriteLanded
+            ? 'LOCAL OFFLINE ENGINE EXECUTED • PERSISTED TO LOCAL STORAGE'
+            : 'LOCAL OFFLINE ENGINE EXECUTED • NOT SAVED LOCALLY (STORAGE UNAVAILABLE)'
+        );
       } finally {
         setIsProcessing(false);
       }
@@ -1566,7 +1652,8 @@ export default function App() {
   const handleUpdateName = async (name: string) => {
     const updatedMemory = { ...memory, name };
     setMemory(updatedMemory);
-    saveLocalMemory(updatedMemory);
+    const localWrite = classifyMemoryStoreWrite(saveLocalMemory(updatedMemory), 'The name change');
+    setMemorySaveNotice(localWrite.notice || null);
 
     try {
       const res = await fetch('/api/memory', {
@@ -1577,11 +1664,13 @@ export default function App() {
       const data = await res.json();
       if (data.memory) {
         setMemory(data.memory);
-        saveLocalMemory(data.memory);
+        const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(data.memory), 'The synced name');
+        setMemorySaveNotice(mergeWrite.notice || null);
       }
     } catch (err) {
       console.warn('[OfflineStorage] Update name offline, saved to localStorage and queued for sync:', err);
-      queuePendingSync('name', { name });
+      const queuedWrite = classifySyncQueueWrite(queuePendingSync('name', { name }), 'The name change');
+      setMemorySaveNotice(queuedWrite.notice || null);
     }
   };
 
@@ -1594,7 +1683,8 @@ export default function App() {
       },
     };
     setMemory(updatedMemory);
-    saveLocalMemory(updatedMemory);
+    const localWrite = classifyMemoryStoreWrite(saveLocalMemory(updatedMemory), 'The new fact');
+    setMemorySaveNotice(localWrite.notice || null);
 
     try {
       const res = await fetch('/api/memory', {
@@ -1605,11 +1695,13 @@ export default function App() {
       const data = await res.json();
       if (data.memory) {
         setMemory(data.memory);
-        saveLocalMemory(data.memory);
+        const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(data.memory), 'The synced fact');
+        setMemorySaveNotice(mergeWrite.notice || null);
       }
     } catch (err) {
       console.warn('[OfflineStorage] Add custom key offline, saved to localStorage and queued for sync:', err);
-      queuePendingSync('custom_key', { [key]: value });
+      const queuedWrite = classifySyncQueueWrite(queuePendingSync('custom_key', { [key]: value }), 'The new fact');
+      setMemorySaveNotice(queuedWrite.notice || null);
     }
   };
 
@@ -1617,7 +1709,8 @@ export default function App() {
     const updatedNotes = memory.notes.filter((n) => n.id !== id);
     const updatedMemory = { ...memory, notes: updatedNotes };
     setMemory(updatedMemory);
-    saveLocalMemory(updatedMemory);
+    const localWrite = classifyMemoryStoreWrite(saveLocalMemory(updatedMemory), 'The note deletion');
+    setMemorySaveNotice(localWrite.notice || null);
 
     try {
       const res = await fetch('/api/memory', {
@@ -1628,11 +1721,13 @@ export default function App() {
       const data = await res.json();
       if (data.memory) {
         setMemory(data.memory);
-        saveLocalMemory(data.memory);
+        const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(data.memory), 'The synced notes');
+        setMemorySaveNotice(mergeWrite.notice || null);
       }
     } catch (err) {
       console.warn('[OfflineStorage] Delete note offline, saved to localStorage and queued for sync:', err);
-      queuePendingSync('note_delete', { id });
+      const queuedWrite = classifySyncQueueWrite(queuePendingSync('note_delete', { id }), 'The note deletion');
+      setMemorySaveNotice(queuedWrite.notice || null);
     }
   };
 
@@ -1646,7 +1741,8 @@ export default function App() {
     const updatedNotes = [newNote, ...(memory.notes || [])];
     const updatedMemory = { ...memory, notes: updatedNotes };
     setMemory(updatedMemory);
-    saveLocalMemory(updatedMemory);
+    const localWrite = classifyMemoryStoreWrite(saveLocalMemory(updatedMemory), 'The saved note');
+    setMemorySaveNotice(localWrite.notice || null);
 
     try {
       const res = await fetch('/api/memory', {
@@ -1657,17 +1753,25 @@ export default function App() {
       const data = await res.json();
       if (data.memory) {
         setMemory(data.memory);
-        saveLocalMemory(data.memory);
+        const mergeWrite = classifyMemoryStoreWrite(saveLocalMemory(data.memory), 'The synced note');
+        setMemorySaveNotice(mergeWrite.notice || null);
       }
     } catch (err) {
       console.warn('[OfflineStorage] Save note offline, saved to localStorage and queued for sync:', err);
-      queuePendingSync('note_add', newNote);
+      const queuedWrite = classifySyncQueueWrite(queuePendingSync('note_add', newNote), 'The saved note');
+      setMemorySaveNotice(queuedWrite.notice || null);
     }
   };
 
   const handleClearChatHistory = () => {
-    clearLocalChatHistory();
+    // Capture the real clear verdict before adopting the reloaded transcript.
+    // The reload falls back to the seeded conversation when the key survives,
+    // so an unconditional adoption showed seeded messages and hid a refused
+    // clear (item 13).
+    const cleared = clearLocalChatHistory();
     setMessages(loadLocalChatHistory());
+    const clearWrite = classifyChatHistoryClear(cleared);
+    if (clearWrite.notice) setMemorySaveNotice(clearWrite.notice);
   };
 
   // Telephony Controls
@@ -1960,10 +2064,27 @@ export default function App() {
         onClose={() => setActiveApp(null)}
       />
 
+      {memorySaveNotice && (
+        <div
+          role="alert"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-md px-4 py-2.5 rounded-lg bg-amber-950/95 border border-amber-500/60 text-amber-200 text-xs font-mono shadow-2xl flex items-start gap-2"
+        >
+          <span className="flex-1">{memorySaveNotice}</span>
+          <button
+            onClick={() => setMemorySaveNotice(null)}
+            className="text-amber-300 hover:text-white font-bold"
+            title="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <MemoryModal
         isOpen={activeApp === 'memory'}
         onClose={() => setActiveApp(null)}
         memory={memory}
+        persistenceState={memoryPersistenceState}
         onUpdateName={handleUpdateName}
         onAddCustomKey={handleAddCustomKey}
         onDeleteNote={handleDeleteNote}
@@ -2006,11 +2127,9 @@ export default function App() {
         onUpdateSettings={(s) => setTelephonySettings(s)}
         onStartOutboundCall={handleStartOutboundCall}
         onTriggerIncomingCall={handleTriggerIncomingCall}
+        persistenceState={telephonyPersistenceState}
         onClearHistory={() => {
           setCallHistory([]);
-          try {
-            localStorage.removeItem('hermes_jarvis_call_history');
-          } catch {}
         }}
       />
 
@@ -2019,6 +2138,7 @@ export default function App() {
         isOpen={activeApp === 'location'}
         onClose={() => setActiveApp(null)}
         onSpeak={speakText}
+        cacheWriteRefused={locationCacheRefused}
         onCoordinatesUpdated={(c, a, source) => {
           setUserCoords(c);
           setUserAddress(a);

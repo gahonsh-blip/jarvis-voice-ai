@@ -4,6 +4,7 @@ const CHAT_HISTORY_KEY = 'hermes_jarvis_chat_history_v1';
 const MEMORY_STORE_KEY = 'hermes_jarvis_memory_store_v1';
 const VOICE_SETTINGS_KEY = 'hermes_jarvis_voice_settings_v1';
 const PENDING_SYNC_KEY = 'hermes_jarvis_pending_sync_v1';
+const NOTEPAD_CONTENT_KEY = 'jarvis_notepad_content';
 
 export interface PendingSyncItem {
   id: string;
@@ -67,23 +68,47 @@ export function loadLocalChatHistory(): ChatMessage[] {
   return defaultInitialMessages;
 }
 
-export function saveLocalChatHistory(messages: ChatMessage[]): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Every writer returns whether the write actually landed. A caller that reports
+ * "persisted" to the operator must be able to read this — the previous `void`
+ * signature let a swallowed quota/storage error read as a completed save.
+ *
+ * A store can also accept `setItem` without throwing yet keep the previous
+ * bytes (private browsing, a frozen or quota-clamped store). Each writer
+ * therefore reads the bytes back and reports `true` only when the store holds
+ * exactly what was written, so a silent no-op cannot read as durable.
+ */
+function writeAndVerify(key: string, serialized: string): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    // Keep last 120 messages to prevent exceeding browser storage quota
-    const trimmed = messages.slice(-120);
-    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(trimmed));
+    localStorage.setItem(key, serialized);
+    return localStorage.getItem(key) === serialized;
   } catch (err) {
-    console.warn('[OfflineStorage] Error saving chat history to localStorage:', err);
+    console.warn(`[OfflineStorage] Error saving ${key} to localStorage:`, err);
+    return false;
   }
 }
 
-export function clearLocalChatHistory(): void {
-  if (typeof window === 'undefined') return;
+export function saveLocalChatHistory(messages: ChatMessage[]): boolean {
+  // Keep last 120 messages to prevent exceeding browser storage quota
+  return writeAndVerify(CHAT_HISTORY_KEY, JSON.stringify(messages.slice(-120)));
+}
+
+/**
+ * Erase the stored chat history. Returns the real verdict: `true` only when the
+ * key is confirmed gone from storage. It used to `return true` straight after
+ * `removeItem`, so a removal that reported success but left the key in place (a
+ * locked-down or quota-frozen store) looked like an emptied history while the
+ * transcript was still on disk.
+ */
+export function clearLocalChatHistory(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.removeItem(CHAT_HISTORY_KEY);
+    return localStorage.getItem(CHAT_HISTORY_KEY) === null;
   } catch (err) {
     console.warn('[OfflineStorage] Error clearing chat history:', err);
+    return false;
   }
 }
 
@@ -116,13 +141,8 @@ export function loadLocalMemory(): MemoryStore {
   return defaultInitialMemory;
 }
 
-export function saveLocalMemory(memory: MemoryStore): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(MEMORY_STORE_KEY, JSON.stringify(memory));
-  } catch (err) {
-    console.warn('[OfflineStorage] Error saving memory store to localStorage:', err);
-  }
+export function saveLocalMemory(memory: MemoryStore): boolean {
+  return writeAndVerify(MEMORY_STORE_KEY, JSON.stringify(memory));
 }
 
 export function loadLocalVoiceSettings(): VoiceSettings | null {
@@ -137,30 +157,41 @@ export function loadLocalVoiceSettings(): VoiceSettings | null {
   }
 }
 
-export function saveLocalVoiceSettings(settings: VoiceSettings): void {
-  if (typeof window === 'undefined') return;
+export function saveLocalVoiceSettings(settings: VoiceSettings): boolean {
+  return writeAndVerify(VOICE_SETTINGS_KEY, JSON.stringify(settings));
+}
+
+export function loadLocalNotepadContent(): string | null {
+  if (typeof window === 'undefined') return null;
   try {
-    localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings));
+    return localStorage.getItem(NOTEPAD_CONTENT_KEY);
   } catch (err) {
-    console.warn('[OfflineStorage] Error saving voice settings to localStorage:', err);
+    console.warn('[OfflineStorage] Error reading notepad content from localStorage:', err);
+    return null;
   }
 }
 
+/**
+ * Persists the notepad draft and reports whether the write actually landed. The
+ * Notepad save button used to call `localStorage.setItem` directly and show
+ * "Saved!" unconditionally, so a swallowed quota or private-mode error read as a
+ * durable save the next reload would not find.
+ */
+export function saveLocalNotepadContent(content: string): boolean {
+  return writeAndVerify(NOTEPAD_CONTENT_KEY, content);
+}
+
 // Sync queue for offline mutations
-export function queuePendingSync(type: PendingSyncItem['type'], payload: any): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const existing = getPendingSyncQueue();
-    const item: PendingSyncItem = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      type,
-      payload,
-      timestamp: new Date().toISOString(),
-    };
-    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify([...existing, item]));
-  } catch (err) {
-    console.warn('[OfflineStorage] Error queueing pending sync:', err);
-  }
+export function queuePendingSync(type: PendingSyncItem['type'], payload: any): boolean {
+  if (typeof window === 'undefined') return false;
+  const existing = getPendingSyncQueue();
+  const item: PendingSyncItem = {
+    id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    type,
+    payload,
+    timestamp: new Date().toISOString(),
+  };
+  return writeAndVerify(PENDING_SYNC_KEY, JSON.stringify([...existing, item]));
 }
 
 export function getPendingSyncQueue(): PendingSyncItem[] {
@@ -175,11 +206,19 @@ export function getPendingSyncQueue(): PendingSyncItem[] {
   }
 }
 
-export function clearPendingSyncQueue(): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Empty the pending-sync queue. Returns the real verdict: `true` only when the
+ * key is confirmed gone from storage. It used to return `void` and swallow the
+ * error, so App.tsx announced "MEMORY SYNCED" after a refused clear and the
+ * next reconnect re-posted a queue the UI had reported as flushed.
+ */
+export function clearPendingSyncQueue(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.removeItem(PENDING_SYNC_KEY);
+    return localStorage.getItem(PENDING_SYNC_KEY) === null;
   } catch (err) {
     console.warn('[OfflineStorage] Error clearing sync queue:', err);
+    return false;
   }
 }

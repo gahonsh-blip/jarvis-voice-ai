@@ -191,3 +191,39 @@ describe('reconcileFixPlanWithCoverage', () => {
     expect(twice.steps.filter((s) => s.id === 'coverage::unscanned')).toHaveLength(1);
   });
 });
+
+// The planner stamps `receipt: VERIFIED` unconditionally, so a scan that reached
+// nothing produced a VERIFIED receipt — a fake success distinct from the
+// `nothingToDo` flag. These pin the receipt to the coverage verdict.
+describe('reconcileFixPlanWithCoverage — receipt honesty', () => {
+  it('downgrades a VERIFIED receipt when the scan reached no repositories', () => {
+    const emptyScan = multiRepoScan({ scans: [], reachableCount: 0, unreachableCount: 0 });
+    const raw = buildFixPlan({ multiRepoScan: emptyScan });
+    // The raw planner claims the plan was verified even though nothing was scanned.
+    expect(raw.receipt.outcome).toBe('VERIFIED');
+
+    const { plan } = reconcileFixPlanWithCoverage(raw, assessFixPlanCoverage({ multiRepoScan: emptyScan }));
+    expect(plan.receipt.outcome).not.toBe('VERIFIED');
+    expect(plan.receipt.verified).toBe(false);
+    expect(plan.receipt.detailEn).not.toMatch(/nothing to fix/i);
+  });
+
+  it('downgrades the receipt when a repository was unreachable', () => {
+    const partial = multiRepoScan({
+      scans: [scan(), scan({ fullName: 'acme/broken', reachable: false, reason: 'Not Found' })],
+      reachableCount: 1,
+      unreachableCount: 1,
+    });
+    const raw = buildFixPlan({ multiRepoScan: partial });
+    const { plan } = reconcileFixPlanWithCoverage(raw, assessFixPlanCoverage({ multiRepoScan: partial }));
+    expect(plan.receipt.outcome).toBe('UNVERIFIED');
+    expect(plan.receipt.detailEn).toContain('Coverage not established');
+  });
+
+  it('leaves the honest VERIFIED receipt on a fully covered clean plan', () => {
+    const clean = buildFixPlan({ multiRepoScan: multiRepoScan() });
+    const { plan } = reconcileFixPlanWithCoverage(clean, assessFixPlanCoverage({ multiRepoScan: multiRepoScan() }));
+    expect(plan.receipt.outcome).toBe('VERIFIED');
+    expect(plan.receipt.verified).toBe(true);
+  });
+});

@@ -493,10 +493,42 @@ describe('a fetch-only YouTube summarization is not credited as executed work', 
       geminiRawSummary: null,
       geminiFailed: false,
     });
-    expect(result.success).toBe(true);
+    // `success` must track whether a summary was produced, not whether the
+    // video metadata was fetched. A `source: 'none'` result summarised
+    // nothing, so it reports `success: false` while still returning the
+    // metadata a caller needs to show the title and link.
+    expect(result.success).toBe(false);
     expect(result.summary.trim()).toBe('');
     expect(result.source).toBe('none');
     expect(result.verificationStatus).toBe('PARTIAL');
+    expect(result.videoInfo.title).toBe('No Content Video');
+  });
+
+  it('buildYouTubeSummary reports success for a real extractive summary', () => {
+    const result = buildYouTubeSummary({
+      videoInfo: {
+        videoId: 'hasContent1',
+        url: 'https://www.youtube.com/watch?v=hasContent1',
+        title: 'Real Video',
+        channel: 'Test Channel',
+        durationSeconds: 120,
+        durationFormatted: '2:00',
+        description: '',
+        thumbnailUrl: '',
+        hasTranscript: true,
+        transcriptLength: 40,
+        availableLanguages: [],
+      },
+      segments: [{ start: 0, duration: 5, timestamp: '0:00', text: 'A real quoted line from the transcript.' }],
+      transcript: 'A real quoted line from the transcript.',
+      description: '',
+      geminiRawSummary: null,
+      geminiFailed: false,
+    });
+    expect(result.success).toBe(true);
+    expect(result.summary.trim().length).toBeGreaterThan(0);
+    expect(result.source).toBe('extractive');
+    expect(result.verificationStatus).toBe('VERIFIED');
   });
 });
 
@@ -648,5 +680,20 @@ describe('computer-operator screen capture is credited only from a host-backed o
     } finally {
       ScreenObserver.setSource(null);
     }
+  });
+});
+
+describe('a note that could not be persisted is not credited as executed work', () => {
+  // The /api/chat `create_file` case rolls the note back when `persistMemory()`
+  // fails and tells the user it was "not saved", but it still set
+  // `actionExecuted = true`, advancing the user-visible "Autonomous Actions
+  // Executed" counter for a save that never happened. The executed flag must
+  // follow the durable outcome. Guarded at the source level like the other
+  // /api/chat cases (server.ts binds a port on import).
+  it('the create_file case credits execution only when the note was persisted', () => {
+    const body = caseBody('create_file', 2200);
+    expect(body).toContain('memoryState.notes = memoryState.notes.filter');
+    expect(body).toContain('actionExecuted = persisted;');
+    expect(body).not.toContain('actionExecuted = true;');
   });
 });

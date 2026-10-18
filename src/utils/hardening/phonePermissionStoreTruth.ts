@@ -25,7 +25,11 @@ import type {
   PhonePermissionState,
 } from '../../types/telephonyProvider';
 
-export type PhonePermissionStoreOutcome = 'APPLIED' | 'NO_STORE' | 'NOTHING_TO_APPLY';
+export type PhonePermissionStoreOutcome =
+  | 'APPLIED'
+  | 'NO_STORE'
+  | 'NOTHING_TO_APPLY'
+  | 'NOT_PERSISTED';
 
 export interface PhonePermissionStoreVerdict {
   /** True only when the change was written to a store that survives the request. */
@@ -82,11 +86,44 @@ export function applyPhonePermissionUpdate(
     PhonePermissionKey,
     PhonePermissionState
   >;
-  store.save(updated);
+
+  // A store that accepts `save()` without throwing can still drop the bytes —
+  // a read-only mount, a full disk, a wrapper that swallows the error. The
+  // grant used to be reported `applied: true` straight after `store.save()`,
+  // so the operator believed a Level-4 authorization (outbound calling, call
+  // recording, private-data access) had changed while the store still held the
+  // previous matrix and the returned `permissions` view silently reverted on
+  // the next read. Read the store back and report `applied` only when it holds
+  // exactly the keys that were asked to change.
+  let readBack: Record<PhonePermissionKey, PhonePermissionState>;
+  try {
+    store.save(updated);
+    readBack = store.load();
+  } catch (err: any) {
+    return {
+      applied: false,
+      outcome: 'NOT_PERSISTED',
+      permissions: store.load(),
+      message: `The permission store refused the write (${err?.message || err}); the previous permissions are unchanged.`,
+    };
+  }
+
+  const dropped = appliedKeys.filter((key) => readBack[key] !== appliedChanges[key]);
+  if (dropped.length > 0) {
+    return {
+      applied: false,
+      outcome: 'NOT_PERSISTED',
+      permissions: readBack,
+      message: `The permission store accepted the write but does not hold it (${dropped.join(
+        ', '
+      )}); the change was not saved and the previous permissions are unchanged.`,
+    };
+  }
+
   return {
     applied: true,
     outcome: 'APPLIED',
-    permissions: store.load(),
+    permissions: readBack,
     message: `Applied ${appliedKeys.length} permission(s).`,
   };
 }

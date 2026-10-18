@@ -78,8 +78,36 @@ describe('Telephony Permissions & Clinic Safety Suite', () => {
         PHONE_OUTBOUND_CALL: 'GRANTED',
         PHONE_RECORDING: 'ASK',
       };
-      savePhonePermissions(updated);
+      expect(savePhonePermissions(updated)).toBe(true);
       expect(loadPhonePermissions()).toEqual(updated);
+    });
+
+    it('reports a silently dropped write as a refusal, not a save', () => {
+      class SilentStorage extends MemoryStorage {
+        private silent = false;
+        setSilent(value: boolean): void {
+          this.silent = value;
+        }
+        setItem(key: string, value: string): void {
+          // Accepts the call without throwing, but keeps the previous bytes.
+          if (this.silent) return;
+          super.setItem(key, value);
+        }
+      }
+      const store = new SilentStorage();
+      (globalThis as any).localStorage = store;
+
+      // Seed a known-good state, then make the store drop the next write.
+      expect(savePhonePermissions(DEFAULT_PHONE_PERMISSIONS)).toBe(true);
+      store.setSilent(true);
+      const granted: Record<PhonePermissionKey, any> = {
+        ...DEFAULT_PHONE_PERMISSIONS,
+        PHONE_OUTBOUND_CALL: 'GRANTED',
+      };
+      // The store accepted `setItem` and kept the previous matrix: the write
+      // must not read as durable, or the outbound-calling gate appears changed.
+      expect(savePhonePermissions(granted)).toBe(false);
+      expect(loadPhonePermissions().PHONE_OUTBOUND_CALL).toBe('ASK');
     });
 
     it('falls back to defaults on corrupted stored JSON', () => {

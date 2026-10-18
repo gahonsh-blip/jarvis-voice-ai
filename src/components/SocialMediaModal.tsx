@@ -42,7 +42,10 @@ import {
 } from 'lucide-react';
 import { SocialMediaPostDraft, PlatformIntegrationInfo, SocialPlatformKey } from '../types';
 import { describeStagedChannel } from '../utils/hardening/youtubeChannelTruth';
+import { resolveYouTubePayloadMode, youTubeStagedFileName } from '../utils/hardening/youtubePayloadModeTruth';
+import { connectedLinkedInIdentity, connectedYouTubeChannelId, linkedInAuthorUrnLabel } from '../utils/hardening/socialAccountIdTruth';
 import { oauthConnectionNotice } from '../utils/hardening/oauthAccountNoticeTruth';
+import { oauthDisconnectNotice } from '../utils/hardening/oauthDisconnectAuditTruth';
 import {
   classifyProviderTestResponse,
   verifiedAccountName,
@@ -50,9 +53,11 @@ import {
   connectionStatusLabel,
   isUsableCredential,
   socialApprovalPostureLabel,
-  describeGrantedScopes,
-  youtubeCanPublishMeasured,
+  publishedPostReachLabel,
+  youTubeStudioStatusLine,
 } from '../utils/socialPublishHonesty';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import { socialRejectOutcome } from '../utils/hardening/socialActionCommandTruth';
 
 interface Props {
   isOpen: boolean;
@@ -67,8 +72,14 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   const [topicPrompt, setTopicPrompt] = useState<string>('');
   const [platform, setPlatform] = useState<string>('LinkedIn');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  // A generation the server refused (durable write failed) must be told to the
+  // operator; the old handler showed nothing and spoke nothing, so a failed
+  // draft read as if it had been prepared.
+  const [generateNotice, setGenerateNotice] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [copiedRedirectUri, setCopiedRedirectUri] = useState<boolean>(false);
+  const [redirectCopyOutcome, setRedirectCopyOutcome] = useState<ClipboardCopyResult | null>(null);
 
   // Platform Integration Hub State
   const [platforms, setPlatforms] = useState<PlatformIntegrationInfo[]>([]);
@@ -123,6 +134,16 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     videoId?: string;
     errorReason?: string;
   } | null>(null);
+
+  // The payload mode the panel shows and the mode the request stages must be the
+  // same value, derived from the bytes that actually exist. A flag flipped before
+  // the FileReader resolves let the panel read "Binary File Mode" while the
+  // server staged a synthetic payload under the real file's name.
+  const ytPayloadDecision = resolveYouTubePayloadMode({
+    fileSelected: ytVideoFile !== null,
+    base64Ready: Boolean(ytVideoBase64),
+    requestedSynthetic: ytIsTestPayload,
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -249,12 +270,23 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       setYtVideoTitle(cleanName.slice(0, 100));
     }
 
-    // Read base64 for upload payload
+    // Read base64 for upload payload. The bytes are what the server stages, so
+    // a read that fails must not leave the panel claiming binary mode: clear the
+    // payload and say so rather than staging a synthetic file under this name.
     const reader = new FileReader();
     reader.onload = () => {
       const res = reader.result as string;
       const base64Data = res.includes(',') ? res.split(',')[1] : res;
+      if (!base64Data) {
+        setYtVideoBase64(null);
+        setOauthError('The selected video file produced no payload bytes; it cannot be uploaded as a binary file.');
+        return;
+      }
       setYtVideoBase64(base64Data);
+    };
+    reader.onerror = () => {
+      setYtVideoBase64(null);
+      setOauthError('The selected video file could not be read; it cannot be uploaded as a binary file.');
     };
     reader.readAsDataURL(file);
   };
@@ -340,6 +372,13 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       setOauthError('Please enter a valid Video Title before staging.');
       return;
     }
+    // Refuse to stage a payload the panel is not showing: the server falls back to
+    // a synthetic file whenever the bytes are absent, so staging here would upload
+    // something other than the selected file and still answer success.
+    if (!ytPayloadDecision.ready) {
+      setOauthError(ytPayloadDecision.notice || 'The selected payload is not ready to stage.');
+      return;
+    }
     setYtIsStaging(true);
     setYtUploadResult(null);
 
@@ -349,9 +388,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         description: ytVideoDesc.trim(),
         privacyStatus: ytPrivacy,
         tags: ytVideoTags.map((t) => (t.startsWith('#') ? t : `#${t}`)),
-        videoFileName: ytVideoFile?.name || (ytIsTestPayload ? 'synthetic_jarvis_test.mp4' : 'uploaded_video.mp4'),
-        videoPayloadBase64: ytVideoBase64 || undefined,
-        isTestUpload: ytIsTestPayload,
+        videoFileName: youTubeStagedFileName(ytPayloadDecision, ytVideoFile?.name),
+        videoPayloadBase64: ytPayloadDecision.mode === 'binary' ? ytVideoBase64 || undefined : undefined,
+        isTestUpload: ytPayloadDecision.isTestUpload,
       };
 
       const res = await fetch('/api/social/youtube/upload-draft', {
@@ -440,7 +479,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
   const handleRejectLevel4Approval = async () => {
     if (!ytStagedPost) return;
     try {
-      await fetch('/api/social/action', {
+      const res = await fetch('/api/social/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -448,11 +487,32 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
           action: 'reject',
         }),
       });
-      setYtStagedPost(null);
-      fetchPosts();
-      onSpeak('YouTube video draft rejected and kept offline, Sir.');
+      // Only clear the draft and announce a rejection when the server confirmed
+      // it was recorded. A failed write leaves the draft pending on disk, so
+      // hiding it here and claiming a rejection is exactly the fake success
+      // this hardening pass removes.
+      const data = await res.json().catch(() => null);
+      const outcome = socialRejectOutcome(data);
+      if (outcome.recorded) {
+        setYtStagedPost(null);
+        fetchPosts();
+        onSpeak('YouTube video draft rejected and kept offline, Sir.');
+      } else {
+        setYtUploadResult({
+          success: false,
+          message: outcome.message,
+          errorReason: 'The rejection was not confirmed as recorded; the draft is still awaiting authorization.',
+        });
+        fetchPosts();
+        onSpeak(outcome.message);
+      }
     } catch (err) {
       console.warn('Reject failed:', err);
+      setYtUploadResult({
+        success: false,
+        message: 'Reject request could not reach the server.',
+        errorReason: 'Network error during rejection.',
+      });
     }
   };
 
@@ -505,8 +565,10 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         onSpeak('LinkedIn personal profile disconnected, Sir.');
       } else {
         // Nothing was linked, so nothing was disconnected — say so instead of
-        // rendering the success notice the server used to always return.
-        setOauthNotice(data.message || 'No LinkedIn account is connected.');
+        // rendering the success notice the server used to always return. A
+        // failed durable removal answers with `error` and no `message`, so the
+        // server's own explanation is preferred over the not-connected text.
+        setOauthNotice(oauthDisconnectNotice('linkedin', data));
         fetchPlatforms();
       }
     } catch (err) {
@@ -561,7 +623,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         fetchPlatforms();
         onSpeak('YouTube channel disconnected, Sir.');
       } else {
-        setOauthNotice(data.message || 'No YouTube channel is connected.');
+        setOauthNotice(oauthDisconnectNotice('youtube', data));
         fetchPlatforms();
       }
     } catch (err) {
@@ -569,9 +631,10 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     }
   };
 
-  const handleCopyRedirectUri = (uri: string) => {
-    navigator.clipboard.writeText(uri);
-    setCopiedRedirectUri(true);
+  const handleCopyRedirectUri = async (uri: string) => {
+    const outcome = await copyToClipboard(uri, 'The redirect URL');
+    setRedirectCopyOutcome(outcome);
+    setCopiedRedirectUri(outcome.copied);
     setTimeout(() => setCopiedRedirectUri(false), 2500);
   };
 
@@ -594,6 +657,8 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
       const account = verifiedAccountName(data);
       if (verdict === 'OK' && account) {
         onSpeak(`${platformKey} verified live against ${account}, Sir.`);
+      } else if (verdict === 'VERIFIED_NOT_PERSISTED') {
+        onSpeak(`${platformKey} verified live as ${account}, but the connection could not be saved and will not survive a restart, Sir.`);
       } else if (verdict === 'OK') {
         onSpeak(`${platformKey} answered, but did not name the account — unverified, Sir.`);
       } else {
@@ -615,6 +680,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     if (!topicPrompt.trim() || isGenerating) return;
 
     setIsGenerating(true);
+    setGenerateNotice('');
     try {
       const res = await fetch('/api/social/generate', {
         method: 'POST',
@@ -622,13 +688,22 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
         body: JSON.stringify({ topic: topicPrompt, platform }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.post) {
         setPosts((prev) => [data.post, ...prev]);
         setSelectedPost(data.post);
         setTopicPrompt('');
         onSpeak(`Post prepared for ${platform}. It is queued in Human Approval Mode.`);
+      } else {
+        // The route answers success only when the draft and its audit row are
+        // durable; anything else (a refused write, a malformed body) must not
+        // read as a prepared draft. Say so instead of leaving the form silent.
+        const reason = data.error || 'The draft could not be stored durably.';
+        setGenerateNotice(`Draft not prepared: ${reason}`);
+        onSpeak(`Draft not prepared. ${reason}`);
       }
-    } catch (err) {
+    } catch (err: any) {
+      setGenerateNotice('Draft not prepared — the server could not be reached.');
+      onSpeak('Draft not prepared — the server could not be reached.');
       console.warn('Post generation failed:', err);
     } finally {
       setIsGenerating(false);
@@ -722,10 +797,11 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
     }
   };
 
-  const handleCopyPost = () => {
+  const handleCopyPost = async () => {
     if (selectedPost) {
-      navigator.clipboard.writeText(selectedPost.content);
-      setCopied(true);
+      const outcome = await copyToClipboard(selectedPost.content, 'The post text');
+      setCopyOutcome(outcome);
+      setCopied(outcome.copied);
       setTimeout(() => setCopied(false), 2000);
     }
   };
@@ -885,6 +961,12 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     {isGenerating ? 'Drafting with Gemini...' : `Draft Post for ${platform}`}
                   </button>
 
+                  {generateNotice && (
+                    <p className="text-[11px] font-mono text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded-lg px-2 py-1.5">
+                      {generateNotice}
+                    </p>
+                  )}
+
                   {platform === 'YouTube' && (
                     <button
                       type="button"
@@ -967,7 +1049,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                         </div>
                         <p className="text-[11px] text-slate-400 font-mono">
                           {isLinkedInConnected
-                            ? (linkedInInfo?.accountName || 'Authenticated Member')
+                            ? connectedLinkedInIdentity(linkedInInfo?.accountName)
                             : 'Not Connected — Connect via OAuth'}
                         </p>
                       </div>
@@ -1127,10 +1209,17 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     </span>
                     <button
                       onClick={handleCopyPost}
+                      title={copyOutcome?.detail || 'Copy post text'}
                       className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1 transition-colors"
                     >
-                      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      {copied ? 'Copied' : 'Copy Text'}
+                      {copied ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : copyOutcome?.tone === 'warn' ? (
+                        <AlertCircle className="w-3 h-3 text-rose-400" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                      {copied ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy Text'}
                     </button>
                   </div>
 
@@ -1191,7 +1280,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     {selectedPost.status === 'published' || selectedPost.finalTruthState === 'VERIFIED' ? (
                       <span className="text-emerald-400 font-bold flex items-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4" />
-                        {selectedPost.platform === 'YouTube' ? 'Uploaded & Verified Live on YouTube' : 'Live & Verified'}
+                        {publishedPostReachLabel(selectedPost)}
                       </span>
                     ) : selectedPost.status === 'not_published' || selectedPost.finalTruthState === 'NOT_PUBLISHED' ? (
                       <span className="text-amber-400 font-bold flex items-center gap-1.5">
@@ -1283,15 +1372,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 font-mono">
-                    {ytOauth?.status === 'API_VERIFIED' || (ytOauth?.connected && ytOauth?.canPublish)
-                      ? youtubeCanPublishMeasured(ytOauth)
-                        ? `Channel: ${ytOauth?.channelTitle || 'Unnamed channel'} | Grant confirmed by the provider — scopes: ${describeGrantedScopes(ytOauth?.scopes)}`
-                        : `Channel confirmed read-only: ${ytOauth?.channelTitle || 'unnamed channel'} | Video upload is NOT authorized — granted scopes: ${describeGrantedScopes(ytOauth?.scopes)}`
-                      : ytOauth?.status === 'CONFIGURED'
-                      ? `Status: Configured (${ytOauth.authType || 'OAuth 2.0'}) — 1-Click OAuth Connect Required for Uploads`
-                      : ytOauth?.status === 'TOKEN_INVALID' || ytOauth?.status === 'ERROR'
-                      ? `Status: Token / Permission Error (${ytOauth.diagnosticError || 'Re-authentication required'})`
-                      : 'Status: Ready for YouTube Video File Selection & Level-4 Human Authorization'}
+                    {youTubeStudioStatusLine(ytOauth)}
                   </p>
                 </div>
               </div>
@@ -1333,7 +1414,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                       <Film className="w-4 h-4" /> 1. Video Source Selection
                     </h4>
                     <span className="text-[10px] font-mono text-slate-400">
-                      {ytIsTestPayload ? 'Synthetic Test Mode' : 'Binary File Mode'}
+                      {ytPayloadDecision.label}
                     </span>
                   </div>
 
@@ -1436,12 +1517,12 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                       type="button"
                       onClick={handleUseSyntheticTestVideo}
                       className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
-                        ytIsTestPayload
+                        ytPayloadDecision.syntheticActive
                           ? 'bg-red-950 text-red-300 border border-red-800'
                           : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      {ytIsTestPayload ? '✓ Active Test Mode' : 'Use Test Mode'}
+                      {ytPayloadDecision.syntheticActive ? '✓ Active Test Mode' : 'Use Test Mode'}
                     </button>
                   </div>
                 </div>
@@ -1629,9 +1710,14 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
 
                   {/* Stage Action Button */}
                   <div className="pt-2">
+                    {ytPayloadDecision.notice && (
+                      <p className="mb-2 text-[10px] font-mono text-amber-300 leading-relaxed">
+                        {ytPayloadDecision.notice}
+                      </p>
+                    )}
                     <button
                       onClick={handleStageYouTubeVideo}
-                      disabled={ytIsStaging || !ytVideoTitle.trim()}
+                      disabled={ytIsStaging || !ytVideoTitle.trim() || !ytPayloadDecision.ready}
                       className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold font-mono flex items-center justify-center gap-2 transition-all shadow-xl shadow-red-950/60 disabled:opacity-50"
                     >
                       {ytIsStaging ? (
@@ -1939,13 +2025,13 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           )}
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-100 text-xs">{oauth.name || 'Personal Member'}</span>
+                              <span className="font-bold text-slate-100 text-xs">{connectedLinkedInIdentity(oauth.name)}</span>
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
                                 OAuth 2.0 Token Active
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-400 font-mono">
-                              Author URN: <code className="text-purple-300">{oauth.authorUrn || `urn:li:person:${oauth.memberSub || 'self'}`}</code>
+                              Author URN: <code className="text-purple-300">{linkedInAuthorUrnLabel(oauth.authorUrn, oauth.memberSub)}</code>
                             </p>
                           </div>
                         </div>
@@ -1987,7 +2073,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-400 font-mono">
-                              Channel ID: <code className="text-red-300">{ytOauth.channelId || 'Authenticated Google Account'}</code>
+                              Channel ID: <code className="text-red-300">{connectedYouTubeChannelId(ytOauth.channelId)}</code>
                             </p>
                           </div>
                         </div>
@@ -2010,6 +2096,7 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                       const verdict = classifyProviderTestResponse(testResult);
                       const account = verifiedAccountName(testResult);
                       const isVerified = verdict === 'OK';
+                      const verifiedNotSaved = verdict === 'VERIFIED_NOT_PERSISTED';
                       return (
                         <div
                           className={`p-3 rounded-xl text-xs font-mono border ${
@@ -2021,7 +2108,9 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                           <div className="flex items-center gap-2 font-bold mb-1">
                             {isVerified ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <ShieldAlert className="w-4 h-4 text-amber-400" />}
                             <span>
-                              Live Probe Result: {isVerified ? `VERIFIED — ${account}` : testResult.status || 'UNCONFIRMED'}
+                              {verifiedNotSaved
+                                ? `Live Probe Result: VERIFIED — ${account} (NOT SAVED)`
+                                : `Live Probe Result: ${isVerified ? `VERIFIED — ${account}` : testResult.status || 'UNCONFIRMED'}`}
                             </span>
                           </div>
                           <p className="text-[11px] leading-relaxed">{describeProviderVerdict(verdict, account, testResult.message)}</p>
@@ -2045,10 +2134,17 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                               </span>
                               <button
                                 onClick={() => handleCopyRedirectUri(oauth.redirectUri!)}
+                                title={redirectCopyOutcome?.detail || 'Copy redirect URL'}
                                 className="px-2.5 py-1 rounded bg-purple-900/60 hover:bg-purple-800 border border-purple-500/40 text-purple-200 text-[11px] font-mono flex items-center gap-1 transition-colors"
                               >
-                                {copiedRedirectUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                                {copiedRedirectUri ? 'Copied!' : 'Copy URL'}
+                                {copiedRedirectUri ? (
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                ) : redirectCopyOutcome?.tone === 'warn' ? (
+                                  <AlertCircle className="w-3 h-3 text-rose-400" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                                {copiedRedirectUri ? 'Copied!' : redirectCopyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy URL'}
                               </button>
                             </div>
                             <code className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-purple-300 font-mono text-xs break-all select-all">
@@ -2070,10 +2166,17 @@ export const SocialMediaModal: React.FC<Props> = ({ isOpen, onClose, onSpeak }) 
                               </span>
                               <button
                                 onClick={() => handleCopyRedirectUri(ytOauth.redirectUri!)}
+                                title={redirectCopyOutcome?.detail || 'Copy redirect URL'}
                                 className="px-2.5 py-1 rounded bg-red-900/60 hover:bg-red-800 border border-red-500/40 text-red-200 text-[11px] font-mono flex items-center gap-1 transition-colors"
                               >
-                                {copiedRedirectUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                                {copiedRedirectUri ? 'Copied!' : 'Copy URL'}
+                                {copiedRedirectUri ? (
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                ) : redirectCopyOutcome?.tone === 'warn' ? (
+                                  <AlertCircle className="w-3 h-3 text-rose-400" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                                {copiedRedirectUri ? 'Copied!' : redirectCopyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy URL'}
                               </button>
                             </div>
                             <code className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-red-300 font-mono text-xs break-all select-all">

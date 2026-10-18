@@ -38,6 +38,25 @@ export function triState(value: boolean | null | undefined, whenTrue: string, wh
   return 'UNKNOWN — not observed';
 }
 
+/** The level observed in the UI, or null when the probe has not answered. */
+export type ObservedSecurityLevel = number | null | undefined;
+
+/**
+ * Compact Security Matrix header badge.
+ *
+ * `SecurityMatrixModal` seeds its active level to a literal `2`, so a badge
+ * built from that seed asserts "Level 2 Active" on every render — including a
+ * load where `/api/security` never answered and the footer already admits the
+ * state is unavailable. The value passed here must be an observed level
+ * (`securityState.currentLevel` from a real `/api/security` reading, or the
+ * confirmed echo of a durable `/api/security/update`), never the seed.
+ */
+export function securityMatrixLevelBadge(observedLevel: ObservedSecurityLevel): string {
+  return typeof observedLevel === 'number' && Number.isFinite(observedLevel)
+    ? `Level ${observedLevel} Active`
+    : 'Level UNKNOWN — /api/security did not respond';
+}
+
 export function securityMatrixPosture(state: SecurityMatrixSnapshot | null | undefined): SecurityMatrixPosture {
   const level = state?.currentLevel;
   return {

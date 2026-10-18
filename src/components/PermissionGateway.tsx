@@ -42,6 +42,11 @@ import {
   emergencyLivenessLabel,
   emergencyStatusKnown,
 } from '../utils/emergencyTruth';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import {
+  classifyApproveOutcome,
+  classifyRejectOutcome,
+} from '../utils/hardening/approvalGatewayOutcomeTruth';
 
 interface PermissionGatewayProps {
   isOpen?: boolean;
@@ -71,6 +76,7 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
   const [emergency, setEmergency] = useState<EmergencyControlState | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [viewFormat, setViewFormat] = useState<'formatted' | 'raw_json'>('formatted');
   const [activeGatewayTab, setActiveGatewayTab] = useState<'external_actions' | 'mobile_privacy'>('external_actions');
   const [mobilePerms, setMobilePerms] = useState<Record<MobilePermissionCategory, boolean>>(loadMobilePermissions());
@@ -173,18 +179,13 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
           }),
         });
         const data = await res.json();
-        if (data.success) {
-          showNotification(`✅ Authorized & Executed: "${reqToApprove.exactAction}"`, 'success');
-          if (onSpeak) onSpeak(`Level 4 permission granted. Action ${reqToApprove.exactAction} executed successfully, Sir.`);
-        } else if (data.outcome === 'UNVERIFIED') {
-          // Approval was recorded, but no provider confirmed the action. Never
-          // tell the operator it executed.
-          showNotification(`⚠️ Not confirmed: ${data.message || 'no provider confirmation received.'}`, 'error');
-          if (onSpeak) onSpeak('Approval recorded, but the action could not be confirmed as executed, Sir.');
-        } else {
-          showNotification(data.error || 'Execution halted', 'error');
-          if (onSpeak) onSpeak(`Execution notice: ${data.error || 'Execution halted'}`);
-        }
+        // The server reports two independent facts — `success` (did the action
+        // run) and `persisted` (is the terminal decision durable). Both must be
+        // read: a success whose decision never reached disk, and an UNPERSISTED
+        // decision that was rolled back, must not be presented as recorded.
+        const outcome = classifyApproveOutcome(data, reqToApprove.exactAction);
+        showNotification(outcome.message, outcome.tone);
+        if (onSpeak) onSpeak(outcome.speak);
       }
       await fetchData();
     } catch (err: any) {
@@ -210,10 +211,11 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
           }),
         });
         const data = await res.json();
-        if (data.success) {
-          showNotification(`❌ Rejected: "${reqToReject.exactAction}" cancelled safely.`, 'error');
-          if (onSpeak) onSpeak(`Action ${reqToReject.exactAction} cancelled safely without external modification, Sir.`);
-        }
+        // A rejection that could not be written to durable storage is rolled
+        // back by the route; do not tell the operator it was recorded.
+        const outcome = classifyRejectOutcome(data, reqToReject.exactAction);
+        showNotification(outcome.message, outcome.tone);
+        if (onSpeak) onSpeak(outcome.speak);
       }
       await fetchData();
     } catch (err: any) {
@@ -223,9 +225,10 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
     }
   };
 
-  const handleCopyPayload = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
+  const handleCopyPayload = async (text: string) => {
+    const outcome = await copyToClipboard(text, 'The payload', 'there was no payload to copy');
+    setCopyOutcome(outcome);
+    setCopied(outcome.copied);
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -494,11 +497,18 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
                       <button
                         onClick={() => {
                           const updated = { ...mobilePerms, [def.category]: !mobilePerms[def.category] };
-                          setMobilePerms(updated);
-                          saveMobilePermissions(updated);
+                          const persisted = saveMobilePermissions(updated);
+                          // Render the durable store echo, not the request: on a
+                          // refused write the store still holds the previous
+                          // policy, so painting `updated` would light a row for
+                          // a permission that silently reverts on reload.
+                          const effective = loadMobilePermissions();
+                          setMobilePerms(effective);
                           showNotification(
-                            `Permission for "${def.nameEn}" updated to: ${updated[def.category] ? 'GRANTED' : 'REVOKED'}`,
-                            'info'
+                            persisted
+                              ? `Permission for "${def.nameEn}" updated to: ${effective[def.category] ? 'GRANTED' : 'REVOKED'}`
+                              : `Permission for "${def.nameEn}" NOT SAVED — local storage refused the write; the store still holds ${effective[def.category] ? 'GRANTED' : 'REVOKED'} and this change reverts on reload.`,
+                            persisted ? 'info' : 'error'
                           );
                         }}
                         className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all ${
@@ -671,10 +681,18 @@ export const PermissionGateway: React.FC<PermissionGatewayProps> = ({
                   <button
                     onClick={() => handleCopyPayload(activeRequest.contentChanges || '')}
                     className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono flex items-center gap-1 transition-colors"
-                    title="Copy payload to clipboard"
+                    title={copyOutcome?.detail || 'Copy payload to clipboard'}
                   >
-                    <Copy className="w-3 h-3" />
-                    <span>{copied ? 'Copied' : 'Copy'}</span>
+                    {copied ? (
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    ) : copyOutcome?.tone === 'warn' ? (
+                      <AlertTriangle className="w-3 h-3 text-rose-400" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                    <span className={copyOutcome?.tone === 'warn' ? 'text-rose-400' : undefined}>
+                      {copied ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy'}
+                    </span>
                   </button>
                 </div>
               </div>

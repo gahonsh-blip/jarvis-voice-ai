@@ -10,7 +10,7 @@ import {
   SimulatedScreenAdapter,
   NotConfiguredScreenOperator,
 } from '../utils/computerOperatorEngine';
-import type { ScreenState, OperatorAction, ActionResult, VerificationResult, ScreenOperatorAdapter } from '../utils/computerOperatorEngine';
+import type { ScreenState, OperatorAction, ActionResult, VerificationResult, ScreenOperatorAdapter, OperatorTask } from '../utils/computerOperatorEngine';
 
 function makeState(overrides: Partial<ScreenState> = {}): ScreenState {
   return {
@@ -255,5 +255,52 @@ const result = await executeOperatorTask(adapter, 'browser kholo', plan, {
   it('intent detection does not auto-approve dangerous output', () => {
     const dangerous = detectDangerousIntent('youtube pe video upload karo');
     assert.equal(dangerous.dangerous, true);
+  });
+
+
+  it('a capped run reports the steps it actually executed, not the plan length', async () => {
+    // Item 13 zero-fake-success: the run used to report `plan.actions.length`
+    // steps even when it executed fewer, so a truncated task was announced as a
+    // full-plan completion.
+    const adapter = new FakeAdapter(makeState());
+    const plan = {
+      actions: [
+        { type: 'click', targetId: 'e1', safe: false, description: 'step 1' },
+        { type: 'click', targetId: 'e2', safe: false, description: 'step 2' },
+        { type: 'click', targetId: 'e3', safe: false, description: 'step 3' },
+      ] as OperatorAction[],
+      needsApproval: false,
+    };
+    const progress: OperatorTask[] = [];
+    const result = await executeOperatorTask(adapter, 'click karo', plan, {
+      taskId: taskId + '-cap',
+      killSwitchActive: false,
+      maxSteps: 2,
+      onProgress: (t) => progress.push({ ...t }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.task.status, 'COMPLETED');
+    // Only two of the three planned actions ran and verified.
+    assert.equal(adapter.clicks.length, 2);
+    assert.equal(result.task.finalResult, 'COMPLETED_2_STEPS');
+    // The terminal update still reaches the UI so COMPLETED renders.
+    assert.equal(progress[progress.length - 1].status, 'COMPLETED');
+  });
+
+
+  it('caps a plan longer than the engine maximum at the maximum', async () => {
+    const adapter = new FakeAdapter(makeState());
+    const actions = Array.from({ length: 10 }, (_, i) => ({
+      type: 'click',
+      targetId: `e${i}`,
+      safe: true,
+      description: `step ${i}`,
+    })) as OperatorAction[];
+    const result = await executeOperatorTask(adapter, 'click karo', { actions, needsApproval: false }, {
+      taskId: taskId + '-max',
+      killSwitchActive: false,
+    });
+    assert.equal(result.task.finalResult, 'COMPLETED_8_STEPS');
+    assert.equal(adapter.clicks.length, 8);
   });
 });

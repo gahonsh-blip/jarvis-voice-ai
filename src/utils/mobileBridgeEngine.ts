@@ -38,21 +38,43 @@ export function loadBridgeRegistration(): BridgeRegistration | null {
   }
 }
 
-export function saveBridgeRegistration(reg: BridgeRegistration): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Persist a bridge registration and report whether it actually landed.
+ *
+ * Returns `true` only when the serialised registration reads back from the
+ * store. The previous `void` signature swallowed the storage error in an empty
+ * catch, so a refused write (quota, private mode, or no browser window) was
+ * indistinguishable from a durable one: the UI reported the handset as
+ * registered while `loadBridgeRegistration()` returned nothing on the next
+ * load. A silent no-op write (accepted call, dropped bytes) is also reported as
+ * a refusal, because only a read-back can tell the difference.
+ */
+export function saveBridgeRegistration(reg: BridgeRegistration): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    localStorage.setItem(BRIDGE_STORAGE_KEY, JSON.stringify(reg));
+    const serialized = JSON.stringify(reg);
+    localStorage.setItem(BRIDGE_STORAGE_KEY, serialized);
+    // A silent no-op store (private mode, quota-clamped, frozen) accepts the
+    // call but keeps the previous bytes, so a non-null check would read a stale
+    // registration as this one. Compare the bytes that are actually stored.
+    return localStorage.getItem(BRIDGE_STORAGE_KEY) === serialized;
   } catch {
-    // ignore
+    return false;
   }
 }
 
-export function clearBridgeRegistration(): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Remove the bridge registration and report whether the removal actually
+ * reached the store. A refused `removeItem` used to return `void`, so a
+ * disconnect that never happened still looked complete.
+ */
+export function clearBridgeRegistration(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.removeItem(BRIDGE_STORAGE_KEY);
+    return localStorage.getItem(BRIDGE_STORAGE_KEY) === null;
   } catch {
-    // ignore
+    return false;
   }
 }
 
@@ -123,7 +145,7 @@ export function buildSensitiveAnnouncement(lang: string): string {
   return 'Sir, a sensitive notification arrived. I did not read its private details.';
 }
 
-export function buildNotificationAnnouncement(event: MobileNotificationEvent, lang: string): string {
+function buildNotificationAnnouncementBase(event: MobileNotificationEvent, lang: string): string {
   const sir = langIsHindi(lang) ? '\u0938\u0930,' : 'Sir,';
   const app = event.appLabel || categoryLabel(event.category);
   if (event.sensitive) return buildSensitiveAnnouncement(lang);
@@ -139,6 +161,20 @@ export function buildNotificationAnnouncement(event: MobileNotificationEvent, la
     return sir + ' ' + app + ' \u092a\u0930 ' + sender + ' \u0915\u093e \u0938\u0902\u0926\u0947\u0936 \u0906\u092f\u093e \u0939\u0948\u0964 \u0909\u0928\u094d\u0939\u094b\u0902\u0928\u0947 \u0932\u093f\u0916\u093e \u0939\u0948: ' + (event.body || event.bodyPreview || '') + '. \u0915\u094d\u092f\u093e \u092e\u0948\u0902 \u0907\u0938\u0915\u093e \u091c\u0935\u093e\u092c \u0926\u0942\u0902?';
   }
   return sir + ' A message arrived from ' + sender + ' on ' + app + ': ' + (event.body || event.bodyPreview || '') + '. Shall I reply?';
+}
+
+// Speaks a notification announcement, naming the dedup gap when the dedup
+// record never reached storage. Without this the caller would report the
+// notification as de-duplicated while a re-delivery after a reload would be
+// announced again as if new (item 13, zero fake success).
+export function buildNotificationAnnouncement(event: MobileNotificationEvent, lang: string): string {
+  const base = buildNotificationAnnouncementBase(event, lang);
+  if (event.dedupPersisted === false) {
+    return langIsHindi(lang)
+      ? base + ' (\u0938\u0942\u091a\u0928\u093e: \u092f\u0939 notification \u0921\u0941\u092a\u094d\u0932\u093f\u0915\u0947\u091f-\u0930\u093f\u0915\u0949\u0930\u094d\u0921 \u0938\u094d\u091f\u094b\u0930 \u092e\u0947\u0902 \u0938\u0939\u0947\u091c\u093e \u0928\u0939\u0940\u0902 \u091c\u093e \u0938\u0915\u093e\u0964)'
+      : base + ' (Note: this notification could not be recorded in the dedup store.)';
+  }
+  return base;
 }
 
 export function buildReplyAsk(lang: string): string {
@@ -170,18 +206,25 @@ function loadQueue(): PendingMobileEvent[] {
  }
 }
 
-function persistQueue(queue: PendingMobileEvent[]): void {
- {
-  if (typeof window === 'undefined') return;
-   try { localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue)); } catch {}
-}
+function persistQueue(queue: PendingMobileEvent[]): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const serialized = JSON.stringify(queue);
+    localStorage.setItem(QUEUE_STORAGE_KEY, serialized);
+    // Read the bytes back: a store that accepts `setItem` without throwing yet
+    // drops the write (private mode, quota-clamped) left the pending-approval
+    // queue reporting a persisted event the next load did not have.
+    return localStorage.getItem(QUEUE_STORAGE_KEY) === serialized;
+  } catch {
+    return false;
+  }
 }
 
-export function enqueuePendingEvent(event: PendingMobileEvent): void {
+export function enqueuePendingEvent(event: PendingMobileEvent): boolean {
  {
   const queue = loadQueue().filter((e) => e.status === 'PENDING_APPROVAL');
    queue.push(event);
-   persistQueue(queue);
+   return persistQueue(queue);
 }
 }
 
@@ -197,22 +240,30 @@ export function getTopPendingEvent(): PendingMobileEvent | undefined {
 }
 }
 
-export function updatePendingEventStatus(eventId: string, status: PendingMobileEvent['status']): void {
+export function updatePendingEventStatus(eventId: string, status: PendingMobileEvent['status']): boolean {
  {
   const queue = loadQueue();
    const idx = queue.findIndex((e) => e.eventId === eventId);
-    if (idx >= 0) {
+    if (idx < 0) return false;
      queue[idx] = { ...queue[idx],  status: status };
-     persistQueue(queue);
-   }
+     return persistQueue(queue);
 }
 }
 
-export function clearPendingQueue(): void {
- {
-  if (typeof window === 'undefined') return;
-   try { localStorage.removeItem(QUEUE_STORAGE_KEY); } catch {}
-}
+/**
+ * Empty the pending-approval queue. Returns the real verdict: `true` only when
+ * the key is confirmed gone from storage. The empty `catch` this replaces let a
+ * refused clear (private mode, full quota, no window) look like an emptied
+ * queue, so the UI announced a clear the next reload still showed.
+ */
+export function clearPendingQueue(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.removeItem(QUEUE_STORAGE_KEY);
+    return localStorage.getItem(QUEUE_STORAGE_KEY) === null;
+  } catch {
+    return false;
+  }
 }
 
 const CLEAR_NO = ['no', 'nahi', '\u0928\u0939\u0940\u0902', 'cancel', 'dismiss', 'decline', '\u092e\u0924 \u0909\u0920\u093e\u0913', '\u092e\u0924 \u092d\u0947\u091c\u094b'];
@@ -277,17 +328,22 @@ function redactAuditSecrets(entry: Record<string, unknown>): Record<string, unkn
   return out;
 }
 
-export function logMobileAudit(entry: Omit<MobileAuditEntry, 'id' | 'timestamp'>): void {
-  if (typeof window === 'undefined') return;
+export function logMobileAudit(entry: Omit<MobileAuditEntry, 'id' | 'timestamp'>): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     const raw = localStorage.getItem(AUDIT_STORAGE_KEY);
     const list: MobileAuditEntry[] = raw ? JSON.parse(raw) : [];
     const sanitized = redactAuditSecrets(entry as unknown as Record<string, unknown>);
     list.unshift({ ...sanitized, id: auditId(), timestamp: new Date().toISOString() } as MobileAuditEntry);
     const trimmed = list.slice(0, MAX_AUDIT_ENTRIES);
-    localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(trimmed));
+    const serialized = JSON.stringify(trimmed);
+    localStorage.setItem(AUDIT_STORAGE_KEY, serialized);
+    // Read the bytes back: a store that accepts `setItem` without throwing yet
+    // keeps the previous bytes made the audit log report an entry that was never
+    // written, so the mobile bridge's security trail could silently drop rows.
+    return localStorage.getItem(AUDIT_STORAGE_KEY) === serialized;
   } catch {
-    // ignore
+    return false;
   }
 }
 
@@ -301,9 +357,19 @@ export function getMobileAuditLog(): MobileAuditEntry[] {
   }
 }
 
-export function clearMobileAuditLog(): void {
-  if (typeof window === 'undefined') return;
-  try { localStorage.removeItem(AUDIT_STORAGE_KEY); } catch {}
+/**
+ * Clear the mobile audit log. Returns `true` only when the key is confirmed
+ * gone from storage; the empty `catch` this replaces reported a cleared log
+ * even when the write was refused.
+ */
+export function clearMobileAuditLog(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.removeItem(AUDIT_STORAGE_KEY);
+    return localStorage.getItem(AUDIT_STORAGE_KEY) === null;
+  } catch {
+    return false;
+  }
 }
 
 export type MobileActionGate = { allowed: true } | { allowed: false; reason: 'KILL_SWITCH' | 'NO_BRIDGE' | 'NO_APPROVAL' | 'CAPABILITY_UNAVAILABLE' | 'PERMISSION_DENIED' };

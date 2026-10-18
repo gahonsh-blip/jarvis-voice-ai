@@ -444,14 +444,34 @@ export class AndroidBridgeManager {
     }
   }
 
-  public saveState(): void {
-    if (typeof window === 'undefined') return;
+  /**
+   * Persist settings, permissions and audit logs. Returns `true` only when all
+   * three writes landed; a refused write (quota exceeded, private mode, no
+   * browser storage) must not look like a durable save.
+   *
+   * A store can also accept `setItem` without throwing and still drop the bytes
+   * (private browsing, a frozen or quota-clamped store). Returning `true` for
+   * that call reported a permission, a setting or an audit row as durable while
+   * the key still held the previous bytes, and the next `loadState()` silently
+   * restored them. Each write is read back and must hold exactly what was
+   * asked, so only a landed write reads as saved.
+   */
+  public saveState(): boolean {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return false;
+    const settingsBytes = JSON.stringify(this.settings);
+    const permsBytes = JSON.stringify(this.permissions);
+    const auditBytes = JSON.stringify(this.auditLogs.slice(0, 100));
     try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(this.settings));
-      localStorage.setItem(PERMS_STORAGE_KEY, JSON.stringify(this.permissions));
-      localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(this.auditLogs.slice(0, 100)));
+      localStorage.setItem(SETTINGS_STORAGE_KEY, settingsBytes);
+      localStorage.setItem(PERMS_STORAGE_KEY, permsBytes);
+      localStorage.setItem(AUDIT_STORAGE_KEY, auditBytes);
+      return (
+        localStorage.getItem(SETTINGS_STORAGE_KEY) === settingsBytes &&
+        localStorage.getItem(PERMS_STORAGE_KEY) === permsBytes &&
+        localStorage.getItem(AUDIT_STORAGE_KEY) === auditBytes
+      );
     } catch {
-      // Safe fallback
+      return false;
     }
   }
 
@@ -471,18 +491,39 @@ export class AndroidBridgeManager {
     return { ...this.permissions };
   }
 
-  public updatePermission(key: keyof MobilePermissionMatrix, state: AndroidPermissionState): void {
+  public updatePermission(key: keyof MobilePermissionMatrix, state: AndroidPermissionState): boolean {
+    // Snapshot before mutating: a durable store that refuses the write must not
+    // be contradicted by the in-memory matrix, because callers read the store
+    // echo (`getPermissions()`) as authoritative and would then report a
+    // permission that silently reverts on reload.
+    const previous = this.permissions[key];
     this.permissions[key] = state;
-    this.saveState();
+    if (this.saveState()) return true;
+    if (this.hasStorage()) this.permissions[key] = previous;
+    return false;
   }
 
   public getSettings(): AndroidBridgeSettings {
     return { ...this.settings };
   }
 
-  public updateSettings(updates: Partial<AndroidBridgeSettings>): void {
+  public updateSettings(updates: Partial<AndroidBridgeSettings>): boolean {
+    // Same rule as `updatePermission`.
+    const previous = this.settings;
     this.settings = { ...this.settings, ...updates };
-    this.saveState();
+    if (this.saveState()) return true;
+    if (this.hasStorage()) this.settings = previous;
+    return false;
+  }
+
+  /**
+   * True when a durable store is present. A refused write means something
+   * different in each case: with no store the in-memory matrix is the only
+   * state and stands; with a store present the in-memory value must be reverted
+   * so it never disagrees with what the store actually holds.
+   */
+  private hasStorage(): boolean {
+    return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
   }
 
   public setEmergencyStop(active: boolean): void {
@@ -1288,7 +1329,7 @@ export class AndroidBridgeManager {
     };
   }
 
-  public recordAudit(log: Omit<AndroidAuditLog, 'id' | 'timestamp'>): void {
+  public recordAudit(log: Omit<AndroidAuditLog, 'id' | 'timestamp'>): boolean {
     const entry: AndroidAuditLog = {
       id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       timestamp: new Date().toISOString(),
@@ -1298,16 +1339,16 @@ export class AndroidBridgeManager {
     if (this.auditLogs.length > 200) {
       this.auditLogs.pop();
     }
-    this.saveState();
+    return this.saveState();
   }
 
   public getAuditLogs(): AndroidAuditLog[] {
     return [...this.auditLogs];
   }
 
-  public clearAuditLogs(): void {
+  public clearAuditLogs(): boolean {
     this.auditLogs = [];
-    this.saveState();
+    return this.saveState();
   }
 }
 

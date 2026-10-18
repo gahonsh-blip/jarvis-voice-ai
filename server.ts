@@ -20,15 +20,23 @@ import {
 } from './src/utils/hardening/auditTrailTruth';
 import { stagedDraftAuditEntry } from './src/utils/hardening/socialDraftAuditTruth';
 import { resolveSocialGeneration } from './src/utils/hardening/socialGenerationTruth';
+import { mobileSocialDraftReply } from './src/utils/hardening/mobileSocialDraftTruth';
 import { isEmergencyStopActive } from './src/utils/hardening/emergencyStop';
 import { emergencyResumeVerdict, emergencyTogglePreAction, killSwitchVerdict } from './src/utils/emergencyTruth';
 import { formatLiveActionItem, whisperTipForDisplay } from './src/utils/hardening/callSummaryTruth';
 import { recordedChannelTitle, describeStagedChannel } from './src/utils/hardening/youtubeChannelTruth';
+import { oauthConnectAuditNote } from './src/utils/hardening/oauthConnectDurabilityTruth';
+import { restoreAuditNote } from './src/utils/hardening/restoreAuditDurabilityTruth';
+import { shutdownOutcome } from './src/utils/hardening/daemonShutdownDurabilityTruth';
+import { oauthDisconnectMessage } from './src/utils/hardening/oauthDisconnectAuditTruth';
 import { classifyYouTubeDraftUpdate } from './src/utils/hardening/youtubeDraftUpdateTruth';
-import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel } from './src/utils/hardening/socialAccountIdTruth';
+import { observedAccountName, describeVerifiedAccount, disconnectAccountLabel, resolveLinkedInAuthorUrn, AUTHOR_URN_NOT_RECORDED_LABEL } from './src/utils/hardening/socialAccountIdTruth';
 import { securityMatrixPosture } from './src/utils/hardening/securityMatrixTruth';
 import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineSpec } from './src/utils/hardening/mobileTelemetryTruth';
+import { briefingFallbackText } from './src/utils/hardening/briefingFallbackTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
+import { buildNightlyReportText } from './src/utils/hardening/nightlyReportTruth';
+import { commandsReceivedInsight } from './src/utils/hardening/commandCounterLabelTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
@@ -39,6 +47,11 @@ import {
 import { classifyTelephonySettingsUpdate, TELEPHONY_SETTING_KEYS } from './src/utils/hardening/telephonySettingsTruth';
 import { classifyTelephonySuiteRun } from './src/utils/hardening/telephonySuiteTruth';
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
+import {
+  inboundAnswerGate,
+  inboundAnswerRejectionTwiML,
+  inboundAnswerRejectionBody,
+} from './src/utils/hardening/inboundAnswerGateTruth';
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
 import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
 import { classifySecurityMatrixUpdate, applySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
@@ -93,6 +106,7 @@ import {
   type EmergencyPersistedState,
   persistedActionRequests,
   hydrateActionRequests,
+  removeActionRequest,
   type PermissionActionRequest,
 } from './server_tools';
 import {
@@ -260,6 +274,7 @@ import {
 } from './src/utils/github/nightlyScheduler';
 import { ApprovalQueue } from './src/utils/github/approvalQueue';
 import { PROTECTED_BRANCH_NAMES } from './src/utils/github/automationWorkflow';
+import { nightlyAuditBadge, nightlyRunLogLine } from './src/utils/github/nightlyAuditTruth';
 
 /** Real host action executor, used by the operator endpoints. */
 const hostActionExecutor = new HostActionExecutor({ workspaceRoot: process.cwd() });
@@ -289,18 +304,16 @@ process.on('unhandledRejection', (reason: any) => {
   console.warn('[Daemon Process Guard] Unhandled Rejection caught safely:', reason?.message || reason);
 });
 
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-  console.log('[Daemon] SIGTERM received. Persisting state and shutting down gracefully...');
-  persistMemory();
-  process.exit(0);
-});
+// Graceful shutdown handling. The final save's durability verdict decides the
+// exit code: a refused write must not be laundered into a clean exit.
+const handleShutdown = (signal: string) => {
+  const outcome = shutdownOutcome(signal, persistMemory());
+  console.log(outcome.logLine);
+  process.exit(outcome.exitCode);
+};
 
-process.on('SIGINT', () => {
-  console.log('[Daemon] SIGINT received. Persisting state and shutting down gracefully...');
-  persistMemory();
-  process.exit(0);
-});
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -508,6 +521,11 @@ interface MemoryData {
     scheduledGoals?: ScheduledGoalSpec[];
     /** Last date each goal ran, keyed by goal id. */
     lastAutonomousGoalRuns?: Record<string, string>;
+    /**
+     * Run history for scheduled goals, newest first. Persisted so a restart does
+     * not erase the evidence of what the scheduler actually ran.
+     */
+    scheduledGoalRuns?: ScheduledGoalRecord[];
   };
   /**
    * Operator-ticked blueprint deliverables. Persisted so the Master Blueprint
@@ -812,7 +830,7 @@ export function getDecryptedYouTubeRefreshToken(): string {
   return envToken;
 }
 
-export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token: string; error?: string }> {
+export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token: string; error?: string; refreshPersisted?: boolean; refreshPersistenceError?: string }> {
   const conn = memoryState.youTubeConnection;
   const currentToken = getDecryptedYouTubeAccessToken();
   const refreshToken = getDecryptedYouTubeRefreshToken();
@@ -861,8 +879,18 @@ export async function ensureValidYouTubeToken(): Promise<{ valid: boolean; token
             connectedAt: new Date().toISOString(),
           };
         }
-        persistMemory();
-        return { valid: true, token: newAccessToken };
+        const refreshPersisted = persistMemory();
+        // A minted access token that never reached disk is a request validity
+        // that expires on the next boot; name the durability gap so a caller
+        // can report it instead of a refresh it cannot keep.
+        return {
+          valid: true,
+          token: newAccessToken,
+          refreshPersisted,
+          refreshPersistenceError: refreshPersisted
+            ? undefined
+            : 'The refreshed YouTube access token could not be written to durable storage, so it is not cached and will be lost on the next boot.',
+        };
       } else {
         const errDetail = tokenData?.error_description || tokenData?.error || `HTTP status ${resp.status}`;
         return { valid: false, token: '', error: `Token refresh failed: ${errDetail}` };
@@ -950,6 +978,22 @@ function diskHasAuditRow(id: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Append `entry` to the audit log and report whether it is durable.
+ *
+ * `persistMemory()` returns true without writing when the file already holds
+ * identical bytes, so a route that only trusts that boolean can record a
+ * `VERIFIED` audit row the next boot does not have. When the write does not
+ * reach disk the phantom row is removed from the in-memory log so the running
+ * process never claims history it cannot keep.
+ */
+function recordDurableAuditRow(entry: AuditLogEntry): boolean {
+  pushAuditEntry(entry);
+  if (persistMemory() && diskHasAuditRow(entry.id)) return true;
+  memoryState.auditLogs = memoryState.auditLogs.filter((e) => e.id !== entry.id);
+  return false;
 }
 
 /**
@@ -1050,7 +1094,7 @@ export function addAuditLog(
   levelRequired: 1 | 2 | 3 | 4 = 1,
   approvedBy: string = 'HUMAN_CONFIRMATION',
   status: string = 'VERIFIED'
-) {
+): boolean {
   const entry: AuditLogEntry = {
     id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     timestamp: new Date().toISOString(),
@@ -1064,8 +1108,13 @@ export function addAuditLog(
     verificationStatus: deriveAuditVerificationStatus(status),
     finalTruthState: deriveAuditFinalTruthState(status),
   };
-  pushAuditEntry(entry);
-  persistMemory();
+  // Route through the durable writer: `persistMemory()` can return true without
+  // writing when the file already holds identical bytes, so trusting its boolean
+  // alone can record a VERIFIED row the next boot does not have. The helper
+  // reads the row back from disk and drops the phantom row on failure, and its
+  // boolean is returned so a caller that reports the audit as written can gate
+  // on it.
+  return recordDurableAuditRow(entry);
 }
 
 // Shortcuts for convenience
@@ -2007,7 +2056,10 @@ function buildProactiveReports(): any[] {
       contentEn: `Sir, nightly plan. ${memoryState.stats.totalCommands} command(s) recorded this session; memory persists to jarvis_memory.json on write. No off-host incremental backup is configured.`,
       contentHi: `सर, रात की योजना। इस सत्र में ${memoryState.stats.totalCommands} कमांड दर्ज। मेमोरी jarvis_memory.json में सुरक्षित होती है।`,
       keyInsights: [
-        'Total Commands Executed: ' + memoryState.stats.totalCommands,
+        // `totalCommands` counts commands *received*, not executed — it advances
+        // on arrival, before any intent runs. The previous "Total Commands
+        // Executed" label credited work nothing had measured (item 13).
+        commandsReceivedInsight(memoryState.stats.totalCommands),
         'Memory store: jarvis_memory.json (local write)',
         'Off-host backup: not configured',
         describeServerHealthClaim(assessedServerStatus()),
@@ -2067,32 +2119,43 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
 
   // Token expiration timestamp check
   if (oauthConn?.expiresAt && new Date(oauthConn.expiresAt).getTime() < Date.now()) {
+    let disconnectPersisted = true;
     if (oauthConn) {
       oauthConn.connected = false;
       oauthConn.errorReason = 'OAuth token expired. Please reconnect.';
-      persistMemory();
+      // Clearing the connection is only real once it reaches disk. The reply
+      // used to announce the expiry while discarding this verdict, so a failed
+      // write left the durable state still reporting the account as connected.
+      disconnectPersisted = persistMemory();
     }
+    const staleConnectionNote = disconnectPersisted
+      ? ''
+      : ' The expired-connection marker could not be written to durable storage, so the saved state may still report this account as connected until it is reconnected.';
     return {
       success: false,
       executionStatus: 'FAILED',
       verificationStatus: 'PROVIDER_ERROR',
       finalTruthState: 'FAILED',
-      errorReason: 'LinkedIn OAuth token has expired. Please reconnect your Personal Profile via the "Connect LinkedIn" button.',
-      userMessage: '❌ EXPIRED TOKEN: LinkedIn OAuth token has expired. Click "Connect LinkedIn" to refresh authorization.',
+      errorReason:
+        'LinkedIn OAuth token has expired. Please reconnect your Personal Profile via the "Connect LinkedIn" button.' +
+        staleConnectionNote,
+      userMessage:
+        '❌ EXPIRED TOKEN: LinkedIn OAuth token has expired. Click "Connect LinkedIn" to refresh authorization.' +
+        staleConnectionNote,
     };
   }
 
   try {
-    let targetAuthor = configuredUrn;
-    if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
+    let targetAuthor = resolveLinkedInAuthorUrn(configuredUrn, oauthConn?.memberSub);
+    if (!targetAuthor) {
       const meRes = await fetch(`${getLinkedInApiBaseUrl()}/v2/userinfo`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (meRes.ok) {
         const meData: any = await meRes.json().catch(() => null);
         if (meData?.sub) {
-          targetAuthor = `urn:li:person:${meData.sub}`;
-          if (oauthConn) {
+          targetAuthor = resolveLinkedInAuthorUrn(undefined, meData.sub);
+          if (targetAuthor && oauthConn) {
             oauthConn.memberSub = meData.sub;
             oauthConn.authorUrn = targetAuthor;
             if (meData.name) oauthConn.name = meData.name;
@@ -2102,24 +2165,42 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
           }
         }
       } else if (meRes.status === 401 || meRes.status === 403) {
+        // The pre-flight probe clears the connection on a rejected token; that
+        // clear is only real once it reaches disk. The reply used to announce
+        // the reconnect while discarding this verdict, so a failed write left
+        // the durable state still reporting the account as connected.
+        let preflightAuthDisconnectPersisted = true;
         if (oauthConn) {
           oauthConn.connected = false;
           oauthConn.errorReason = 'OAuth token invalid or expired. Reconnection required.';
-          persistMemory();
+          preflightAuthDisconnectPersisted = persistMemory();
         }
+        const preflightAuthConnectionNote = preflightAuthDisconnectPersisted
+          ? ''
+          : ' The rejected-connection marker could not be written to durable storage, so the saved state may still report this account as connected until it is reconnected.';
         return {
           success: false,
           executionStatus: 'FAILED',
           verificationStatus: 'PROVIDER_ERROR',
           finalTruthState: 'FAILED',
-          errorReason: 'LinkedIn authentication failed (HTTP 401/403). Token expired or revoked.',
-          userMessage: '❌ AUTHENTICATION ERROR: LinkedIn rejected the token (HTTP 401/403). Please reconnect via the Connect LinkedIn button.',
+          errorReason: 'LinkedIn authentication failed (HTTP 401/403). Token expired or revoked.' + preflightAuthConnectionNote,
+          userMessage: '❌ AUTHENTICATION ERROR: LinkedIn rejected the token (HTTP 401/403). Please reconnect via the Connect LinkedIn button.' + preflightAuthConnectionNote,
         };
       }
     }
 
-    if (!targetAuthor || targetAuthor === 'urn:li:person:self') {
-      targetAuthor = 'urn:li:person:self';
+    if (!targetAuthor) {
+      // No real member identity was read (no author URN on the connection, no
+      // member from /v2/userinfo). Posting under `urn:li:person:self` would
+      // publish to an invented member, so refuse rather than fabricate an author.
+      return {
+        success: false,
+        executionStatus: 'NOT_PUBLISHED',
+        verificationStatus: 'MISSING_CREDENTIALS',
+        finalTruthState: 'DRAFT',
+        errorReason: 'LinkedIn member identity could not be resolved: neither the connection nor /v2/userinfo returned an author URN. Reconnect to refresh the member identity.',
+        userMessage: '⚠️ NOT PUBLISHED: Could not resolve the LinkedIn author URN (the token authenticated but returned no member identity). The post is retained in your local DRAFT queue with zero false claims; reconnect LinkedIn to publish.',
+      };
     }
 
     // Official LinkedIn REST Posts API (2025/v2) Payload for Personal Member Profile
@@ -2207,6 +2288,7 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
     }
 
     // A rejected token must clear the connection so the UI asks for a reconnect.
+    let rejectedTokenDisconnectPersisted = true;
     if (publishOutcome.failureKind === 'AUTH' || publishOutcome.failureKind === 'PERMISSION') {
       if (oauthConn) {
         oauthConn.connected = false;
@@ -2214,9 +2296,16 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
           publishOutcome.failureKind === 'AUTH'
             ? 'OAuth token rejected. Please reconnect.'
             : 'OAuth token rejected or missing w_member_social scope. Please reconnect.';
-        persistMemory();
+        // Clearing the connection is only real once it reaches disk. The reply
+        // used to announce the reconnect while discarding this verdict, so a
+        // failed write left the durable state still reporting the account as
+        // connected.
+        rejectedTokenDisconnectPersisted = persistMemory();
       }
     }
+    const rejectedConnectionNote = rejectedTokenDisconnectPersisted
+      ? ''
+      : ' The rejected-connection marker could not be written to durable storage, so the saved state may still report this account as connected until it is reconnected.';
 
     const attempts = publishOutcome.attempts.length;
     const errDetail = publishOutcome.errorReason || 'unknown error';
@@ -2238,8 +2327,8 @@ async function verifyAndPublishToLinkedIn(post: ServerSocialPost): Promise<{
         executionStatus: 'FAILED',
         verificationStatus: 'PROVIDER_ERROR',
         finalTruthState: 'FAILED',
-        errorReason: `LinkedIn auth/permission error: ${errDetail}`,
-        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Ensure 'w_member_social' is approved, then reconnect.`,
+        errorReason: `LinkedIn auth/permission error: ${errDetail}` + rejectedConnectionNote,
+        userMessage: `❌ PERMISSION / AUTH ERROR: LinkedIn rejected the post (${errDetail}). Ensure 'w_member_social' is approved, then reconnect.` + rejectedConnectionNote,
       };
     }
 
@@ -2786,6 +2875,7 @@ async function testPlatformConnection(platformKey: string): Promise<{
   accountName?: string;
   accountIdentifier?: string;
   message: string;
+  profilePersisted?: boolean;
 }> {
   const p = platformKey.toLowerCase();
 
@@ -2815,27 +2905,53 @@ async function testPlatformConnection(platformKey: string): Promise<{
           if (data?.picture) conn.picture = data.picture;
           if (data?.email) conn.email = data.email;
           if (memberUrn) conn.authorUrn = memberUrn;
-          persistMemory();
+          // The profile fields are cached above; the verify reply used to report
+          // a verified connection regardless of whether that cache reached disk.
+          // Honor the write: on failure the caller names the durability gap
+          // instead of reporting the profile as stored.
+          const profilePersisted = persistMemory();
+          return {
+            success: true,
+            status: 'VERIFIED',
+            accountName: memberName ?? undefined,
+            accountIdentifier: memberUrn,
+            profilePersisted,
+            message: memberName
+              ? `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`
+              : `Live Verified: Connected to Personal Member Profile (${memberUrn}). The provider did not return an account name.`,
+          };
         }
+        // The token authenticated, but no connection object is held to cache the
+        // profile onto, so no local write is expected.
         return {
           success: true,
           status: 'VERIFIED',
           accountName: memberName ?? undefined,
           accountIdentifier: memberUrn,
+          profilePersisted: true,
           message: memberName
             ? `Live Verified: Connected to Personal Member Profile for ${memberName} (${memberUrn}).`
             : `Live Verified: Connected to Personal Member Profile (${memberUrn}). The provider did not return an account name.`,
         };
       } else {
+        // The verify probe clears the connection on a rejected token; that clear
+        // is only real once it reaches disk. The reply used to announce the
+        // reconnect while discarding this verdict, so a failed write left the
+        // durable state still reporting the account as connected — the same fake
+        // success the publish path already refuses.
+        let expiredTokenDisconnectPersisted = true;
         if (conn) {
           conn.connected = false;
           conn.errorReason = `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked.`;
-          persistMemory();
+          expiredTokenDisconnectPersisted = persistMemory();
         }
+        const expiredConnectionNote = expiredTokenDisconnectPersisted
+          ? ''
+          : ' The expired-connection marker could not be written to durable storage, so the saved state may still report this account as connected until it is reconnected.';
         return {
           success: false,
           status: res.status === 401 ? 'EXPIRED' : 'ERROR',
-          message: `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked. Please click "Connect LinkedIn" to reconnect.`,
+          message: `LinkedIn returned HTTP ${res.status}. OAuth token may be expired or revoked. Please click "Connect LinkedIn" to reconnect.` + expiredConnectionNote,
         };
       }
     } catch (e: any) {
@@ -2945,11 +3061,15 @@ async function testPlatformConnection(platformKey: string): Promise<{
           const avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url;
 
           // Update memoryState with verified channel data
+          let profilePersisted = true;
           if (memoryState.youTubeConnection) {
             if (title) memoryState.youTubeConnection.channelTitle = title;
             memoryState.youTubeConnection.channelId = chId;
             if (avatarUrl) memoryState.youTubeConnection.avatarUrl = avatarUrl;
-            persistMemory();
+            // The verified channel fields are cached above; the verify reply used
+            // to report a verified connection regardless of whether that cache
+            // reached disk. Honor the write so the caller names the durability gap.
+            profilePersisted = persistMemory();
           }
 
           return {
@@ -2957,6 +3077,7 @@ async function testPlatformConnection(platformKey: string): Promise<{
             status: 'VERIFIED',
             accountName: title ?? chId ?? undefined,
             accountIdentifier: chId,
+            profilePersisted,
             message: title
               ? `Connected & Verified to YouTube Channel "${title}" (${chId}) via OAuth 2.0.`
               : `Connected & Verified to YouTube Channel ${chId} via OAuth 2.0. The provider did not return a channel name.`,
@@ -3420,6 +3541,10 @@ let telegramConfig = {
   totalMessagesReceived: 0,
   lastActivity: new Date().toISOString(),
   errorMessage: undefined as string | undefined,
+  // Observed verdict of the last processed-update marker write in the polling
+  // loop. False until a persist is actually observed, so no caller can read a
+  // fabricated "saved" state before a write ran.
+  lastPersistFailed: false,
 };
 
 let activeTelegramChatId: string | number | null = initialAdminChatId;
@@ -3627,13 +3752,16 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       botReplyText = `⏳ *HERMES JARVIS*: Analyzing YouTube video and extracting transcript...\n\nProcessing link: \`${rawUrl || vidId}\``;
       // Fetch and summarize
       const summaryResult = await summarizeYouTubeVideoCore({ url: rawUrl, videoId: vidId || undefined });
-      if (summaryResult.success && summaryResult.videoInfo) {
+      // Gate on `videoInfo`, not `success`: a result with `source: 'none'` now
+      // carries `success: false` but still has real metadata worth showing. The
+      // `formatYouTubeSummaryNotice` check below leads with the fact that no
+      // summary was produced.
+      if ('videoInfo' in summaryResult) {
         const info = summaryResult.videoInfo;
-        // A summariser result can carry `success: true` and a video with an EMPTY
-        // summary (`source: 'none'` — no transcript and no description). The old
-        // reply rendered the "YOUTUBE VIDEO SUMMARY" heading with a blank body in
-        // that case, reading as a summary that was never produced. Lead with the
-        // truth instead.
+        // A video with no transcript and no description comes back with an EMPTY
+        // summary (`source: 'none'`). The old reply rendered the "YOUTUBE VIDEO
+        // SUMMARY" heading with a blank body in that case, reading as a summary
+        // that was never produced. Lead with the truth instead.
         const noSummaryNotice = formatYouTubeSummaryNotice(summaryResult);
         if (noSummaryNotice) {
           botReplyText = `🎥 *YOUTUBE VIDEO SUMMARY*\n\n📌 *Title*: ${info.title}\n👤 *Channel*: ${info.channel} (${info.durationFormatted})\n🔗 [Watch Video](${info.url})\n\n⚠️ _${noSummaryNotice}_`;
@@ -3671,17 +3799,26 @@ async function processMobileCommand(text: string, senderLabel: string = 'user', 
       ],
     };
   } else if (intentData.intent === 'create_social_post') {
-    const activeDraft = memoryState.socialPosts.find((p) => p.status === 'pending_approval') || memoryState.socialPosts[0];
-    botReplyText = `📱 *NEW SOCIAL MEDIA POST DRAFTED*\n\n*Topic*: ${activeDraft.topic}\n*Platform*: ${activeDraft.platform}\n\n📝 *Draft Content*:\n"${activeDraft.content.substring(0, 220)}..."\n\n⚠️ *Human Approval Mode*: Post तैयार है। क्या मैं इसे publish करूँ?`;
-    actionData = { type: 'social_draft', postId: activeDraft.id, status: 'pending_approval' };
-    inlineKeyboard = {
-      inline_keyboard: [
-        [
-          { text: '✅ YES (Approve & Publish)', callback_data: `approve_post_${activeDraft.id}` },
-          { text: '❌ REJECT (Draft Only)', callback_data: `reject_post_${activeDraft.id}` },
+    // This branch only looks up a stored draft — it creates nothing. It used to
+    // answer "NEW SOCIAL MEDIA POST DRAFTED" and, with an empty store, throw on
+    // `activeDraft.topic` so the webhook 500'd for the command it claimed to
+    // have drafted. Derive the reply and the approval target from the draft that
+    // was really found, and answer a plain "no draft" notice when none exists.
+    const socialDraft = mobileSocialDraftReply(memoryState.socialPosts);
+    botReplyText = socialDraft.replyText;
+    if (socialDraft.found && socialDraft.draftId) {
+      actionData = { type: 'social_draft', postId: socialDraft.draftId, status: 'pending_approval' };
+      inlineKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '✅ YES (Approve & Publish)', callback_data: `approve_post_${socialDraft.draftId}` },
+            { text: '❌ REJECT (Draft Only)', callback_data: `reject_post_${socialDraft.draftId}` },
+          ],
         ],
-      ],
-    };
+      };
+    } else {
+      actionData = { type: 'social_draft_unavailable', posts: memoryState.socialPosts.length };
+    }
   } else if (intentData.intent === 'find_document') {
     const doc = intentData.actionPayload?.query || '';
     const search = realFsSearch(doc);
@@ -3831,8 +3968,16 @@ User message: "${clean}".`,
     }
   }
 
-  persistMemory();
-  return { userMsg, botMsg, inlineKeyboard, delivery };
+  // The command's record — the user turn, the reply, the advanced counters and
+  // any state the intent changed — is only real once it reaches disk. This call
+  // used to be a bare statement, so a read-only volume or full disk left the
+  // exchange in process memory while every caller saw an ordinary success. Bind
+  // the verdict so `/api/telegram/send` can report whether the record is durable.
+  const commandRecordPersisted = persistMemory();
+  if (!commandRecordPersisted) {
+    console.warn('[Telegram Bot] Command record NOT durable - the exchange is not on disk (item 13).');
+  }
+  return { userMsg, botMsg, inlineKeyboard, delivery, commandRecordPersisted };
 }
 
 async function handleTelegramCallback(callbackQuery: any) {
@@ -3908,13 +4053,29 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('approve_perm_')) {
     const permId = data.replace('approve_perm_', '');
     const updated = updateActionRequestStatus(permId, 'EXECUTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
-    // The mobile approval is durable so a restart cannot resurrect the request
-    // as pending and let it be approved a second time.
-    if (updated) persistApprovalRegistry();
+    // The mobile approval must survive a restart, or a reboot resurrects the
+    // request as pending and it can be approved again (a duplicate external
+    // action). The registry lives outside `memoryState` and `persistMemory()`
+    // can return true without writing when the file already holds identical
+    // bytes, so EXECUTED is read back from disk rather than trusting the write
+    // boolean. A decision that cannot be confirmed on disk is refused: the
+    // request is reverted to PENDING_APPROVAL so a later successful persist
+    // cannot write a phantom approval, and the reply does not claim it was
+    // recorded.
+    const persisted = updated
+      ? persistApprovalRegistry() && actionRequestStatusOnDisk(permId, 'EXECUTED')
+      : false;
+    if (updated && !persisted) {
+      const liveReq = getAllActionRequests().find((r) => r.id === permId);
+      if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+      memoryState.permissionRequests = persistedActionRequests();
+    }
     // This branch records the human approval only — no dispatcher runs here, so
     // no provider can confirm the external action. Never say "executed/verified".
     const confirmText = updated
-      ? formatUnconfirmedMobileApprovalReply(updated)
+      ? persisted
+        ? formatUnconfirmedMobileApprovalReply(updated)
+        : `⚠️ *APPROVAL NOT RECORDED*\n\nRequest \`${permId}\` could not be written to durable storage; the approval was not recorded and the request remains pending.`
       : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired.`;
 
     const botMsg = {
@@ -3929,13 +4090,26 @@ async function handleTelegramCallback(callbackQuery: any) {
   } else if (data.startsWith('reject_perm_')) {
     const permId = data.replace('reject_perm_', '');
     const updated = updateActionRequestStatus(permId, 'REJECTED', { resolvedBy: 'TELEGRAM_MOBILE_ADMIN' });
-    // Durable so a restart cannot resurrect the rejected request as pending.
-    if (updated) persistApprovalRegistry();
+    // As on the approve branch, the rejection must be confirmed on disk rather
+    // than trusted from `persistApprovalRegistry()`'s boolean, or a restart
+    // resurrects the rejected request as pending. A rejection that cannot be
+    // confirmed is reverted so the operator is not told it was recorded.
+    const persisted = updated
+      ? persistApprovalRegistry() && actionRequestStatusOnDisk(permId, 'REJECTED')
+      : false;
+    if (updated && !persisted) {
+      const liveReq = getAllActionRequests().find((r) => r.id === permId);
+      if (liveReq) liveReq.status = 'PENDING_APPROVAL';
+      memoryState.permissionRequests = persistedActionRequests();
+    }
     // A request that was already decided is not re-rejectable. Saying "cancelled
     // safely" for a null result told the operator a re-tap had withdrawn an
-    // action that had in fact already run (or been rejected earlier).
+    // action that had in fact already run (or been rejected earlier). A
+    // rejection that could not be written to disk is likewise not reported.
     const cancelText = updated
-      ? `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated.exactAction || permId}\` cancelled safely.`
+      ? persisted
+        ? `❌ *ACTION REJECTED*\n\nUnderstood, Sir. Action \`${updated.exactAction || permId}\` cancelled safely.`
+        : `⚠️ *REJECTION NOT RECORDED*\n\nRequest \`${permId}\` could not be written to durable storage; the rejection was not recorded and the request remains pending.`
       : `⚠️ *ACTION NOTICE*: Request \`${permId}\` was already processed or expired; nothing was changed.`;
     const botMsg = {
       id: `tg-${Date.now()}`,
@@ -4033,7 +4207,18 @@ async function startTelegramPolling() {
                 });
               }
             }
-            persistMemory();
+            // Honor the write verdict. The advanced offset and the dedup list
+            // live only in memory until they reach disk; a silently failed
+            // persist (read-only volume, full disk) would lose the processed
+            // marker, and the next boot would reprocess every update in the
+            // window — re-running commands and re-firing approvals. The loop
+            // still continues (a transient disk error must not stop the daemon),
+            // but the gap is recorded in the live Telegram status instead of
+            // being discarded.
+            telegramConfig.lastPersistFailed = !persistMemory();
+            if (telegramConfig.lastPersistFailed) {
+              console.warn('[Telegram Bot] Processed-update marker could not be written to durable storage; it may be reprocessed after a restart.');
+            }
           }
         } catch (pollErr: any) {
           consecutiveErrors++;
@@ -4114,21 +4299,42 @@ async function checkAndRunSchedulerJobs() {
   const todayIST = getISTDateString();
   const { hour, minute } = getISTCurrentHourMinute();
 
+  // Each routine tick stamps its per-day marker and may only push / log once
+  // that marker is durable. `persistMemory()` reports true without writing when
+  // the file already holds the identical bytes, and fails outright on a
+  // read-only volume or a full disk; an unverified marker would live only in
+  // memory, so the next boot would re-run the tick and a "delivered" log line
+  // would claim a run the durable store lacks. Each tick reads its marker back
+  // via `routineMarkerOnDisk` before the external push; when it did not land the
+  // in-memory stamp is dropped and a FAILED audit row is recorded (item 13).
+
   // 1. Morning Briefing at 09:00 AM IST
   if (hour === 9 && minute >= 0 && minute <= 15) {
     if (memoryState.schedulerState.lastMorningRunDate !== todayIST) {
       memoryState.schedulerState.lastMorningRunDate = todayIST;
-
-      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
-      if (activeTelegramChatId && getCleanTelegramToken()) {
-        const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
-        const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
-        const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
-        const delivery = await deliverTelegramMessage(activeTelegramChatId, morningText);
-        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
+      if (!persistMemory() || !routineMarkerOnDisk('lastMorningRunDate', todayIST)) {
+        delete memoryState.schedulerState.lastMorningRunDate;
+        const failEntry = `[${new Date().toISOString()}] Morning Briefing (09:00 AM IST) NOT run: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        const morningBriefingMarkerAudit = addAuditLog(
+          'Morning Briefing (09:00 AM IST) NOT run: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        if (!morningBriefingMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+      } else {
+        let push: SchedulerPushOutcome = { attempted: false, delivered: false };
+        if (activeTelegramChatId && getCleanTelegramToken()) {
+          const pendingQuotations = memoryState.freelanceLeads.filter((l) => !!l.quotation).length;
+          const pendingPosts = memoryState.socialPosts.filter((p) => p.status === 'pending_approval').length;
+          const morningText = `🌅 *HERMES PROACTIVE MORNING BRIEFING (09:00 AM)*\n\nGood morning, Sir!\n\n• *Pending Quotations*: ${pendingQuotations} lead(s)\n• *Social Posts*: ${pendingPosts} draft awaiting approval\n• *Security Level*: Level ${securityMatrixState.currentLevel} Active\n\nHave a productive day!`;
+          const delivery = await deliverTelegramMessage(activeTelegramChatId, morningText);
+          push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
+        }
+        await recordSchedulerOutcome('Morning Briefing (09:00 AM IST)', push);
       }
-      await recordSchedulerOutcome('Morning Briefing (09:00 AM IST)', push);
-      persistMemory();
     }
   }
 
@@ -4137,8 +4343,21 @@ async function checkAndRunSchedulerJobs() {
     if (memoryState.schedulerState.lastMiddayRunDate !== todayIST) {
       memoryState.schedulerState.lastMiddayRunDate = todayIST;
       // No Telegram push and no audit work: this tick only advances the marker.
-      await recordSchedulerOutcome('Midday Health Audit (02:00 PM IST)', { attempted: false, delivered: false });
-      persistMemory();
+      if (!persistMemory() || !routineMarkerOnDisk('lastMiddayRunDate', todayIST)) {
+        delete memoryState.schedulerState.lastMiddayRunDate;
+        const failEntry = `[${new Date().toISOString()}] Midday Health Audit (02:00 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        const middayHealthMarkerAudit = addAuditLog(
+          'Midday Health Audit (02:00 PM IST) NOT run: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        if (!middayHealthMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+      } else {
+        await recordSchedulerOutcome('Midday Health Audit (02:00 PM IST)', { attempted: false, delivered: false });
+      }
     }
   }
 
@@ -4146,8 +4365,21 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 18 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastEveningRunDate !== todayIST) {
       memoryState.schedulerState.lastEveningRunDate = todayIST;
-      await recordSchedulerOutcome('Evening Social Pulse (06:30 PM IST)', { attempted: false, delivered: false });
-      persistMemory();
+      if (!persistMemory() || !routineMarkerOnDisk('lastEveningRunDate', todayIST)) {
+        delete memoryState.schedulerState.lastEveningRunDate;
+        const failEntry = `[${new Date().toISOString()}] Evening Social Pulse (06:30 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        const eveningPulseMarkerAudit = addAuditLog(
+          'Evening Social Pulse (06:30 PM IST) NOT run: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        if (!eveningPulseMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+      } else {
+        await recordSchedulerOutcome('Evening Social Pulse (06:30 PM IST)', { attempted: false, delivered: false });
+      }
     }
   }
 
@@ -4155,15 +4387,37 @@ async function checkAndRunSchedulerJobs() {
   if (hour === 22 && minute >= 30 && minute <= 45) {
     if (memoryState.schedulerState.lastNightRunDate !== todayIST) {
       memoryState.schedulerState.lastNightRunDate = todayIST;
-
-      let push: SchedulerPushOutcome = { attempted: false, delivered: false };
-      if (activeTelegramChatId && getCleanTelegramToken()) {
-        const nightText = `🌙 *HERMES NIGHTLY WORK REPORT (10:30 PM)*\n\nSir, today's work summary has been recorded.\n• *Commands Executed*: ${memoryState.stats.totalCommands}\n• *Memory Persistence*: Synchronized\n• *Daemon Status*: Standby & Active`;
-        const delivery = await deliverTelegramMessage(activeTelegramChatId, nightText);
-        push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
+      if (!persistMemory() || !routineMarkerOnDisk('lastNightRunDate', todayIST)) {
+        delete memoryState.schedulerState.lastNightRunDate;
+        const failEntry = `[${new Date().toISOString()}] Nightly Work Summary (10:30 PM IST) NOT run: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        const nightlySummaryMarkerAudit = addAuditLog(
+          'Nightly Work Summary (10:30 PM IST) NOT run: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        if (!nightlySummaryMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+      } else {
+        let push: SchedulerPushOutcome = { attempted: false, delivered: false };
+        if (activeTelegramChatId && getCleanTelegramToken()) {
+          // The report is composed only from facts read back here. The previous
+          // fixed text claimed that the day's work summary had been recorded
+          // (no summary artifact is written) and that memory persistence was
+          // "Synchronized" (the store was never read), and it labelled a count
+          // of commands *received* as "Commands Executed" (item 13).
+          const nightText = buildNightlyReportText({
+            runMarkerDurable: routineMarkerOnDisk('lastNightRunDate', todayIST),
+            memoryStoreReadable: memoryStoreReadableOnDisk(),
+            daemonPid: DAEMON_PID,
+            commandsRecorded: memoryState.stats.totalCommands,
+          });
+          const delivery = await deliverTelegramMessage(activeTelegramChatId, nightText);
+          push = { attempted: true, delivered: delivery.delivered, detail: delivery.errorReason || delivery.outcome };
+        }
+        await recordSchedulerOutcome('Nightly Work Summary (10:30 PM IST)', push);
       }
-      await recordSchedulerOutcome('Nightly Work Summary (10:30 PM IST)', push);
-      persistMemory();
     }
   }
 
@@ -4177,31 +4431,66 @@ async function checkAndRunSchedulerJobs() {
     };
     if (schedState.lastGithubNightlyRunDate !== todayIST) {
       schedState.lastGithubNightlyRunDate = todayIST;
-      const logEntry = `[${new Date().toISOString()}] Started Nightly Repository Check (03:00 AM IST)`;
-      schedulerRunLog.unshift(logEntry);
-      console.log('[Scheduler]', logEntry);
-      persistMemory();
 
-      runNightlyCheck({ github: githubFetchOptions() })
-        .then((result) => {
-          recordNightlyRun(result.record);
-          addAuditLog(
-            `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
-            1,
-            'AUTOMATED_SCHEDULE',
-            result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
-          );
-          console.log('[Scheduler] Nightly repository check:', result.record.outcome);
-        })
-        .catch((err: any) => {
-          console.warn('[Scheduler] Nightly repository check failed:', err?.message);
-          addAuditLog(
-            `GitHub nightly check FAILED: ${err?.message || 'unknown error'}`,
-            1,
-            'AUTOMATED_SCHEDULE',
-            'FAILED'
-          );
-        });
+      // The per-day marker that stops this 15-minute window from re-running the
+      // scan is stamped above, but the scan only proceeds once that marker is on
+      // disk. `persistMemory()` returns true without writing when the file
+      // already holds the identical bytes, so on a read-only volume the marker
+      // would be held in memory only — the next boot would find no marker and
+      // re-run the check. Read the marker back before starting; skip the scan
+      // when it did not land and say so.
+      if (!persistMemory() || !nightlyMarkerOnDisk(todayIST)) {
+        const failEntry = `[${new Date().toISOString()}] Nightly Repository Check NOT started: the per-day marker could not be written to durable storage.`;
+        schedulerRunLog.unshift(failEntry);
+        console.warn('[Scheduler]', failEntry);
+        const githubCheckMarkerAudit = addAuditLog(
+          'GitHub nightly check NOT started: the per-day marker could not be written to durable storage.',
+          1,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        if (!githubCheckMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+      } else {
+        runNightlyCheck({ github: githubFetchOptions() })
+          .then((result) => {
+            // Consume both durability verdicts. The run-history row and the audit
+            // row are the durable evidence of the check; on a read-only volume or
+            // a full disk neither reaches storage, and discarding the verdicts
+            // left the process (and its run log) claiming a check whose record the
+            // next boot would not have.
+            const recorded = recordNightlyRun(result.record);
+            const auditRecorded = addAuditLog(
+              `GitHub nightly check ${result.receipt.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+              1,
+              'AUTOMATED_SCHEDULE',
+              nightlyAuditBadge(result.receipt.outcome)
+            );
+            // Log what was observed, after the check — never a pre-scan "started"
+            // line that asserted a run before it had produced anything.
+            const logEntry = nightlyRunLogLine(
+              {
+                receiptOutcome: result.receipt.outcome,
+                scannedRepositories: result.record.scannedRepositories,
+                unreachableRepositories: result.record.unreachableRepositories,
+                reposWithFailingCi: result.record.reposWithFailingCi.length,
+                plannedSteps: result.record.plannedSteps,
+              },
+              { recorded, auditRecorded }
+            );
+            schedulerRunLog.unshift(logEntry);
+            console.log('[Scheduler]', logEntry);
+          })
+          .catch((err: any) => {
+            console.warn('[Scheduler] Nightly repository check failed:', err?.message);
+            const githubCheckFailureAudit = addAuditLog(
+              `GitHub nightly check FAILED: ${err?.message || 'unknown error'}`,
+              1,
+              'AUTOMATED_SCHEDULE',
+              'FAILED'
+            );
+            if (!githubCheckFailureAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+          });
+      }
     }
   }
 
@@ -4222,14 +4511,44 @@ async function checkAndRunSchedulerJobs() {
       const today = todayIST;
       schedState.lastAutonomousGoalRuns[goal.id] = today;
 
+      // The per-day marker above stops this goal from re-running on the next
+      // tick, but the goal only runs once that marker is on disk. `persistMemory()`
+      // returns true without writing when the file already holds the identical
+      // bytes, and on a read-only volume or full disk the write fails outright;
+      // either way the marker lives only in memory, the next boot finds no marker
+      // and re-runs a goal this process recorded as run. Read the marker back,
+      // skip the goal when it did not land, and leave the in-memory marker unset
+      // so this process does not claim a run the durable store lacks.
+      if (!persistMemory() || !autonomousGoalMarkerOnDisk(goal.id, today)) {
+        delete schedState.lastAutonomousGoalRuns[goal.id];
+        const scheduledGoalMarkerAudit = addAuditLog(
+          `Scheduled autonomous task "${goal.name}" (${goal.id}) NOT run: the per-day marker could not be written to durable storage.`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          'FAILED'
+        );
+        if (!scheduledGoalMarkerAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+        recordScheduledGoalRun({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: 'FAILED',
+          verified: false,
+          stepsDone: 0,
+          stepsTotal: Array.isArray(goal.steps) ? goal.steps.length : 0,
+          at: new Date().toISOString(),
+        });
+        continue;
+      }
+
       if (goal.requiresApproval) {
-        addAuditLog(
+        const scheduledGoalApprovalAudit = addAuditLog(
           `Scheduled autonomous task "${goal.name}" (${goal.id}) is due but requires human approval; it was NOT run unattended.`,
           3,
           'AUTOMATED_SCHEDULE',
           'PENDING'
         );
-        scheduledGoalRuns.unshift({
+        if (!scheduledGoalApprovalAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+        recordScheduledGoalRun({
           goalId: goal.id,
           ranDate: today,
           outcome: 'PERMISSION_REQUIRED',
@@ -4238,43 +4557,20 @@ async function checkAndRunSchedulerJobs() {
           stepsTotal: Array.isArray(goal.steps) ? goal.steps.length : 0,
           at: new Date().toISOString(),
         });
-        persistMemory();
         continue;
       }
 
       const { buildGoalSteps } = await import('./src/utils/autonomous/stepLibrary');
       const { steps, rejected } = buildGoalSteps(goal.steps as StepDescriptor[]);
       if (rejected.length > 0) {
-        addAuditLog(
+        const scheduledGoalRejectedAudit = addAuditLog(
           `Scheduled autonomous task "${goal.name}" rejected: unsupported step kind(s) ${rejected.join(', ')}`,
           2,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
-        persistMemory();
-        continue;
-      }
-
-      try {
-        const runner = new AutonomousGoalRunner();
-        const result = await runner.run(goal.name, steps);
-        scheduledGoalRuns.unshift({
-          goalId: goal.id,
-          ranDate: today,
-          outcome: result.outcome,
-          verified: result.verified,
-          stepsDone: result.steps.filter((s) => s.status === 'DONE').length,
-          stepsTotal: result.steps.length,
-          at: new Date().toISOString(),
-        });
-        addAuditLog(
-          `Scheduled autonomous task "${goal.name}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
-          2,
-          'AUTOMATED_SCHEDULE',
-          result.outcome === 'VERIFIED' ? 'VERIFIED' : 'FAILED'
-        );
-      } catch (err: any) {
-        scheduledGoalRuns.unshift({
+        if (!scheduledGoalRejectedAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+        recordScheduledGoalRun({
           goalId: goal.id,
           ranDate: today,
           outcome: 'FAILED',
@@ -4283,15 +4579,46 @@ async function checkAndRunSchedulerJobs() {
           stepsTotal: steps.length,
           at: new Date().toISOString(),
         });
-        addAuditLog(
+        continue;
+      }
+
+      try {
+        const runner = new AutonomousGoalRunner();
+        const result = await runner.run(goal.name, steps);
+        recordScheduledGoalRun({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: result.outcome,
+          verified: result.verified,
+          stepsDone: result.steps.filter((s) => s.status === 'DONE').length,
+          stepsTotal: result.steps.length,
+          at: new Date().toISOString(),
+        });
+        const scheduledGoalOutcomeAudit = addAuditLog(
+          `Scheduled autonomous task "${goal.name}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
+          2,
+          'AUTOMATED_SCHEDULE',
+          result.outcome === 'VERIFIED' ? 'VERIFIED' : 'FAILED'
+        );
+        if (!scheduledGoalOutcomeAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
+      } catch (err: any) {
+        recordScheduledGoalRun({
+          goalId: goal.id,
+          ranDate: today,
+          outcome: 'FAILED',
+          verified: false,
+          stepsDone: 0,
+          stepsTotal: steps.length,
+          at: new Date().toISOString(),
+        });
+        const scheduledGoalFailureAudit = addAuditLog(
           `Scheduled autonomous task "${goal.name}" FAILED: ${err?.message || 'unknown error'}`,
           2,
           'AUTOMATED_SCHEDULE',
           'FAILED'
         );
+        if (!scheduledGoalFailureAudit) console.warn('[Scheduler] audit row NOT durable - this tick is not recorded on disk (item 13).');
       }
-      if (scheduledGoalRuns.length > 100) scheduledGoalRuns.length = 100;
-      persistMemory();
     }
   }
 }
@@ -4670,6 +4997,9 @@ app.post('/api/telegram/test-live', async (req: Request, res: Response) => {
         success: delivery.delivered,
         botReachable: true,
         bot: botInfo,
+        // The username the API actually returned, so the client can name the
+        // bot without rendering the server's template default.
+        botUsername: typeof botInfo?.username === 'string' ? botInfo.username : undefined,
         notificationSent: delivery.delivered,
         deliveryOutcome: delivery.outcome,
         messageId: delivery.messageId,
@@ -4697,6 +5027,10 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
     const result = await processMobileCommand(text, 'web_client', activeTelegramChatId || undefined);
     const delivery = gatewaySendResult(result.delivery);
     const notice = telegramGatewayNotice(delivery);
+    // The reply may have been delivered while the command record never reached
+    // disk. Both facts are reported: delivery is unchanged, and the durability
+    // of the exchange is named instead of being assumed from a delivered reply.
+    const recordPersisted = result.commandRecordPersisted;
     res.json({
       // Success means Telegram confirmed the outbound reply. A local echo with
       // no delivery is reported as undelivered, not as a sent message.
@@ -4705,6 +5039,13 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
       deliveryOutcome: delivery.outcome,
       messageId: delivery.messageId,
       errorReason: delivery.errorReason,
+      commandRecordPersisted: recordPersisted,
+      ...(recordPersisted
+        ? {}
+        : {
+            recordNote:
+              'The reply was handled but the command record could not be written to durable storage, so it may be lost on restart.',
+          }),
       userMessage: result.userMsg,
       botMessage: { ...result.botMsg, text: telegramGatewayBubble(result.botMsg.text, delivery) },
       message: notice.message,
@@ -5040,11 +5381,13 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-  // Persist the registry alongside the post/audit rows so the staged Level-4
-  // request survives a restart too, not just the draft it refers to.
-  const uploadPersisted = persistApprovalRegistry();
-
   if (!uploadVerdict.success) {
+    // The gateway registered a terminal (finance/emergency-blocked) request for
+    // this posting. Leaving it in the queue means a later persist for any other
+    // reason writes it to disk and the next boot re-offers it as pending. Drop
+    // it before answering, as the block-branch permission routes do.
+    removeActionRequest(uploadGate.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     const code = uploadVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : uploadVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
     return res.status(code).json({
       success: false,
@@ -5055,10 +5398,26 @@ app.post('/api/social/youtube/upload-draft', (req: Request, res: Response) => {
     });
   }
 
-  // A staged upload is only real once it is durable. A write that never reached
-  // disk (read-only volume, full disk) leaves this process holding a staged
-  // upload the next boot does not have, so roll it back and do not claim it.
+  // Persist the registry alongside the post/audit rows so the staged Level-4
+  // request survives a restart too, not just the draft it refers to.
+  //
+  // A staged upload is only real once it is durable. `persistApprovalRegistry()`
+  // returns `persistMemory()`'s boolean, which is true when the file already
+  // holds byte-identical state even though no write was attempted (read-only
+  // volume, full disk); the pending gate is therefore read back from disk before
+  // the route claims a staged upload, so it never hands out an approval card a
+  // restart would forget. Mirrors the telephony stage route.
+  const uploadPersisted =
+    persistApprovalRegistry() &&
+    actionRequestStatusOnDisk(uploadGate.request.id, 'PENDING_APPROVAL');
+
+  // A write that never reached disk (read-only volume, full disk) leaves this
+  // process holding a staged upload the next boot does not have, so roll it back
+  // and do not claim it. The phantom gate is dropped from both the live registry
+  // and the persisted snapshot so a later persist cannot resurrect it.
   if (!uploadPersisted) {
+    removeActionRequest(uploadGate.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     const postIndex = memoryState.socialPosts.indexOf(newPost);
     if (postIndex !== -1) memoryState.socialPosts.splice(postIndex, 1);
     const auditIndex = memoryState.auditLogs.indexOf(uploadAuditRow);
@@ -5147,11 +5506,13 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     verificationStatus: stagingAudit.verificationStatus,
     finalTruthState: stagingAudit.finalTruthState,
   });
-  // Persist the registry alongside the post/audit rows so the staged Level-4
-  // test request survives a restart too, not just the draft it refers to.
-  const testPersisted = persistApprovalRegistry();
-
   if (!testVerdict.success) {
+    // The gateway registered a terminal (finance/emergency-blocked) request for
+    // this staged posting. Drop it before answering so a later persist for any
+    // other reason cannot write it to disk and the next boot cannot re-offer it
+    // as pending — the same phantom-request guard as the upload route.
+    removeActionRequest(testGate.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     const code = testVerdict.outcome === 'BLOCKED_FINANCE' ? 403 : testVerdict.outcome === 'BLOCKED_EMERGENCY' ? 423 : 409;
     return res.status(code).json({
       success: false,
@@ -5162,10 +5523,23 @@ app.post('/api/social/youtube/draft-test', (req: Request, res: Response) => {
     });
   }
 
+  // Persist the registry alongside the post/audit rows so the staged Level-4
+  // test request survives a restart too, not just the draft it refers to.
+  //
+  // As on the upload route, `persistApprovalRegistry()` can report true without
+  // writing, so the pending gate is read back from disk before the route claims
+  // a staged test draft — never a success a restart would forget.
+  const testPersisted =
+    persistApprovalRegistry() &&
+    actionRequestStatusOnDisk(testGate.request.id, 'PENDING_APPROVAL');
+
   // A staged test draft is only real once it is durable. A write that never
   // reached disk leaves this process holding a staged draft the next boot does
-  // not have, so roll it back and do not claim it.
+  // not have, so roll it back and do not claim it. The phantom gate is dropped
+  // from both the live registry and the persisted snapshot.
   if (!testPersisted) {
+    removeActionRequest(testGate.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     const postIndex = memoryState.socialPosts.indexOf(newPost);
     if (postIndex !== -1) memoryState.socialPosts.splice(postIndex, 1);
     const auditIndex = memoryState.auditLogs.indexOf(testAuditRow);
@@ -5358,7 +5732,7 @@ function getPlatformIntegrationsStatus(req?: Request): any[] {
         authType: isLinkedInOAuthConnected ? 'OAUTH_2_0' : staticLinkedInToken ? 'STATIC_ENV_TOKEN' : undefined,
         name: conn?.name || (staticLinkedInToken ? 'Configured Personal Member' : undefined),
         memberSub: conn?.memberSub,
-        authorUrn: conn?.authorUrn || (staticLinkedInToken ? process.env.LINKEDIN_AUTHOR_URN || 'urn:li:person:self' : undefined),
+        authorUrn: resolveLinkedInAuthorUrn(conn?.authorUrn, conn?.memberSub) ?? (staticLinkedInToken ? resolveLinkedInAuthorUrn(process.env.LINKEDIN_AUTHOR_URN, undefined) ?? undefined : undefined),
         email: conn?.email,
         picture: conn?.picture,
         connectedAt: conn?.connectedAt,
@@ -5647,7 +6021,11 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
     // fall back to the invented 'LinkedIn Member'.
     let memberName: string | null = null;
     let memberSub = '';
-    let authorUrn = 'urn:li:person:self';
+    // An unresolved member must not be recorded as `urn:li:person:self`: the
+    // placeholder names no real member, so a later publish (or the connected
+    // banner) would treat an unread identity as a concrete author. Record the
+    // empty string and let the publish path refuse rather than fabricate one.
+    let authorUrn = '';
     let memberEmail = '';
     let memberPicture = '';
 
@@ -5656,7 +6034,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       if (uData) {
         memberSub = uData.sub || '';
         memberName = observedAccountName(uData.name) ?? observedAccountName(`${uData.given_name || ''} ${uData.family_name || ''}`.trim());
-        authorUrn = memberSub ? `urn:li:person:${memberSub}` : 'urn:li:person:self';
+        authorUrn = memberSub ? `urn:li:person:${memberSub}` : '';
         memberEmail = uData.email || '';
         memberPicture = uData.picture || '';
       }
@@ -5707,13 +6085,18 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
       return;
     }
 
-    // Log security audit entry
-    addAuditLog(
+    // Log security audit entry. The row is a second durable write whose boolean
+    // was discarded, so a connect whose audit row never reached disk still
+    // rendered the green "Connected!" card. The connection is real (its
+    // credential persisted and read back above); only the audit row may be
+    // missing, and the card now says so instead of implying it was recorded.
+    const linkedInAuditRecorded = addAuditLog(
       `LinkedIn Personal Profile Connected via OAuth 2.0 (${memberDisplay} - ${authorUrn})`,
       1,
       'HUMAN_CONFIRMATION',
       'VERIFIED'
     );
+    const linkedInAuditNote = oauthConnectAuditNote('linkedin', linkedInAuditRecorded);
 
     res.send(`<!DOCTYPE html>
 <html>
@@ -5732,6 +6115,7 @@ app.get(['/api/auth/linkedin/callback', '/api/auth/linkedin/callback/'], async (
     <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
       Target: Personal Member Profile (Real UGC Posts API Ready)
     </div>
+    ${linkedInAuditNote ? `<div style="padding: 10px; background: rgba(0,0,0,0.35); border: 1px solid #b45309; border-radius: 8px; color: #fcd34d; font-size: 12px; line-height: 1.4; margin-bottom: 20px;">${linkedInAuditNote}</div>` : ''}
     <button onclick="window.close()" style="background: #16a34a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;">Done</button>
   </div>
   <script>
@@ -5817,7 +6201,7 @@ app.get('/api/auth/linkedin/status', (req: Request, res: Response) => {
       configured: true,
       authType: 'STATIC_ENV_TOKEN',
       name: 'Configured Personal Member (Env Token)',
-      authorUrn: staticUrn || 'urn:li:person:self',
+      authorUrn: resolveLinkedInAuthorUrn(staticUrn, undefined) ?? AUTHOR_URN_NOT_RECORDED_LABEL,
       hasClientId: Boolean(clientId),
       hasClientSecret: Boolean(clientSecret),
       redirectUri,
@@ -5870,14 +6254,22 @@ app.post('/api/auth/linkedin/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  addAuditLog(
+  // The credential removal is durable, but the audit row is a second durable
+  // write whose boolean used to be discarded: a row that never reached disk was
+  // still announced as a clean disconnect. Carry the result so the reply names
+  // the unrecorded entry instead of implying the security log has it.
+  const linkedInDisconnectAuditRecorded = addAuditLog(
     `LinkedIn Personal Profile Disconnected (${prevMember})`,
     1,
     'HUMAN_CONFIRMATION',
     'VERIFIED'
   );
 
-  res.json({ success: true, message: 'LinkedIn disconnected successfully.' });
+  res.json({
+    success: true,
+    auditRecorded: linkedInDisconnectAuditRecorded,
+    message: oauthDisconnectMessage('linkedin', linkedInDisconnectAuditRecorded),
+  });
 });
 
 // ------------------------------------------------------------------------------
@@ -6105,12 +6497,18 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
       return;
     }
 
-    addAuditLog(
+    // The security audit row is a second durable write whose boolean was
+    // discarded (same fake success as the LinkedIn callback): a connect whose
+    // audit row never reached disk still rendered the green "Connected!" card.
+    // The connection is real — only the audit row may be missing, and the card
+    // now names that instead of implying it was recorded.
+    const youTubeAuditRecorded = addAuditLog(
       `YouTube Channel Connected via OAuth 2.0 (${channelDisplay} - ${channelId || 'Authenticated'})`,
       1,
       'HUMAN_CONFIRMATION',
       'VERIFIED'
     );
+    const youTubeAuditNote = oauthConnectAuditNote('youtube', youTubeAuditRecorded);
 
     res.send(`<!DOCTYPE html>
 <html>
@@ -6129,6 +6527,7 @@ app.get(['/api/auth/youtube/callback', '/api/auth/youtube/callback/'], async (re
     <div style="padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; color: #86efac; font-size: 12px; margin-bottom: 20px;">
       Google Cloud & YouTube Data API v3 Ready
     </div>
+    ${youTubeAuditNote ? `<div style="padding: 10px; background: rgba(0,0,0,0.35); border: 1px solid #b45309; border-radius: 8px; color: #fcd34d; font-size: 12px; line-height: 1.4; margin-bottom: 20px;">${youTubeAuditNote}</div>` : ''}
     <button onclick="window.close()" style="background: #16a34a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;">Done</button>
   </div>
   <script>
@@ -6201,12 +6600,17 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
         const customUrl = item.snippet?.customUrl || '';
         const avatarUrl = item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '';
 
+        // The live probe verifies the channel, but the refreshed fields are only
+        // durable once they reach disk. Capture the write result so the reply
+        // carries it, instead of reporting a re-verified cache that a dropped
+        // write would lose on the next boot.
+        let profilePersisted = true;
         if (memoryState.youTubeConnection) {
           if (title) memoryState.youTubeConnection.channelTitle = title;
           memoryState.youTubeConnection.channelId = chId;
           memoryState.youTubeConnection.customUrl = customUrl;
           if (avatarUrl) memoryState.youTubeConnection.avatarUrl = avatarUrl;
-          persistMemory();
+          profilePersisted = persistMemory();
         }
 
         const conn = memoryState.youTubeConnection;
@@ -6214,6 +6618,12 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
         // canPublish therefore follows the recorded grant: true only when the
         // upload scope is on record, false when it is absent or unrecorded.
         const uploadScopeGranted = publishScopeGranted('youtube', conn?.scopes) === true;
+        // The account is genuinely verified against Google, but a refreshed
+        // profile cache that did not reach disk is not durable. Report that gap
+        // rather than a saved-connection claim the next boot would contradict.
+        const profileMessage = uploadScopeGranted
+          ? undefined
+          : `Channel confirmed read-only. The upload scope (${PLATFORM_PUBLISH_SCOPES.youtube}) is not on record for this connection, so publishing is not confirmed — reconnect to grant upload access.`;
         return res.json({
           connected: true,
           status: 'API_VERIFIED',
@@ -6230,9 +6640,10 @@ app.get('/api/auth/youtube/status', async (req: Request, res: Response) => {
           hasClientSecret: Boolean(clientSecret),
           hasApiKey: Boolean(apiKey),
           redirectUri,
-          message: uploadScopeGranted
-            ? undefined
-            : `Channel confirmed read-only. The upload scope (${PLATFORM_PUBLISH_SCOPES.youtube}) is not on record for this connection, so publishing is not confirmed — reconnect to grant upload access.`,
+          profilePersisted,
+          message: profilePersisted
+            ? profileMessage
+            : `The channel was verified against Google, but the refreshed profile could not be written to durable storage, so it is not cached. ${profileMessage ?? ''}`.trim(),
         });
       } else {
         const is403 = probeRes.status === 403;
@@ -6363,14 +6774,21 @@ app.post('/api/auth/youtube/disconnect', (req: Request, res: Response) => {
     });
   }
 
-  addAuditLog(
+  // Same rule as LinkedIn: the removal is durable, but the audit row is a
+  // separate durable write. Report whether it landed instead of implying the
+  // security log recorded a disconnection it may not have.
+  const youTubeDisconnectAuditRecorded = addAuditLog(
     `YouTube Channel Disconnected (${prevChannel})`,
     1,
     'HUMAN_CONFIRMATION',
     'VERIFIED'
   );
 
-  res.json({ success: true, message: 'YouTube disconnected successfully.' });
+  res.json({
+    success: true,
+    auditRecorded: youTubeDisconnectAuditRecorded,
+    message: oauthDisconnectMessage('youtube', youTubeDisconnectAuditRecorded),
+  });
 });
 
 app.get('/api/social/platforms', (req: Request, res: Response) => {
@@ -6383,7 +6801,18 @@ app.post('/api/social/platforms/test', async (req: Request, res: Response) => {
   if (!platform) return res.status(400).json({ error: 'Platform identifier is required' });
 
   const result = await testPlatformConnection(platform);
-  res.json(result);
+  // `persisted` is true only when the probe verified the account AND, when a
+  // profile cache write was expected, that write reached durable storage. The
+  // UI must not report a verified-and-saved profile for a write that failed,
+  // nor claim durable state for a probe that verified nothing: a
+  // NOT_CONFIGURED / AUTH_REQUIRED / ERROR / EXPIRED probe has no connection to
+  // persist, so it must not answer `persisted: true` for state it never wrote.
+  const persisted = result.success === true && result.profilePersisted !== false;
+  const message =
+    result.profilePersisted === false
+      ? `${result.message} The profile details could not be written to durable storage, so the verified account has not been cached.`
+      : result.message;
+  res.json({ ...result, persisted, message });
 });
 
 // Proactive Routines APIs
@@ -6537,14 +6966,27 @@ app.get('/api/backup', (req: Request, res: Response) => {
       errors: integrity.errors,
     });
   }
-  addAuditLog(
+  // The backup body is validated, but recording it is a durable write. This
+  // route appended a `VERIFIED` audit row and discarded the write result, so on
+  // a read-only volume it still answered `success: true, verified: true` while
+  // the record never reached `jarvis_memory.json` — the claim reverted on the
+  // next boot. `addAuditLog` now confirms the row on disk and returns false when
+  // it did not land; refuse to claim the backup instead of trusting the write.
+  const recorded = addAuditLog(
     `Memory backup created and round-trip verified (${backup.keyCount} keys)`,
     3,
     'HUMAN_OPERATOR',
     'VERIFIED'
   );
-  persistMemory();
-  res.json({ success: true, verified: true, backup });
+  if (!recorded) {
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      verified: false,
+      error: 'The backup record could not be written to durable storage; the backup was not recorded.',
+    });
+  }
+  res.json({ success: true, verified: true, persisted: true, backup });
 });
 
 /** Restore a previously created backup. */
@@ -6576,13 +7018,17 @@ app.post('/api/restore', (req: Request, res: Response) => {
     });
   }
 
-  addAuditLog(
+  // The audit row is a second durable write; its boolean was discarded, so a
+  // restore whose security record never reached disk still answered an
+  // unqualified success. Capture it and name the gap in the response.
+  const auditRecorded = addAuditLog(
     `Memory restored from backup: ${result.restoredKeys.length} keys replaced, ${result.preservedKeys.length} preserved`,
     4,
     'HUMAN_OPERATOR',
     'VERIFIED'
   );
-  res.json({ success: true, persisted: true, ...result });
+  const auditNote = restoreAuditNote(auditRecorded);
+  res.json({ success: true, persisted: true, auditRecorded, ...(auditNote ? { auditNote } : {}), ...result });
 });
 
 /** Deployment readiness check. Observes this process's real configuration. */
@@ -7110,6 +7556,11 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
   const verdict = classifyApprovalCreate(result);
 
   if (result.blockedByFinance) {
+    // The gateway registered the blocked request in the queue. Leaving it there
+    // means any later persist writes it to disk and the next boot resurrects a
+    // request the route reported as blocked. Drop it before answering.
+    removeActionRequest(result.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     return res.status(403).json({
       success: false,
       blocked: true,
@@ -7120,6 +7571,8 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
   }
 
   if (result.blockedByEmergency) {
+    removeActionRequest(result.request.id);
+    memoryState.permissionRequests = persistedActionRequests();
     return res.status(423).json({
       success: false,
       blocked: true,
@@ -7145,7 +7598,18 @@ app.post('/api/approvals/create', (req: Request, res: Response) => {
   // so a discarded write silently emptied it on the next restart and the
   // operator's later decision resolved nothing. The write result is honored — a
   // request that cannot reach disk is not reported as a staged approval.
-  const persisted = persistApprovalRegistry();
+  //
+  // `persistApprovalRegistry()` returns `persistMemory()`'s boolean, which is
+  // `true` whenever the serialized snapshot already matches `jarvis_memory.json`
+  // — even when no write is attempted (read-only volume, full disk). So the gate
+  // cannot rest on that boolean alone: the staged row is read back from disk
+  // with `actionRequestStatusOnDisk`, exactly as the telephony-stage,
+  // YouTube-draft and approvals-resolve routes do. Without the read-back an
+  // operator could be handed an approval card — and an `actionId` — for a
+  // request the next boot never sees.
+  const persisted =
+    persistApprovalRegistry() &&
+    actionRequestStatusOnDisk(result.request.id, 'PENDING_APPROVAL');
   if (!persisted) {
     // The write failed, so roll the live registry back to what it held before
     // this request. `persistApprovalRegistry` copies the request into
@@ -7404,8 +7868,14 @@ app.post('/api/tools/fs/write', (req: Request, res: Response) => {
   }
   const result = realFsWrite(filePath, content);
   if (result.success) {
-    pushAuditEntry({
-      id: `log-fs-${Date.now()}`,
+    // The file write already happened; the audit row that records it as VERIFIED
+    // is only trustworthy once it is durable. Push it, persist, and read the row
+    // back from disk rather than trusting `persistMemory()`'s boolean, which is
+    // true even when the file already held identical bytes. A row that does not
+    // reach storage is rolled back and the response states the record is not on
+    // disk instead of claiming a durable write.
+    const auditPersisted = recordDurableAuditRow({
+      id: `log-fs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: new Date().toISOString(),
       action: `Modified Workspace File: "${filePath}" (${result.bytesWritten} bytes)`,
       levelRequired: 3,
@@ -7414,7 +7884,17 @@ app.post('/api/tools/fs/write', (req: Request, res: Response) => {
       verificationStatus: 'VERIFIED',
       finalTruthState: 'VERIFIED',
     });
-    persistMemory();
+    return res.json({
+      ...result,
+      auditPersisted,
+      auditRecorded: auditPersisted,
+      ...(auditPersisted
+        ? {}
+        : {
+            error:
+              'The file was written, but the audit record could not be persisted to durable storage.',
+          }),
+    });
   }
   res.json(result);
 });
@@ -7424,8 +7904,11 @@ app.post('/api/tools/fs/delete', (req: Request, res: Response) => {
   if (!filePath) return res.status(400).json({ error: 'path is required' });
   const result = realFsDelete(filePath);
   if (result.success) {
-    pushAuditEntry({
-      id: `log-fs-${Date.now()}`,
+    // Same durability rule as the write route: the deletion happened, but the
+    // VERIFIED audit row is only real once it is on disk. Read it back and roll
+    // a phantom row back instead of trusting `persistMemory()`'s boolean.
+    const auditPersisted = recordDurableAuditRow({
+      id: `log-fs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: new Date().toISOString(),
       action: `Deleted Workspace Resource: "${filePath}"`,
       levelRequired: 3,
@@ -7434,7 +7917,17 @@ app.post('/api/tools/fs/delete', (req: Request, res: Response) => {
       verificationStatus: 'VERIFIED',
       finalTruthState: 'VERIFIED',
     });
-    persistMemory();
+    return res.json({
+      ...result,
+      auditPersisted,
+      auditRecorded: auditPersisted,
+      ...(auditPersisted
+        ? {}
+        : {
+            error:
+              'The resource was deleted, but the audit record could not be persisted to durable storage.',
+          }),
+    });
   }
   res.json(result);
 });
@@ -7669,11 +8162,112 @@ function getNightlyRuns(): NightlyRunRecord[] {
   return anyState.nightlyGithubRuns ?? [];
 }
 
-function recordNightlyRun(record: NightlyRunRecord) {
+/**
+ * True only when the memory file on disk carries a nightly run with `runId`.
+ * `persistMemory()` can return true without writing when the file already holds
+ * the identical bytes, so the manual-run route must read the record back rather
+ * than trust the boolean before reporting the run as recorded.
+ */
+function nightlyRunOnDisk(runId: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const runs: NightlyRunRecord[] = Array.isArray(onDisk.nightlyGithubRuns)
+      ? onDisk.nightlyGithubRuns
+      : [];
+    return runs.some((r) => r?.runId === runId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the per-day marker that gates the nightly GitHub check reached disk.
+ * `persistMemory()` reports true without writing when the file already holds the
+ * identical bytes, so the marker is read back before the scan proceeds; a marker
+ * that never landed would let the next boot re-run a check this process already
+ * logged as started (item 13).
+ */
+function nightlyMarkerOnDisk(date: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const state = onDisk?.schedulerState as { lastGithubNightlyRunDate?: string } | undefined;
+    return state?.lastGithubNightlyRunDate === date;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the per-goal per-day marker reached disk. The scheduled-autonomous
+ * loop stamps `schedulerState.lastAutonomousGoalRuns[goalId]` before running a
+ * goal; `persistMemory()` reports true without writing when the file already
+ * holds the identical bytes, so the marker is read back before the goal runs. A
+ * marker that never landed would let the next boot re-run a goal this process
+ * already recorded as run, next to a durable marker the store does not have
+ * (item 13).
+ */
+function autonomousGoalMarkerOnDisk(goalId: string, date: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const state = onDisk?.schedulerState as
+      | { lastAutonomousGoalRuns?: Record<string, string> }
+      | undefined;
+    return state?.lastAutonomousGoalRuns?.[goalId] === date;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Record a nightly-run history entry and report whether it reached disk. Like
+ * the audit log, `persistMemory()` can return true without writing, so the
+ * record is read back with `nightlyRunOnDisk`; when the write did not land the
+ * run is dropped from the in-memory history so the process never reports a run
+ * the next boot will not have.
+ */
+function recordNightlyRun(record: NightlyRunRecord): boolean {
   const anyState = memoryState as unknown as { nightlyGithubRuns?: NightlyRunRecord[] };
   const runs = [record, ...(anyState.nightlyGithubRuns ?? [])].slice(0, 30);
   anyState.nightlyGithubRuns = runs;
-  persistMemory();
+  if (persistMemory() && nightlyRunOnDisk(record.runId)) return true;
+  anyState.nightlyGithubRuns = runs.filter((r) => r.runId !== record.runId);
+  return false;
+}
+
+/**
+ * Whether one of the four routine scheduler run-markers reached disk. Each
+ * routine tick (Morning / Midday / Evening / Night) stamps its per-day marker
+ * and must not carry an external push — or claim the tick in the run log —
+ * until that marker is durable. `persistMemory()` reports true without writing
+ * when the file already holds the identical bytes, and fails outright on a
+ * read-only volume or a full disk; either way the marker would live only in
+ * memory, so it is read back before the tick is treated as run (item 13).
+ */
+type RoutineSchedulerMarker = 'lastMorningRunDate' | 'lastMiddayRunDate' | 'lastEveningRunDate' | 'lastNightRunDate';
+
+function routineMarkerOnDisk(marker: RoutineSchedulerMarker, date: string): boolean {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const state = onDisk?.schedulerState as Record<string, string | undefined> | undefined;
+    return state?.[marker] === date;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the memory store is present and parses. The nightly report used to
+ * assert "Memory Persistence: Synchronized" with no read of the store; this is
+ * the read-back that turns it into an observation, so an unwritable or absent
+ * store is reported as NOT VERIFIED (item 13).
+ */
+function memoryStoreReadableOnDisk(): boolean {
+  try {
+    JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Reports whether GitHub automation is usable, without making a network call.
@@ -7855,8 +8449,13 @@ app.post('/api/github/fix-plan', async (req: Request, res: Response) => {
       coverage
     );
 
+    // `success` must follow the plan's own receipt. `reconcileFixPlanWithCoverage`
+    // downgrades the receipt to UNVERIFIED when the scan never covered the scope,
+    // but this route used to answer `success: true` regardless — so an unscanned
+    // scope read as a successful plan while the receipt inside the same body said
+    // otherwise. Report the receipt's verdict so the two cannot disagree.
     res.json({
-      success: true,
+      success: plan.receipt.verified,
       outcome: plan.receipt.outcome,
       nothingToDo: plan.nothingToDo,
       highestRisk: plan.highestRisk,
@@ -7910,14 +8509,33 @@ app.post('/api/github/approvals/:id/decision', (req: Request, res: Response) => 
     });
   }
 
-  addAuditLog(
+  // The decision is only real once its audit row is durable. `addAuditLog`
+  // routes through the durable writer, which reads the row back from disk
+  // (`persistMemory()` can return true without writing when the file already
+  // holds identical bytes) and drops a phantom row on a non-durable write. The
+  // route previously discarded that verdict and always answered
+  // `{ success: true, recorded: true }`, so a read-only volume or full disk
+  // reported a recorded human approval the next boot would not have. Gate the
+  // success reply on the durable write.
+  const auditRecorded = addAuditLog(
     `${approved ? 'APPROVED' : 'REJECTED'} GitHub automation action "${updated!.summary}" (${updated!.id}) by ${decidedBy}`,
     4,
     decidedBy.trim(),
     approved ? 'VERIFIED' : 'BLOCKED'
   );
 
-  res.json({ success: true, recorded: true, outcome: verdict.outcome, approval: updated });
+  if (!auditRecorded) {
+    return res.status(500).json({
+      success: false,
+      recorded: false,
+      outcome: verdict.outcome,
+      persisted: false,
+      approval: updated,
+      error: 'The decision could not be written to durable storage; it was not recorded.',
+    });
+  }
+
+  res.json({ success: true, recorded: true, persisted: true, outcome: verdict.outcome, approval: updated });
 });
 
 // Reports the nightly schedule and recent runs.
@@ -7938,18 +8556,45 @@ app.get('/api/github/nightly', (_req: Request, res: Response) => {
 app.post('/api/github/nightly/run', async (_req: Request, res: Response) => {
   try {
     const result = await runNightlyCheck({ github: githubFetchOptions() });
-    recordNightlyRun(result.record);
+    // Consume the durability verdict: on a read-only volume or a full disk the
+    // run-history write never lands, so the caller must not be told the run was
+    // recorded when the next boot would not find it.
+    const runRecorded = recordNightlyRun(result.record);
 
-    addAuditLog(
-      `GitHub nightly check ${result.record.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
+    // The audit row is the durable evidence that the check ran. `addAuditLog()`
+    // returns the read-back verdict (`recordDurableAuditRow`), which the route
+    // discarded: on a read-only volume or full disk the row never reached disk
+    // while the response still presented the run as logged, so a later Security
+    // Matrix read would show no trace of it. Capture the verdict and report it,
+    // alongside the run-record verdict, so the caller can tell a run whose
+    // evidence survived from one whose did not.
+    const auditRecorded = addAuditLog(
+      `GitHub nightly check ${result.receipt.outcome}: ${result.record.scannedRepositories} scanned, ${result.record.reposWithFailingCi.length} with failing CI, ${result.record.plannedSteps} planned step(s)`,
       1,
       'AUTOMATED_SCHEDULE',
-      result.record.outcome === 'COMPLETED' ? 'VERIFIED' : 'FAILED'
+      nightlyAuditBadge(result.receipt.outcome)
     );
 
-    res.status(result.receipt.verified || result.record.outcome === 'COMPLETED' ? 200 : 502).json({
+    // Surface the same observed line the scheduler would record, so a manual run
+    // and a scheduled one leave the same durable, non-overstated trace.
+    const logEntry = nightlyRunLogLine(
+      {
+        receiptOutcome: result.receipt.outcome,
+        scannedRepositories: result.record.scannedRepositories,
+        unreachableRepositories: result.record.unreachableRepositories,
+        reposWithFailingCi: result.record.reposWithFailingCi.length,
+        plannedSteps: result.record.plannedSteps,
+      },
+      { recorded: runRecorded, auditRecorded }
+    );
+    schedulerRunLog.unshift(logEntry);
+
+    res.status(result.receipt.verified ? 200 : 502).json({
       success: result.record.outcome === 'COMPLETED',
       outcome: result.receipt.outcome,
+      recorded: runRecorded,
+      auditRecorded,
+      runLogEntry: logEntry,
       record: result.record,
       plan: result.plan
         ? {
@@ -8059,8 +8704,11 @@ ${transcript.slice(0, 35000)}
         throw new Error('Gemini returned an empty summary');
       }
 
-      pushAuditEntry({
-        id: `log-yt-${Date.now()}`,
+      // The VERIFIED audit row is only real once it is on disk. Route it
+      // through the durable writer, which reads the row back and drops a phantom
+      // row rather than trusting `persistMemory()`'s boolean alone.
+      recordDurableAuditRow({
+        id: `log-yt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         timestamp: new Date().toISOString(),
         action: `🎥 Summarized YouTube Video: "${videoInfo.title}" (${videoInfo.channel}) via Gemini 2.5 Flash`,
         levelRequired: 2,
@@ -8069,7 +8717,6 @@ ${transcript.slice(0, 35000)}
         verificationStatus: 'VERIFIED',
         finalTruthState: 'VERIFIED',
       });
-      persistMemory();
 
       return result;
     } catch (geminiErr: any) {
@@ -8090,8 +8737,12 @@ ${transcript.slice(0, 35000)}
     geminiFailed: geminiConfigured,
   });
 
-  pushAuditEntry({
-    id: `log-yt-${Date.now()}`,
+  // The audit row is only real once it is on disk. The extractive fallback used
+  // to append the row and then discard the persist result, so a dropped write
+  // left the running process holding a VERIFIED row the next boot did not have.
+  // The durable writer reads the row back and drops the phantom.
+  recordDurableAuditRow({
+    id: `log-yt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     timestamp: new Date().toISOString(),
     action: result.source === 'extractive'
       ? `🎥 Extracted key lines for YouTube video: "${videoInfo.title}" (no AI synthesis applied)`
@@ -8106,7 +8757,6 @@ ${transcript.slice(0, 35000)}
         : 'MISSING_CREDENTIALS',
     finalTruthState: result.verificationStatus === 'VERIFIED' ? 'VERIFIED' : 'PARTIAL',
   });
-  persistMemory();
 
   return result;
 }
@@ -8267,7 +8917,55 @@ export interface ScheduledGoalSpec {
  * Nothing runs on a schedule until the operator registers something.
  */
 let scheduledGoals: ScheduledGoalSpec[] = [];
+// Bounded run history. The most recent records are also mirrored into
+// `memoryState.schedulerState.scheduledGoalRuns` so a restart does not erase the
+// evidence of what the scheduler actually ran (item 13).
 const scheduledGoalRuns: ScheduledGoalRecord[] = [];
+
+/**
+ * Read the scheduled-goal run history back from the memory file. The per-day
+ * marker makes a goal run at most once a day, so the history is small and is
+ * restored on boot rather than only appended to in memory.
+ */
+function scheduledGoalRunsOnDisk(): ScheduledGoalRecord[] | null {
+  try {
+    const onDisk = JSON.parse(fs.readFileSync(MEMORY_FILE_PATH, 'utf-8'));
+    const rows = onDisk?.schedulerState?.scheduledGoalRuns;
+    return Array.isArray(rows) ? (rows as ScheduledGoalRecord[]) : [];
+  } catch {
+    return null;
+  }
+}
+
+/** True only when this exact run record is present in the memory file on disk. */
+function scheduledGoalRunOnDisk(record: ScheduledGoalRecord): boolean {
+  const rows = scheduledGoalRunsOnDisk();
+  if (!rows) return false;
+  return rows.some(
+    (r) => r?.goalId === record.goalId && r?.ranDate === record.ranDate && r?.at === record.at
+  );
+}
+
+/**
+ * Append a scheduled-goal run record and report whether it is durable.
+ *
+ * The record is the only evidence that a run happened. An in-memory-only record
+ * is erased by the next restart while the per-day marker keeps the goal from
+ * running again, so the run would vanish from the history entirely. The record
+ * is mirrored into `memoryState.schedulerState.scheduledGoalRuns` and trusted
+ * only after it is read back from disk. When the write does not land the record
+ * is removed from memory so the API never shows a run the durable store cannot
+ * confirm.
+ */
+function recordScheduledGoalRun(record: ScheduledGoalRecord): boolean {
+  scheduledGoalRuns.unshift(record);
+  if (scheduledGoalRuns.length > 100) scheduledGoalRuns.length = 100;
+  memoryState.schedulerState.scheduledGoalRuns = scheduledGoalRuns.slice();
+  if (persistMemory() && scheduledGoalRunOnDisk(record)) return true;
+  scheduledGoalRuns.shift();
+  memoryState.schedulerState.scheduledGoalRuns = scheduledGoalRuns.slice();
+  return false;
+}
 
 /** Minimal shape check for a persisted goal, so a corrupt file cannot crash boot. */
 function isPersistedGoal(value: unknown): value is ScheduledGoalSpec {
@@ -8294,6 +8992,14 @@ function loadScheduledGoals(): void {
   for (const goal of scheduledGoals) byId.set(goal.id, goal);
   scheduledGoals = Array.from(byId.values());
   memoryState.schedulerState.scheduledGoals = scheduledGoals;
+
+  // Restore the run history too. It is the only record that a scheduled goal
+  // ran, so losing it on restart would leave a run that happened invisible.
+  const runsOnDisk = scheduledGoalRunsOnDisk();
+  if (runsOnDisk) {
+    scheduledGoalRuns.length = 0;
+    for (const run of runsOnDisk.slice(0, 100)) scheduledGoalRuns.push(run);
+  }
 }
 
 /** Persist the current registry. Returns whether the state actually reached disk. */
@@ -8390,13 +9096,18 @@ app.post('/api/autonomous/goals/run', async (req: Request, res: Response) => {
   });
   if (goalRunHistory.length > 50) goalRunHistory.length = 50;
 
-  addAuditLog(
+  // The completion audit row is the durable record of the run. `addAuditLog`
+  // routes through the durable writer and returns whether the row reached disk;
+  // this route used to append the row, discard that verdict, and call a bare
+  // `persistMemory()` whose boolean nobody read — so a write that never landed
+  // (read-only volume, full disk) was still reported to the caller as recorded.
+  // Surface the durability of the audit row instead of hiding it.
+  const auditPersisted = addAuditLog(
     `Autonomous goal "${goal}" finished ${result.outcome} (${result.steps.filter((s) => s.status === 'DONE').length}/${result.steps.length} steps)`,
     2,
     req.body?.approver ? `HUMAN:${String(req.body.approver).slice(0, 40)}` : 'AUTONOMOUS',
     result.outcome === 'VERIFIED' ? 'VERIFIED' : result.outcome === 'FAILED' ? 'FAILED' : 'PENDING'
   );
-  persistMemory();
 
   return res.json({
     success: result.verified,
@@ -8404,6 +9115,7 @@ app.post('/api/autonomous/goals/run', async (req: Request, res: Response) => {
     outcome: result.outcome,
     verified: result.verified,
     awaitingApproval: result.awaitingApproval ?? false,
+    persisted: auditPersisted,
     steps: result.steps,
     audit: result.audit,
     receipt: result.receipt,
@@ -8499,13 +9211,27 @@ app.post('/api/autonomous/schedule', (req: Request, res: Response) => {
     });
   }
 
-  addAuditLog(
+  // The audit row is part of the registration's durable record. A row that
+  // never reached disk means the task's provenance is gone on the next boot, so
+  // report failure and roll the registry entry back rather than claiming a
+  // registration whose audit trail cannot be kept.
+  const auditPersisted = addAuditLog(
     `Scheduled autonomous task "${name}" (${id}) ${existing >= 0 ? 'updated' : 'registered'} to run daily at minute ${atMinuteOfDay}`,
     3,
     'HUMAN_OPERATOR',
     'VERIFIED'
   );
-  persistMemory();
+  if (!auditPersisted) {
+    if (existing >= 0 && previous) scheduledGoals[existing] = previous;
+    else if (existing < 0) scheduledGoals.pop();
+    memoryState.schedulerState.scheduledGoals = scheduledGoals;
+    persistScheduledGoals();
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'The registration audit trail could not be written to durable storage; the task was not registered.',
+    });
+  }
 
   res.status(existing >= 0 ? 200 : 201).json({ success: true, persisted: true, goal: spec });
 });
@@ -8528,9 +9254,17 @@ app.delete('/api/autonomous/schedule/:id', (req: Request, res: Response) => {
       error: 'Scheduled task could not be removed from durable storage; it is still registered.',
     });
   }
-  addAuditLog(`Scheduled autonomous task "${removed.name}" (${removed.id}) removed`, 3, 'HUMAN_OPERATOR', 'VERIFIED');
-  persistMemory();
-  res.json({ success: true, persisted: true, removed: removed.id });
+  // The removal itself is already durable (checked above). The audit row is the
+  // provenance for it; when that row cannot reach disk the removal still holds,
+  // so report `auditRecorded` truthfully rather than dropping the boolean and
+  // implying the trail was written.
+  const auditRecorded = addAuditLog(
+    `Scheduled autonomous task "${removed.name}" (${removed.id}) removed`,
+    3,
+    'HUMAN_OPERATOR',
+    'VERIFIED'
+  );
+  res.json({ success: true, persisted: true, auditRecorded, removed: removed.id });
 });
 
 // Mobile Personal Status & Morning Briefing Telemetry Endpoints
@@ -8607,29 +9341,20 @@ Keep it respectful, crisp (3-5 short sentences), in authentic conversational Hin
     }
 
     // Default bilingual briefing fallback. Reports only what the device actually
-    // sent; absent fields are named as unavailable instead of defaulted.
-    const batteryLvl = mobileData?.battery?.levelPercent;
-    const temp = mobileData?.weather?.temperatureC;
-    const notifs = mobileData?.notifications?.unreadCount;
-    const cal = mobileData?.calendar?.todayEventsCount;
-    const mail = mobileData?.email?.unreadCount;
-    const anyTelemetry = [batteryLvl, temp, notifs, cal, mail].some((v) => v != null);
-
-    if (!anyTelemetry) {
-      const spokenText = language === 'hindi'
-        ? `सुप्रभात सर। इस समय कोई मोबाइल डिवाइस जुड़ा नहीं है, इसलिए बैटरी, मौसम, notifications, कैलेंडर और ईमेल का डेटा उपलब्ध नहीं है।`
-        : `Good morning, Sir. No mobile device is currently connected, so battery, weather, notification, calendar and email data are unavailable.`;
-      return res.json({
-        success: true,
-        spokenText,
-        source: 'autonomous_local_engine',
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const spokenText = language === 'hindi'
-      ? `सुप्रभात सर। ${batteryLvl != null ? `आपके मोबाइल की बैटरी ${batteryLvl} प्रतिशत है। ` : 'बैटरी डेटा उपलब्ध नहीं है। '}${temp != null ? `तापमान ${temp} डिग्री है। ` : 'मौसम डेटा उपलब्ध नहीं है। '}${notifs != null ? `${notifs} notifications, ` : ''}${cal != null ? `${cal} शेड्यूल्ड मीटिंग्स, ` : ''}${mail != null ? `और ${mail} नए ईमेल्स पेंडिंग हैं।` : ''}`
-      : `Good morning, Sir. ${batteryLvl != null ? `Your device battery is at ${batteryLvl} percent. ` : 'Battery data is unavailable. '}${temp != null ? `The temperature is ${temp} degrees. ` : 'Weather data is unavailable. '}${notifs != null ? `${notifs} notifications, ` : ''}${cal != null ? `${cal} calendar events, ` : ''}${mail != null ? `and ${mail} emails are waiting.` : ''}`;
+    // sent; absent fields are named as unavailable instead of defaulted. A
+    // snapshot that carried none of the fields this server reads must not be
+    // read as "no device is connected" — that is a connectivity claim nobody
+    // observed here.
+    const spokenText = briefingFallbackText(
+      {
+        batteryLevelPercent: mobileData?.battery?.levelPercent,
+        temperatureC: mobileData?.weather?.temperatureC,
+        unreadNotifications: mobileData?.notifications?.unreadCount,
+        todayEvents: mobileData?.calendar?.todayEventsCount,
+        unreadEmails: mobileData?.email?.unreadCount,
+      },
+      language
+    );
 
     res.json({
       success: true,
@@ -9947,6 +10672,31 @@ app.post('/api/telephony/incoming', async (req: Request, res: Response) => {
     return res.json({ success: false, error: 'EMERGENCY_STOP_ACTIVE', message: 'Autonomous call answering suspended.' });
   }
 
+  // Autonomous Inbound Answering Permission (Section D).
+  // The permission matrix is consulted before a session exists, because the
+  // decision this gate makes is whether the line is answered at all. `DENIED`
+  // and an undecided `ASK`/`NOT_CONFIGURED` both refuse; only an explicit
+  // `GRANTED` answers. Previously this route never read the permission, so an
+  // operator who revoked it still had JARVIS pick up the phone.
+  const inboundStore = resolvePhonePermissionStore();
+  const inboundPermissions = inboundStore ? inboundStore.load() : loadPhonePermissions();
+  const inboundVerdict = inboundAnswerGate(inboundPermissions);
+  const wantsTwiml = Boolean(
+    req.headers['content-type']?.includes('application/x-www-form-urlencoded') || req.body.CallSid,
+  );
+  if (!inboundVerdict.allowed) {
+    addAuditLog(
+      `Inbound call answering refused: ${inboundVerdict.reason}`,
+      1,
+      'PERMISSION_MATRIX',
+      'BLOCKED',
+    );
+    if (wantsTwiml) {
+      return res.status(403).type('text/xml').send(inboundAnswerRejectionTwiML(inboundVerdict));
+    }
+    return res.status(403).json(inboundAnswerRejectionBody(inboundVerdict));
+  }
+
   const rawFrom = resolveRawNumber(req.body.From || req.body.callerNumber);
   const rawTo = resolveRawNumber(req.body.To || req.body.recipientNumber);
   const isSimulated = Boolean(req.body.isSimulated || req.headers['x-telephony-simulation'] === 'true');
@@ -10054,6 +10804,12 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
     });
     const verdict = classifyOutboundStage(actionReq);
     if (!verdict.success) {
+      // The gateway still registered the request (finance/emergency blocks
+      // unshift a terminal entry). A blocked dial must not linger in the queue:
+      // a later persist for any other reason writes it to disk and the next boot
+      // re-offers it as pending. Drop the phantom request before answering.
+      removeActionRequest(actionReq.request.id);
+      memoryState.permissionRequests = persistedActionRequests();
       return res.status(409).json({
         success: false,
         staged: false,
@@ -10078,8 +10834,30 @@ app.post('/api/telephony/outbound/stage', (req: Request, res: Response) => {
 
     // The staged Level-4 action must be durable; otherwise the approval card the
     // operator later acts on has no matching request after a restart. A write
-    // that cannot reach disk is named in `persisted`.
-    const persisted = persistApprovalRegistry();
+    // that cannot reach disk is named in `persisted`. A registry write can report
+    // true without writing when the memory file already holds the identical
+    // bytes, so this cannot be trusted alone: the approval row is read back from
+    // disk with `actionRequestStatusOnDisk`. When it did not land the pending
+    // request is withdrawn from the session manager and the gateway registry, and
+    // the route answers `staged: false` — never a staged call that a restart
+    // would forget, and never an approval card for a request that is not on disk.
+    const persisted =
+      persistApprovalRegistry() &&
+      actionRequestStatusOnDisk(actionReq.request.id, 'PENDING_APPROVAL');
+    if (!persisted) {
+      TelephonySessionManager.cancelOutboundRequest(request.id);
+      removeActionRequest(actionReq.request.id);
+      memoryState.permissionRequests = persistedActionRequests();
+      return res.status(500).json({
+        success: false,
+        staged: false,
+        persisted: false,
+        outcome: 'NOT_DURABLE',
+        actionId: null,
+        message:
+          'The outbound call request could not be written to durable storage; it was not staged.',
+      });
+    }
 
     res.json({
       success: true,
@@ -10389,6 +11167,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     // In-app voice-output level, mirroring the UI slider. Not a system mixer
     // value — `audioDispatchTruth` never reports the host output level as changed.
     let voiceOutputLevel = 1.0;
+    // Set true only when a branch actually ran persistMemory() AND it returned
+    // true. The generic reply's "logged to local memory" claim is gated on it, so
+    // a read-only volume or full disk cannot produce a false durability claim.
+    let replyPersisted = false;
 
     switch (intentData.intent) {
       case 'finance_blocked': {
@@ -10552,14 +11334,16 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const targetUrl = intentData.actionPayload?.url || message;
         const videoId = intentData.actionPayload?.videoId || extractYouTubeVideoId(targetUrl);
         const summaryRes = await summarizeYouTubeVideoCore({ url: targetUrl, videoId: videoId || undefined });
-        if (summaryRes.success && summaryRes.videoInfo) {
+        // Gate on real metadata, not `success`. A result with `source: 'none'`
+        // carries `success: false` but still has the video title and link; the
+        // `hasSummary` check below decides whether any work is credited.
+        if ('videoInfo' in summaryRes) {
           const notice = summaryRes.notice ? `\n\n${summaryRes.notice}` : '';
-          // `success` only proves the video metadata was fetched — not that a
-          // summary was produced. A video that exposes no transcript and no
-          // description comes back `success: true` with an empty summary
-          // (`source: 'none'`), so crediting it advanced the user-visible
-          // "Autonomous Actions Executed" counter for a summarization that
-          // never happened. Only a non-empty summary is executed work.
+          // A video that exposes no transcript and no description comes back
+          // with an empty summary (`source: 'none'`, `success: false`), so
+          // crediting it advanced the user-visible "Autonomous Actions
+          // Executed" counter for a summarization that never happened. Only a
+          // non-empty summary is executed work.
           const hasSummary = Boolean(summaryRes.summary && summaryRes.summary.trim());
           spokenResponse = hasSummary
             ? `YouTube video "${summaryRes.videoInfo.title}" by ${summaryRes.videoInfo.channel} (${summaryRes.videoInfo.durationFormatted}).${notice}\n\n${summaryRes.summary}`
@@ -10781,7 +11565,13 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           } else {
             spokenResponse = `I read your name as ${verdict.name}, but I could not write it to durable storage, so it is not saved. Please try again.`;
           }
-          actionExecuted = true;
+          // The reply already follows the durable outcome; the executed flag must
+          // match it. A name only held in this process's memory (a failed
+          // persistMemory()) was not recorded, so crediting `true` advanced the
+          // user-visible "Autonomous Actions Executed" counter for a write that
+          // never happened. Mirrors the `create_file` case (`actionExecuted =
+          // persisted`).
+          actionExecuted = persisted;
           actionDetail = { type: 'set_name', title: persisted ? 'Memory Updated' : 'Memory Write Failed', payload: { name: verdict.name, persisted } };
         } else {
           spokenResponse = language.startsWith('hi')
@@ -10995,7 +11785,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           memoryState.notes = memoryState.notes.filter((n) => n.id !== newNote.id);
           spokenResponse = `I could not write your note to durable storage, so it was not saved. Please try again.`;
         }
-        actionExecuted = true;
+        // A note that could not be persisted was rolled back above, so no note
+        // exists. Crediting `true` here advanced the user-visible "Autonomous
+        // Actions Executed" counter for a save that never happened; the executed
+        // flag must follow the durable outcome exactly as the spoken reply does.
+        actionExecuted = persisted;
         actionDetail = { type: 'create_file', title: persisted ? 'Saved Note' : 'Note Write Failed', payload: { ...newNote, persisted } };
         break;
       }
@@ -11164,9 +11958,11 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
             spokenResponse = result.text?.trim() || (isHi ? 'आपकी सेवा में सदैव तत्पर, सर।' : 'At your service, Sir.');
           } catch (geminiErr: any) {
             console.error('Gemini error:', geminiErr);
+            // This branch has no durable-write call; the transcript persist below
+            // decides whether the "logged" wording is truthful.
             spokenResponse = isHi
-              ? `क्लाउड एआई सेवा में अस्थायी व्यवधान है। संदेश दर्ज कर लिया गया है: "${message}"।`
-              : `Cloud AI service encountered a temporary error. Logged command: "${message}".`;
+              ? `क्लाउड एआई सेवा में अस्थायी व्यवधान है। संदेश प्राप्त हुआ: "${message}"।`
+              : `Cloud AI service encountered a temporary error. Received command: "${message}".`;
           }
         } else {
           const userLower = message.toLowerCase().trim();
@@ -11197,9 +11993,12 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
               ? `आपकी सेवा में सदैव तत्पर, ${memoryState.name || 'सर'}।`
               : `Always a pleasure to assist, ${memoryState.name || 'Sir'}.`;
           } else {
+            // The "logged to local memory" claim is only true once the transcript
+            // persist below succeeds. The placeholder is swapped for the honest
+            // failure wording when it does not.
             spokenResponse = isHi
-              ? `कमांड प्राप्त हुई: "${message}"। डेटा स्थानीय मेमोरी में सुरक्षित है।`
-              : `Command acknowledged: "${message}". Logged to local memory. You can ask me to check projects, calculate equations, review weather, or manage social posts.`;
+              ? `कमांड प्राप्त हुई: "${message}"। {{MEMORY_SAVED}}`
+              : `Command acknowledged: "${message}". {{MEMORY_SAVED}} You can ask me to check projects, calculate equations, review weather, or manage social posts.`;
           }
         }
         break;
@@ -11219,7 +12018,25 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
       { role: 'jarvis' as const, content: spokenResponse, timestamp: new Date().toISOString() },
     ].slice(-40);
 
-    persistMemory();
+    replyPersisted = persistMemory();
+
+    // The generic branch left a placeholder where its durability claim belongs.
+    // Swap in the truthful wording now that the write result is known, so a
+    // failed write is never reported as a save.
+    if (spokenResponse.includes('{{MEMORY_SAVED}}')) {
+      const replyIsHi =
+        language.startsWith('hi') ||
+        /[\u0900-\u097F]/.test(message) ||
+        message.toLowerCase().includes('kya') ||
+        message.toLowerCase().includes('hai');
+      const savedText = replyIsHi
+        ? 'यह वार्तालाप स्थानीय मेमोरी में सुरक्षित है।'
+        : 'Logged to local memory.';
+      const notSavedText = replyIsHi
+        ? 'यह वार्तालाप स्थानीय मेमोरी में सुरक्षित नहीं हो सका, इसलिए इसे सहेजा नहीं गया है।'
+        : 'This conversation could not be written to durable storage, so it was not saved.';
+      spokenResponse = spokenResponse.replace('{{MEMORY_SAVED}}', replyPersisted ? savedText : notSavedText);
+    }
 
     res.json({
       reply: spokenResponse,

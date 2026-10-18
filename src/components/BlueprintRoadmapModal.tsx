@@ -18,6 +18,7 @@ import {
   Check,
   ExternalLink,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
 import { BlueprintPhase } from '../types';
 import {
@@ -28,6 +29,8 @@ import {
   blueprintFooterLabel,
   blueprintPhaseCountLabel,
 } from '../utils/blueprintTruth';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import { blueprintToggleOutcome } from '../utils/hardening/blueprintToggleOutcomeTruth';
 
 interface Props {
   isOpen: boolean;
@@ -67,10 +70,14 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
   const [reportMarkdown, setReportMarkdown] = useState<string>('');
   const [showFullReport, setShowFullReport] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   // False until /api/blueprint actually answered with phases. A failed request
   // must not leave the progress figures rendering as measured zeros.
   const [blueprintRead, setBlueprintRead] = useState<boolean>(false);
+  // The last toggle verdict worth speaking. A refused tick is shown here so a
+  // click that changed nothing never looks like it worked.
+  const [toggleNotice, setToggleNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -101,18 +108,24 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
   };
 
   const handleToggleDeliverable = async (phaseId: number, itemIndex: number) => {
+    setToggleNotice(null);
     try {
       const res = await fetch('/api/blueprint/toggle-item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phaseId, itemIndex }),
       });
-      const data = await res.json();
-      if (data.success) {
+      // The route answers JSON for both success and refusal, so read the body
+      // regardless of status. A refused tick (malformed body → 400, or a
+      // non-durable write rolled back → 500) must be spoken, not swallowed.
+      const data = await res.json().catch(() => null);
+      const outcome = blueprintToggleOutcome(data);
+      setToggleNotice({ tone: outcome.tone, message: outcome.message });
+      if (outcome.refresh) {
         fetchBlueprint();
       }
-    } catch (err) {
-      console.warn('Toggle deliverable failed:', err);
+    } catch (err: any) {
+      setToggleNotice({ tone: 'error', message: `Toggle request failed: ${err?.message || 'unknown error'}` });
     }
   };
 
@@ -127,12 +140,11 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
     }
   };
 
-  const handleCopyReport = () => {
-    if (reportMarkdown) {
-      navigator.clipboard.writeText(reportMarkdown);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const handleCopyReport = async () => {
+    const outcome = await copyToClipboard(reportMarkdown, 'The blueprint report');
+    setCopyOutcome(outcome);
+    setCopied(outcome.copied);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (!isOpen) return null;
@@ -217,10 +229,17 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
               <div className="flex gap-2">
                 <button
                   onClick={handleCopyReport}
+                  title={copyOutcome?.detail || 'Copy Markdown'}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 flex items-center gap-1"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? 'Copied!' : 'Copy Markdown'}
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : copyOutcome?.tone === 'warn' ? (
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  {copied ? 'Copied!' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy Markdown'}
                 </button>
                 <button
                   onClick={() => setShowFullReport(false)}
@@ -305,6 +324,20 @@ export const BlueprintRoadmapModal: React.FC<Props> = ({ isOpen, onClose, onRunC
                     <span>Phase Deliverables & Verification Checklist</span>
                     <span className="text-[11px] text-cyan-400">Click to toggle</span>
                   </h4>
+
+                  {toggleNotice && (
+                    <div
+                      role="status"
+                      className={`mb-3 px-3 py-2 rounded-lg border text-xs font-mono ${
+                        toggleNotice.tone === 'error'
+                          ? 'bg-rose-950/40 border-rose-800/60 text-rose-200'
+                          : 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200'
+                      }`}
+                    >
+                      {toggleNotice.tone === 'error' ? '⚠ ' : '✓ '}
+                      {toggleNotice.message}
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-2">
                     {currentPhase.deliverables.map((item, idx) => (

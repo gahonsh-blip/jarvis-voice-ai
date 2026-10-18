@@ -66,6 +66,62 @@ describe('applyPhonePermissionUpdate never claims a change without a store', () 
     // The returned view is the store's, not the caller's local merge.
     expect(store.load().PHONE_RECORDING).toBe('GRANTED');
   });
+
+  it('refuses to claim applied when the store silently drops the write', () => {
+    // A store that accepts `save()` without throwing but keeps nothing — a
+    // read-only mount, a full disk, or a wrapper that swallows the error. The
+    // old code answered `applied: true` here while `permissions` reverted.
+    const store = {
+      load: () => ({ ...DEFAULT_PHONE_PERMISSIONS }),
+      save: (_p: Record<PhonePermissionKey, PhonePermissionState>) => {
+        /* silently drops */
+      },
+    };
+    const v = applyPhonePermissionUpdate(store, DEFAULT_PHONE_PERMISSIONS, {
+      PHONE_OUTBOUND_CALL: 'GRANTED',
+    });
+    expect(v.applied).toBe(false);
+    expect(v.outcome).toBe('NOT_PERSISTED');
+    expect(v.permissions.PHONE_OUTBOUND_CALL).toBe('ASK');
+    expect(v.message).toMatch(/not saved/i);
+  });
+
+  it('refuses to claim applied when the store throws on save', () => {
+    const store = {
+      load: () => ({ ...DEFAULT_PHONE_PERMISSIONS }),
+      save: () => {
+        throw new Error('EACCES: read-only file system');
+      },
+    };
+    const v = applyPhonePermissionUpdate(store, DEFAULT_PHONE_PERMISSIONS, {
+      PHONE_RECORDING: 'GRANTED',
+    });
+    expect(v.applied).toBe(false);
+    expect(v.outcome).toBe('NOT_PERSISTED');
+    expect(v.permissions.PHONE_RECORDING).toBe('DENIED');
+    expect(v.message).toMatch(/read-only file system/);
+  });
+
+  it('refuses to claim applied when the store keeps only part of the change', () => {
+    // The store holds one requested key but drops the other. Reporting
+    // `applied: true` would tell the operator both Level-4 grants landed.
+    let held: Record<PhonePermissionKey, PhonePermissionState> = { ...DEFAULT_PHONE_PERMISSIONS };
+    const store = {
+      load: () => ({ ...held }),
+      save: (p: Record<PhonePermissionKey, PhonePermissionState>) => {
+        held = { ...DEFAULT_PHONE_PERMISSIONS, PHONE_PRIVATE_DATA_ACCESS: p.PHONE_PRIVATE_DATA_ACCESS };
+      },
+    };
+    const v = applyPhonePermissionUpdate(store, DEFAULT_PHONE_PERMISSIONS, {
+      PHONE_RECORDING: 'GRANTED',
+      PHONE_PRIVATE_DATA_ACCESS: 'GRANTED',
+    });
+    expect(v.applied).toBe(false);
+    expect(v.outcome).toBe('NOT_PERSISTED');
+    expect(v.permissions.PHONE_RECORDING).toBe('DENIED');
+    expect(v.permissions.PHONE_PRIVATE_DATA_ACCESS).toBe('GRANTED');
+    expect(v.message).toMatch(/PHONE_RECORDING/);
+  });
 });
 
 const JARVIS_PORT = 4759;

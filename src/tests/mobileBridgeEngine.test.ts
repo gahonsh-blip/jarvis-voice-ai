@@ -369,4 +369,139 @@ describe('Mobile Bridge Engine + Notification Privacy Suite', () => {
       assert.equal(maskCallerId(undefined), 'unknown number');
     });
   });
+
+  describe('8. Storage writes report real durability (zero fake success)', () => {
+    it('enqueuePendingEvent returns true only when the queue write persisted', () => {
+      installMemoryStorage();
+      assert.equal(enqueuePendingEvent(makeCall() as any), true);
+    });
+
+    it('updatePendingEventStatus returns false for an unknown event id', () => {
+      installMemoryStorage();
+      assert.equal(updatePendingEventStatus('does-not-exist', 'REJECTED'), false);
+    });
+
+    it('updatePendingEventStatus returns false when storage refuses the write', () => {
+      installMemoryStorage();
+      enqueuePendingEvent(makeCall() as any);
+      (globalThis as any).localStorage.setItem = () => {
+        throw new Error('QuotaExceededError');
+      };
+      assert.equal(updatePendingEventStatus('call-1', 'REJECTED'), false);
+    });
+
+    it('enqueuePendingEvent returns false when storage refuses the write', () => {
+      installMemoryStorage();
+      (globalThis as any).localStorage.setItem = () => {
+        throw new Error('QuotaExceededError');
+      };
+      assert.equal(enqueuePendingEvent(makeCall() as any), false);
+    });
+
+    it('logMobileAudit returns true on success and false when the write is refused', () => {
+      installMemoryStorage();
+      assert.equal(logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any), true);
+      (globalThis as any).localStorage.setItem = () => {
+        throw new Error('QuotaExceededError');
+      };
+      assert.equal(logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any), false);
+    });
+
+    it('clearPendingQueue reports the real clear verdict, not a bare void', () => {
+      installMemoryStorage();
+      enqueuePendingEvent(makeCall() as any);
+      assert.equal(clearPendingQueue(), true);
+      assert.equal(getPendingQueue().length, 0);
+    });
+
+    it('clearPendingQueue returns false when storage refuses the removal', () => {
+      installMemoryStorage();
+      enqueuePendingEvent(makeCall() as any);
+      (globalThis as any).localStorage.removeItem = () => {
+        throw new Error('SecurityError');
+      };
+      assert.equal(clearPendingQueue(), false);
+    });
+
+    it('clearMobileAuditLog reports the real clear verdict and survives a refusal', () => {
+      installMemoryStorage();
+      logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any);
+      assert.equal(clearMobileAuditLog(), true);
+      assert.equal(getMobileAuditLog().length, 0);
+      logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any);
+      (globalThis as any).localStorage.removeItem = () => {
+        throw new Error('SecurityError');
+      };
+      assert.equal(clearMobileAuditLog(), false);
+    });
+  });
+
+  // Backlog item 13 — the writers above were made to return a boolean for a
+  // *throwing* store, but a store that accepts `setItem` without throwing yet
+  // drops the bytes (private browsing, a frozen or quota-clamped store) still
+  // read as durable. Only a read-back can tell the difference. These guards pin
+  // that the three mobile-bridge writers compare the stored bytes, so a silent
+  // no-op is reported as a refusal instead of a fake success.
+  describe('9. Storage writes detect a silent no-op store (zero fake success)', () => {
+    class SilentStorage {
+      private store = new Map<string, string>();
+      // A store that keeps every write it is given.
+      private silent = false;
+      setSilent(value: boolean): void {
+        this.silent = value;
+      }
+      getItem(key: string): string | null {
+        return this.store.has(key) ? this.store.get(key)! : null;
+      }
+      setItem(key: string, value: string): void {
+        // Accepts the call without throwing, but keeps the previous bytes.
+        if (this.silent) return;
+        this.store.set(key, value);
+      }
+      removeItem(key: string): void {
+        this.store.delete(key);
+      }
+      clear(): void {
+        this.store.clear();
+      }
+    }
+
+    function installSilentStorage(): SilentStorage {
+      const store = new SilentStorage();
+      (globalThis as any).localStorage = store;
+      (globalThis as any).window = globalThis;
+      return store;
+    }
+
+    it('saveBridgeRegistration reports a silently dropped write as not saved', () => {
+      const store = installSilentStorage();
+      // A prior registration is already durable.
+      assert.equal(saveBridgeRegistration({ deviceId: 'old-device', token: 'old' } as any), true);
+      store.setSilent(true);
+      assert.equal(saveBridgeRegistration({ deviceId: 'new-device', token: 'new' } as any), false);
+      // The store still holds the previous registration, not the new one.
+      assert.equal(loadBridgeRegistration()!.deviceId, 'old-device');
+    });
+
+    it('saveBridgeRegistration reports a landed write as saved', () => {
+      installSilentStorage();
+      assert.equal(saveBridgeRegistration({ deviceId: 'dev-1', token: 't1' } as any), true);
+      assert.equal(loadBridgeRegistration()!.deviceId, 'dev-1');
+    });
+
+    it('enqueuePendingEvent reports a silently dropped queue write as not persisted', () => {
+      const store = installSilentStorage();
+      store.setSilent(true);
+      assert.equal(enqueuePendingEvent(makeCall() as any), false);
+      // Nothing landed, so the queue is still empty after the "enqueue".
+      assert.equal(getPendingQueue().length, 0);
+    });
+
+    it('logMobileAudit reports a silently dropped audit write as not persisted', () => {
+      const store = installSilentStorage();
+      store.setSilent(true);
+      assert.equal(logMobileAudit({ eventType: 'MESSAGE_RECEIVED' } as any), false);
+      assert.equal(getMobileAuditLog().length, 0);
+    });
+  });
 });

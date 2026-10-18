@@ -52,11 +52,25 @@ import {
   transcriptBadgeLabel,
   transcriptTabLabel,
 } from '../utils/hardening/youtubeTranscriptLabelTruth';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
+import {
+  classifyApproveOutcome,
+  classifyRejectOutcome,
+} from '../utils/hardening/approvalGatewayOutcomeTruth';
 import {
   hasRealYouTubeSummary,
   youtubeSummaryCopyText,
   youtubeTakeawaysEmptyLabel,
 } from '../utils/hardening/youtubePanelSummaryTruth';
+import {
+  webFetchDisplayTitle,
+  webFetchSuccessNotice,
+} from '../utils/hardening/webFetchDisplayTruth';
+import {
+  githubStatusBadge,
+  githubStatusMessage,
+  githubStatusTone,
+} from '../utils/hardening/githubStatusDisplayTruth';
 
 interface AutonomousToolsModalProps {
   isOpen: boolean;
@@ -69,7 +83,7 @@ type ActiveTab = 'approvals' | 'youtube' | 'git' | 'filesystem' | 'github' | 'we
 export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOpen, onClose, initialQuery }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('approvals');
   const [loading, setLoading] = useState<boolean>(false);
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Emergency Control State. Null until /api/emergency/status answers, so a
   // failed or unstarted fetch can never read as "not paused".
@@ -99,6 +113,9 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
 
   // GitHub State
   const [githubStatus, setGithubStatus] = useState<any>(null);
+  // False until `/api/tools/github/status` actually answers. The banner must not
+  // draw "NOT CONNECTED" / "Inspecting..." from the initial `null`.
+  const [githubStatusObserved, setGithubStatusObserved] = useState(false);
   const [githubRepos, setGithubRepos] = useState<any[]>([]);
   const [issueRepo, setIssueRepo] = useState<string>('');
   const [issueTitle, setIssueTitle] = useState<string>('');
@@ -118,6 +135,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   const [ytResult, setYtResult] = useState<any>(null);
   const [ytSearchQuery, setYtSearchQuery] = useState<string>('');
   const [ytCopied, setYtCopied] = useState<boolean>(false);
+  const [ytCopyOutcome, setYtCopyOutcome] = useState<ClipboardCopyResult | null>(null);
   const [ytSubTab, setYtSubTab] = useState<'summary' | 'takeaways' | 'transcript'>('summary');
 
   // Finance-guard self-check. Null until /api/security/finance-guard answers,
@@ -149,7 +167,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   }, [isOpen, initialQuery]);
 
-  const showFeedback = (text: string, type: 'success' | 'error' = 'success') => {
+  const showFeedback = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setActionMessage({ type, text });
     setTimeout(() => setActionMessage(null), 5000);
   };
@@ -236,16 +254,16 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
         body: JSON.stringify({ id, decision, approver: 'HUMAN_OPERATOR_WEB_GATE' }),
       });
       const data = await res.json();
-      if (data.success) {
-        showFeedback(
-          decision === 'APPROVE'
-            ? `✅ Action executed successfully: ${data.request?.exactAction}`
-            : `❌ Action rejected and safely cancelled.`,
-          decision === 'APPROVE' ? 'success' : 'error'
-        );
-      } else {
-        showFeedback(data.error || 'Execution blocked', 'error');
-      }
+      // The server reports `success` (did the action run) and `persisted` (is the
+      // terminal decision durable) as independent facts, and answers HTTP 500
+      // `{ success: false, persisted: false, outcome: 'UNPERSISTED' }` when the
+      // decision could not be written and was rolled back. Branching on
+      // `data.success` alone read a non-durable decision as "executed
+      // successfully" and hid the rollback behind a generic block message.
+      const outcome = decision === 'APPROVE'
+        ? classifyApproveOutcome(data, data.request?.exactAction || id)
+        : classifyRejectOutcome(data, data.request?.exactAction || id);
+      showFeedback(outcome.message, outcome.tone);
       fetchApprovals();
     } catch (err: any) {
       showFeedback('Approval request failed: ' + err.message, 'error');
@@ -360,10 +378,22 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       });
       const data = await res.json();
       if (data.success) {
-        showFeedback(`File written successfully: ${target} (${data.bytesWritten} bytes)`);
+        // The write happened, but the route independently reports whether its
+        // audit row reached durable storage (`auditPersisted`). A write whose
+        // trail could not be persisted must not read as a clean success, so
+        // surface the durability gap as an info verdict rather than a green
+        // "written successfully".
         setNewFileName('');
         setNewFileContent('');
         fetchFsList(fsPath);
+        if (data.auditPersisted === false) {
+          showFeedback(
+            `File written: ${target} (${data.bytesWritten} bytes) — audit record NOT written to durable storage.`,
+            'info'
+          );
+        } else {
+          showFeedback(`File written successfully: ${target} (${data.bytesWritten} bytes)`);
+        }
       } else {
         showFeedback(data.error || 'File write failed', 'error');
       }
@@ -377,11 +407,25 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
   // 5. GitHub Tools
   const fetchGithubData = async () => {
     try {
-      const [statusRes, reposRes] = await Promise.all([
-        fetch('/api/tools/github/status', { method: 'POST' }).then((r) => r.json()),
-        fetch('/api/tools/github/repos', { method: 'POST' }).then((r) => r.json()),
-      ]);
-      setGithubStatus(statusRes);
+      const statusRes = await fetch('/api/tools/github/status', { method: 'POST' });
+      // A non-OK status response is not a status: mark it unobserved so the
+      // banner reads UNKNOWN rather than a claim drawn from a failed probe.
+      if (!statusRes.ok) {
+        setGithubStatusObserved(false);
+        setGithubStatus(null);
+      } else {
+        const statusData = await statusRes.json();
+        setGithubStatus(statusData);
+        setGithubStatusObserved(true);
+      }
+    } catch {
+      // The status endpoint could not be reached. Report it as unobserved, not
+      // as "NOT CONNECTED".
+      setGithubStatusObserved(false);
+      setGithubStatus(null);
+    }
+    try {
+      const reposRes = await fetch('/api/tools/github/repos', { method: 'POST' }).then((r) => r.json());
       setGithubRepos(reposRes.repos || []);
     } catch {
       // safe fallback
@@ -438,7 +482,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
       const data = await res.json();
       if (data.success) {
         setWebResult(data);
-        showFeedback(`Successfully fetched and cleaned "${data.title}"`);
+        showFeedback(webFetchSuccessNotice(data.title));
       } else {
         showFeedback(data.error || 'Failed to fetch web content', 'error');
       }
@@ -490,17 +534,24 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
     }
   };
 
-  const handleCopySummary = (result: any) => {
+  const handleCopySummary = async (result: any) => {
     // Never announce a copy that carried no summary. When the summariser
     // produced nothing, the clipboard gets the explanatory notice so the
     // "Summary copied" toast is never a claim the result cannot back.
     const text = youtubeSummaryCopyText(result || {});
-    navigator.clipboard.writeText(text);
-    setYtCopied(true);
+    const outcome = await copyToClipboard(
+      text,
+      'The summary',
+      'there was no summary to copy'
+    );
+    setYtCopyOutcome(outcome);
+    setYtCopied(outcome.copied);
     showFeedback(
-      hasRealYouTubeSummary(result || {})
-        ? 'Summary copied to clipboard!'
-        : 'No summary was produced — the explanation was copied instead.'
+      outcome.copied
+        ? hasRealYouTubeSummary(result || {})
+          ? 'Summary copied to clipboard!'
+          : 'No summary was produced — the explanation was copied instead.'
+        : outcome.detail
     );
     setTimeout(() => setYtCopied(false), 3000);
   };
@@ -643,7 +694,9 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
             className={`px-4 py-2 text-xs font-mono font-semibold flex items-center gap-2 transition-all ${
               actionMessage.type === 'success'
                 ? 'bg-emerald-950/90 text-emerald-200 border-b border-emerald-800'
-                : 'bg-rose-950/90 text-rose-200 border-b border-rose-800'
+                : actionMessage.type === 'info'
+                  ? 'bg-amber-950/90 text-amber-200 border-b border-amber-800'
+                  : 'bg-rose-950/90 text-rose-200 border-b border-rose-800'
             }`}
           >
             {actionMessage.type === 'success' ? <Check className="w-4 h-4" /> : <AlertOctagon className="w-4 h-4" />}
@@ -950,10 +1003,17 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                       </a>
                       <button
                         onClick={() => handleCopySummary(ytResult)}
+                        title={ytCopyOutcome?.detail || 'Copy summary'}
                         className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-mono text-cyan-300 flex items-center gap-1.5 transition-colors"
                       >
-                        {ytCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{ytCopied ? 'Copied' : 'Copy Summary'}</span>
+                        {ytCopied ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : ytCopyOutcome?.tone === 'warn' ? (
+                          <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        <span>{ytCopied ? 'Copied' : ytCopyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy Summary'}</span>
                       </button>
                     </div>
                   </div>
@@ -1323,7 +1383,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
               {/* Status Banner */}
               <div
                 className={`p-4 rounded-xl border flex items-center justify-between font-mono text-xs ${
-                  githubStatus?.connected
+                  githubStatusTone(githubStatusObserved, githubStatus?.connected) === 'connected'
                     ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
                     : 'bg-amber-950/60 border-amber-500/40 text-amber-200'
                 }`}
@@ -1340,20 +1400,22 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
                     <GitFork className="w-6 h-6" />
                   )}
                   <div>
-                    <span className="font-bold">{githubStatus?.message || 'Inspecting GitHub connection...'}</span>
-                    {githubStatus?.publicRepos !== undefined && (
+                    <span className="font-bold">
+                      {githubStatusMessage(githubStatus?.message, githubStatusObserved)}
+                    </span>
+                    {githubStatusObserved && githubStatus?.publicRepos !== undefined && (
                       <p className="text-[10px] text-slate-400">Public Repos: {githubStatus.publicRepos}</p>
                     )}
                   </div>
                 </div>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                    githubStatus?.connected
+                    githubStatusTone(githubStatusObserved, githubStatus?.connected) === 'connected'
                       ? 'bg-emerald-900 border border-emerald-500 text-emerald-300'
                       : 'bg-amber-900 border border-amber-500 text-amber-300'
                   }`}
                 >
-                  {githubStatus?.connected ? 'AUTHENTICATED' : 'NOT CONNECTED'}
+                  {githubStatusBadge(githubStatusObserved, githubStatus?.connected)}
                 </span>
               </div>
 
@@ -1459,7 +1521,7 @@ export const AutonomousToolsModal: React.FC<AutonomousToolsModalProps> = ({ isOp
               {webResult && (
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-white font-bold text-sm truncate">{webResult.title}</span>
+                    <span className="text-white font-bold text-sm truncate">{webFetchDisplayTitle(webResult.title)}</span>
                     <span className="text-[10px] text-cyan-400">{webResult.url}</span>
                   </div>
                   <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 whitespace-pre-wrap max-h-64 overflow-y-auto">

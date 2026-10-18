@@ -13,6 +13,7 @@ import {
   isCancelCommand,
   planScreenActions,
   executeOperatorTask,
+  persistOperatorTaskState,
   NotConfiguredScreenOperator,
   redactSecrets,
   type OperatorTask,
@@ -143,61 +144,55 @@ export async function executePlannedOperatorRun(
   // Honest guard: never claim success for an empty/blocked plan.
 
   if (options.killSwitchActive) {
-
-    return {
-      ok: false,
+    const task: OperatorTask = {
+      taskId: options.taskId,
+      timestamp: new Date().toISOString(),
+      intent: classifyCommandIntent(goal).intent,
+      status: 'BLOCKED',
+      state: null,
+      actions: [],
+      actionIndex: 0,
+      verificationResult: null,
+      approvalState: 'REJECTED',
       error: 'GLOBAL_KILL_SWITCH_ACTIVE',
-      task: {
-        taskId: options.taskId,
-        timestamp: new Date().toISOString(),
-        intent: classifyCommandIntent(goal).intent,
-        status: 'BLOCKED',
-        state: null,
-        actions: [],
-        actionIndex: 0,
-        verificationResult: null,
-        approvalState: 'REJECTED',
-        error: 'GLOBAL_KILL_SWITCH_ACTIVE',
-      },
     };
+    persistOperatorTaskState(task);
+    return { ok: false, error: 'GLOBAL_KILL_SWITCH_ACTIVE', task };
   }
  
   if (run.plan.blockedBy || run.plan.actions.length === 0) {
     const cancelled = options.cancelCheck ? options.cancelCheck() : false;
     if (cancelled) {
-      return {
-        ok: false,
-        error: 'CANCELLED_BY_OWNER',
-        task: {
-          taskId: options.taskId,
-          timestamp: new Date().toISOString(),
-          intent: classifyCommandIntent(goal).intent,
-          status: 'CANCELLED',
-          state: null,
-          actions: [],
-          actionIndex: 0,
-          verificationResult: null,
-          approvalState: 'NOT_REQUIRED',
-          error: 'CANCELLED_BY_OWNER',
-        },
-      };
-    }
-    return {
-      ok: false,
-      error: run.plan.blockedBy ?? 'ACTION_FAILED_EMPTY_PLAN',
-      task: {
+      const task: OperatorTask = {
         taskId: options.taskId,
         timestamp: new Date().toISOString(),
         intent: classifyCommandIntent(goal).intent,
-        status: 'FAILED',
+        status: 'CANCELLED',
         state: null,
         actions: [],
         actionIndex: 0,
         verificationResult: null,
         approvalState: 'NOT_REQUIRED',
-        error: run.plan.blockedBy ?? 'ACTION_FAILED_EMPTY_PLAN',
-      },
+        error: 'CANCELLED_BY_OWNER',
+      };
+      persistOperatorTaskState(task);
+      return { ok: false, error: 'CANCELLED_BY_OWNER', task };
+    }
+    const blockError = run.plan.blockedBy ?? 'ACTION_FAILED_EMPTY_PLAN';
+    const task: OperatorTask = {
+      taskId: options.taskId,
+      timestamp: new Date().toISOString(),
+      intent: classifyCommandIntent(goal).intent,
+      status: 'FAILED',
+      state: null,
+      actions: [],
+      actionIndex: 0,
+      verificationResult: null,
+      approvalState: 'NOT_REQUIRED',
+      error: blockError,
     };
+    persistOperatorTaskState(task);
+    return { ok: false, error: blockError, task };
   }
   return executeOperatorTask(run.adapter, goal, run.plan, {
     taskId: options.taskId,

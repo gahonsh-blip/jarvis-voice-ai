@@ -606,5 +606,26 @@
       "content": "Chrome browser was not launched: Requires a desktop session to launch applications.",
       "timestamp": "2026-09-30T16:11:58.887Z"
     }
-  ]
+  ],
+  "permissionRequests": [],
+  "telephonySettings": {
+    "provider": "browser_webrtc_simulator",
+    "twilioAccountSid": "",
+    "twilioAuthToken": "",
+    "twilioPhoneNumber": "",
+    "autoAnswerInbound": true,
+    "autoAnswerDelaySeconds": 2,
+    "aiReceptionistGreeting": "Hello, thank you for calling. You have reached Alex's AI Executive Assistant, JARVIS. How may I assist you today?",
+    "aiPersona": "executive_assistant",
+    "spamScreeningEnabled": true,
+    "spamThresholdScore": 70,
+    "acousticFilterEnabled": true,
+    "dtmfAudioEnabled": true,
+    "recordingEnabled": true,
+    "forwardUrgentToTelegram": true,
+    "voiceLanguage": "en-US",
+    "voicePitch": 1,
+    "voiceRate": 1.05
+  },
+  "telephonyCallRecords": []
 }

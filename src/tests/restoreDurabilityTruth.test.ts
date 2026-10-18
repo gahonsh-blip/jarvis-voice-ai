@@ -112,6 +112,10 @@ describe('POST /api/restore reports a durable restore honestly', () => {
   });
 
   it('refuses to report success when the restore cannot reach disk, and rolls back', async () => {
+    // Capture the restore payload while the disk is still writable: the helper
+    // calls `GET /api/backup`, which now honestly refuses on a read-only volume.
+    const restorePayload = await backupWithName('Must Not Survive');
+
     // Make the memory file unwritable. The server process is uid-nonroot, so the
     // next writeFileSync throws EACCES and persistMemory() returns false.
     fs.chmodSync(memoryFile, 0o444);
@@ -119,7 +123,7 @@ describe('POST /api/restore reports a durable restore honestly', () => {
     const res = await fetch(`${base()}/api/restore`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ backup: await backupWithName('Must Not Survive') }),
+      body: JSON.stringify({ backup: restorePayload }),
     });
 
     expect(res.status).toBe(500);

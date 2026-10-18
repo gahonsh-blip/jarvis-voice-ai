@@ -206,6 +206,15 @@ export function hydrateActionRequests(stored: unknown): void {
 }
 
 /**
+ * Drop `id` from the live registry. Used to roll back a request the gateway
+ * registered but whose blocked/no-op verdict must not leave a phantom entry in
+ * the approval queue that later persists and resurrects on the next boot.
+ */
+export function removeActionRequest(id: string): void {
+  pendingActionRequests = pendingActionRequests.filter((a) => a.id !== id);
+}
+
+/**
  * Statuses a request can no longer move out of. A decision is a fact: once a
  * request is REJECTED, EXECUTED, FAILED or blocked by the emergency stop, a
  * later call must not rewrite it. Before this guard the shared helper accepted
@@ -382,6 +391,58 @@ function isProtectedPath(absolutePath: string): boolean {
   return PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(base));
 }
 
+const REAL_PROJECT_ROOT = (() => {
+  try {
+    return fs.realpathSync(PROJECT_ROOT);
+  } catch {
+    return PROJECT_ROOT;
+  }
+})();
+
+/**
+ * Resolve the real location on disk of `absolutePath`, following symlinks in the
+ * deepest existing ancestor and re-appending the not-yet-existing tail.
+ *
+ * The lexical `path.relative` check above cannot see a symlink that lives inside
+ * the root and points outside it: the spelling is contained while the bytes are
+ * not. `fs.realpathSync` on the nearest existing ancestor is what actually
+ * decides where a read, write or delete would land.
+ */
+function resolveRealTarget(absolutePath: string): { realPath: string; error?: string } {
+  let current = absolutePath;
+  const tail: string[] = [];
+  for (;;) {
+    let lst: fs.Stats;
+    try {
+      lst = fs.lstatSync(current);
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) {
+        return { realPath: '', error: 'Invalid path resolution: no existing ancestor.' };
+      }
+      tail.unshift(path.basename(current));
+      current = parent;
+      continue;
+    }
+    if (lst.isSymbolicLink()) {
+      try {
+        const resolved = fs.realpathSync(current);
+        return { realPath: tail.length ? path.resolve(resolved, ...tail) : path.resolve(resolved) };
+      } catch {
+        // A dangling or unreadable link cannot be proven to land inside the root.
+        return { realPath: '', error: 'Access denied: path is a symbolic link that cannot be resolved.' };
+      }
+    }
+    let realAncestor: string;
+    try {
+      realAncestor = fs.realpathSync(current);
+    } catch {
+      realAncestor = current;
+    }
+    return { realPath: tail.length ? path.resolve(realAncestor, ...tail) : path.resolve(realAncestor) };
+  }
+}
+
 function safeResolvePath(relativePath: string): { safePath: string; error?: string } {
   try {
     if (typeof relativePath !== 'string' || relativePath.trim() === '') {
@@ -401,6 +462,19 @@ function safeResolvePath(relativePath: string): { safePath: string; error?: stri
       path.isAbsolute(relative);
     if (escapesRoot) {
       return { safePath: '', error: 'Access denied: Path is outside authorized workspace root.' };
+    }
+    // A symlink inside the root can point anywhere. Re-check containment against
+    // the real on-disk location so a link cannot smuggle a read, write, delete or
+    // listing out of the authorized workspace.
+    const { realPath, error: realError } = resolveRealTarget(absolute);
+    if (realError) return { safePath: '', error: realError };
+    const relativeReal = path.relative(REAL_PROJECT_ROOT, realPath);
+    const escapesRealRoot =
+      relativeReal === '..' ||
+      relativeReal.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeReal);
+    if (escapesRealRoot) {
+      return { safePath: '', error: 'Access denied: Path resolves outside authorized workspace root.' };
     }
     if (isProtectedPath(absolute)) {
       return { safePath: '', error: 'Access denied: Path targets a protected credential or VCS location.' };
@@ -1235,7 +1309,11 @@ export function heuristicTranscriptSummarize(
 export type YouTubeSummarySource = 'gemini' | 'extractive' | 'none';
 
 export interface YouTubeSummaryResult {
-  success: true;
+  // `success` means a summary was actually produced, not merely that the video
+  // metadata was fetched. A video with no transcript and no description is
+  // returned with `source: 'none'`, an empty summary and `success: false`, so a
+  // caller cannot credit a summarization that never happened.
+  success: boolean;
   videoInfo: YouTubeVideoInfo;
   summary: string;
   executiveOverview: string;
@@ -1259,13 +1337,14 @@ export function buildYouTubeSummary(params: {
   geminiFailed?: boolean;
 }): YouTubeSummaryResult {
   const { videoInfo, segments, transcript, description, geminiRawSummary, geminiFailed } = params;
-  const base = { success: true as const, videoInfo, segments, transcript };
+  const base = { videoInfo, segments, transcript };
 
   if (geminiRawSummary && geminiRawSummary.trim()) {
     const rawSummary = geminiRawSummary.trim();
     const extractedTakeaways = (rawSummary.match(/^[•\-\*]\s+(.+)$/gm) || []).map((t) => t.trim());
     return {
       ...base,
+      success: true,
       summary: rawSummary,
       executiveOverview: rawSummary,
       keyTakeaways: extractedTakeaways,
@@ -1287,6 +1366,7 @@ export function buildYouTubeSummary(params: {
     const summary = `### 📌 Extractive Overview\n${heuristic.executiveSummary}\n\n### ⏱️ Quoted Key Lines\n${heuristic.keyTakeaways.join('\n')}\n\n### 💡 Quoted Insights\n${heuristic.actionableInsights.map((i) => `• ${i}`).join('\n')}`;
     return {
       ...base,
+      success: true,
       summary,
       executiveOverview: heuristic.executiveSummary,
       keyTakeaways: heuristic.keyTakeaways,
@@ -1300,9 +1380,12 @@ export function buildYouTubeSummary(params: {
   }
 
   // No transcript and no description: there is nothing real to summarize.
+  // `success` is false because no summary was produced — only the video's
+  // metadata is available. The `videoInfo` is still returned so a caller can
+  // show the title and link, but it may not credit a summarization.
   return {
     ...base,
-    success: true,
+    success: false,
     summary: '',
     executiveOverview: '',
     keyTakeaways: [],

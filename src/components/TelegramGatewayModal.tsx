@@ -23,6 +23,7 @@ import {
   telegramBotHandleLabel,
   telegramTransportLabel,
   telegramCloudSyncClaim,
+  telegramTestBanner,
 } from '../utils/telegramGatewayTruth';
 
 interface Props {
@@ -53,7 +54,7 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
   // answered with one; the seeded config carries `false` and must not be read
   // as "observed not-live".
   const [statusKnown, setStatusKnown] = useState<boolean>(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ tone: 'success' | 'warn' | 'fail'; message: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'live_chat' | 'connect_guide'>('live_chat');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -93,23 +94,18 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
     try {
       const res = await fetch('/api/telegram/test-live', { method: 'POST' });
       const data = await res.json();
+      // Render the banner from what the server actually observed. A reachable
+      // bot whose delivery was not confirmed must not read as a live verified
+      // connection, and a success banner must not claim a notification was sent
+      // unless the server confirmed one.
+      const banner = telegramTestBanner(data);
+      setTestResult({ tone: banner.tone, message: banner.message });
       if (data.success) {
-        setTestResult({
-          success: true,
-          message: data.notificationSent
-            ? '✅ Live Bot Verified! Ping notification sent to your Telegram app on mobile.'
-            : `✅ Connected to ${data.bot?.username || 'Telegram'}. Send /start from your phone to register chat ID.`,
-        });
         fetchMessages();
-      } else {
-        setTestResult({
-          success: false,
-          message: data.message || data.error || 'Failed to connect to Telegram API.',
-        });
       }
     } catch (err: any) {
       setTestResult({
-        success: false,
+        tone: 'fail',
         message: err.message || 'Connection test timed out.',
       });
     } finally {
@@ -141,7 +137,7 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
         onSpeak(cleanSpeech);
       }
       if (data.message) {
-        setTestResult({ success: data.delivered === true, message: data.message });
+        setTestResult({ tone: data.delivered === true ? 'success' : 'fail', message: data.message });
       }
     } catch (err) {
       console.warn('Telegram send failed:', err);
@@ -261,13 +257,19 @@ export const TelegramGatewayModal: React.FC<Props> = ({ isOpen, onClose, onSpeak
         {testResult && (
           <div
             className={`px-6 py-2 text-xs flex items-center justify-between border-b ${
-              testResult.success
+              testResult.tone === 'success'
                 ? 'bg-emerald-950/60 border-emerald-800/50 text-emerald-200'
-                : 'bg-amber-950/60 border-amber-800/50 text-amber-200'
+                : testResult.tone === 'warn'
+                ? 'bg-amber-950/60 border-amber-800/50 text-amber-200'
+                : 'bg-rose-950/60 border-rose-800/50 text-rose-200'
             }`}
           >
             <div className="flex items-center gap-2">
-              {testResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-amber-400" />}
+              {testResult.tone === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <AlertCircle className={`w-4 h-4 ${testResult.tone === 'warn' ? 'text-amber-400' : 'text-rose-400'}`} />
+              )}
               <span>{testResult.message}</span>
             </div>
             <button onClick={() => setTestResult(null)} className="text-slate-400 hover:text-slate-100">

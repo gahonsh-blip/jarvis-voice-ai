@@ -13,6 +13,7 @@ import {
   Lock,
   Server,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
 import { OracleVMStatus } from '../types';
 import { billingBadgeLabel } from '../utils/hardening/billingEntitlementTruth';
@@ -27,6 +28,7 @@ import {
   resolveFirewallRuleState,
   summarizeFirewallObservation,
 } from '../utils/vmTelemetryDisplay';
+import { copyToClipboard, type ClipboardCopyResult } from '../utils/hardening/clipboardCopyTruth';
 
 interface Props {
   isOpen: boolean;
@@ -40,6 +42,7 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [vmStatus, setVmStatus] = useState<OracleVMStatus | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyOutcome, setCopyOutcome] = useState<ClipboardCopyResult | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -61,12 +64,16 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   };
 
-  const handleCopySSH = () => {
+  const handleCopySSH = async () => {
     // Copy only a command that targets an address the server actually reported.
     const command = buildSshCommand(vmStatus?.publicIp);
-    if (!command) return;
-    navigator.clipboard.writeText(command);
-    setCopied(true);
+    const outcome = await copyToClipboard(
+      command,
+      'The SSH command',
+      'the server reported no SSH address to copy'
+    );
+    setCopyOutcome(outcome);
+    setCopied(outcome.copied);
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -203,10 +210,19 @@ export const OracleCloudModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <code>{sshCommand ?? `SSH target ${UNKNOWN} — server reported no address`}</code>
               <button
                 onClick={handleCopySSH}
+                title={copyOutcome?.detail || 'Copy SSH command'}
                 className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 text-[11px]"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copied' : 'Copy'}
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : copyOutcome?.tone === 'warn' ? (
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+                <span className={copyOutcome?.tone === 'warn' ? 'text-rose-400' : undefined}>
+                  {copied ? 'Copied' : copyOutcome?.tone === 'warn' ? 'Copy failed' : 'Copy'}
+                </span>
               </button>
             </div>
           </div>
