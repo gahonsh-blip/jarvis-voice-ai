@@ -21183,3 +21183,12 @@ sites in `server.ts` / `server_tools.ts` remains unaudited.
 
 Commit `c8a514e`, pushed to `feature/hermes-full-completion`. PR #8 remains
 open, non-draft. Main **NOT MERGED — awaiting human approval.**
+
+**Security observed this slot (2026-10-18 23:35).** `git check-ignore -v .env`
+-> `.gitignore:4:.env`; `git status --short` empty after the docs commit; no
+token/key in the diff; no `node_modules/` or `dist/` staged.
+`npm audit --omit=dev` -> **found 0 vulnerabilities**. PR #8 read through the
+GitHub API: `state: open`, `draft: false`, `mergeable: true`,
+`mergeable_state: unstable` (checks not green: the owner account is locked on
+billing), head `c5d986b`. `GITHUB_TOKEN` is empty in this sandbox; the provider
+token `github_token` was used for the read-only API call.
