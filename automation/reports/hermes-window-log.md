@@ -21105,3 +21105,21 @@ Next Slot:
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में item #13 का गार्ड मज़बूत किया गया — अब variable/shorthand
   durability claims भी पकड़े जाते हैं; 14/14 टेस्ट पास, 2925 टेस्ट पास, बिल्ड सफल।
+
+
+### Slot 4 addendum — exact refs (appended after the report above)
+
+- source+tests commit: `5ad2c01` (test(honesty): generalize durability-claim guard)
+- docs+report commit:   `bc57143` (docs(hermes): update completion status and window log)
+- code branch tip:      `bc57143` on origin/feature/hermes-full-completion (verified with git ls-remote)
+- state branch tip:     `18c790d` on origin/automation/hermes-state
+- PR: #8 https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (open, non-draft)
+
+Concurrency observation (recorded for later slots): when this slot tried to
+publish the state branch, the push was rejected as non-fast-forward. A competing
+slot-4 commit `8443a0e` ("chore(state): slot 4 2026-10-18 23:05", authored
+17:37:25Z) already sat on origin/automation/hermes-state, and a plain
+`git fetch origin automation/hermes-state` did NOT surface it — `git ls-remote`
+did. This slot rebased its state update onto `8443a0e` and pushed `18c790d`
+(no force-push). Future slots: verify the state tip with `git ls-remote`, not
+only `git fetch`, before publishing, and rebase rather than force.
