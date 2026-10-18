@@ -21246,3 +21246,58 @@ deployment unit available. Commit `5e2f6ce`, pushed to
 `feature/hermes-full-completion`. PR #8 remains open, non-draft. Main **NOT MERGED —
 awaiting human approval.**
 
+
+
+---
+
+## Slot 7 — WORK — 2026-10-18 01:36 IST
+
+**Item #13 (`Zero-fake-success for all tools`) — telephony inbound-answer slice.**
+
+**Defect found and fixed.** `POST /api/telephony/incoming` — the webhook a carrier
+calls when the line rings — checked the webhook signature and the emergency stop,
+then created a session and answered unconditionally. `PHONE_INBOUND_ANSWER`
+("Autonomous Inbound Call Answering") is advertised on the telephony permission
+screen, persisted in the permission matrix and served by
+`GET /api/telephony/permissions`, but the route never read it. An operator who set
+the permission to `DENIED` still had JARVIS pick up the phone and greet the caller,
+while the permission screen showed the surface as revoked. This is a fail-open on
+the one surface that reaches the outside world by ringing a phone.
+
+**Fix.** New `src/utils/hardening/inboundAnswerGateTruth.ts` exposes
+`inboundAnswerGate(permissions)`; `server.ts` calls it with the authoritative
+matrix (the durable store when `JARVIS_PHONE_PERMISSIONS_FILE` is set, the compiled
+defaults otherwise) *before* any session exists. Only an explicit `GRANTED`
+answers. `DENIED` refuses. `ASK` / `NOT_CONFIGURED` / unset are *undecided* and also
+refuse: a ringing line cannot be paused to ask the operator, so "not yet decided"
+is not consent — reading it as consent is the same defect the owner-approval path
+already had. A refusal is audited BLOCKED and answers HTTP 403 — TwiML
+`<Hangup/>` for a carrier, JSON `{success:false, answered:false, outcome,
+permission}` otherwise — with no session created.
+
+**Evidence.** New `src/tests/inboundAnswerGateTruth.test.ts`, 4 cases, driving a real
+`npx tsx server.ts` process against a real permission-store file: DENIED refuses and
+`GET /api/telephony/status` reports `currentCall: null` (no session behind the
+refusal); undecided `ASK` refuses with `outcome: PERMISSION_UNDECIDED`; explicit
+`GRANTED` answers with a session id; a TwiML caller gets a `<Hangup/>` and no
+`<Gather>`. Observed **4 passed / 4**.
+
+**Negative-validated.** Stashing `server.ts` failed **3 failed | 1 passed** — the
+DENIED refusal, the undecided ASK refusal and the TwiML hangup all answered 200.
+The single case that still passed is the GRANTED case, which is correct: the old
+code always answered. Restored -> **4/4**.
+
+Item #13 stays `PARTIAL` — the tail of unclassified `success: true` /
+discarded-`persistMemory()` sites is still not individually audited.
+
+Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; targeted
+`inboundAnswerGateTruth` 1 file / 4 passed; with `durabilityClaimInvariant` +
+`telephonyEndpointTruth` + `telephonyPermissions` + `phonePermissionStoreTruth` +
+`telephonyPermissionUpdateTruth` -> 6 files / 94 passed, 0 failed. Full
+`npx vitest run` and `npm run build`: **NOT RUN this fire** — the 1800 s cap; the
+fix was committed and pushed before the long gates. E2E: real-server HTTP E2E ran
+(the test above); device/emulator E2E **NOT RUN** — no handset. Deploy:
+`NOT_CONFIGURED` — no deployment target is present; the verified artifact is the
+deployment unit available. Commit `becf930c`, pushed to
+`feature/hermes-full-completion`. PR #8 remains open, non-draft. Main **NOT MERGED —
+awaiting human approval.**
