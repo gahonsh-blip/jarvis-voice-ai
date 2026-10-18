@@ -121,12 +121,30 @@ export function loadPhonePermissions(): Record<PhonePermissionKey, PhonePermissi
   return { ...DEFAULT_PHONE_PERMISSIONS };
 }
 
-export function savePhonePermissions(perms: Record<PhonePermissionKey, PhonePermissionState>): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Persist the phone permission matrix. Returns whether the write actually
+ * landed: `true` only when the store holds exactly what was written.
+ *
+ * It used to return `void` and swallow the storage error in a catch, so a
+ * refused write (quota, private mode, no `localStorage`) was indistinguishable
+ * from a durable one and a caller could announce a Level-4 authorization change
+ * the next reload would not find. A store that accepts `setItem` without
+ * throwing yet keeps the previous bytes (private browsing, a frozen or
+ * quota-clamped store) is also a refusal, so the bytes are read back before the
+ * write is reported as landed — the same guard as the sibling writers in
+ * `telephonyEngine.ts` and `offlineStorage.ts`.
+ */
+export function savePhonePermissions(
+  perms: Record<PhonePermissionKey, PhonePermissionState>
+): boolean {
+  if (typeof window === 'undefined') return false;
+  const serialized = JSON.stringify(perms);
   try {
-    localStorage.setItem(PHONE_PERMISSIONS_STORAGE_KEY, JSON.stringify(perms));
+    localStorage.setItem(PHONE_PERMISSIONS_STORAGE_KEY, serialized);
+    return localStorage.getItem(PHONE_PERMISSIONS_STORAGE_KEY) === serialized;
   } catch (e) {
     console.warn('[Telephony Permissions] Error saving phone permissions:', e);
+    return false;
   }
 }
 
