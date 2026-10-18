@@ -20807,3 +20807,93 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - इस स्लॉट में टेलीफ़ोनी परमिशन राइटर का झूठा सफलता दावा ठीक किया — स्टोर को वापस पढ़कर ही applied:true दिया जाता है; lint स्वच्छ, 2908 टेस्ट पास, बिल्ड सफल; PR #8 मर्ज-योग्य, main पर मर्ज नहीं — मानव अनुमोदन की प्रतीक्षा में।
+
+---
+
+## Slot 2026-10-18 21:35 IST — WORK SLOT
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 21:35
+Window date: 2026-10-18   Window slots completed so far: 2
+
+Completed:
+- Security hardening (bug found + fixed): workspace filesystem containment
+  guard `safeResolvePath` in `server_tools.ts` decided containment purely
+  lexically (`path.relative` on the resolved spelling). A symlink *inside* the
+  root pointing outside it passed the check, so `realFsRead` leaked an outside
+  file, `realFsWrite` wrote outside the workspace, `realFsDelete` unlinked an
+  outside file, and `realFsList` enumerated an outside directory — each while
+  returning `success: true`. Now the real on-disk target is resolved
+  (`fs.realpathSync` of the deepest existing ancestor, with the not-yet-existing
+  tail re-appended) and containment is re-checked against the repo's real root;
+  an unresolvable link is denied, never trusted.
+  Evidence: `server_tools.ts` `resolveRealTarget` + `REAL_PROJECT_ROOT` +
+  `safeResolvePath`; tests `src/tests/workspacePathContainment.test.ts`
+  ("denies reading through a symlink that points outside the root",
+  "denies writing, deleting and listing through an outside symlink",
+  "denies a symlinked file ... that escapes the root",
+  "still allows a symlink that stays inside the root").
+
+Bugs Found:
+- Symlink escape in the workspace fs containment guard (above). Found by a
+  standalone `tsx` probe that created `__probe_link__ -> /tmp/hermes-outside-*`
+  inside the root and called `realFsWrite`/`realFsRead`/`realFsList`/
+  `realFsDelete`. Pre-fix output: `{"success":true,...}`, `landed outside
+  root: true`, `READ: {"success":true,"content":"OUTSIDE_SECRET"}`,
+  `DELETE: {"success":true}` with the outside file gone.
+
+Bugs Fixed:
+- Same. Negative-validated: the probe reproduced the escape before the fix
+  (`success:true`, bytes landed outside the root) and the identical probe
+  reports `{"success":false,"error":"Access denied: Path resolves outside
+  authorized workspace root."}` after it, with no outside file written or
+  deleted. Targeted suites: `workspacePathContainment` + `workspaceFsSecurity`
+  = 2 files, 20 tests passed.
+
+In Progress:
+- #13 "Zero-fake-success for all tools" — remains `PARTIAL`. The symlink fix is
+  a hardening slice, not the classification of every remaining `success: true`
+  return. Tail still open: `deliverTelegramMessage` / `sendTelegramMessageStrict`
+  / `sendRealTelegramMessage`, LinkedIn author resolution, `processMobileCommand`
+  stats, scheduler push delivery logging.
+
+Remaining:
+- #13 tail (above); #1/#2 hardware-blocked; #8..#12, #14..#60 per
+  `docs/COMPLETION_STATUS.md`.
+
+Tests:    20/20 passed (2 files: workspacePathContainment, workspaceFsSecurity)
+          Full `npx vitest run`: NOT RUN this slot — 30-minute cap reached;
+          prior full-suite baseline was 2908 passing.
+Lint:     PASS — `npm run lint` (tsc --noEmit) exit 0
+Build:    NOT RUN this slot (cap); unchanged by this change — the edit touches
+          `server_tools.ts` only and `tsc --noEmit` is clean.
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox
+Security: Symlink-escape hardening applied and verified by probe + tests.
+          Full audit NOT RUN this slot.
+
+Documentation: automation/reports/hermes-window-log.md (this entry)
+Branch:  feature/hermes-full-completion
+Commit:  9ec0795
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target (DEPLOY_URL unset) or hosting
+            integration present.
+
+Blocked:
+- Real Android E2E / Real Screenshot — requires a handset, emulator or display
+  session (NOT_AVAILABLE here).
+- GitHub Actions CI — owner account locked (billing); jobs never start.
+
+Human Approval Required:
+- Merge of PR #8 to main.
+- Clear the GitHub billing lock so CI can run the same gates verified locally.
+
+Next Slot:
+- Resume #13: audit the Telegram delivery trio and the scheduler push-delivery
+  logging for discarded `persistMemory()` / bare `success: true`, one coherent
+  cluster at a time.
+
+हिंदी सारांश (एक पंक्ति):
+- वर्कस्पेस फ़ाइल-सुरक्षा गार्ड में सिमलिंक एस्केप बग मिला और ठीक किया — अब रूट के बाहर इशारा करने वाला लिंक पढ़/लिख/मिटा/सूची नहीं कर सकता; lint स्वच्छ, 20/20 टेस्ट पास; PR #8 मर्ज नहीं — मानव अनुमोदन की प्रतीक्षा में।
