@@ -14,11 +14,19 @@ import {
 // file — so the next mutating route that answers `persisted: true` without any
 // way to know the write landed would pass every existing test.
 //
-// This test asserts that property globally: every mutating route claiming
-// `persisted: true` must either read the value back from the memory file
-// (`*OnDisk()` / `diskHasAuditRow()`) or answer an explicit non-durable refusal
-// (`persisted: false`). It is a source-level guard because `server.ts` binds a
-// port on import and cannot be imported here, matching approvalDecisionTruth.test.ts.
+// This test asserts that property globally: every mutating route making a
+// durability claim (`persisted` / `recorded` / `stored`) must either read the
+// value back from the memory file (`*OnDisk()` / `diskHasAuditRow()`), answer an
+// explicit non-durable refusal (`persisted: false`), or forward the verdict of a
+// durability-aware writer (`persistMemory()`, `recordNightlyRun()`, ...).
+//
+// Slot 4 of this window found the first version of the guard matched only the
+// literal `persisted: true`, so variable-form claims (`persisted: result.persisted`,
+// `recorded: runRecorded`) and object shorthand (`{ ..., persisted }`) escaped it.
+// The cases below pin that gap shut and negative-validate the fix.
+//
+// It is a source-level guard because `server.ts` binds a port on import and
+// cannot be imported here, matching approvalDecisionTruth.test.ts.
 const serverSource = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
 
 describe('durabilityClaimScan detector', () => {
@@ -52,6 +60,73 @@ describe('durabilityClaimScan detector', () => {
           return res.status(500).json({ success: false, persisted: false });
         }
         res.json({ success: true, persisted: true });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
+  });
+
+  it('flags a variable-form claim that forwards a writer it never calls', () => {
+    // The literal-only guard missed this shape entirely. `result.persisted` is a
+    // claim, but nothing in the route produced it, so it is unbacked.
+    const snippet = `
+      app.post('/api/fake', async (req, res) => {
+        const result = await somethingElse(req.body);
+        res.json({ success: true, persisted: result.persisted });
+      });
+    `;
+    const violations = findUnbackedDurabilityClaims(snippet);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].path).toBe('/api/fake');
+  });
+
+  it('flags a recorded/stored claim, not just persisted', () => {
+    const snippet = `
+      app.post('/api/fake', (req, res) => {
+        res.json({ success: true, recorded: true, stored: true });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(1);
+  });
+
+  it('flags an object-shorthand durability claim', () => {
+    const snippet = `
+      app.post('/api/fake', (req, res) => {
+        const persisted = true;
+        res.json({ success: true, persisted });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(1);
+  });
+
+  it('accepts a forwarded claim when the route calls the durability writer', () => {
+    const snippet = `
+      app.post('/api/good', async (req, res) => {
+        const result = await executeApprovedAction(req.body.id, 'reject', 'HUMAN');
+        res.json({ success: result.success, persisted: result.persisted });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
+  });
+
+  it('still flags a discarded persistMemory() boolean behind a literal true', () => {
+    // The exact item-13 defect: the write is attempted, its boolean is thrown
+    // away, and the route answers a hard-coded true. The writer's presence must
+    // not excuse it.
+    const snippet = `
+      app.post('/api/fake', (req, res) => {
+        memoryState.thing = req.body.thing;
+        persistMemory();
+        res.json({ success: true, persisted: true });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(1);
+  });
+
+  it('ignores a claim that appears only in a comment', () => {
+    const snippet = `
+      app.post('/api/clean', (req, res) => {
+        // The old code answered persisted: true without checking disk.
+        res.json({ success: true });
       });
     `;
     expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
@@ -97,7 +172,19 @@ describe('server.ts durability claims (real file)', () => {
     expect(paths).toContain('/api/telephony/calls');
   });
 
-  it('no mutating route claims persisted: true without a read-back or a refusal path', () => {
+  it('scans the broader persisted/recorded/stored claim set, not just literal true', () => {
+    const claiming = sliceRoutes(serverSource).filter(
+      (r) => r.method !== 'GET' && /(?:persisted|recorded|stored)\s*:/.test(r.body)
+    );
+    // Observed 32 at the time of writing. The bound guards against the scanner
+    // silently narrowing back to literal-only claims.
+    expect(claiming.length).toBeGreaterThanOrEqual(30);
+    const paths = claiming.map((r) => r.path);
+    expect(paths).toContain('/api/social/action');
+    expect(paths).toContain('/api/github/nightly/run');
+  });
+
+  it('no mutating route makes an unbacked durability claim', () => {
     const violations = findUnbackedDurabilityClaims(serverSource);
     const rendered = violations.map((v) => `${v.method} ${v.path} (line ${v.line}): ${v.reason}`);
     expect(rendered).toEqual([]);
