@@ -21445,7 +21445,7 @@ Branch:  feature/hermes-full-completion
 Commit:  2cd6727 (fix) + dd0c118 (test retarget) + docs commit
 Push:    succeeded → origin/feature/hermes-full-completion
 
-PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (open, non-draft, head a76a15f, mergeable_state: unstable — billing-locked CI only)
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8 (open, non-draft; mergeable_state: unstable — billing-locked CI only; head observed a76a15f at query time, then advanced by this docs commit)
 Main merge: NOT MERGED — awaiting human approval (never auto-merge)
 Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this sandbox; the
             verified `dist/server.cjs` is the deployment unit available.
