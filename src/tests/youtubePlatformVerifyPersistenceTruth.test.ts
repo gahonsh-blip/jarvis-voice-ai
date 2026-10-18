@@ -67,8 +67,10 @@ describe('item 13 — the YouTube verify does not report a channel cache that fa
 
   it('the platforms/test route surfaces a failed YouTube cache as persisted:false', () => {
     // Shared route gate — a channel cache that did not reach disk must not be
-    // relayed as a verified-and-saved connection.
-    expect(serverFlat).toContain('if (result.profilePersisted === false)');
-    expect(serverFlat).toContain('persisted: false,');
+    // relayed as a verified-and-saved connection. The claim is derived from the
+    // probe, so a failed write still reads persisted:false and a probe that
+    // verified nothing cannot read persisted:true.
+    expect(serverFlat).toContain('result.success === true && result.profilePersisted !== false');
+    expect(serverFlat).toContain('The profile details could not be written to durable storage');
   });
 });

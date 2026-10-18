@@ -52,9 +52,12 @@ describe('item 13 — the LinkedIn verify does not report a cache that failed to
   });
 
   it('the platforms/test route surfaces a failed cache as persisted:false', () => {
-    expect(serverFlat).toContain('if (result.profilePersisted === false)');
-    expect(serverFlat).toContain('persisted: false,');
-    expect(serverFlat).toContain('res.json({ ...result, persisted: true });');
+    // The claim is derived from the probe, not hard-coded: a verified probe
+    // whose cache write failed must read as persisted:false, and a probe that
+    // verified nothing must not read as persisted:true.
+    expect(serverFlat).toContain('result.success === true && result.profilePersisted !== false');
+    expect(serverFlat).toContain('The profile details could not be written to durable storage');
+    expect(serverFlat).not.toContain('res.json({ ...result, persisted: true });');
     expect(serverFlat).not.toContain('const result = await testPlatformConnection(platform); res.json(result);');
   });
 
