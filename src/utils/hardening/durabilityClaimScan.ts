@@ -43,6 +43,19 @@
 // Both are closed here, and both are pinned by negative-validated cases in
 // `durabilityClaimInvariant.test.ts`.
 //
+// Slot 11 (2026-10-19 03:35 IST) found the claim vocabulary itself still short.
+// `applied` is the same false-success claim as `persisted` — a route that answers
+// `applied: true` for a change whose write could be refused tells the caller the
+// mutation took effect when the store may still hold the previous value — and
+// six mutating routes in `server.ts` make it (`/api/blueprint/toggle-item`,
+// `/api/freelance/update-status`, `/api/social/youtube/update-draft`,
+// `/api/security/update`, `/api/telephony/settings`, `/api/telephony/permissions`).
+// Five are already backed; `/api/telephony/permissions` forwards
+// `result.applied` from `applyPhonePermissionUpdate()`, which reads the store
+// back before reporting, so it is backed too — the writer allowlist simply did
+// not name it. The vocabulary now includes `applied` and the allowlist names
+// that writer, so the class is pinned rather than merely unguarded.
+//
 // The scanner is deliberately structural (source text) because `server.ts` binds
 // a port on import, so it cannot be imported by a test. `serverSource` is
 // passed in rather than read here so the same function serves both the guard
@@ -68,8 +81,9 @@ const ROUTE_RE = /app\.(get|post|put|delete|patch)\(\s*(?:'([^']+)'|\[([^\]]*)\]
 
 // The keys that assert durability. `persisted` is the canonical one; `recorded`
 // and `stored` are the same claim under a different name and were the ones the
-// literal-only guard missed.
-const CLAIM_KEY = 'persisted|recorded|stored';
+// literal-only guard missed. `applied` is the same claim on the mutation path —
+// "the change took effect" — and was added in slot 11 of the 2026-10-18 window.
+const CLAIM_KEY = 'persisted|recorded|stored|applied';
 
 // A `key: value` property. Captures the value expression so a literal `true`
 // can be told apart from a forwarded variable.
@@ -98,8 +112,14 @@ const REFUSAL_RE = new RegExp(`(?:${CLAIM_KEY})\\s*:\\s*false`);
 // each write and consume a verdict the list did not name. `testPlatformConnection`
 // is included because it returns `profilePersisted` derived from `persistMemory()`,
 // so the verify route forwards a computed verdict rather than asserting one.
+//
+// Slot 11 (2026-10-19 03:35 IST): `applyPhonePermissionUpdate` is added for the
+// same reason � it reads the permission store back and reports `applied: false`
+// when the store does not hold the write, so `/api/telephony/permissions`
+// forwards a computed verdict. Without it the newly-widened `applied` claim
+// vocabulary flagged that route as unbacked when it is in fact the repaired one.
 const DURABILITY_WRITER_CALL_RE =
-  /(?:await\s+)?(?:persistMemory|persistBlueprintPhases|persistScheduledGoals|persistSecurityMatrixState|persistTelephonySettingsState|persistApprovalRegistry|persistEmergencyState|persistTelephonyCalls|recordDurableAuditRow|recordNightlyRun|recordScheduledGoalRun|recordSchedulerOutcome|recordAudit|recordBridgeAuthFailure|addAuditLog|executeApprovedAction|testPlatformConnection|writeFileSync|writeFile)\s*\(/g;
+  /(?:await\s+)?(?:persistMemory|persistBlueprintPhases|persistScheduledGoals|persistSecurityMatrixState|persistTelephonySettingsState|persistApprovalRegistry|persistEmergencyState|persistTelephonyCalls|recordDurableAuditRow|recordNightlyRun|recordScheduledGoalRun|recordSchedulerOutcome|recordAudit|recordBridgeAuthFailure|addAuditLog|executeApprovedAction|testPlatformConnection|applyPhonePermissionUpdate|writeFileSync|writeFile)\s*\(/g;
 
 // A writer call whose verdict is thrown away cannot back a claim. The test is
 // positional: a call is *discarded* only when it sits in statement position,

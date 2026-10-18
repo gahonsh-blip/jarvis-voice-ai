@@ -15,10 +15,11 @@ import {
 // way to know the write landed would pass every existing test.
 //
 // This test asserts that property globally: every mutating route making a
-// durability claim (`persisted` / `recorded` / `stored`) must either read the
-// value back from the memory file (`*OnDisk()` / `diskHasAuditRow()`), answer an
-// explicit non-durable refusal (`persisted: false`), or forward the verdict of a
-// durability-aware writer (`persistMemory()`, `recordNightlyRun()`, ...).
+// durability claim (`persisted` / `recorded` / `stored` / `applied`) must either
+// read the value back from the memory file (`*OnDisk()` / `diskHasAuditRow()`),
+// answer an explicit non-durable refusal (`persisted: false`), or forward the
+// verdict of a durability-aware writer (`persistMemory()`, `recordNightlyRun()`,
+// ...).
 //
 // Slot 4 of this window found the first version of the guard matched only the
 // literal `persisted: true`, so variable-form claims (`persisted: result.persisted`,
@@ -263,6 +264,47 @@ describe('durabilityClaimScan detector', () => {
     `;
     expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
   });
+
+  it('flags an applied claim with no writer and no read-back', () => {
+    // Slot 11: `applied` is the durability claim on the mutation path — "the
+    // change took effect" — and was outside the vocabulary, so this exact shape
+    // was invisible to the guard.
+    const snippet = `
+      app.post('/api/fake', (req, res) => {
+        memoryState.thing = req.body.thing;
+        res.json({ success: true, applied: true, persisted: true });
+      });
+    `;
+    const violations = findUnbackedDurabilityClaims(snippet);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].path).toBe('/api/fake');
+  });
+
+  it('accepts an applied claim forwarded from a read-back writer', () => {
+    // The shape `/api/telephony/permissions` uses: the verdict comes from a
+    // helper that reads the store back, so the route reports what it observed.
+    const snippet = `
+      app.post('/api/good', (req, res) => {
+        const result = applyPhonePermissionUpdate(store, current, changes);
+        res.json({ success: result.applied, applied: result.applied });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
+  });
+
+  it('still flags an applied claim that discards the read-back writer', () => {
+    // Widening the vocabulary must not excuse the original defect: the writer is
+    // called, its verdict thrown away, and a hard-coded `applied: true` answered.
+    const snippet = `
+      app.post('/api/fake', (req, res) => {
+        const result = applyPhonePermissionUpdate(store, current, changes);
+        res.json({ success: true, applied: true });
+      });
+    `;
+    const violations = findUnbackedDurabilityClaims(snippet);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].path).toBe('/api/fake');
+  });
 });
 
 describe('server.ts durability claims (real file)', () => {
@@ -280,16 +322,20 @@ describe('server.ts durability claims (real file)', () => {
     expect(paths).toContain('/api/telephony/calls');
   });
 
-  it('scans the broader persisted/recorded/stored claim set, not just literal true', () => {
+  it('scans the broader persisted/recorded/stored/applied claim set, not just literal true', () => {
     const claiming = sliceRoutes(serverSource).filter(
-      (r) => r.method !== 'GET' && /(?:persisted|recorded|stored)\s*:/.test(r.body)
+      (r) => r.method !== 'GET' && /(?:persisted|recorded|stored|applied)\s*:/.test(r.body)
     );
-    // Observed 32 at the time of writing. The bound guards against the scanner
-    // silently narrowing back to literal-only claims.
+    // Observed 33 against the raw server.ts at the time of writing (32 before
+    // slot 11 added the `applied` vocabulary). The bound guards against the
+    // scanner silently narrowing back to literal-only claims or dropping the
+    // mutation-path vocabulary.
     expect(claiming.length).toBeGreaterThanOrEqual(30);
     const paths = claiming.map((r) => r.path);
     expect(paths).toContain('/api/social/action');
     expect(paths).toContain('/api/github/nightly/run');
+    // The `applied` claim the slot-11 widening was added to cover.
+    expect(paths).toContain('/api/telephony/permissions');
   });
 
   it('no mutating route makes an unbacked durability claim', () => {
