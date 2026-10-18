@@ -47,6 +47,11 @@ import {
 import { classifyTelephonySettingsUpdate, TELEPHONY_SETTING_KEYS } from './src/utils/hardening/telephonySettingsTruth';
 import { classifyTelephonySuiteRun } from './src/utils/hardening/telephonySuiteTruth';
 import { resolveRawNumber } from './src/utils/hardening/telephonyOwnNumberTruth';
+import {
+  inboundAnswerGate,
+  inboundAnswerRejectionTwiML,
+  inboundAnswerRejectionBody,
+} from './src/utils/hardening/inboundAnswerGateTruth';
 import { classifyMemoryUpdate } from './src/utils/hardening/memoryUpdateTruth';
 import { classifyMemorySync } from './src/utils/hardening/memorySyncTruth';
 import { classifySecurityMatrixUpdate, applySecurityMatrixUpdate } from './src/utils/hardening/securityMatrixUpdateTruth';
@@ -10664,6 +10669,31 @@ app.post('/api/telephony/incoming', async (req: Request, res: Response) => {
       return res.type('text/xml').send(pauseTwiml);
     }
     return res.json({ success: false, error: 'EMERGENCY_STOP_ACTIVE', message: 'Autonomous call answering suspended.' });
+  }
+
+  // Autonomous Inbound Answering Permission (Section D).
+  // The permission matrix is consulted before a session exists, because the
+  // decision this gate makes is whether the line is answered at all. `DENIED`
+  // and an undecided `ASK`/`NOT_CONFIGURED` both refuse; only an explicit
+  // `GRANTED` answers. Previously this route never read the permission, so an
+  // operator who revoked it still had JARVIS pick up the phone.
+  const inboundStore = resolvePhonePermissionStore();
+  const inboundPermissions = inboundStore ? inboundStore.load() : loadPhonePermissions();
+  const inboundVerdict = inboundAnswerGate(inboundPermissions);
+  const wantsTwiml = Boolean(
+    req.headers['content-type']?.includes('application/x-www-form-urlencoded') || req.body.CallSid,
+  );
+  if (!inboundVerdict.allowed) {
+    addAuditLog(
+      `Inbound call answering refused: ${inboundVerdict.reason}`,
+      1,
+      'PERMISSION_MATRIX',
+      'BLOCKED',
+    );
+    if (wantsTwiml) {
+      return res.status(403).type('text/xml').send(inboundAnswerRejectionTwiML(inboundVerdict));
+    }
+    return res.status(403).json(inboundAnswerRejectionBody(inboundVerdict));
   }
 
   const rawFrom = resolveRawNumber(req.body.From || req.body.callerNumber);
