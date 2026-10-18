@@ -36,6 +36,7 @@ import { privacyMatrixTruth, schedulerTruth, daemonSchedulerTruth, type RoutineS
 import { briefingFallbackText } from './src/utils/hardening/briefingFallbackTruth';
 import { schedulerRunLogLine, type SchedulerPushOutcome } from './src/utils/hardening/schedulerRunTruth';
 import { buildNightlyReportText } from './src/utils/hardening/nightlyReportTruth';
+import { commandsReceivedInsight } from './src/utils/hardening/commandCounterLabelTruth';
 import { youtubeVoiceStatusReply } from './src/utils/hardening/youtubeVoiceStatusTruth';
 import { formatYouTubeSummaryNotice } from './src/utils/hardening/youtubeSummaryNoticeTruth';
 import { classifyPhonePermissionUpdate } from './src/utils/hardening/phonePermissionUpdateTruth';
@@ -2050,7 +2051,10 @@ function buildProactiveReports(): any[] {
       contentEn: `Sir, nightly plan. ${memoryState.stats.totalCommands} command(s) recorded this session; memory persists to jarvis_memory.json on write. No off-host incremental backup is configured.`,
       contentHi: `सर, रात की योजना। इस सत्र में ${memoryState.stats.totalCommands} कमांड दर्ज। मेमोरी jarvis_memory.json में सुरक्षित होती है।`,
       keyInsights: [
-        'Total Commands Executed: ' + memoryState.stats.totalCommands,
+        // `totalCommands` counts commands *received*, not executed — it advances
+        // on arrival, before any intent runs. The previous "Total Commands
+        // Executed" label credited work nothing had measured (item 13).
+        commandsReceivedInsight(memoryState.stats.totalCommands),
         'Memory store: jarvis_memory.json (local write)',
         'Off-host backup: not configured',
         describeServerHealthClaim(assessedServerStatus()),
