@@ -72,4 +72,16 @@ describe('item 13 — a verified probe whose cache did not persist is not report
     // The card labels the account it verified while naming the missing save.
     expect(modal).toContain('(NOT SAVED)');
   });
+
+  it('the route does not answer persisted:true for a probe that verified nothing', () => {
+    const server = source('server.ts');
+    const start = server.indexOf("app.post('/api/social/platforms/test'");
+    expect(start).toBeGreaterThan(-1);
+    const body = server.slice(start, server.indexOf('\n});', start));
+    // The unconditional `persisted: true` fall-through is gone; the claim is now
+    // derived from the probe's own success, so a NOT_CONFIGURED / ERROR probe
+    // that persisted nothing cannot read as durable.
+    expect(body).not.toMatch(/res\.json\(\{\s*\.\.\.result,\s*persisted:\s*true\s*\}\)/);
+    expect(body).toContain('result.success === true && result.profilePersisted !== false');
+  });
 });

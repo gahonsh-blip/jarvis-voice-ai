@@ -6803,15 +6803,16 @@ app.post('/api/social/platforms/test', async (req: Request, res: Response) => {
   const result = await testPlatformConnection(platform);
   // `persisted` is true only when the probe verified the account AND, when a
   // profile cache write was expected, that write reached durable storage. The
-  // UI must not report a verified-and-saved profile for a write that failed.
-  if (result.profilePersisted === false) {
-    return res.json({
-      ...result,
-      persisted: false,
-      message: `${result.message} The profile details could not be written to durable storage, so the verified account has not been cached.`,
-    });
-  }
-  res.json({ ...result, persisted: true });
+  // UI must not report a verified-and-saved profile for a write that failed,
+  // nor claim durable state for a probe that verified nothing: a
+  // NOT_CONFIGURED / AUTH_REQUIRED / ERROR / EXPIRED probe has no connection to
+  // persist, so it must not answer `persisted: true` for state it never wrote.
+  const persisted = result.success === true && result.profilePersisted !== false;
+  const message =
+    result.profilePersisted === false
+      ? `${result.message} The profile details could not be written to durable storage, so the verified account has not been cached.`
+      : result.message;
+  res.json({ ...result, persisted, message });
 });
 
 // Proactive Routines APIs
