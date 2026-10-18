@@ -89,8 +89,17 @@ const REFUSAL_RE = new RegExp(`(?:${CLAIM_KEY})\\s*:\\s*false`);
 // Durability-aware writers. A route that *consumes* one of their return values is
 // reporting a computed verdict, not asserting success. `persistMemory()` is the
 // canonical writer; the rest wrap it or read the row back from disk.
+//
+// Slot 9 (2026-10-19 02:05 IST) found this list stale: four repaired routes that
+// *do* consume a durability verdict were still flagged once the refusal exemption
+// below was tightened — `persistBlueprintPhases` (`/api/blueprint/toggle-item`),
+// `persistScheduledGoals` (`/api/autonomous/schedule`), `persistSecurityMatrixState`
+// (`/api/security/update`) and `persistTelephonySettingsState` (`/api/telephony/settings`)
+// each write and consume a verdict the list did not name. `testPlatformConnection`
+// is included because it returns `profilePersisted` derived from `persistMemory()`,
+// so the verify route forwards a computed verdict rather than asserting one.
 const DURABILITY_WRITER_CALL_RE =
-  /(?:await\s+)?(?:persistMemory|recordDurableAuditRow|addAuditLog|recordNightlyRun|persistApprovalRegistry|persistEmergencyState|persistTelephonyCalls|executeApprovedAction)\s*\(/g;
+  /(?:await\s+)?(?:persistMemory|persistBlueprintPhases|persistScheduledGoals|persistSecurityMatrixState|persistTelephonySettingsState|persistApprovalRegistry|persistEmergencyState|persistTelephonyCalls|recordDurableAuditRow|recordNightlyRun|recordScheduledGoalRun|recordSchedulerOutcome|recordAudit|recordBridgeAuthFailure|addAuditLog|executeApprovedAction|testPlatformConnection|writeFileSync|writeFile)\s*\(/g;
 
 // A writer call whose verdict is thrown away cannot back a claim. The test is
 // positional: a call is *discarded* only when it sits in statement position,
@@ -164,17 +173,25 @@ export function findUnbackedDurabilityClaims(source: string): DurabilityClaimVio
     const shorthand = CLAIM_SHORTHAND_RE.test(route.body);
     if (values.length === 0 && !shorthand) continue;
 
-    // A read-back or an explicit refusal backs any claim.
-    if (READ_BACK_RE.test(route.body) || REFUSAL_RE.test(route.body)) continue;
-
     const literalTrue = values.some((v) => v === 'true');
-    // A forwarded verdict (a variable, a property, or object shorthand) is only
-    // trustworthy when the route actually *consumes* a durability-aware writer
-    // whose result it could be forwarding. A hard-coded `: true` gets no such
-    // exemption, and neither does a route that calls a writer but discards its
-    // boolean — a discarded `persistMemory()` must still be flagged, which is the
-    // whole point of item 13.
-    if (!literalTrue && hasConsumedWriter(route.body)) continue;
+    const consumedWriter = hasConsumedWriter(route.body);
+
+    // A read-back of the persisted state backs any claim: the route asked disk.
+    if (READ_BACK_RE.test(route.body)) continue;
+
+    // Slot 9 (2026-10-19 02:05 IST): the refusal exemption used to be body-wide,
+    // so a route that hard-coded `persisted: true` in one branch was cleared by
+    // any unrelated `persisted: false` elsewhere in the same body — the exact
+    // shape of `/api/social/platforms/test`, which answered `persisted: true`
+    // whenever the probe's `profilePersisted` was not `false`, including for a
+    // `NOT_CONFIGURED`/`ERROR` probe that persisted nothing. A refusal now backs
+    // a claim only when the route also *consumes* a durability-aware writer, i.e.
+    // the refusal is the other branch of a verdict the route actually computed.
+    if (literalTrue) {
+      if (consumedWriter && REFUSAL_RE.test(route.body)) continue;
+    } else if (consumedWriter) {
+      continue;
+    }
 
     const rendered = [
       ...values.map((v) => `${v}`),

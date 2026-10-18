@@ -197,6 +197,72 @@ describe('durabilityClaimScan detector', () => {
     `;
     expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
   });
+
+  it('flags a hardcoded claim "backed" only by an unrelated refusal in the same body', () => {
+    // Slot 9: the refusal exemption was body-wide, so this route — which answers
+    // `persisted: true` on the happy path and never computed a durability verdict —
+    // was cleared by the unrelated `persisted: false` in its validation branch.
+    // The claim is now unbacked unless the route also consumes a writer.
+    const snippet = `
+      app.post('/api/fake', (req, res) => {
+        const result = probe(req.body);
+        if (result.profilePersisted === false) {
+          return res.json({ ...result, persisted: false, message: 'not saved' });
+        }
+        res.json({ ...result, persisted: true });
+      });
+    `;
+    const violations = findUnbackedDurabilityClaims(snippet);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].path).toBe('/api/fake');
+  });
+
+  it('accepts a refusal paired with a consumed writer, the shape a repaired route uses', () => {
+    // The same refusal branch is a genuine durability gate once the route
+    // consumes the writer verdict it is reporting.
+    const snippet = `
+      app.post('/api/good', (req, res) => {
+        const stored = persistMemory();
+        if (!stored) return res.json({ persisted: false, error: 'disk' });
+        res.json({ persisted: true });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
+  });
+
+  it('recognises the durability writers the earlier allowlist omitted', () => {
+    // Slot 9: four repaired routes consume a writer the list did not name, so the
+    // tightened refusal rule flagged them. Each of these must read as backed.
+    const snippet = `
+      app.post('/api/blueprint/toggle-item', (req, res) => {
+        const stored = persistBlueprintPhases();
+        if (!stored) return res.status(500).json({ persisted: false });
+        res.json({ success: true, persisted: true });
+      });
+      app.post('/api/security/update', (req, res) => {
+        const stored = persistSecurityMatrixState();
+        res.json({ success: true, persisted: stored });
+      });
+      app.post('/api/telephony/settings', (req, res) => {
+        const stored = persistTelephonySettingsState();
+        res.json({ success: true, persisted: stored });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
+  });
+
+  it('recognises testPlatformConnection, whose returned verdict the verify route forwards', () => {
+    const snippet = `
+      app.post('/api/social/platforms/test', async (req, res) => {
+        const result = await testPlatformConnection(req.body.platform);
+        if (result.profilePersisted === false) {
+          return res.json({ ...result, persisted: false });
+        }
+        res.json({ ...result, persisted: true });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
+  });
 });
 
 describe('server.ts durability claims (real file)', () => {
