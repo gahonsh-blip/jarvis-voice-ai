@@ -21192,3 +21192,57 @@ GitHub API: `state: open`, `draft: false`, `mergeable: true`,
 `mergeable_state: unstable` (checks not green: the owner account is locked on
 billing), head `c5d986b`. `GITHUB_TOKEN` is empty in this sandbox; the provider
 token `github_token` was used for the read-only API call.
+
+---
+
+## 2026-10-18 00:35 IST — WORK SLOT 6 (state read: `slots_completed: 5`, `current_item: 13`, `finalized: false`)
+
+Item 13 (`Zero-fake-success for all tools`) — **`processMobileCommand()` closed with a
+discarded `persistMemory()` verdict, so a command that never reached disk was
+indistinguishable from a durable one at the HTTP layer.** The handler's final statement
+was a bare `persistMemory();` whose boolean was thrown away. The record it writes — the
+user turn, the reply, the advanced counters and any state the intent changed — is only
+real once it lands on disk; on a read-only volume or a full disk the whole exchange
+stayed in process memory while `POST /api/telegram/send` (the single web-client caller,
+`server.ts` L5022) answered an ordinary success, and a delivered reply was read as a
+durable record.
+
+Found by the slot-6 sweep: `/tmp/scan.mjs` over `server.ts` reports **159**
+`persistMemory()`/audit calls, **5 discarded** — `L2159`, `L2625`, `L3966`, `L7259`,
+`L7432`. `L3966` is this fix. `L7259`/`L7432` are benign (an emergency-state persist on
+the *non-executed* branch of `/api/emergency/toggle` and `/api/system/kill-switch`, where
+no state changed, so there is nothing to lose). `L2159` and `L2625` are best-effort
+enrichment of an already-durable OAuth connection (LinkedIn profile email, YouTube
+channel id) — recorded for the next slot, not changed here.
+
+The verdict is now bound as `const commandRecordPersisted = persistMemory();`, warned on
+failure, returned from the handler, and forwarded by `POST /api/telegram/send` as
+`commandRecordPersisted` plus a `recordNote` when the record did not land. Delivery is
+unchanged and still reported independently — a delivered reply no longer implies a
+durable record.
+
+Guarded by `src/tests/telegramCommandRecordDurabilityTruth.test.ts` (6 cases: a real
+server process against a memory file made read-only after the first successful write
+reports `commandRecordPersisted: true` with no `recordNote` while the disk is writable,
+then `false` with a `recordNote` once it is not; and a source guard that the handler no
+longer closes with a discarded `persistMemory()` statement, that it returns the bound
+verdict, and that the send route forwards it rather than assuming a record).
+Negative-validated — stashing `server.ts` failed **5 failed | 1 passed**; restored →
+**6/6**.
+
+Item 13 stays `PARTIAL` — the tail of unclassified `success: true` / discarded-
+`persistMemory()` sites is still not individually audited. This slot assessed the
+remaining `success: true` read-route sites (computer-operator tasks, github
+status/approvals/nightly, autonomous goals/schedule, security matrix/audit-secrets) and
+they report in-memory read state, not durability claims; no change needed.
+
+Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; targeted
+`telegramCommandRecordDurabilityTruth` 1 file / 6 passed; `durabilityClaimInvariant` +
+`telegramSendTruth` + `commandCounterLabelTruth` + `chatDurabilityTruth` 4 files / 38
+passed; full `npx vitest run` **268 files / 2935 tests passed** (0 failed); `npm run
+build` exit 0 (`dist/server.cjs` 1,102,926 bytes). E2E: NOT RUN — no handset / emulator /
+display session. Deploy: `NOT_CONFIGURED` — the verified `dist/server.cjs` is the
+deployment unit available. Commit `5e2f6ce`, pushed to
+`feature/hermes-full-completion`. PR #8 remains open, non-draft. Main **NOT MERGED —
+awaiting human approval.**
+
