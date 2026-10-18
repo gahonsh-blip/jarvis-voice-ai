@@ -1,28 +1,19 @@
 {
   "window_date": "2026-10-18",
   "window_started_at": "2026-10-18T15:35:00Z",
-  "last_slot_at": "2026-10-18T16:58:00Z",
-  "slots_completed": 3,
+  "last_slot_at": "2026-10-18T17:36:00Z",
+  "slots_completed": 4,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "bcd774a",
+  "last_commit": "45c01dd9",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {
-      "item": "real-android-e2e",
-      "reason": "no handset/emulator"
-    },
-    {
-      "item": "real-screenshot",
-      "reason": "no device/display session"
-    },
-    {
-      "item": "github-actions-ci",
-      "reason": "owner account locked due to a billing issue; jobs never start"
-    }
+    {"item": "real-android-e2e", "reason": "no handset/emulator"},
+    {"item": "real-screenshot", "reason": "no device/display session"},
+    {"item": "github-actions-ci", "reason": "owner account locked due to a billing issue; jobs never start"}
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
