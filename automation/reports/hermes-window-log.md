@@ -21393,3 +21393,74 @@ is the deployment unit available. Main **NOT MERGED — awaiting human approval.
 
 हिंदी सारांश: इस स्लॉट में `savePhonePermissions` को ठीक किया गया ताकि चुपचाप
 गिराए गए लेखन को सफलता न बताया जाए; 25/25 परीक्षण पास, lint और build हरे।
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 02:05 (fire) / ~03:05
+Window date: 2026-10-19 (window 2026-10-18 → 2026-10-19)   Window slots completed so far: 10
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL, one slice closed) — `POST /api/social/platforms/test`
+  no longer answers `persisted: true` for a probe that verified nothing.
+  Evidence: `server.ts` route now derives `const persisted = result.success === true &&
+  result.profilePersisted !== false;`; `src/tests/socialPlatformVerifyPersistedTruth.test.ts`
+  6/6 passed (was 5); 4 affected suites 35/35 passed. Negative-validated: stashing `server.ts`
+  failed exactly the new case (1 failed | 5 passed); restored → 6/6.
+
+In Progress:
+- #13 Zero-fake-success — the long tail of unclassified `success: true` / discarded
+  `persistMemory()` sites in `server.ts` / `server_tools.ts` still needs individual audit.
+
+Remaining:
+- #13 remains PARTIAL; the rest of the backlog is as recorded in docs/COMPLETION_STATUS.md.
+  Hardware/credential-bound items (real Android E2E, real screenshot, live provider calls)
+  stay BLOCKED / NOT_AVAILABLE — no device, emulator, display session or OAuth grant here.
+
+Bugs Found:
+- `POST /api/social/platforms/test` derived `persisted` from one special case
+  (`if (result.profilePersisted === false)`) and then fell through to an unconditional
+  `res.json({ ...result, persisted: true })`. A probe returning `success: false`
+  (NOT_CONFIGURED / AUTH_REQUIRED / ERROR / EXPIRED) carries no `profilePersisted`, so it
+  took the fall-through and the Social Hub read a durable, saved connection for a probe that
+  persisted nothing. Found by reading the route body during the item-13 audit.
+
+Bugs Fixed:
+- The route now derives the claim from the probe's own verdict
+  (`result.success === true && result.profilePersisted !== false`), so an unverified probe can
+  never read as durable, while a verified-but-unwritten probe still reads `persisted: false`
+  with the durable-storage caveat. Verified by the new test case and by negative validation.
+
+Tests:    269 files / 2945 tests passed, 0 failed (82.86 s) — observed, exit 0.
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0 — observed.
+Build:    `npm run build` exit 0; artifact `dist/server.cjs` 1,105,547 bytes — observed.
+E2E:      NOT RUN — no handset, no emulator, no display session; the changed route's provider
+          calls need live OAuth credentials that are not present.
+Security: `npm audit --omit=dev` → 0 vulnerabilities — observed. No `.env` staged; no secret in
+          the diff; permission gateway untouched (this change makes a claim more honest, not
+          more permissive).
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle), docs/CHANGELOG.md (slot 10 entry).
+Branch:  feature/hermes-full-completion
+Commit:  2cd6727 (fix) + dd0c118 (test retarget) + docs commit
+Push:    succeeded → origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration in this sandbox; the
+            verified `dist/server.cjs` is the deployment unit available.
+
+Blocked:
+- Real Android E2E / real screenshot / live provider verification — require a physical device,
+  emulator, display session or OAuth grant, none of which exist in this sandbox.
+
+Human Approval Required:
+- None this slot. Merge to `main` remains a human decision.
+
+Next Slot:
+- Continue item #13: audit the next unclassified `success: true` / discarded `persistMemory()`
+  site in `server.ts` / `server_tools.ts`, or close the remaining route-claim gap found by the
+  durability-claim scan. Whichever is genuinely exploitable first.
+
+हिंदी सारांश (एक पंक्ति):
+- सोशल प्लेटफ़ॉर्म-टेस्ट रूट अब ऐसे प्रोब के लिए `persisted: true` नहीं कहता जिसने कुछ भी सत्यापित/सहेजा नहीं; पूरी सूट 269 फ़ाइल/2945 टेस्ट पास, आइटम #13 अभी भी PARTIAL।

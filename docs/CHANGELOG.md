@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-19 03:00 IST — window 2026-10-18/19 slot 10: the platform-test route no longer claims a durable connection for a probe that verified nothing
+
+### Fixed
+- **`POST /api/social/platforms/test` answered `persisted: true` for every probe that was not explicitly `profilePersisted === false`, including a probe that returned `success: false` and cached nothing.** The route appended a durability caveat only for the one special case and then fell through to an unconditional `res.json({ ...result, persisted: true })`. A `NOT_CONFIGURED`, `AUTH_REQUIRED`, `ERROR` or `EXPIRED` probe carries no `profilePersisted`, so it took the fall-through and the Social Hub read a durable, saved connection for a probe that persisted nothing — the false-success class item 13 removes, on the read path the Hub shows before any publish. The claim is now derived from the probe's own verdict (`result.success === true && result.profilePersisted !== false`), so an unverified probe can never read as durable, while a verified-but-unwritten probe still reads `persisted: false` with the durable-storage caveat.
+
+### Tests
+- **`src/tests/socialPlatformVerifyPersistedTruth.test.ts` 5 → 6 cases.** A source assertion that the unconditional `res.json({ ...result, persisted: true })` fall-through is gone and the claim is derived. Negative-validated — stashing `server.ts` failed exactly that case (`1 failed | 5 passed`); restored → 6/6.
+- **Retargeted two source-shape guards** (`socialPlatformVerifyPersistenceTruth`, `youtubePlatformVerifyPersistenceTruth`) that pinned the old literal `if (result.profilePersisted === false)` to the derived expression plus the caveat wording — same intent, no weaker assertion. 4 affected suites / 35 tests pass.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run` 269 files / 2945 tests passed, 0 failed (82.86 s); `npm run build` exit 0 (`dist/server.cjs` 1,105,547 bytes); `npm audit --omit=dev` 0 vulnerabilities. Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-19 02:35 IST — window 2026-10-18/19 slot 9: the last client-side storage writer reports a silently dropped write as a refusal
 
 ### Fixed
