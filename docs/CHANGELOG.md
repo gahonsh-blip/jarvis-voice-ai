@@ -4,6 +4,13 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 23:05 IST — window 2026-10-18/19 slot 4: the durability-claim guard sees variable and shorthand claims
+
+### Fixed
+- **The item-13 property guard (`src/utils/hardening/durabilityClaimScan.ts`) matched only the literal `persisted: true`, so every variable-form and shorthand durability claim in `server.ts` escaped it.** A route answering `persisted: result.persisted` (`POST /api/social/action`), `recorded: runRecorded` (`POST /api/github/nightly/run`), `persisted: webhookPersisted` (`POST /api/telegram/webhook`) or the object shorthand `{ ..., persisted }` (`POST /api/emergency/toggle`, `POST /api/system/kill-switch`) was invisible to the invariant — the exact false-success class item 13 removes, left unguarded. The detector now scans the wider claim key set (`persisted` / `recorded` / `stored`), recognises object shorthand, strips comments first (line-count preserving, `https://` safe) so prose about a claim is never counted, and treats a forwarded verdict as backed only when the route actually calls a durability-aware writer (`persistMemory()`, `recordNightlyRun()`, `executeApprovedAction()`, ...). A discarded `persistMemory()` boolean behind a hard-coded `true` is still flagged, so the widening cannot excuse the original defect.
+- **`test(honesty)` — `src/tests/durabilityClaimInvariant.test.ts` 7 → 14 cases** cover variable-form forwarding, `recorded`/`stored` keys, object shorthand, a writer-forwarded claim accepted, the discarded-`persistMemory()`-behind-literal-`true` case still flagged, a claim that appears only in a comment ignored, and a real-file assertion that the scanner covers ≥ 30 claiming routes including `/api/social/action` and `/api/github/nightly/run`. On the real `server.ts` the widened scan covers **32** mutating routes with a claim (up from 21) and reports **0** violations. Negative-validated: reverting the detector to its literal-only form failed exactly the 4 new cases (`4 failed | 10 passed`); restored → 14/14.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run` 267 files / 2925 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,102,443 bytes). Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 22:05 IST — window 2026-10-18/19 slot 3: the night routine names received commands as received
 
 ### Fixed

@@ -21036,3 +21036,72 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - केवल जाँच: गार्ड हरा है पर वेरिएबल-रूप `persisted:` क्लेम छूट जाते हैं; कोई कोड बदलाव नहीं, ट्री साफ़।
+
+
+---
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 23:05 (fire 23:05; report written ~23:24 IST)
+Window date: 2026-10-18   Window slots completed so far: 4
+
+Completed:
+- #13 Zero-fake-success for all tools — PARTIAL advanced. The item-13 property
+  guard (src/utils/hardening/durabilityClaimScan.ts) matched only the literal
+  `persisted: true`, so every variable-form and shorthand durability claim in
+  server.ts escaped it. Widened to the claim key set persisted/recorded/stored,
+  object shorthand, comment-stripped source, and a writer-aware backing test.
+  Evidence: src/tests/durabilityClaimInvariant.test.ts 7 -> 14 cases, all pass
+  (1 file / 14 passed). Real-file scan over server.ts: 32 mutating routes with a
+  durability claim (up from 21 literal), 0 violations.
+
+In Progress:
+- #13 — the tail of unclassified `success: true` / discarded-`persistMemory()`
+  sites in server.ts / server_tools.ts remains.
+
+Remaining:
+- #13 tail; the rest of the 60-item backlog is unchanged this slot (see
+  docs/COMPLETION_STATUS.md for the authoritative board).
+
+Bugs Found:
+- The item-13 invariant was a partial guard: route.body.includes('persisted: true')
+  could not see `persisted: result.persisted`, `recorded: runRecorded`,
+  `persisted: webhookPersisted`, or shorthand `{ ..., persisted }`. Found by
+  reading the detector against the real route bodies.
+
+Bugs Fixed:
+- Widened the detector as above. Negative-validated: reverting it to the
+  literal-only form failed exactly the 4 new cases (4 failed | 10 passed);
+  restoring it passes 14/14.
+
+Tests:    267 files / 2925 tests passed (83.80 s, 0 failed) — observed this run
+Lint:     `npm run lint` (tsc --noEmit) exit 0 — observed this run
+Build:    `npm run build` exit 0; dist/server.cjs 1,102,443 bytes — observed
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox
+Security: no .env staged, no token/key in the diff, no node_modules/dist tracked
+          (see Phase F checks in the finalization slot). npm audit NOT RUN this slot.
+
+Documentation: docs/COMPLETION_STATUS.md (last-cycle entry), docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  5ad2c01 (source+tests); docs commit appended this slot
+Push:    succeeded — 45c01dd..5ad2c01 on origin/feature/hermes-full-completion
+
+PR:         #8 (open, non-draft) — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target or hosting integration is
+            present in this environment; the verified dist/server.cjs is the
+            deployment unit available.
+
+Blocked:
+- Real Android E2E / Real Screenshot / device-connected items — require a handset
+  or emulator; NOT_AVAILABLE in this sandbox.
+
+Human Approval Required:
+- Merge of PR #8 to `main` (owner reads the final verification report first).
+
+Next Slot:
+- #13 tail — continue the false-success sweep over server.ts / server_tools.ts,
+  or the next non-VERIFIED backlog item if the sweep is exhausted.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में item #13 का गार्ड मज़बूत किया गया — अब variable/shorthand
+  durability claims भी पकड़े जाते हैं; 14/14 टेस्ट पास, 2925 टेस्ट पास, बिल्ड सफल।
