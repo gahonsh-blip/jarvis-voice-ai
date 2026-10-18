@@ -4,6 +4,13 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 22:05 IST — window 2026-10-18/19 slot 3: the night routine names received commands as received
+
+### Fixed
+- **The night proactive routine (`buildProactiveReports()`, `server.ts`) published `memoryState.stats.totalCommands` under the label "Total Commands Executed".** The counter advances when a command is *received* (`processMobileCommand()`, `POST /api/chat`), before any intent is classified or run, so a greeting, a capabilities question or a refused finance request inflated a figure the 10:30 PM briefing called executed. The label and the rendered line now come from `commandsReceivedInsight()` (`src/utils/hardening/commandCounterLabelTruth.ts`): `Total Commands Received: <n> (received this session, not a count of executed actions)`, and a non-finite counter renders as 0 instead of `NaN`. This is the sibling of the mislabel the nightly Telegram report already fixed (`nightlyReportTruth.ts`).
+- **`test(honesty)` — `src/tests/commandCounterLabelTruth.test.ts` (6 cases)** cover the composed line, the zero case, the non-finite fallback, and three source guards: the pre-fix `'Total Commands Executed: '` literal is gone, the insight is composed from the helper, and the helper is imported from the hardening module. Negative-validated: restoring the pre-fix line failed exactly the two source guards (`2 failed | 4 passed`); restored → 6/6.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run` 267 files / 2918 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,102,443 bytes). Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 04:05 IST — window 2026-10-17/18 slot 14: the offline storage writers read their bytes back
 
 ### Fixed

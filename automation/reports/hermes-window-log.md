@@ -20897,3 +20897,78 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - वर्कस्पेस फ़ाइल-सुरक्षा गार्ड में सिमलिंक एस्केप बग मिला और ठीक किया — अब रूट के बाहर इशारा करने वाला लिंक पढ़/लिख/मिटा/सूची नहीं कर सकता; lint स्वच्छ, 20/20 टेस्ट पास; PR #8 मर्ज नहीं — मानव अनुमोदन की प्रतीक्षा में।
+
+---
+
+## 2026-10-18 22:05 IST — WORK SLOT 3 (window 2026-10-18 → 2026-10-19)
+
+HERMES JARVIS — AUTONOMOUS WINDOW REPORT
+Slot:        WORK  |  IST time: 22:05
+Window date: 2026-10-18   Window slots completed so far: 3
+
+Completed:
+- #13 Zero-fake-success for all tools (PARTIAL, slice) — the night proactive
+  routine published a count of commands *received* under the label "Total
+  Commands Executed". `buildProactiveReports()` (server.ts) emitted
+  `'Total Commands Executed: ' + memoryState.stats.totalCommands`; that counter
+  advances on arrival (`processMobileCommand()`, top of `POST /api/chat`),
+  before any intent is classified or any tool runs, so a greeted or refused
+  command inflated a figure the 10:30 PM briefing called executed. The label and
+  the rendered line now come from `commandsReceivedInsight()`
+  (`src/utils/hardening/commandCounterLabelTruth.ts`): "Total Commands Received:
+  <n> (received this session, not a count of executed actions)". Evidence:
+  `src/tests/commandCounterLabelTruth.test.ts` (6 passed); lint exit 0; full
+  suite 267 files / 2918 tests passed; build exit 0.
+
+In Progress:
+- #13 — the tail of unclassified `success: true` / discarded-`persistMemory()`
+  sites in server.ts / server_tools.ts remains un-audited.
+
+Remaining:
+- #1 / #2 / #55 blocked on hardware; #51 / #54 / #60 external legs pending.
+
+Bugs Found:
+- Night proactive routine labelled a count of commands received as "executed"
+  (server.ts `buildProactiveReports`), the last "Executed"-labelled surface on
+  the routine and the sibling of the mislabel `nightlyReportTruth.ts` already
+  fixed.
+
+Bugs Fixed:
+- The label and line now come from `commandCounterLabelTruth.ts`, which names
+  the figure received and disclaims executed work; a non-finite counter renders
+  as 0, not NaN. Negative-validated: restoring the pre-fix line failed exactly
+  the two source guards (`2 failed | 4 passed`); restored → 6/6.
+
+Tests:    267 files / 2918 tests passed (targeted `commandCounterLabelTruth` 1 file / 6 passed)
+Lint:     `npm run lint` (`tsc --noEmit`) exit 0
+Build:    `npm run build` exit 0 — `dist/server.cjs` 1,102,443 bytes
+E2E:      NOT RUN — no handset / emulator / display session
+Security: not re-run this slot (no security surface touched)
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle + item 13 evidence),
+               docs/CHANGELOG.md
+Branch:  feature/hermes-full-completion
+Commit:  b1c7dcd
+Push:    succeeded — origin/feature/hermes-full-completion (648b667..b1c7dcd)
+
+PR:         #8 (https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8)
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target (DEPLOY_URL unset) or hosting
+            integration present in this sandbox.
+
+Blocked:
+- Real Android E2E / Real Screenshot — requires a handset, emulator or display
+  session (NOT_AVAILABLE here).
+- GitHub Actions CI — owner account locked (billing); jobs never start.
+
+Human Approval Required:
+- Merge of PR #8 to main.
+- Clear the GitHub billing lock so CI can run the same gates verified locally.
+
+Next Slot:
+- Resume #13: audit the Telegram delivery trio and the scheduler push-delivery
+  logging for discarded `persistMemory()` / bare `success: true`, one coherent
+  cluster at a time.
+
+हिंदी सारांश (एक पंक्ति):
+- रात्रि रिपोर्ट में "Total Commands Executed" लेबल गलत था — जो काउंटर केवल प्राप्त कमांड गिनता है, उसे "executed" बताया जा रहा था; अब सही लेबल "Total Commands Received" से बदला और टेस्ट से सुरक्षित किया; lint स्वच्छ, 267 फ़ाइलें/2918 टेस्ट पास; PR #8 मर्ज नहीं — मानव अनुमोदन की प्रतीक्षा में।
