@@ -4,6 +4,15 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-19 02:35 IST — window 2026-10-18/19 slot 9: the last client-side storage writer reports a silently dropped write as a refusal
+
+### Fixed
+- **`savePhonePermissions()` (`src/utils/telephonyPermissions.ts`) returned `void` and swallowed the storage error in a `catch`, so a refused write (quota, private mode, no `localStorage`) was indistinguishable from a durable one.** A store that accepted `setItem` without throwing yet kept the previous bytes — the silent no-op the slot-1 `phonePermissionStoreTruth` read-back guard exists to catch — left `hermes_jarvis_phone_permissions_v1` at its previous value, so a caller could announce a Level-4 authorization change (`PHONE_OUTBOUND_CALL`, `PHONE_RECORDING`, `PHONE_PRIVATE_DATA_ACCESS`) that the next reload would not find. The writer now serialises once, writes, and reads the bytes back, returning `true` only when the store holds exactly what was written; a no-`window` context returns `false` instead of pretending success. A survey of the remaining `localStorage.setItem` sites confirmed this was the last instance of the class in the client storage layer, and no production caller depended on the old `void` signature.
+
+### Tests
+- **`src/tests/telephonyPermissions.test.ts` 24 → 25 cases.** A `SilentStorage` subclass that accepts `setItem` and keeps the previous bytes makes `savePhonePermissions` report `false` while `loadPhonePermissions()` still returns the pre-write `ASK` for `PHONE_OUTBOUND_CALL`; the round-trip case now also asserts the `true` verdict. Negative-validated — stashing `src/utils/telephonyPermissions.ts` failed exactly the two read-back-dependent cases (`2 failed | 23 passed`); restored → 25/25.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; targeted `telephonyPermissions` 1 file / 25 passed; full `npx vitest run` 269 files / 2940 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,105,523 bytes); `npm audit --omit=dev` 0 vulnerabilities. Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 01:35 IST — window 2026-10-18/19 slot 7: the inbound call webhook honours the inbound-answering permission
 
 ### Fixed
