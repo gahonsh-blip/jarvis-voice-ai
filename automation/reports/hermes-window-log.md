@@ -20723,3 +20723,87 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - अंतिम स्लॉट: विंडो की टिप da86b7d को फिर से सत्यापित किया — lint स्वच्छ, 2905 टेस्ट पास, बिल्ड सफल (dist/server.cjs 1,099,361 बाइट), npm audit में 0 कमजोरियाँ; PR #8 खुला और मर्ज-योग्य है, main पर मर्ज नहीं किया — मानव अनुमोदन की प्रतीक्षा में।
+
+---
+
+## 2026-10-18 21:05 IST — WORK SLOT 1 (window 2026-10-18 → 2026-10-19)
+
+Slot:        WORK  |  IST time: 21:05
+Window date: 2026-10-18   Window slots completed so far: 1
+
+Completed:
+- #13 Zero-fake-success for all tools — the telephony permission writer
+  reported a Level-4 authorization change as applied without reading the store
+  back. `applyPhonePermissionUpdate()`
+  (`src/utils/hardening/phonePermissionStoreTruth.ts`) called
+  `store.save(updated)` and returned `applied: true` / `outcome:'APPLIED'`
+  unconditionally on the non-throwing path. The wrapped store
+  (`src/utils/telephonyPermissions.ts`) short-circuits on `typeof window ===
+  'undefined'`, and a quota-clamped/frozen `localStorage` accepts `setItem`
+  without throwing yet keeps the previous bytes — so a grant/denial of
+  OUTBOUND_CALLING / PHONE_RECORDING / PHONE_PRIVATE_DATA_ACCESS via
+  POST /api/telephony/permissions read as durable while the matrix still held
+  the old state and the returned `permissions` view reverted on the next read.
+  Evidence: helper now reads the store back after save() and reports
+  applied:true only when the store holds exactly the changed keys; throwing,
+  silent-drop and partial-write stores yield outcome:'NOT_PERSISTED',
+  applied:false + the authoritative view; NO_STORE / NOTHING_TO_APPLY
+  distinguished. Test `src/tests/phonePermissionStoreTruth.test.ts` — 9 passed
+  (1 file). Negative-validated: reverting to the pre-fix unconditional claim
+  failed exactly the three silent/partial cases (3 failed | 6 passed); restored
+  -> 9/9.
+
+In Progress:
+- #13 Zero-fake-success for all tools — remains PARTIAL. The tail of
+  unclassified `success: true` / discarded-`persistMemory()` sites in
+  server.ts / server_tools.ts is still not individually audited.
+
+Bugs Found:
+- Telephony permission store truth: `applyPhonePermissionUpdate` claimed
+  `applied:true` after `store.save()` without a read-back, so a store that
+  accepted the write and dropped the bytes reported a Level-4 authorization
+  change as durable.
+- Window-state bug (process, not code): the previous window's state file
+  recorded `window_date: "2026-10-18"` while `window_started_at` was
+  `2026-10-17T15:35:00Z` (2026-10-17 21:05 IST) — the field held the
+  FINALIZATION date, not the window START date. Under the idempotency guard
+  (`window_date == today IST AND finalized == true`) that mislabel makes
+  tonight's 21:05 fire look like a completed window and would stop it. Tonight's
+  window is written with `window_date` = the IST date of the window's START
+  (2026-10-18).
+
+Bugs Fixed:
+- Telephony permission durability (above) — proven by the negative validation.
+
+Tests:    266 files / 2908 tests passed (0 failed), 81.42 s — full `npx vitest run`
+Lint:     PASS — `npm run lint` (tsc --noEmit) exit 0
+Build:    PASS — `npm run build` exit 0, dist/server.cjs 1,100,072 bytes
+E2E:      NOT RUN — no handset / emulator / display session in this sandbox
+Security: NOT RUN this slot (full audit recorded in the prior finalization slot)
+
+Documentation: docs/COMPLETION_STATUS.md (Last cycle line + item #13 row)
+Branch:  feature/hermes-full-completion
+Commit:  affb69c (fix) + 6ed4518 (docs)
+Push:    succeeded -> origin/feature/hermes-full-completion
+
+PR:         #8 — https://github.com/gahonsh-blip/jarvis-voice-ai/pull/8
+Main merge: NOT MERGED — awaiting human approval (never auto-merge)
+Deploy:     NOT_CONFIGURED — no deployment target (DEPLOY_URL unset) or hosting
+            integration present; the verified dist/server.cjs is the deployment
+            unit available.
+
+Blocked:
+- Real Android E2E — requires a physical handset or emulator (NOT_AVAILABLE here)
+- Real Screenshot — requires a device/display session (NOT_AVAILABLE here)
+- GitHub Actions CI — owner account locked (billing); jobs never start
+
+Human Approval Required:
+- Merge of PR #8 to main.
+- Clear the GitHub billing lock so CI can run the same gates verified locally.
+
+Next Slot:
+- Continue #13: audit the remaining `success: true` / discarded-`persistMemory()`
+  sites in server.ts / server_tools.ts and close one coherent cluster.
+
+हिंदी सारांश (एक पंक्ति):
+- इस स्लॉट में टेलीफ़ोनी परमिशन राइटर का झूठा सफलता दावा ठीक किया — स्टोर को वापस पढ़कर ही applied:true दिया जाता है; lint स्वच्छ, 2908 टेस्ट पास, बिल्ड सफल; PR #8 मर्ज-योग्य, main पर मर्ज नहीं — मानव अनुमोदन की प्रतीक्षा में।
