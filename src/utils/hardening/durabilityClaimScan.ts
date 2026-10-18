@@ -33,6 +33,16 @@
 // escaped it entirely. This version closes that gap and strips comments first,
 // so a `// ... persisted: true ...` note cannot be mistaken for a claim.
 //
+// Slot 5 found two further holes in the same guard:
+//   * `sliceRoutes` only matched the single-quoted single-path form, so a route
+//     declared as an array (`app.post(['/a', '/b'], ...)`) was not a slice at all
+//     and its body escaped the scan; and
+//   * the writer exemption matched the *call* rather than its *use*, so a route
+//     that called `persistMemory()` and then discarded the boolean while
+//     forwarding some unrelated flag (`persisted: someOtherFlag`) was exempted.
+// Both are closed here, and both are pinned by negative-validated cases in
+// `durabilityClaimInvariant.test.ts`.
+//
 // The scanner is deliberately structural (source text) because `server.ts` binds
 // a port on import, so it cannot be imported by a test. `serverSource` is
 // passed in rather than read here so the same function serves both the guard
@@ -54,7 +64,7 @@ export interface DurabilityClaimViolation {
   reason: string;
 }
 
-const ROUTE_RE = /app\.(get|post|put|delete|patch)\(\s*'([^']+)'/g;
+const ROUTE_RE = /app\.(get|post|put|delete|patch)\(\s*(?:'([^']+)'|\[([^\]]*)\])/g;
 
 // The keys that assert durability. `persisted` is the canonical one; `recorded`
 // and `stored` are the same claim under a different name and were the ones the
@@ -76,11 +86,31 @@ const READ_BACK_RE = /(?:[A-Za-z]+OnDisk\(|diskHasAuditRow\()/;
 // `recorded: false` in a non-2xx reply is the shape every repaired route uses.
 const REFUSAL_RE = new RegExp(`(?:${CLAIM_KEY})\\s*:\\s*false`);
 
-// Durability-aware writers. A route that forwards one of their return values is
+// Durability-aware writers. A route that *consumes* one of their return values is
 // reporting a computed verdict, not asserting success. `persistMemory()` is the
 // canonical writer; the rest wrap it or read the row back from disk.
-const DURABILITY_WRITER_RE =
-  /\b(?:persistMemory|recordDurableAuditRow|addAuditLog|recordNightlyRun|persistApprovalRegistry|persistEmergencyState|persistTelephonyCalls|executeApprovedAction)\s*\(/;
+const DURABILITY_WRITER_CALL_RE =
+  /(?:await\s+)?(?:persistMemory|recordDurableAuditRow|addAuditLog|recordNightlyRun|persistApprovalRegistry|persistEmergencyState|persistTelephonyCalls|executeApprovedAction)\s*\(/g;
+
+// A writer call whose verdict is thrown away cannot back a claim. The test is
+// positional: a call is *discarded* only when it sits in statement position,
+// i.e. the last non-space character before it closes a block or statement
+// (`{`, `}`, `;`, or the start of the slice). Anywhere else — `x = writer()`,
+// `return writer()`, `if (!writer())`, `a && writer()` — the verdict is
+// consumed and may be forwarded honestly. Matching the call alone is not
+// enough: `persistMemory(); res.json({ persisted: someFlag })` calls the writer
+// but still asserts a value it never computed, which is the defect item 13
+// exists to remove.
+function hasConsumedWriter(body: string): boolean {
+  DURABILITY_WRITER_CALL_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = DURABILITY_WRITER_CALL_RE.exec(body)) !== null) {
+    const before = body.slice(0, m.index).replace(/\s+$/, '');
+    const last = before.slice(-1);
+    if (last !== '' && last !== '{' && last !== '}' && last !== ';') return true;
+  }
+  return false;
+}
 
 // Line and block comments are removed before scanning so prose about a claim
 // (this file's own comments are full of `persisted: true`) is never counted.
@@ -98,7 +128,16 @@ export function sliceRoutes(source: string): RouteSlice[] {
   ROUTE_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = ROUTE_RE.exec(source)) !== null) {
-    matches.push({ index: m.index, method: m[1].toUpperCase(), path: m[2] });
+    // Single-path form carries the path in group 2. The array form
+    // (`app.get(['/a', '/b'], ...)`) carries a quoted list in group 3; joining it
+    // with ` | ` keeps one route as one slice instead of dropping it, so a
+    // mutating route declared only in array form cannot escape the scan.
+    let path = m[2];
+    if (path === undefined && m[3] !== undefined) {
+      const parts = [...m[3].matchAll(/'([^']+)'/g)].map((p) => p[1]);
+      path = parts.length === 1 ? parts[0] : parts.join(' | ');
+    }
+    matches.push({ index: m.index, method: m[1].toUpperCase(), path: path ?? '' });
   }
 
   return matches.map((match, i) => {
@@ -130,11 +169,12 @@ export function findUnbackedDurabilityClaims(source: string): DurabilityClaimVio
 
     const literalTrue = values.some((v) => v === 'true');
     // A forwarded verdict (a variable, a property, or object shorthand) is only
-    // trustworthy when the route actually calls a durability-aware writer whose
-    // result it could be forwarding. A hard-coded `: true` gets no such
-    // exemption: a discarded `persistMemory()` boolean must still be flagged,
-    // which is the whole point of item 13.
-    if (!literalTrue && DURABILITY_WRITER_RE.test(route.body)) continue;
+    // trustworthy when the route actually *consumes* a durability-aware writer
+    // whose result it could be forwarding. A hard-coded `: true` gets no such
+    // exemption, and neither does a route that calls a writer but discards its
+    // boolean — a discarded `persistMemory()` must still be flagged, which is the
+    // whole point of item 13.
+    if (!literalTrue && hasConsumedWriter(route.body)) continue;
 
     const rendered = [
       ...values.map((v) => `${v}`),

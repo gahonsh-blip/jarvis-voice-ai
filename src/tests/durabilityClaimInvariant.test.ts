@@ -155,6 +155,48 @@ describe('durabilityClaimScan detector', () => {
     const violations = findUnbackedDurabilityClaims(snippet);
     expect(violations.map((v) => v.path)).toEqual(['/api/unguarded']);
   });
+
+  it('slices an array-form route so its body cannot escape the scan', () => {
+    // Slot 5: `sliceRoutes` matched only the single-quoted single-path form, so a
+    // route declared as an array was not a slice at all and its body — including
+    // an unbacked claim — was invisible to the guard.
+    const snippet = `
+      app.post(['/api/fake', '/api/fake/'], (req, res) => {
+        memoryState.thing = req.body.thing;
+        persistMemory();
+        res.json({ success: true, persisted: true });
+      });
+    `;
+    const violations = findUnbackedDurabilityClaims(snippet);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].path).toBe('/api/fake | /api/fake/');
+  });
+
+  it('flags a claim forwarded from a value the route never computed, even when it calls the writer', () => {
+    // Slot 5: the writer exemption matched the *call*, not its *use*. Here the
+    // route calls `persistMemory()` and discards the boolean, then forwards an
+    // unrelated flag as the durability claim — the exact defect item 13 removes.
+    const snippet = `
+      app.post('/api/fake', (req, res) => {
+        memoryState.thing = req.body.thing;
+        persistMemory();
+        res.json({ success: true, persisted: someOtherFlag });
+      });
+    `;
+    const violations = findUnbackedDurabilityClaims(snippet);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].path).toBe('/api/fake');
+  });
+
+  it('accepts a forwarded claim when the writer verdict is consumed', () => {
+    const snippet = `
+      app.post('/api/good', (req, res) => {
+        const stored = persistMemory();
+        res.json({ success: stored, stored });
+      });
+    `;
+    expect(findUnbackedDurabilityClaims(snippet)).toHaveLength(0);
+  });
 });
 
 describe('server.ts durability claims (real file)', () => {
@@ -188,5 +230,15 @@ describe('server.ts durability claims (real file)', () => {
     const violations = findUnbackedDurabilityClaims(serverSource);
     const rendered = violations.map((v) => `${v.method} ${v.path} (line ${v.line}): ${v.reason}`);
     expect(rendered).toEqual([]);
+  });
+
+  it('slices the array-form routes, which the single-path regex skipped', () => {
+    // Slot 5: four routes in server.ts are declared as arrays. Before the fix
+    // `sliceRoutes` dropped them entirely, so their bodies were never scanned.
+    const paths = sliceRoutes(serverSource).map((r) => r.path);
+    expect(paths).toContain('/api/auth/linkedin/callback | /api/auth/linkedin/callback/');
+    expect(paths).toContain('/api/auth/youtube/callback | /api/auth/youtube/callback/');
+    expect(paths).toContain('/privacy | /privacy-policy');
+    expect(paths).toContain('/terms | /terms-of-service');
   });
 });
