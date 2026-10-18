@@ -21301,3 +21301,27 @@ fix was committed and pushed before the long gates. E2E: real-server HTTP E2E ra
 deployment unit available. Commit `becf930c`, pushed to
 `feature/hermes-full-completion`. PR #8 remains open, non-draft. Main **NOT MERGED —
 awaiting human approval.**
+
+### Slot 7 — addendum (same fire, gates completed after the push)
+
+The 1800 s cap did not cut this fire, so the long gates ran after `becf930c` was
+already pushed:
+
+- `npm run lint` (`tsc --noEmit`) — exit 0.
+- Full `npx vitest run` — **269 files / 2939 tests passed**, 0 failed (82.99 s).
+- `npm run build` — exit 0; artifact `dist/server.cjs` **1,105,523 bytes**.
+- `npm audit --omit=dev` — **0 vulnerabilities**.
+- Security re-check on head `9a4e19ba`: `git check-ignore -v .env` ->
+  `.gitignore:4:.env`; `git status --short` empty; no `dist/` or `node_modules/`
+  in `git diff --name-only origin/main`; the credential-pattern scan of
+  `git diff origin/main` matched only the deliberate fixture
+  `s3cr3t-value-1234` in `src/tests/securityAudit.test.ts:46` (not a real
+  credential).
+
+CI note (observed via the check-runs API): the workflow check-run on head
+`9a4e19ba` reports `failure`, and its annotation reads *"The job was not started
+because your account is locked due to a billing issue."* The job never ran, so
+this is **not** a code failure. The identical lint/test/build gates pass locally
+in this sandbox. PR #8 is open, non-draft, `mergeable: true`,
+`mergeable_state: unstable` (billing-locked CI only). Main **NOT MERGED —
+awaiting human approval.**
