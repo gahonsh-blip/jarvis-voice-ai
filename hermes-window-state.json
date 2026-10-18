@@ -1,12 +1,12 @@
 {
   "window_date": "2026-10-18",
   "window_started_at": "2026-10-18T15:35:00Z",
-  "last_slot_at": "2026-10-18T20:15:00Z",
-  "slots_completed": 7,
+  "last_slot_at": "2026-10-18T20:13:38Z",
+  "slots_completed": 8,
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "9a4e19ba",
+  "last_commit": "ed1b332cace97b6937caf9452c1c6117fc52deea",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
@@ -16,12 +16,8 @@
       "reason": "no handset/emulator"
     },
     {
-      "item": "real-screenshot",
-      "reason": "no device/display session"
-    },
-    {
-      "item": "github-actions-ci",
-      "reason": "owner account locked due to a billing issue; jobs never start"
+      "item": "ci-workflow-runs",
+      "reason": "GitHub account locked due to a billing issue; workflow jobs never start"
     }
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
