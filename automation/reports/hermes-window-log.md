@@ -21531,3 +21531,80 @@ leave the tree green for the 04:35 finalization slot.
 
 हिंदी सारांश (एक पंक्ति):
 - item 13 के गार्ड की "durability claim" शब्दावली में `applied` जोड़ा गया और उसे सही read-back writer से जोड़ा गया; कोई नकली सफलता नहीं पाई गई, पूरी सूट 269 फ़ाइल / 2948 टेस्ट हरी रही।
+
+---
+
+## 2026-10-19 04:05 IST — WORK SLOT 12 (last work slot) — item 13, client storage read-back invariant
+
+**Context.** State branch `automation/hermes-state` read this fire:
+`slots_completed: 11`, `current_item: 13`, `current_item_status: PARTIAL`,
+`finalized: false`. IST 04:05 → a WORK slot, the last one before the 04:35
+finalization fire.
+
+**What was done (item 13, `Zero-fake-success for all tools` — stays `PARTIAL`).**
+
+Slots 1–11 repaired the individual client `localStorage` writers and pinned the
+*server-side* durability-claim invariant with `durabilityClaimScan.ts`. Nothing
+asserted the client-side read-back invariant tree-wide, so a future
+`localStorage.setItem(k, v); return true;` would pass every existing test.
+
+- Added `src/utils/hardening/storageWriteScan.ts`. `findStorageWrites()` finds
+  every production `setItem` and requires a read-back of the same store in the
+  enclosing function (a `getItem` of the store, or a `load*` helper).
+- Added `src/tests/storageWriteReadBackInvariant.test.ts` (7 cases) asserting
+  **zero** unbacked writers across the **17** production sites.
+
+**Bug found in the new scanner, and fixed.** `blankNonCode()` blanked comments,
+strings and template literals but not **regex literals**. The apostrophe in
+`mobileNotificationPrivacy.ts`'s
+`/\b(?:confidential|private party|don't share|do not share)\b/i` (line 61)
+opened a phantom string and blanked the rest of the file — the scan reported 15
+of 17 sites and missed both writers in that file (lines 219, 454). `blankNonCode()`
+now recognises regex literals (opened only where an expression can start) and
+blanks their bodies and trailing flags. Per-file counts after the fix:
+androidBridgeEngine [465,466,467]; offlineStorage [84]; telephonyEngine
+[60,93,128]; locationService [191]; mobileStatusEngine [118];
+**mobileNotificationPrivacy [219,454]**; telephonyPermissions [143];
+computerOperatorEngine [275,298]; mobileBridgeEngine [56,213,340] = **17**.
+
+**Negative validation.** Replacing `savePhonePermissions()`'s read-back with
+`return true;` made the guard fail, naming
+`src/utils/telephonyPermissions.ts:143 savePhonePermissions`
+(`1 failed | 6 passed`). Restored → 7/7.
+
+**Gates (observed this fire).**
+- `npm run lint` (`tsc --noEmit`) exit 0.
+- Targeted `storageWriteReadBackInvariant` 1 file / 7 passed.
+- Full `npx vitest run` **270 files / 2955 tests passed**, 0 failed (84.59 s).
+- `npm run build` exit 0; artifact `dist/server.cjs` 1,105,547 bytes.
+- `npm audit --omit=dev` → 0 vulnerabilities.
+- `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short` clean
+  apart from the intended doc edit; no `node_modules/` or `dist/` tracked;
+  credential-pattern scan of `git diff origin/main` matched nothing.
+
+**Flaky test (honest record).** The first full `npx vitest run` this slot
+reported 270 files, **2 failed / 2953 passed**, both in
+`src/tests/telegramCommandRecordDurabilityTruth.test.ts` ("does not present an
+unrecorded command as an ordinary success") — a test that spawns a real
+`tsx server.ts` on port 4771 and `chmod`s its memory file read-only. The
+immediate re-run passed 2955/2955, and a targeted re-run of the file passed too.
+Most likely cross-test contention: ~40 durability tests each spawn their own
+`tsx server.ts` child on a distinct port and vitest runs the files concurrently,
+so a cold start under load can exceed the test's server-wait window. This slot's
+change adds no server and no port, so it cannot be the cause; it was not
+reproduced. Recorded as a real flake to investigate, not dismissed.
+
+**Not run / not available.**
+- E2E: NOT RUN — no handset / emulator / display session; the change is a
+  source-level guard and touches no runtime route behaviour.
+- Deploy: `NOT_CONFIGURED` — no deployment target present; the verified
+  `dist/server.cjs` is the deployment unit available.
+
+**Commit** `9758b1e`, pushed to `feature/hermes-full-completion`.
+PR #8 remains open, non-draft. Main **NOT MERGED — awaiting human approval.**
+
+**Next slot (04:35 IST, FINALIZATION):** no new development. Run the full
+verification, refresh PR #8, write `finalized: true` state, and report.
+
+हिंदी सारांश (एक पंक्ति):
+- client localStorage लेखकों के लिए पूरे ट्री का read-back गार्ड जोड़ा गया और उसी गार्ड में regex-literal की असली खामी ठीक की गई; अब सभी 17 साइटें पकड़ी जाती हैं और पूरी सूट 270 फ़ाइल / 2955 टेस्ट हरी रही।
