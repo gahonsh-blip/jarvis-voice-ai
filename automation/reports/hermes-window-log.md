@@ -21325,3 +21325,17 @@ this is **not** a code failure. The identical lint/test/build gates pass locally
 in this sandbox. PR #8 is open, non-draft, `mergeable: true`,
 `mergeable_state: unstable` (billing-locked CI only). Main **NOT MERGED —
 awaiting human approval.**
+
+### Slot 7 — closing facts
+
+- Head `ed1b332c` on `feature/hermes-full-completion` (the gate-evidence docs
+  commit); window state branch `automation/hermes-state` at `fe91dc3c`,
+  `slots_completed: 8`, `current_item: 13`, `current_item_status: PARTIAL`,
+  `finalized: false`.
+- PR #8 observed via the API: `state: open`, `draft: false`,
+  `mergeable: true`, `mergeable_state: unstable`, `head: ed1b332c`, `base: main`.
+- Deploy: `NOT_CONFIGURED` — no deployment target or hosting integration is
+  present; the verified `dist/server.cjs` (1,105,523 bytes) is the deployment
+  unit available.
+- Item 13 remains `PARTIAL`: the long tail of unclassified `success: true` /
+  discarded-`persistMemory()` sites is still not individually audited.
