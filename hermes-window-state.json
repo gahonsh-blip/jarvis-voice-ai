@@ -6,14 +6,23 @@
   "current_item": 13,
   "current_item_title": "Zero-fake-success for all tools",
   "current_item_status": "PARTIAL",
-  "last_commit": "c5d986b",
+  "last_commit": "3ee7526",
   "last_branch": "feature/hermes-full-completion",
   "finalized": false,
   "finalization_result": null,
   "blocked_items": [
-    {"item": "real-android-e2e", "reason": "no handset/emulator"},
-    {"item": "real-screenshot", "reason": "no device/display session"},
-    {"item": "github-actions-ci", "reason": "owner account locked due to a billing issue; jobs never start"}
+    {
+      "item": "real-android-e2e",
+      "reason": "no handset/emulator"
+    },
+    {
+      "item": "real-screenshot",
+      "reason": "no device/display session"
+    },
+    {
+      "item": "github-actions-ci",
+      "reason": "owner account locked due to a billing issue; jobs never start"
+    }
   ],
   "last_report_path": "/tmp/hermes-window-report.md"
 }
