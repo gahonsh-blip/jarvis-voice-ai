@@ -3963,8 +3963,16 @@ User message: "${clean}".`,
     }
   }
 
-  persistMemory();
-  return { userMsg, botMsg, inlineKeyboard, delivery };
+  // The command's record — the user turn, the reply, the advanced counters and
+  // any state the intent changed — is only real once it reaches disk. This call
+  // used to be a bare statement, so a read-only volume or full disk left the
+  // exchange in process memory while every caller saw an ordinary success. Bind
+  // the verdict so `/api/telegram/send` can report whether the record is durable.
+  const commandRecordPersisted = persistMemory();
+  if (!commandRecordPersisted) {
+    console.warn('[Telegram Bot] Command record NOT durable - the exchange is not on disk (item 13).');
+  }
+  return { userMsg, botMsg, inlineKeyboard, delivery, commandRecordPersisted };
 }
 
 async function handleTelegramCallback(callbackQuery: any) {
@@ -5014,6 +5022,10 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
     const result = await processMobileCommand(text, 'web_client', activeTelegramChatId || undefined);
     const delivery = gatewaySendResult(result.delivery);
     const notice = telegramGatewayNotice(delivery);
+    // The reply may have been delivered while the command record never reached
+    // disk. Both facts are reported: delivery is unchanged, and the durability
+    // of the exchange is named instead of being assumed from a delivered reply.
+    const recordPersisted = result.commandRecordPersisted;
     res.json({
       // Success means Telegram confirmed the outbound reply. A local echo with
       // no delivery is reported as undelivered, not as a sent message.
@@ -5022,6 +5034,13 @@ app.post('/api/telegram/send', async (req: Request, res: Response) => {
       deliveryOutcome: delivery.outcome,
       messageId: delivery.messageId,
       errorReason: delivery.errorReason,
+      commandRecordPersisted: recordPersisted,
+      ...(recordPersisted
+        ? {}
+        : {
+            recordNote:
+              'The reply was handled but the command record could not be written to durable storage, so it may be lost on restart.',
+          }),
       userMessage: result.userMsg,
       botMessage: { ...result.botMsg, text: telegramGatewayBubble(result.botMsg.text, delivery) },
       message: notice.message,
