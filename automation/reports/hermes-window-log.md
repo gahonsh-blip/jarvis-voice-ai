@@ -21464,3 +21464,70 @@ Next Slot:
 
 हिंदी सारांश (एक पंक्ति):
 - सोशल प्लेटफ़ॉर्म-टेस्ट रूट अब ऐसे प्रोब के लिए `persisted: true` नहीं कहता जिसने कुछ भी सत्यापित/सहेजा नहीं; पूरी सूट 269 फ़ाइल/2945 टेस्ट पास, आइटम #13 अभी भी PARTIAL।
+
+---
+
+## Slot 2026-10-19 03:35 IST — WORK SLOT 11 (window 2026-10-18 → 2026-10-19)
+
+**Item:** #13 `Zero-fake-success for all tools` — **PARTIAL** (one class of claim pinned; item NOT closed).
+
+**What was wrong.** The item-13 property guard
+(`src/utils/hardening/durabilityClaimScan.ts`) recognised only the claim keys
+`persisted`, `recorded` and `stored`. `applied` is the same durability claim on
+the mutation path — "the change took effect" — and it appeared on six mutating
+routes in `server.ts` with none of them scanned.
+
+**What changed.**
+- `CLAIM_KEY` widened to `persisted|recorded|stored|applied`.
+- Writer allowlist now names `applyPhonePermissionUpdate`.
+
+**Evidence (observed this slot).**
+- Scan with the widened vocabulary over `server.ts`: exactly one violation —
+  `POST /api/telephony/permissions` (line 11064),
+  `values=["false","result.applied","false"] consumedWriter=false`.
+- That route is the repaired one, not an overclaimer. It forwards
+  `result.applied` from `applyPhonePermissionUpdate()`
+  (`src/utils/hardening/phonePermissionStoreTruth.ts`), which writes, reads the
+  store back, and reports `applied: false` / `outcome: 'NOT_PERSISTED'` when the
+  store does not hold the keys asked to change. The allowlist names it; the
+  guard was **not** narrowed back to hide it.
+- Coverage count measured this slot: raw `server.ts` → 33 mutating routes with a
+  `persisted|recorded|stored|applied` claim (32 before); comment-stripped → 32
+  (31 before). The only route the widening adds is `/api/telephony/permissions`.
+  The test comment records 33 because the test reads the raw source.
+- `src/tests/durabilityClaimInvariant.test.ts` 22 → 25 cases; observed
+  `Tests 25 passed (25)`.
+
+**Negative validation (both halves).**
+- Vocabulary reverted → `1 failed | 24 passed` (the `applied` case fails).
+- Vocabulary widened, allowlist entry removed → `2 failed | 23 passed`, the
+  real-file scan naming `POST /api/telephony/permissions (line 11064)`.
+- Both restored → 25/25.
+
+**Gates (observed this fire).**
+- `npm run lint` (`tsc --noEmit`) exit 0.
+- Targeted `durabilityClaimInvariant` 1 file / 25 passed.
+- Full `npx vitest run` **269 files / 2948 tests passed**, 0 failed (83.74 s).
+- `npm run build` exit 0; artifact `dist/server.cjs` 1,105,547 bytes.
+- `npm audit --omit=dev` → 0 vulnerabilities.
+- `git check-ignore -v .env` → `.gitignore:4:.env`; `git status --short` empty.
+
+**Not run / not available.**
+- E2E: NOT RUN — no handset / emulator / display session.
+- Deploy: `NOT_CONFIGURED` — no deployment target present; the verified
+  `dist/server.cjs` is the deployment unit available.
+
+**No bugs fixed.** No production route was found to overclaim. This is a guard
+blind spot closed, not a route repaired; reporting it as a fixed overclaim would
+have been false.
+
+**Commit** `4e0b9d1`, pushed to `feature/hermes-full-completion`.
+PR #8 remains open, non-draft. Main **NOT MERGED — awaiting human approval.**
+
+**Next slot (04:05 IST, last work slot):** the smallest remaining unclassified
+`success: true` site in `server.ts` / `server_tools.ts` that can be audited and
+pinned within ~17 minutes; otherwise a finalization-style verification sweep to
+leave the tree green for the 04:35 finalization slot.
+
+हिंदी सारांश (एक पंक्ति):
+- item 13 के गार्ड की "durability claim" शब्दावली में `applied` जोड़ा गया और उसे सही read-back writer से जोड़ा गया; कोई नकली सफलता नहीं पाई गई, पूरी सूट 269 फ़ाइल / 2948 टेस्ट हरी रही।
