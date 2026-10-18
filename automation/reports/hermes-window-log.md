@@ -21339,3 +21339,57 @@ awaiting human approval.**
   unit available.
 - Item 13 remains `PARTIAL`: the long tail of unclassified `success: true` /
   discarded-`persistMemory()` sites is still not individually audited.
+
+---
+
+### Slot 9 — 2026-10-19 02:35 IST (WORK slot of the 2026-10-18 → 2026-10-19 window)
+
+Window date 2026-10-18 (window started 15:35Z). State branch read successfully
+this fire: `slots_completed: 8`, `current_item: 13`, `current_item_status:
+PARTIAL`, `finalized: false` — so this is **slot 9**.
+
+Item 13 (`Zero-fake-success for all tools`).
+
+**Bug found and fixed — `savePhonePermissions()` reported a write as landed
+whenever `localStorage.setItem` did not throw.** `src/utils/telephonyPermissions.ts`
+declared `savePhonePermissions(perms): void` and swallowed the storage error in a
+`catch`. A refused write (quota, private mode, no `localStorage`) was therefore
+indistinguishable from a durable one, and a store that accepted `setItem`
+without throwing yet kept the previous bytes — the silent no-op the slot-1
+`phonePermissionStoreTruth` read-back guard exists to catch — left
+`hermes_jarvis_phone_permissions_v1` at its previous value. A caller could
+announce a Level-4 authorization change (`PHONE_OUTBOUND_CALL`,
+`PHONE_RECORDING`, `PHONE_PRIVATE_DATA_ACCESS`) that the next reload would not
+find. The writer now serialises once, writes, and reads the bytes back,
+returning `true` only when the store holds exactly what was written; a
+no-`window` context returns `false` instead of pretending success.
+
+A survey of the remaining `localStorage.setItem` sites confirmed every other
+writer already returns a read-back verdict, so this was the **last instance of
+the class in the client storage layer**. No production caller depended on the
+old `void` signature — only the module import at `server.ts:164` and the test.
+
+**Evidence.** `src/tests/telephonyPermissions.test.ts` 24 → 25 cases: a
+`SilentStorage` subclass that accepts `setItem` and keeps the previous bytes
+makes `savePhonePermissions` report `false` while `loadPhonePermissions()` still
+returns the pre-write `ASK` for `PHONE_OUTBOUND_CALL`; the round-trip case now
+also asserts the `true` verdict. Negative-validated — stashing
+`src/utils/telephonyPermissions.ts` failed exactly the two read-back-dependent
+cases (`2 failed | 23 passed`); restored → 25/25.
+
+**Gates (observed this fire).** `npm run lint` (`tsc --noEmit`) exit 0;
+targeted `telephonyPermissions` 1 file / 25 passed; full `npx vitest run`
+**269 files / 2940 tests passed**, 0 failed (83.23 s); `npm run build` exit 0,
+artifact `dist/server.cjs` **1,105,523 bytes**.
+
+Commit `2af87a6`, pushed to `feature/hermes-full-completion` **before** the long
+gates ran. Item 13 stays `PARTIAL` — the tail of unclassified `success: true` /
+discarded-`persistMemory()` sites in `server.ts` / `server_tools.ts` remains.
+
+Blocked: real Android device E2E (no handset/emulator); CI workflow runs
+(GitHub account locked for billing — jobs never start).
+Deploy: `NOT_CONFIGURED` — no deployment target present; the verified artifact
+is the deployment unit available. Main **NOT MERGED — awaiting human approval.**
+
+हिंदी सारांश: इस स्लॉट में `savePhonePermissions` को ठीक किया गया ताकि चुपचाप
+गिराए गए लेखन को सफलता न बताया जाए; 25/25 परीक्षण पास, lint और build हरे।
