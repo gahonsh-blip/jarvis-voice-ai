@@ -4,6 +4,16 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 23:35 IST — window 2026-10-18/19 slot 5: the durability-claim guard scans array routes and the writer it requires is one it consumed
+
+### Fixed
+- **Two escapes were still live in the item-13 property guard (`src/utils/hardening/durabilityClaimScan.ts`), so a mutating route could answer a durability claim the guard never saw.**
+  - **Array-form routes were not sliced at all.** `sliceRoutes()` matched only `app.<method>('<path>', ...)`, so `app.post(['/a', '/b'], ...)` produced no slice and its whole body — including any unbacked durability claim — was invisible to the scan. The array form is now sliced with its quoted paths joined (`/api/auth/linkedin/callback | /api/auth/linkedin/callback/`, `/privacy | /privacy-policy`, `/terms | /terms-of-service`, the YouTube callback), so those bodies are scanned like any other.
+  - **The writer exemption tested the writer's *call*, not its *use*.** `DURABILITY_WRITER_RE.test(route.body)` exempted a route that called a durability writer and then **discarded** the boolean while forwarding an unrelated flag (`res.json({ success: true, persisted: someOtherFlag })`) — exactly the false-success class item 13 removes, merely moved one step away. The exemption now runs through `hasConsumedWriter()`, which is positional: a writer verdict counts only when it is not in statement position (`x = writer()`, `return writer()`, `if (!writer())`, `a && writer()` consume it; a bare `persistMemory();` statement does not).
+- On the real `server.ts` the tightened scan still reports **0** violations across 131 routes — the four array-form routes are benign (`GET` only, no claim) and no route forwards a claim from a discarded writer today — so this is a guard-strengthening change with no false positives introduced.
+- **`test(honesty)` — `src/tests/durabilityClaimInvariant.test.ts` 14 → 18 cases** cover an array-form mutating route with a discarded writer (flagged, joined path asserted), a claim forwarded from a value the route never computed (flagged even though the route calls the writer), a forwarded claim whose writer verdict *is* consumed (accepted), and a real-file assertion that the four array-form routes are present as slices. Negative-validated: reverting both scanner fixes failed exactly 3 tests (`3 failed | 15 passed`); restored → 18/18.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; full `npx vitest run` 267 files / 2929 tests passed; `npm run build` exit 0 (`dist/server.cjs` 1,102,443 bytes). Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 23:05 IST — window 2026-10-18/19 slot 4: the durability-claim guard sees variable and shorthand claims
 
 ### Fixed

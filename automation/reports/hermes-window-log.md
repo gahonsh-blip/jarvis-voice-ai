@@ -21123,3 +21123,63 @@ slot-4 commit `8443a0e` ("chore(state): slot 4 2026-10-18 23:05", authored
 did. This slot rebased its state update onto `8443a0e` and pushed `18c790d`
 (no force-push). Future slots: verify the state tip with `git ls-remote`, not
 only `git fetch`, before publishing, and rebase rather than force.
+
+
+---
+
+## Slot 2026-10-18 23:35 IST — WORK SLOT 5 (window 2026-10-18 → 2026-10-19)
+
+Item: #13 `Zero-fake-success for all tools` — status remains `PARTIAL`.
+
+State read: `automation/hermes-state` → `window_date: 2026-10-18`,
+`slots_completed: 4`, `current_item: 13`, `finalized: false`.
+
+**What was wrong.** The item-13 property guard
+(`src/utils/hardening/durabilityClaimScan.ts`) — the check that is supposed to
+catch a mutating route answering a durability claim (`persisted` / `recorded` /
+`stored`) that no writer ever computed — could be escaped two ways, both found
+this slot by reading the scanner against `server.ts`:
+
+1. **Array-form routes were not sliced at all.** `sliceRoutes()` matched only
+   `app.<method>('<path>', ...)`. A route declared as an array
+   (`app.post(['/a', '/b'], ...)`) produced no slice, so its entire body —
+   including any unbacked durability claim — was never scanned. Four array-form
+   routes exist in `server.ts` (the LinkedIn callback, `/privacy`, `/terms`,
+   the YouTube callback).
+2. **The writer exemption tested the writer's *call*, not its *use*.**
+   `DURABILITY_WRITER_RE.test(route.body)` exempted any route that merely
+   mentioned a durability writer. A route that called `persistMemory()`,
+   discarded the boolean and forwarded an unrelated flag
+   (`res.json({ success: true, persisted: someOtherFlag })`) therefore passed —
+   the exact false-success class item 13 exists to remove, moved one step away.
+
+**Fix.**
+- `sliceRoutes()` now also slices the array form, joining its quoted paths.
+- The exemption runs through the new `hasConsumedWriter()`, which is
+  positional: a writer verdict counts only when it is *not* in statement
+  position (`x = writer()`, `return writer()`, `if (!writer())`,
+  `a && writer()` consume it; a bare `persistMemory();` statement does not).
+
+**Observed result on the real file.** The tightened scan still reports **0**
+violations across 131 routes in `server.ts` — the four array-form routes are
+`GET`-only with no claim, and no route forwards a claim from a discarded writer
+today. This is therefore a guard-strengthening change: no false positives were
+introduced, and the two escapes are now pinned.
+
+**Evidence.**
+- Targeted: `npx vitest run src/tests/durabilityClaimInvariant.test.ts` —
+  **18 passed** (14 → 18; +4 cases).
+- Negative validation: reverting both scanner fixes failed exactly 3 tests
+  (`3 failed | 15 passed`); restoring them passes 18/18.
+- `npm run lint` (`tsc --noEmit`): **exit 0**.
+- Full `npx vitest run`: **267 files / 2929 tests passed, 0 failed** (81.28 s).
+- `npm run build`: **exit 0**, `dist/server.cjs` **1,102,443 bytes**.
+
+**Honesty notes.** E2E: NOT RUN (no handset / emulator / display session).
+Deploy: NOT_CONFIGURED — no deployment target is present in this sandbox; the
+verified `dist/server.cjs` is the deployment unit available. Item #13 stays
+`PARTIAL`: the tail of unclassified `success: true` / discarded-`persistMemory()`
+sites in `server.ts` / `server_tools.ts` remains unaudited.
+
+Commit `c8a514e`, pushed to `feature/hermes-full-completion`. PR #8 remains
+open, non-draft. Main **NOT MERGED — awaiting human approval.**
