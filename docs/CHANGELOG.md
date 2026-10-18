@@ -4,6 +4,18 @@ All notable improvements, security updates, and feature additions are documented
 
 ---
 
+## [Unreleased] - 2026-10-18 01:35 IST — window 2026-10-18/19 slot 7: the inbound call webhook honours the inbound-answering permission
+
+### Fixed
+- **`POST /api/telephony/incoming` answered every call regardless of `PHONE_INBOUND_ANSWER`, so an operator who revoked autonomous answering still had JARVIS pick up the phone.** The route checked the webhook signature and the emergency stop, then created a session and answered unconditionally. `PHONE_INBOUND_ANSWER` ("Autonomous Inbound Call Answering") is advertised on the telephony permission screen, persisted in the permission matrix and served by `GET /api/telephony/permissions`, but the route never read it — a fail-open on the one surface that reaches the outside world by ringing a phone, and the permission screen showed the surface as revoked while the caller was greeted.
+  - The route now consults the authoritative matrix (the durable store when `JARVIS_PHONE_PERMISSIONS_FILE` is set, the compiled defaults otherwise) through the new `inboundAnswerGate()` (`src/utils/hardening/inboundAnswerGateTruth.ts`) **before** any session exists.
+  - Only an explicit `GRANTED` answers. `DENIED` refuses. `ASK` / `NOT_CONFIGURED` / unset are *undecided* and refuse too: a ringing line cannot be paused to ask the operator, so "not yet decided" is not consent — the same reading the owner-approval path already enforces.
+  - A refusal is audited BLOCKED and answers HTTP 403 — TwiML `<Hangup/>` for a carrier, JSON `{success:false, answered:false, outcome, permission}` otherwise — with no session created.
+
+### Tests
+- **`test(honesty)` — new `src/tests/inboundAnswerGateTruth.test.ts` (4 cases)**, driving a real `npx tsx server.ts` process against a real permission-store file: DENIED refuses with `GET /api/telephony/status` reporting `currentCall: null`; undecided `ASK` refuses with `outcome: PERMISSION_UNDECIDED`; explicit `GRANTED` answers with a session id; a TwiML caller gets a `<Hangup/>` and no `<Gather>`. Observed 4 passed / 4. Negative-validated: stashing `server.ts` failed **3 failed | 1 passed** (the DENIED refusal, the undecided ASK refusal and the TwiML hangup all answered 200; the GRANTED case still passed, correctly, because the old code always answered); restored → 4/4.
+- Gates (observed this fire): `npm run lint` (`tsc --noEmit`) exit 0; targeted `inboundAnswerGateTruth` 1 file / 4 passed, and with `durabilityClaimInvariant` + `telephonyEndpointTruth` + `telephonyPermissions` + `phonePermissionStoreTruth` + `telephonyPermissionUpdateTruth` → 6 files / 94 passed, 0 failed; full `npx vitest run` and `npm run build` NOT RUN this fire (1800 s cap; the fix was committed and pushed before the long gates). Item 13 remains `PARTIAL`.
+
 ## [Unreleased] - 2026-10-18 23:35 IST — window 2026-10-18/19 slot 5: the durability-claim guard scans array routes and the writer it requires is one it consumed
 
 ### Fixed
