@@ -5,6 +5,19 @@
 
 ---
 
+### 🧠 Super-Agent upgrade (multi-provider, tool-using)
+
+JARVIS now runs its own agent loop instead of a single hard-coded model:
+
+- **Never blocked by one quota**: Gemini, Groq, OpenRouter, Cerebras, DeepSeek and local Ollama are tried in order; a failing provider cools down and the next one answers.
+- **Real tools**: filesystem read/write inside a jailed workspace, grep, shell commands, URL fetch, free web search, git status/commit/push, durable memory.
+- **Safety**: path jail, destructive-command blocklist, approval gate for writes/commands/pushes, repeat-call protection, step cap.
+- **Three front doors**: `/api/agent/run`, `/api/agent/stream`, `npm run agent` (terminal), plus `npm run agent:status`.
+- **Transferred playbooks**: `agent-skills/` holds the operating knowledge for deploys, Supabase, repo audits, freelance profiles, outreach and client delivery.
+
+Full setup, API examples, safety model and cost table: [docs/SUPER_AGENT.md](docs/SUPER_AGENT.md)
+
+
 ## 📌 1. Project Overview (सिस्टम परिचय)
 
 **HERMES JARVIS** is a production-ready, zero-subscription personal AI agent daemon. It enables complete hands-free remote supervision and autonomous task execution from your Android mobile (via Telegram Bot and responsive web dashboard) backed by a 24/7 persistent background daemon.

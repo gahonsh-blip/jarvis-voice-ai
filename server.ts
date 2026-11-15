@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { createAgentRouter } from './src/agent/routes';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -11246,6 +11247,11 @@ Current Status: Phase 0 (Safety) and Phase 1 (Cloud ARM VM) active. Tools: Freel
 // ==============================================================================
 // 9. VITE STATIC SERVING & DAEMON INITIALIZATION
 // ==============================================================================
+// ==============================================================================
+// 8b. SUPER-AGENT (multi-provider, tool-using) API
+// ==============================================================================
+app.use('/api/agent', createAgentRouter());
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
