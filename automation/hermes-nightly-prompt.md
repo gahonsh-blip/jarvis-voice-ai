@@ -13,18 +13,22 @@ The repository is cloned for you at the start of the run. Work in it.
    a SUCCESS; a run that edits files and dies before reporting is a FAILURE.**
    Write the report skeleton first (Phase 0) and fill it in as you go. If you
    are past your time budget at any point, stop implementing immediately and go
-   straight to Phase 5 (commit) and Phase 6 (report).
+   straight to Phase 6 (finish the report) **then** Phase 5 (commit and push) —
+   the report is written before the push, never after it.
 
-   Budget, measured from run start:
+   Budget, measured from run start. The platform kills the run at its cap; the
+   schedule is set with a margin *inside* that cap so the report is always
+   written. **Never let work run past T+26 min without a committed change and a
+   written report.**
 
    | By | Phase |
    | :--- | :--- |
-   | T+5 min | Phase 0 done — dependency install started |
-   | T+8 min | Phase 1 done — target chosen |
-   | T+18 min | Phase 2 done — change written |
-   | T+24 min | Phase 3 done — targeted tests run |
-   | T+27 min | Phase 5 done — committed and pushed |
-   | T+30 min | Phase 6 — report written (**hard stop**) |
+   | T+4 min | Phase 0 done — dependency install started |
+   | T+7 min | Phase 1 done — target chosen |
+   | T+16 min | Phase 2 done — change written |
+   | T+21 min | Phase 3 done — targeted tests run |
+   | T+23 min | Phase 6 done — report written to `/tmp/hermes-nightly-report.md` |
+   | T+24 min | Phase 5 done — committed and pushed (**leave ≥5 min margin before the cap**) |
 
    **Setup is expensive.** `npm ci`/`npm install` on this repo takes several
    minutes. Start it in the background at the very start and continue reading
@@ -53,6 +57,24 @@ The repository is cloned for you at the start of the run. Work in it.
    `docs/COMPLETION_STATUS.md` lists defects that are already fixed and
    committed. Do not re-investigate or re-fix those. Your job is the *next*
    thing, not a re-run of last night.
+8. **Time-box every command that can hang.** Network-bound steps (clone, fetch,
+   install, push) can stall until the platform kills the whole run. Wrap them so
+   a hang becomes a fast, reportable failure instead of a dead run:
+   `timeout 120 npm ci`, `timeout 90 git push ...`. Never start a command near
+   T+20 min that can block indefinitely.
+
+   Known ways this automation has died before it could report — recognise them
+   and route around them:
+   - the LLM gateway returning an HTML error page instead of JSON
+     (`OpenAIError: <!DOCTYPE html> ... Service Temporarily Unavailable`) — an
+     upstream outage, not a repo defect; it needs no code change here;
+   - the run being killed at the platform cap while a full
+     `lint && test && build` gate was still running;
+   - `git push` or a token probe hanging with no credentials in the clone's
+     remote;
+   - the sandbox not being ready (`Sandbox ... not ready after 300s`).
+   In every one of those cases the correct behaviour is: stop, write the honest
+   report saying what did not happen, and exit.
 
 ## Your repository — and what you do NOT own
 
@@ -182,6 +204,10 @@ rewording an old status.
 
 ## Phase 5 — Commit and push
 
+**Order matters at endgame: write the Phase 6 report first, then commit and
+push.** A written report with a failed push is an acceptable outcome; a hang
+during push with no report is the enemy.
+
 Commit on `feature/hermes-full-completion` with a meaningful message:
 
 ```
@@ -191,14 +217,20 @@ test(area): what is now covered
 docs(hermes): update completion status
 ```
 
-Then push **only that branch**:
+Then push **only that branch**, fully non-interactively. The clone's remote may
+have no credentials, and git must never stop to prompt — always time-box the
+push and use the injected token in the remote URL:
 
 ```
-git push -u origin feature/hermes-full-completion
+cd /workspace/project/jarvis-voice-ai
+git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/gahonsh-blip/jarvis-voice-ai.git"
+timeout 90 git push -u origin feature/hermes-full-completion
 ```
 
-Never `main`. Never force-push. If the push is rejected, report it and stop —
-do not force.
+Never `main`. Never force-push. If the push is rejected or times out, report it
+and stop — do not force, do not retry in a loop, do not spend the remaining
+budget fighting it. A push that did not finish is reported as
+`Push: failed — <reason>`, and the local commit is the deliverable.
 
 ## Phase 6 — Report (the deliverable)
 
