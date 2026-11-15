@@ -100,3 +100,31 @@ gate, write-when-approved, repeat-call protection and the DuckDuckGo parser.
 
 With Gemini plus Groq plus Ollama configured, the free quotas of three providers have
 to be exhausted on the same day before the agent stops, and Ollama has no quota at all.
+
+## 8. Running it 24/7 (free)
+
+Two supported ways, both cost 0:
+
+**Docker, any small VPS or your own PC**
+
+```bash
+docker build -t hermes-jarvis .
+docker run -d --name jarvis -p 3000:3000 --env-file .env -v $HOME/work:/workspace hermes-jarvis
+```
+
+`/workspace` is the folder the agent may read and change. Mount the projects you
+want it to work on, nothing else.
+
+**Ubuntu box, Oracle Cloud Always Free ARM (4 OCPU / 24 GB) is enough**
+
+```bash
+git clone https://github.com/gahonsh-blip/jarvis-voice-ai.git && cd jarvis-voice-ai
+bash deploy/quickstart.sh     # installs node, builds, starts under pm2
+```
+
+`quickstart.sh` creates `.env` on the first run and stops so you can paste a free
+key, then re-running it builds, checks the providers and starts the daemon under pm2.
+Add `pm2 startup` once so it survives a reboot.
+
+Keep `/api/agent/*` off the public internet unless `AGENT_API_TOKEN` is set; the
+routes can write files and run commands on that machine.
