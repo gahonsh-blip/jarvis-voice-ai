@@ -1,13 +1,6 @@
-*.wav
-*.mp3
-__pycache__/
+node_modules
+dist
+.vercel
 .env
-
-node_modules/
-
-dist/
 .env.local
-.env.*.local
-
-
-.vite/
+*.log

@@ -20,6 +20,7 @@ import { SecurityMatrixModal } from './components/SecurityMatrixModal';
 import { AutonomousToolsModal } from './components/AutonomousToolsModal';
 import { ComputerOperatorModal } from './components/ComputerOperatorModal';
 import { PermissionGateway } from './components/PermissionGateway';
+import SuperAgentGate from './components/SuperAgentGate';
 import { MobilePersonalStatusModal } from './components/MobilePersonalStatusModal';
 import { MobileBridgeModal } from './components/MobileBridgeModal';
 import {
@@ -2025,6 +2026,7 @@ export default function App() {
           setUserCoordsSource(source);
         }}
       />
+          <SuperAgentGate />
     </div>
   );
 }
