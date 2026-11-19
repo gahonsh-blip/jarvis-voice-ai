@@ -2,116 +2,141 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>JARVIS — live agent</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#08131a">
 <style>
-:root{--bg:#08131a;--card:#0f2027;--line:#1d3b45;--teal:#12776A;--mint:#7FD1C4;--ink:#e8f4f2;--mute:#8fb3ae}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:780px;margin:0 auto;padding:18px}
-h1{font-size:19px;margin:6px 0 2px}.sub{color:var(--mute);font-size:13px;margin-bottom:14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
-textarea,input{width:100%;background:#0a1a21;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
-textarea{min-height:84px;resize:vertical}
-button{background:var(--teal);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-weight:600;font-size:14px;cursor:pointer}
-button:disabled{opacity:.5;cursor:not-allowed}
-.row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-.step{border-left:3px solid var(--line);padding:6px 0 6px 10px;margin:8px 0;font-size:13.5px}
-.step b{color:var(--mint)}.ok{color:#4ade80}.err{color:#f87171}
-pre{white-space:pre-wrap;background:#0a1a21;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12.5px;overflow:auto}
-.lock{border:1px solid #C9922E;background:#241c0c;border-radius:12px;padding:12px;margin-bottom:12px}
-.hint{color:var(--mute);font-size:12.5px}
-</style></head>
-<body><div class="wrap">
+:root{--bg:#08131a;--card:#0f2027;--line:#1d3b45;--fg:#e6f4f1;--dim:#8fb0b8;--ok:#3ddc97;--err:#ff6b6b;--gold:#ffd479}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#08131a,#0b1a22);color:var(--fg);font:15px/1.55 system-ui,Segoe UI,Roboto,sans-serif;padding:18px}
+h1{font-size:19px;margin:0 0 4px}
+.sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+input[type=text],input[type=password],textarea{width:100%;background:#0a1a21;border:1px solid var(--line);border-radius:9px;color:var(--fg);padding:10px 12px;font:inherit}
+textarea{min-height:70px;resize:vertical}
+.row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+button{background:#12414a;color:var(--fg);border:1px solid var(--line);border-radius:9px;padding:10px 16px;font:inherit;cursor:pointer}
+button.primary{background:var(--gold);color:#1a1200;font-weight:700;border-color:var(--gold)}
+button:disabled{opacity:.55;cursor:default}
+.hint{font-size:12.5px;color:var(--dim);margin-top:6px}
+.ok{color:var(--ok)} .err{color:var(--err)}
+pre{background:#0a1a21;border:1px solid var(--line);border-radius:9px;padding:10px;overflow:auto;font-size:12.5px;margin:6px 0 0;white-space:pre-wrap;word-break:break-word}
+.step{border-left:3px solid var(--line);padding:8px 10px;margin:8px 0;background:#0b1d24;border-radius:0 8px 8px 0}
+.step b{color:var(--gold);font-size:13px}
+.chk{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--dim);margin-top:10px}
+</style></head><body>
 <h1>JARVIS — live agent</h1>
-<div class="sub">Real tool calls on a real server. Nothing here is a mock: every line below is an actual execution result.</div>
+<div class="sub">Real agent loop on the server: model + 10 tools + approval gate. Nothing runs without your consent.</div>
 
 <div class="card">
-  <div id="gateBox">
-    <div class="lock">
-      <b>Consent + lock passcode</b>
-      <div class="hint">Actions that change something (write, run, git) stay blocked until you set a passcode and approve them. Read-only tools run freely.</div>
-      <div class="row"><input id="pc" type="password" placeholder="Set a passcode (4+ chars)" style="flex:1"><button id="setPc">Set passcode</button></div>
-      <div id="gateState" class="hint"></div>
-    </div>
-  </div>
-
-  <div class="card" style="margin:0 0 12px">
-    <b>Your AI key</b>
-    <div class="hint">Paste a free Gemini key from https://aistudio.google.com/apikey . It stays in this browser and is sent only with your own requests; the server never stores it.</div>
-    <div class="row"><input id="gk" type="password" placeholder="AIza..." style="flex:1"><button id="saveKey">Save key</button></div>
-    <div id="keyState" class="hint"></div>
-  </div>
-
-  <label class="hint">Task</label>
-  <textarea id="task" placeholder="e.g. List the files here, then write a file notes.txt that says hello"></textarea>
+  <label>Screen-lock passcode</label>
+  <div id="gateState" class="hint">checking…</div>
   <div class="row">
-    <button id="run">Run</button>
-    <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="approve" style="width:auto"> allow write/run tools (needs passcode)</label>
+    <input id="pc" type="password" placeholder="Set or enter your passcode (4+ chars)" style="flex:1">
+    <button id="setPc">Set passcode</button>
   </div>
+  <div class="hint">Stored on this device as a SHA-256 hash. It is the lock that guards write/run tools.</div>
 </div>
-
-<div class="card" id="out"><div class="hint">Output appears here.</div></div>
 
 <div class="card">
-  <b>Model status</b>
-  <pre id="status">checking…</pre>
+  <label>Your AI key (optional)</label>
+  <div class="row">
+    <input id="gk" type="password" placeholder="AIza... or AQ..." style="flex:1">
+    <button id="saveKey">Save key</button>
+  </div>
+  <div id="keyState" class="hint"></div>
+  <div class="hint">A server key is already configured. Paste your own only if you want your runs billed to your key; it stays in this browser.</div>
 </div>
+
+<div class="card">
+  <label>Task</label>
+  <textarea id="task" placeholder="e.g. list the files here, then tell me how many tools you have"></textarea>
+  <label class="chk"><input id="allow" type="checkbox"> allow write/run tools (asks for the passcode)</label>
+  <div class="row"><button id="run" class="primary">Run</button><button id="clear">Clear output</button></div>
 </div>
+
+<div class="card"><label>Result</label><div id="out" class="hint">Nothing yet.</div></div>
+<div class="card"><label>Model status</label><pre id="status">checking…</pre></div>
+
 <script>
 const $ = (id) => document.getElementById(id);
-const KEY = 'jarvis_pass_hash';
+const PASS = 'jarvis_pass_hash';
+const KSTORE = 'jarvis_gemini_key';
 
-async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+async function sha(t){
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2,'0')).join('');
+}
 function renderGate(){
-  const has = localStorage.getItem(KEY);
-  $('gateState').innerHTML = has ? '<span class="ok">Passcode set on this device.</span> Write/run tools unlock only when you tick the box below.' : 'No passcode yet.';
+  const has = localStorage.getItem(PASS);
+  $('gateState').innerHTML = has
+    ? '<span class="ok">Passcode set on this device.</span> Write/run tools unlock only when you tick the box below.'
+    : 'No passcode yet. Set one first, it is what authorises real actions.';
+}
+function renderKey(){
+  const k = localStorage.getItem(KSTORE) || '';
+  $('keyState').innerHTML = k
+    ? '<span class="ok">Your key is saved in this browser (' + k.slice(0,6) + '…).</span>'
+    : 'Using the server key.';
 }
 $('setPc').onclick = async () => {
   const v = $('pc').value.trim();
   if (v.length < 4) return alert('At least 4 characters.');
-  localStorage.setItem(KEY, await sha(v)); $('pc').value = ''; renderGate();
-
-const KSTORE = 'jarvis_gemini_key';
-function renderKey(){
-  const k = localStorage.getItem(KSTORE) || '';
-  $('keyState').innerHTML = k ? '<span class="ok">Key saved in this browser (' + k.slice(0,6) + '…).</span>' : 'No key saved yet.';
-}
+  localStorage.setItem(PASS, await sha(v));
+  $('pc').value = '';
+  renderGate();
+  alert('Passcode set.');
+};
 $('saveKey').onclick = () => {
   const v = $('gk').value.trim();
   if (v.length < 20) return alert('That does not look like a key.');
-  localStorage.setItem(KSTORE, v); $('gk').value = ''; renderKey();
+  localStorage.setItem(KSTORE, v);
+  $('gk').value = '';
+  renderKey();
+  alert('Key saved on this device only.');
 };
-renderKey();
-};
-renderGate();
-
-fetch('/api/agent/status').then(r=>r.json()).then(d=>{
-  $('status').textContent = JSON.stringify(d,null,1).slice(0,1400);
-}).catch(e=>{ $('status').textContent = 'status failed: '+e.message; });
+$('clear').onclick = () => { $('out').innerHTML = 'Nothing yet.'; };
 
 $('run').onclick = async () => {
-  const task = $('task').value.trim(); if(!task) return;
-  const wantsWrite = $('approve').checked;
-  if (wantsWrite && !localStorage.getItem(KEY)) return alert('Set a passcode first.');
-  if (wantsWrite) {
-    const p = prompt('Enter your passcode to approve write/run tools:');
-    if (!p) return;
-    const h = await sha(p);
-    if (h !== localStorage.getItem(KEY)) return alert('Wrong passcode.');
-    if (!confirm('Allow this run to write files and run commands?')) return;
+  const task = $('task').value.trim();
+  if (!task) return alert('Write a task first.');
+  let approved = false;
+  if ($('allow').checked) {
+    const stored = localStorage.getItem(PASS);
+    if (!stored) return alert('Set a passcode first.');
+    const given = prompt('Enter your screen-lock passcode to authorise write/run tools:');
+    if (given === null) return;
+    if (await sha(given) !== stored) { $('out').innerHTML = '<div class="err">Wrong passcode. Nothing was run.</div>'; return; }
+    approved = true;
   }
-  $('run').disabled = true; $('out').innerHTML = '<div class="hint">Running…</div>';
+  $('run').disabled = true;
+  $('out').innerHTML = '<div class="hint">Working…</div>';
   try {
-    const r = await fetch('/api/agent/run', {method:'POST',headers:{'content-type':'application/json','x-gemini-key':(localStorage.getItem(KSTORE)||'')},
-      body: JSON.stringify({task, approved: wantsWrite, maxSteps: 10})});
+    const r = await fetch('/api/agent/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-gemini-key': localStorage.getItem(KSTORE) || '' },
+      body: JSON.stringify({ task, approved, maxSteps: 8 })
+    });
     const d = await r.json();
     let html = '';
-    (d.steps||[]).forEach(s=>{
-      html += '<div class="step"><b>'+(s.tool||s.kind||'step')+'</b> '+(s.ok===false?'<span class="err">failed</span>':'')+
-              '<pre>'+JSON.stringify(s.args||s.input||{},null,0).slice(0,300)+'</pre>'+
-              (s.result? '<pre>'+String(typeof s.result==='string'?s.result:JSON.stringify(s.result)).slice(0,700)+'</pre>':'')+'</div>';
+    (d.steps || []).forEach(s => {
+      const name = s.tool || s.kind || 'step';
+      html += '<div class="step"><b>' + name + '</b> ' + (s.ok === false ? '<span class="err">failed</span>' : '') +
+        '<pre>' + String(JSON.stringify(s.args || s.input || {})).slice(0,300) + '</pre>' +
+        (s.result ? '<pre>' + String(typeof s.result === 'string' ? s.result : JSON.stringify(s.result)).slice(0,900) + '</pre>' : '') +
+        '</div>';
     });
-    html += '<div class="step"><b>answer</b><pre>'+String(d.answer||d.error||'no answer').slice(0,2500)+'</pre></div>';
+    html += '<div class="step"><b>answer</b><pre>' + String(d.answer || d.error || 'no answer').slice(0,3000) + '</pre></div>';
     $('out').innerHTML = html;
-  } catch(e){ $('out').innerHTML = '<div class="err">'+e.message+'</div>'; }
+  } catch (e) {
+    $('out').innerHTML = '<div class="err">' + e.message + '</div>';
+  }
   $('run').disabled = false;
 };
+
+renderGate();
+renderKey();
+fetch('/api/agent/status').then(r => r.json()).then(d => {
+  $('status').textContent = JSON.stringify(d, null, 2);
+}).catch(e => { $('status').textContent = 'status unavailable: ' + e.message; });
 </script></body></html>
