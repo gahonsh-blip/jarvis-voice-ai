@@ -44,14 +44,14 @@ export function createAgentRouter(): Router {
     const root = mkdtempSync(join(tmpdir(), 'agent-selftest-'));
     const cases: Record<string, Record<string, unknown>> = {
       list_files: { path: '.' },
-      read_file: { path: 'missing.txt' },
+      read_file: { path: 'selftest.txt' },
       write_file: { path: 'selftest.txt', content: 'hello from selftest' },
       grep_files: { pattern: 'selftest' },
       run_command: { command: 'echo ok' },
       fetch_url: { url: 'https://example.com' },
       web_search: { query: 'base44' },
-      git: { args: '--version' },
-      remember: { note: 'selftest memory', tags: 'selftest' },
+      git: { action: 'status' },
+      remember: { key: 'selftest', value: 'ok' },
       recall: { query: 'selftest' },
       time_now: {},
       http_request: { url: 'https://api.github.com/zen' },
@@ -60,6 +60,8 @@ export function createAgentRouter(): Router {
       memory_set: { key: 'selftest', value: 'ok' },
       memory_get: { key: 'selftest' },
     };
+    const { writeFileSync } = await import('fs');
+    try { writeFileSync(join(root, 'selftest.txt'), 'hello from selftest'); } catch { /* ignore */ }
     const results = [] as Array<{ tool: string; ok: boolean; ms: number; output: string }>;
     for (const spec of TOOL_SPECS) {
       const args = cases[spec.name];

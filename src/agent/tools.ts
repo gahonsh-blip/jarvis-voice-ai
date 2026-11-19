@@ -322,8 +322,46 @@ export const TOOLS: AgentTool[] = [
             'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
           },
         });
-        const results = parseDuckDuckGo(body, limit);
-        if (!results.length) return { ok: false, output: 'no_results: search page had no parsable results' };
+        let results = parseDuckDuckGo(body, limit);
+        if (!results.length) {
+          // Cloud IPs are frequently served an empty DDG page. Try the lite
+          // endpoint, then the instant-answer API, before giving up.
+          try {
+            const lite = await fetchText(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, {
+              headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36' },
+            });
+            results = parseDuckDuckGo(lite.body, limit);
+          } catch { /* keep going */ }
+        }
+        if (!results.length) {
+          try {
+            const ia = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
+            const j: any = await ia.json();
+            const items: string[] = [];
+            if (j.AbstractText) items.push(`1. ${j.Heading || query}\n   ${j.AbstractURL || ''}\n   ${j.AbstractText}`);
+            for (const t of (j.RelatedTopics || []).slice(0, limit)) {
+              if (t.Text && t.FirstURL) items.push(`${items.length + 1}. ${t.Text}\n   ${t.FirstURL}`);
+            }
+            if (items.length) return { ok: true, output: clip(items.join('\n')) };
+          } catch { /* fall through */ }
+        }
+        if (!results.length) {
+          // Last resort that is not IP-blocked: Wikipedia's open search API.
+          // Narrower than a web engine, but it returns real results instead of
+          // an empty page, and the output says which engine answered.
+          try {
+            const w = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=${limit}&origin=*`);
+            const wj: any = await w.json();
+            const hits = (wj?.query?.search || []) as Array<{ title: string; snippet: string }>;
+            if (hits.length) {
+              const out = hits.map((h, i) =>
+                `${i + 1}. ${h.title}\n   https://en.wikipedia.org/wiki/${encodeURIComponent(h.title.replace(/ /g, '_'))}\n   ${h.snippet.replace(/<[^>]+>/g, '')}`,
+              ).join('\n');
+              return { ok: true, output: clip(`source: wikipedia\n${out}`) };
+            }
+          } catch { /* fall through */ }
+        }
+        if (!results.length) return { ok: false, output: 'no_results: every free search endpoint refused this host' };
         return {
           ok: true,
           output: clip(results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join('\n')),
@@ -350,6 +388,16 @@ export const TOOLS: AgentTool[] = [
     },
     async run(args, ctx) {
       const action = String(args.action || 'status');
+      const hasGit = (() => {
+        try { return require('child_process').execSync('git --version', { stdio: 'ignore' }); }
+        catch { return false; }
+      })();
+      if (!hasGit) {
+        return {
+          ok: false,
+          output: 'git_unavailable: this host has no git binary. Use http_request against the GitHub REST API (https://api.github.com) with a token, or run the agent on a VM where git is installed.',
+        };
+      }
       const dangerous = action === 'push' || action === 'pull';
       if (dangerous && !ctx.approved) {
         return { ok: false, output: `approval_required: ${action}`, needsApproval: true };
