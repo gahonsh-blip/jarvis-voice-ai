@@ -117,7 +117,15 @@ $('run').onclick = async () => {
       headers: { 'content-type': 'application/json', 'x-gemini-key': localStorage.getItem(KSTORE) || '' },
       body: JSON.stringify({ task, approved, maxSteps: 8 })
     });
-    const d = await r.json();
+    const raw = await r.text();
+    let d;
+    try { d = JSON.parse(raw); }
+    catch (e) {
+      $('out').innerHTML = '<div class="err">The server returned a non-JSON answer (status ' + r.status + ').</div><pre>' +
+        raw.slice(0, 800).replace(/</g, '&lt;') + '</pre>';
+      $('run').disabled = false;
+      return;
+    }
     let html = '';
     (d.steps || []).forEach(s => {
       const name = s.tool || s.kind || 'step';

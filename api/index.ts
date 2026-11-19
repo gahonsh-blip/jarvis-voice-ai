@@ -7,6 +7,14 @@
  * so the deployed URL really executes tasks.
  */
 import express from 'express';
+import { mkdirSync } from 'fs';
+
+// Serverless filesystems start empty: create the agent workspace so shell and
+// file tools have somewhere real to work instead of throwing ENOENT.
+try {
+  const ws = process.env.AGENT_WORKSPACE_ROOT || '/tmp/ws';
+  mkdirSync(ws, { recursive: true });
+} catch { /* read-only fs: tools will report it */ }
 import { createAgentRouter } from '../src/agent/routes.js';
 
 const app = express();
