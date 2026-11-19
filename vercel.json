@@ -1,0 +1,11 @@
+{
+  "buildCommand": "npx vite build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/index.ts": { "memory": 1024, "maxDuration": 60 }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/((?!assets|icons|api|manifest|sw).*)", "destination": "/index.html" }
+  ]
+}

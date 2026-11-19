@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JARVIS — live agent</title>
+<style>
+:root{--bg:#08131a;--card:#0f2027;--line:#1d3b45;--teal:#12776A;--mint:#7FD1C4;--ink:#e8f4f2;--mute:#8fb3ae}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:780px;margin:0 auto;padding:18px}
+h1{font-size:19px;margin:6px 0 2px}.sub{color:var(--mute);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+textarea,input{width:100%;background:#0a1a21;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
+textarea{min-height:84px;resize:vertical}
+button{background:var(--teal);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-weight:600;font-size:14px;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.step{border-left:3px solid var(--line);padding:6px 0 6px 10px;margin:8px 0;font-size:13.5px}
+.step b{color:var(--mint)}.ok{color:#4ade80}.err{color:#f87171}
+pre{white-space:pre-wrap;background:#0a1a21;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12.5px;overflow:auto}
+.lock{border:1px solid #C9922E;background:#241c0c;border-radius:12px;padding:12px;margin-bottom:12px}
+.hint{color:var(--mute);font-size:12.5px}
+</style></head>
+<body><div class="wrap">
+<h1>JARVIS — live agent</h1>
+<div class="sub">Real tool calls on a real server. Nothing here is a mock: every line below is an actual execution result.</div>
+
+<div class="card">
+  <div id="gateBox">
+    <div class="lock">
+      <b>Consent + lock passcode</b>
+      <div class="hint">Actions that change something (write, run, git) stay blocked until you set a passcode and approve them. Read-only tools run freely.</div>
+      <div class="row"><input id="pc" type="password" placeholder="Set a passcode (4+ chars)" style="flex:1"><button id="setPc">Set passcode</button></div>
+      <div id="gateState" class="hint"></div>
+    </div>
+  </div>
+
+  <label class="hint">Task</label>
+  <textarea id="task" placeholder="e.g. List the files here, then write a file notes.txt that says hello"></textarea>
+  <div class="row">
+    <button id="run">Run</button>
+    <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="approve" style="width:auto"> allow write/run tools (needs passcode)</label>
+  </div>
+</div>
+
+<div class="card" id="out"><div class="hint">Output appears here.</div></div>
+
+<div class="card">
+  <b>Model status</b>
+  <pre id="status">checking…</pre>
+</div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const KEY = 'jarvis_pass_hash';
+
+async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function renderGate(){
+  const has = localStorage.getItem(KEY);
+  $('gateState').innerHTML = has ? '<span class="ok">Passcode set on this device.</span> Write/run tools unlock only when you tick the box below.' : 'No passcode yet.';
+}
+$('setPc').onclick = async () => {
+  const v = $('pc').value.trim();
+  if (v.length < 4) return alert('At least 4 characters.');
+  localStorage.setItem(KEY, await sha(v)); $('pc').value = ''; renderGate();
+};
+renderGate();
+
+fetch('/api/agent/status').then(r=>r.json()).then(d=>{
+  $('status').textContent = JSON.stringify(d,null,1).slice(0,1400);
+}).catch(e=>{ $('status').textContent = 'status failed: '+e.message; });
+
+$('run').onclick = async () => {
+  const task = $('task').value.trim(); if(!task) return;
+  const wantsWrite = $('approve').checked;
+  if (wantsWrite && !localStorage.getItem(KEY)) return alert('Set a passcode first.');
+  if (wantsWrite) {
+    const p = prompt('Enter your passcode to approve write/run tools:');
+    if (!p) return;
+    const h = await sha(p);
+    if (h !== localStorage.getItem(KEY)) return alert('Wrong passcode.');
+    if (!confirm('Allow this run to write files and run commands?')) return;
+  }
+  $('run').disabled = true; $('out').innerHTML = '<div class="hint">Running…</div>';
+  try {
+    const r = await fetch('/api/agent/run', {method:'POST',headers:{'content-type':'application/json'},
+      body: JSON.stringify({task, approved: wantsWrite, maxSteps: 10})});
+    const d = await r.json();
+    let html = '';
+    (d.steps||[]).forEach(s=>{
+      html += '<div class="step"><b>'+(s.tool||s.kind||'step')+'</b> '+(s.ok===false?'<span class="err">failed</span>':'')+
+              '<pre>'+JSON.stringify(s.args||s.input||{},null,0).slice(0,300)+'</pre>'+
+              (s.result? '<pre>'+String(typeof s.result==='string'?s.result:JSON.stringify(s.result)).slice(0,700)+'</pre>':'')+'</div>';
+    });
+    html += '<div class="step"><b>answer</b><pre>'+String(d.answer||d.error||'no answer').slice(0,2500)+'</pre></div>';
+    $('out').innerHTML = html;
+  } catch(e){ $('out').innerHTML = '<div class="err">'+e.message+'</div>'; }
+  $('run').disabled = false;
+};
+</script></body></html>
