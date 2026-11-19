@@ -33,6 +33,13 @@ pre{white-space:pre-wrap;background:#0a1a21;border:1px solid var(--line);border-
     </div>
   </div>
 
+  <div class="card" style="margin:0 0 12px">
+    <b>Your AI key</b>
+    <div class="hint">Paste a free Gemini key from https://aistudio.google.com/apikey . It stays in this browser and is sent only with your own requests; the server never stores it.</div>
+    <div class="row"><input id="gk" type="password" placeholder="AIza..." style="flex:1"><button id="saveKey">Save key</button></div>
+    <div id="keyState" class="hint"></div>
+  </div>
+
   <label class="hint">Task</label>
   <textarea id="task" placeholder="e.g. List the files here, then write a file notes.txt that says hello"></textarea>
   <div class="row">
@@ -61,6 +68,18 @@ $('setPc').onclick = async () => {
   const v = $('pc').value.trim();
   if (v.length < 4) return alert('At least 4 characters.');
   localStorage.setItem(KEY, await sha(v)); $('pc').value = ''; renderGate();
+
+const KSTORE = 'jarvis_gemini_key';
+function renderKey(){
+  const k = localStorage.getItem(KSTORE) || '';
+  $('keyState').innerHTML = k ? '<span class="ok">Key saved in this browser (' + k.slice(0,6) + '…).</span>' : 'No key saved yet.';
+}
+$('saveKey').onclick = () => {
+  const v = $('gk').value.trim();
+  if (v.length < 20) return alert('That does not look like a key.');
+  localStorage.setItem(KSTORE, v); $('gk').value = ''; renderKey();
+};
+renderKey();
 };
 renderGate();
 
@@ -81,7 +100,7 @@ $('run').onclick = async () => {
   }
   $('run').disabled = true; $('out').innerHTML = '<div class="hint">Running…</div>';
   try {
-    const r = await fetch('/api/agent/run', {method:'POST',headers:{'content-type':'application/json'},
+    const r = await fetch('/api/agent/run', {method:'POST',headers:{'content-type':'application/json','x-gemini-key':(localStorage.getItem(KSTORE)||'')},
       body: JSON.stringify({task, approved: wantsWrite, maxSteps: 10})});
     const d = await r.json();
     let html = '';

@@ -173,14 +173,18 @@ function toGeminiTools(tools: ToolSpec[]) {
   ];
 }
 
+/* A key typed into the UI for this request only. Never persisted server-side. */
+export let keyOverride = '';
+export function setKeyOverride(v: string) { keyOverride = String(v || '').trim(); }
+
 export const geminiProvider: Provider = {
   id: 'gemini',
   label: 'Google Gemini (free tier)',
   freeTier: true,
-  isConfigured: () => Boolean(process.env.GEMINI_API_KEY),
+  isConfigured: () => Boolean(process.env.GEMINI_API_KEY || keyOverride),
   async chat(request: ChatRequest): Promise<ChatResult> {
     const model = process.env.AGENT_GEMINI_MODEL || 'gemini-2.5-flash';
-    const key = process.env.GEMINI_API_KEY;
+    const key = keyOverride || process.env.GEMINI_API_KEY;
     const systemText = request.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
     const { signal, cancel } = withTimeout(request.signal);
     try {

@@ -8,6 +8,7 @@
  */
 import { Router, type Request, type Response } from 'express';
 import { agentStatus, runAgent } from './loop.js';
+import { setKeyOverride } from './providers.js';
 import { TOOL_SPECS } from './tools.js';
 import { providerStatus } from './providers.js';
 
@@ -43,6 +44,8 @@ export function createAgentRouter(): Router {
       res.status(400).json({ ok: false, error: 'task_required' });
       return;
     }
+    // A key supplied by the caller for this one run (BYO key, never stored).
+    setKeyOverride(String(req.header('x-gemini-key') || req.body?.geminiKey || ''));
     const result = await runAgent({
       task,
       approved: Boolean(req.body?.approved),
