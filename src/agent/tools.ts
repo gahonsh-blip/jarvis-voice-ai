@@ -417,6 +417,124 @@ export const TOOLS: AgentTool[] = [
   },
 ];
 
+
+/* ---------------------------------------------------------------------------
+ * Six more real tools, so the agent is not limited to files and shell.
+ * Everything here runs on the server with no key required; where a key is
+ * needed later (Gmail, GitHub private, paid APIs) the tool reports exactly
+ * which variable to set instead of pretending it worked.
+ * ------------------------------------------------------------------------ */
+const EXTRA_TOOLS: AgentTool[] = [
+  {
+    name: 'time_now',
+    description: 'Current date and time, in UTC and in Asia/Kolkata. Use before writing dates into files or posts.',
+    parameters: { type: 'object', properties: {} },
+    async run() {
+      const now = new Date();
+      const ist = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata', dateStyle: 'full', timeStyle: 'medium',
+      }).format(now);
+      return { ok: true, output: `UTC: ${now.toISOString()}\nIST: ${ist}` };
+    },
+  },
+  {
+    name: 'http_request',
+    description: 'Call any HTTP API: method, url, optional headers and JSON body. Returns status and the first 4000 characters of the response.',
+    parameters: {
+      type: 'object',
+      properties: {
+        method: { type: 'string', description: 'GET, POST, PUT, PATCH or DELETE' },
+        url: { type: 'string', description: 'Full https URL' },
+        headers: { type: 'string', description: 'JSON object of headers, optional' },
+        body: { type: 'string', description: 'Request body, optional' },
+      },
+      required: ['url'],
+    },
+    async run(args) {
+      const url = String(args.url || '');
+      if (!/^https:\/\//i.test(url)) return { ok: false, output: 'only https URLs are allowed' };
+      const method = String(args.method || 'GET').toUpperCase();
+      let headers: Record<string, string> = {};
+      if (args.headers) {
+        try { headers = JSON.parse(String(args.headers)); } catch { return { ok: false, output: 'headers must be valid JSON' }; }
+      }
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: method === 'GET' || method === 'HEAD' ? undefined : String(args.body ?? ''),
+      });
+      const text = await res.text();
+      return { ok: res.ok, output: `HTTP ${res.status}\n${text.slice(0, 4000)}` };
+    },
+  },
+  {
+    name: 'hash_text',
+    description: 'SHA-256 of a string, hex encoded. Useful for checksums, dedupe keys and verifying content.',
+    parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+    async run(args) {
+      const { createHash } = await import('crypto');
+      return { ok: true, output: createHash('sha256').update(String(args.text ?? '')).digest('hex') };
+    },
+  },
+  {
+    name: 'json_get',
+    description: 'Read a dotted path out of a JSON string, e.g. path "items.0.name". Returns the value as JSON.',
+    parameters: {
+      type: 'object',
+      properties: { json: { type: 'string' }, path: { type: 'string' } },
+      required: ['json', 'path'],
+    },
+    async run(args) {
+      let cur: any;
+      try { cur = JSON.parse(String(args.json)); } catch { return { ok: false, output: 'invalid JSON' }; }
+      for (const part of String(args.path || '').split('.').filter(Boolean)) {
+        if (cur == null) return { ok: false, output: `path "${args.path}" not found` };
+        cur = cur[part];
+      }
+      if (cur === undefined) return { ok: false, output: `path "${args.path}" not found` };
+      return { ok: true, output: JSON.stringify(cur).slice(0, 4000) };
+    },
+  },
+  {
+    name: 'memory_set',
+    description: 'Save a durable note (key + value) in the agent workspace so it survives later runs on the same host.',
+    parameters: {
+      type: 'object',
+      properties: { key: { type: 'string' }, value: { type: 'string' } },
+      required: ['key', 'value'],
+    },
+    async run(args, ctx) {
+      const { writeFileSync, mkdirSync, readFileSync } = await import('fs');
+      const dir = `${ctx.root}/.agent`;
+      mkdirSync(dir, { recursive: true });
+      const file = `${dir}/kv.json`;
+      let store: Record<string, string> = {};
+      try { store = JSON.parse(readFileSync(file, 'utf8')); } catch { store = {}; }
+      store[String(args.key)] = String(args.value);
+      writeFileSync(file, JSON.stringify(store, null, 2));
+      return { ok: true, output: `saved ${args.key}` };
+    },
+  },
+  {
+    name: 'memory_get',
+    description: 'Read a note saved with memory_set, or list all keys when no key is given.',
+    parameters: { type: 'object', properties: { key: { type: 'string' } } },
+    async run(args, ctx) {
+      const { readFileSync } = await import('fs');
+      const file = `${ctx.root}/.agent/kv.json`;
+      let store: Record<string, string> = {};
+      try { store = JSON.parse(readFileSync(file, 'utf8')); } catch { return { ok: true, output: 'no notes yet' }; }
+      if (!args.key) return { ok: true, output: JSON.stringify(Object.keys(store)) };
+      const v = store[String(args.key)];
+      return v === undefined ? { ok: false, output: 'key not found' } : { ok: true, output: v };
+    },
+  },
+];
+
+for (const t of EXTRA_TOOLS) {
+  if (!TOOLS.some((x) => x.name === t.name)) TOOLS.push(t);
+}
+
 export const TOOL_SPECS = TOOLS.map(({ name, description, parameters }) => ({ name, description, parameters }));
 
 export function findTool(name: string): AgentTool | undefined {

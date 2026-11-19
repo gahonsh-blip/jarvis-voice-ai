@@ -9,7 +9,7 @@
 import { Router, type Request, type Response } from 'express';
 import { agentStatus, runAgent } from './loop.js';
 import { setKeyOverride } from './providers.js';
-import { TOOL_SPECS } from './tools.js';
+import { TOOL_SPECS, executeTool } from './tools.js';
 import { providerStatus } from './providers.js';
 
 function guardToken(req: Request, res: Response): boolean {
@@ -31,6 +31,50 @@ export function createAgentRouter(): Router {
       workspaceRoot: process.env.AGENT_WORKSPACE_ROOT || process.cwd(),
       models: providerStatus(),
     });
+  });
+
+
+  /* Runs every tool once with safe arguments and reports which ones really
+     work on this host. This is the honest answer to "does it actually run",
+     not a screenshot of a UI. */
+  router.get('/selftest', async (_req, res) => {
+    const { mkdtempSync } = await import('fs');
+    const { tmpdir } = await import('os');
+    const { join } = await import('path');
+    const root = mkdtempSync(join(tmpdir(), 'agent-selftest-'));
+    const cases: Record<string, Record<string, unknown>> = {
+      list_files: { path: '.' },
+      read_file: { path: 'missing.txt' },
+      write_file: { path: 'selftest.txt', content: 'hello from selftest' },
+      grep_files: { pattern: 'selftest' },
+      run_command: { command: 'echo ok' },
+      fetch_url: { url: 'https://example.com' },
+      web_search: { query: 'base44' },
+      git: { args: '--version' },
+      remember: { note: 'selftest memory', tags: 'selftest' },
+      recall: { query: 'selftest' },
+      time_now: {},
+      http_request: { url: 'https://api.github.com/zen' },
+      hash_text: { text: 'abc' },
+      json_get: { json: '{"a":{"b":[1,2]}}', path: 'a.b.0' },
+      memory_set: { key: 'selftest', value: 'ok' },
+      memory_get: { key: 'selftest' },
+    };
+    const results = [] as Array<{ tool: string; ok: boolean; ms: number; output: string }>;
+    for (const spec of TOOL_SPECS) {
+      const args = cases[spec.name];
+      if (!args) { results.push({ tool: spec.name, ok: false, ms: 0, output: 'no test case' }); continue; }
+      const started = Date.now();
+      const out = await executeTool(spec.name, args, { root, approved: true } as any);
+      results.push({
+        tool: spec.name,
+        ok: Boolean(out.ok),
+        ms: Date.now() - started,
+        output: String(out.output ?? '').slice(0, 200).replace(/\s+/g, ' '),
+      });
+    }
+    const passed = results.filter((r) => r.ok).length;
+    res.json({ total: results.length, passed, failed: results.length - passed, results });
   });
 
   router.get('/tools', (_req, res) => {
