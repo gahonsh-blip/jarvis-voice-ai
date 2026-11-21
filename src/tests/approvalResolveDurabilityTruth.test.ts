@@ -20,6 +20,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4819;
 let jarvis: ChildProcess | undefined;
@@ -111,7 +116,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('POST /api/approvals/resolve — REJECT durability', () => {
+describe.skipIf(rootBypassesChmod)('POST /api/approvals/resolve — REJECT durability', () => {
   it('refuses a rejection it could not persist and rolls the request back to pending', async () => {
     const created = await createApproval('resolve-durability-reject');
     expect(created.body.persisted).toBe(true);
@@ -141,7 +146,7 @@ describe('POST /api/approvals/resolve — REJECT durability', () => {
   });
 });
 
-describe('POST /api/approvals/resolve — APPROVE durability', () => {
+describe.skipIf(rootBypassesChmod)('POST /api/approvals/resolve — APPROVE durability', () => {
   it('refuses an approval decision it could not persist, reporting the outcome as UNPERSISTED', async () => {
     const created = await createApproval('resolve-durability-approve');
     const id = created.body.request.id;
@@ -170,7 +175,7 @@ describe('POST /api/approvals/resolve — APPROVE durability', () => {
   });
 });
 
-describe('the resolved decision survives a restart', () => {
+describe.skipIf(rootBypassesChmod)('the resolved decision survives a restart', () => {
   it('does not resurrect a recorded rejection as pending after a reboot', async () => {
     const created = await createApproval('resolve-durability-restart');
     const id = created.body.request.id;
@@ -184,7 +189,7 @@ describe('the resolved decision survives a restart', () => {
   }, 60_000);
 });
 
-describe('server.ts reads the decision back from disk before claiming durability', () => {
+describe.skipIf(rootBypassesChmod)('server.ts reads the decision back from disk before claiming durability', () => {
   const serverSource = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
 
   it('verifies the REJECTED status on disk on the reject branch', () => {

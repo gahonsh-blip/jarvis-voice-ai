@@ -30,6 +30,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4815;
 const RESTART_PORT = 4816;
@@ -112,7 +117,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('the security-matrix update route reports a durable change honestly', () => {
+describe.skipIf(rootBypassesChmod)('the security-matrix update route reports a durable change honestly', () => {
   it('exposes the defaults when the persisted file carries no matrix', async () => {
     const state = await getSecurity(JARVIS_PORT);
     // The seeded file is `{}`, so the boot hydration keeps the defaults and must
@@ -150,7 +155,7 @@ describe('the security-matrix update route reports a durable change honestly', (
   });
 });
 
-describe('a successful security-matrix save survives a restart', () => {
+describe.skipIf(rootBypassesChmod)('a successful security-matrix save survives a restart', () => {
   it('persists the gate to disk and reloads it on the next boot', async () => {
     // Make the file writable again and apply a real change.
     fs.chmodSync(memoryFile, 0o644);
@@ -174,7 +179,7 @@ describe('a successful security-matrix save survives a restart', () => {
   }, 60_000);
 });
 
-describe('the security-matrix update route keeps the durability check wired', () => {
+describe.skipIf(rootBypassesChmod)('the security-matrix update route keeps the durability check wired', () => {
   const route = (startMarker: string, endMarker: string) => {
     const start = serverSource.indexOf(startMarker);
     return serverSource.slice(start, serverSource.indexOf(endMarker, start));

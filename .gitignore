@@ -1,6 +1,10 @@
-node_modules
-dist
-.vercel
+node_modules/
+dist/
+.vercel/
 .env
 .env.local
 *.log
+__pycache__/
+.vite/
+.DS_Store
+coverage/

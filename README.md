@@ -10,6 +10,8 @@
 JARVIS now runs its own agent loop instead of a single hard-coded model:
 
 - **Never blocked by one quota**: Gemini, Groq, OpenRouter, Cerebras, DeepSeek and local Ollama are tried in order; a failing provider cools down and the next one answers.
+- **Consent layer**: every tool belongs to a capability (files, shell, network, messages, calls, publish, payments, platform). The first use asks; the answer is stored in `~/.jarvis/permissions.json`. See `docs/PERMISSIONS.md`.
+- **Works offline**: `AGENT_OFFLINE=1` keeps files, shell, memory and the loop running with no key and no internet.
 - **Personas**: one registry, several voices — `jarvis` (engineering) and `call` (live phone agent that speaks in short, human turns). See `docs/PERSONAS.md`.
 - **Real tools**: filesystem read/write inside a jailed workspace, grep, shell commands, URL fetch, free web search, git status/commit/push, durable memory.
 - **Safety**: path jail, destructive-command blocklist, approval gate for writes/commands/pushes, repeat-call protection, step cap.

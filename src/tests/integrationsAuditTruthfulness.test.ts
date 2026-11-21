@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { getIntegrationsAuditReport } from '../../server_tools';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 // Regression guard for fabricated success in the Truth-in-Execution Integrations
 // Matrix. The Oracle Cloud ARM VM entry was hardcoded to a working status with an
@@ -12,7 +17,7 @@ import { getIntegrationsAuditReport } from '../../server_tools';
 // only that a credential string is visible in the environment. These tests pin
 // that weaker, honest claim and forbid the stronger one.
 
-describe('integrations audit never fabricates a working integration', () => {
+describe.skipIf(rootBypassesChmod)('integrations audit never fabricates a working integration', () => {
   it('counts every item exactly once across the three statuses', () => {
     const report = getIntegrationsAuditReport();
     const { total, credentialsPresent, notConfigured, notAvailable } = report.summary;

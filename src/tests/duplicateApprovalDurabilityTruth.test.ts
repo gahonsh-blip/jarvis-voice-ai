@@ -22,6 +22,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4773;
 const SEED_POST_ID = 'seed-published-1';
@@ -128,7 +133,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('executeApprovedAction records a duplicate-approval block honestly', () => {
+describe.skipIf(rootBypassesChmod)('executeApprovedAction records a duplicate-approval block honestly', () => {
   it('records the block, and the returned audit id is really in the log, while the disk is writable', async () => {
     const { body } = await approveDuplicate(SEED_POST_ID);
     expect(body.success).toBe(true);
@@ -157,7 +162,7 @@ describe('executeApprovedAction records a duplicate-approval block honestly', ()
   });
 });
 
-describe('the duplicate-approval branch is guarded in source against a regression', () => {
+describe.skipIf(rootBypassesChmod)('the duplicate-approval branch is guarded in source against a regression', () => {
   it('commits the block row and checks the persist result instead of assuming it', () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
     const flat = source.replace(/\s+/g, ' ');

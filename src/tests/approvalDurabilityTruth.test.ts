@@ -24,6 +24,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4791;
 let jarvis: ChildProcess | undefined;
@@ -106,7 +111,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('POST /api/approvals/create stages durably', () => {
+describe.skipIf(rootBypassesChmod)('POST /api/approvals/create stages durably', () => {
   it('reports a durable staging and the request is readable as pending', async () => {
     const { status, body } = await createApproval('durable-approval-ok');
     expect(status).toBe(200);
@@ -131,7 +136,7 @@ describe('POST /api/approvals/create stages durably', () => {
   });
 });
 
-describe('the staged approval survives a restart', () => {
+describe.skipIf(rootBypassesChmod)('the staged approval survives a restart', () => {
   it('reloads the durable request and drops the one that failed to persist', async () => {
     fs.chmodSync(memoryFile, 0o644); // the previous case left the file read-only
     const durable = await createApproval('durable-approval-across-restart');
@@ -155,7 +160,7 @@ describe('the staged approval survives a restart', () => {
   }, 60_000);
 });
 
-describe('server.ts persists the approval registry on the decision surfaces', () => {
+describe.skipIf(rootBypassesChmod)('server.ts persists the approval registry on the decision surfaces', () => {
   const serverSource = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
 
   it('persists on the create route and rolls back an unpersisted staging', () => {

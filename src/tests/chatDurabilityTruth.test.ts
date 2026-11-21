@@ -22,6 +22,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4767;
 let jarvis: ChildProcess | undefined;
@@ -99,7 +104,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('POST /api/chat set_name reports a durable record honestly', () => {
+describe.skipIf(rootBypassesChmod)('POST /api/chat set_name reports a durable record honestly', () => {
   it('records a real name and claims the durable write while the disk is writable', async () => {
     const { status, body } = await chat('My name is Tony Stark');
     expect(status).toBe(200);
@@ -124,7 +129,7 @@ describe('POST /api/chat set_name reports a durable record honestly', () => {
   });
 });
 
-describe('POST /api/chat create_file reports a durable save honestly', () => {
+describe.skipIf(rootBypassesChmod)('POST /api/chat create_file reports a durable save honestly', () => {
   it('saves a note while the disk is writable', async () => {
     fs.chmodSync(memoryFile, 0o644);
 

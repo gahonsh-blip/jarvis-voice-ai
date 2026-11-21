@@ -5,6 +5,7 @@ import path from 'path';
 import { runAgent } from '../agent/loop';
 import { resetProviderState, chatWithFallback } from '../agent/providers';
 import { inspectCommand, safeResolve, parseDuckDuckGo, executeTool } from '../agent/tools';
+import { grant } from '../agent/permissions';
 
 const WORKSPACE = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-agent-'));
 
@@ -30,6 +31,10 @@ function groqText(text: string) {
 }
 
 beforeEach(() => {
+  // The loop now asks for consent first. This test exercises the loop, not the
+  // consent UI, so it grants what it needs in a throwaway store.
+  process.env.AGENT_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-perm-'));
+  for (const cap of ['files.read', 'files.write', 'shell', 'network', 'memory'] as const) grant(cap);
   resetProviderState();
   process.env.GEMINI_API_KEY = 'test-key';
   process.env.AGENT_PROVIDER_ORDER = 'gemini';

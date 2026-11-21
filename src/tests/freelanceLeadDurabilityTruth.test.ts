@@ -19,6 +19,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4771;
 let jarvis: ChildProcess | undefined;
@@ -96,7 +101,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('the freelance lead routes report a durable change honestly', () => {
+describe.skipIf(rootBypassesChmod)('the freelance lead routes report a durable change honestly', () => {
   let leadId: string;
 
   it('stores and persists a real lead while the disk is writable', async () => {
@@ -159,7 +164,7 @@ describe('the freelance lead routes report a durable change honestly', () => {
   });
 });
 
-describe('the freelance lead routes keep the durability check wired', () => {
+describe.skipIf(rootBypassesChmod)('the freelance lead routes keep the durability check wired', () => {
   const route = (startMarker: string, endMarker: string) => {
     const start = serverSource.indexOf(startMarker);
     return serverSource.slice(start, serverSource.indexOf(endMarker, start));

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ADVERTISED_TOOLS, TOOL_COUNT, TOOL_SPECS, findTool, executeTool } from '../agent/tools.js';
 import { ALL_87_NAMES, PARITY_GROUPS, bridgeConfigured } from '../agent/base44-parity.js';
+import { grant } from '../agent/permissions.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /**
  * The owner asked for the full 87-tool surface on the Jarvis server, counted,
@@ -9,6 +13,10 @@ import { ALL_87_NAMES, PARITY_GROUPS, bridgeConfigured } from '../agent/base44-p
  * and a tool that cannot act says so instead of pretending.
  */
 describe('Base44 parity — 87 tools, no gaps', () => {
+  // Consent is checked before a tool runs; this file tests the tools themselves.
+  process.env.AGENT_STATE_DIR = mkdtempSync(join(tmpdir(), 'parity-perm-'));
+  for (const cap of ['files.read', 'files.write', 'shell', 'network', 'memory', 'messages', 'calls', 'publish', 'payments', 'platform'] as const) grant(cap);
+
   it('advertises exactly 87 tools', () => {
     expect(TOOL_COUNT).toBe(87);
     expect(TOOL_SPECS).toHaveLength(87);

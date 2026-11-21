@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import type { AgentTool, ToolContext, ToolResult } from './types.js';
 import { COVERED_BY_NATIVE, PARITY_TOOLS } from './base44-parity.js';
+import { checkPermission } from './permissions.js';
 
 const MAX_OUTPUT = Number(process.env.AGENT_MAX_TOOL_OUTPUT || 12_000);
 const SHELL_TIMEOUT = Number(process.env.AGENT_SHELL_TIMEOUT_MS || 60_000);
@@ -630,6 +631,9 @@ export async function executeTool(
 ): Promise<ToolResult> {
   const tool = findTool(name);
   if (!tool) return { ok: false, output: `unknown_tool: ${name}` };
+  // Consent first: the owner's answer is checked before the tool's own code.
+  const permitted = checkPermission(name);
+  if (!permitted.ok) return { ok: false, output: permitted.output };
   try {
     return await tool.run(args, ctx);
   } catch (err: any) {

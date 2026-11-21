@@ -25,6 +25,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4799;
 let jarvis: ChildProcess | undefined;
@@ -119,7 +124,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('POST /api/telephony/outbound/authorize — REJECT durability', () => {
+describe.skipIf(rootBypassesChmod)('POST /api/telephony/outbound/authorize — REJECT durability', () => {
   it('refuses a rejection it could not persist, reverts the request and rolls the action back', async () => {
     const staged = await stageOutbound();
     expect(staged.body.success).toBe(true);
@@ -151,7 +156,7 @@ describe('POST /api/telephony/outbound/authorize — REJECT durability', () => {
   });
 });
 
-describe('POST /api/telephony/outbound/authorize — APPROVE durability', () => {
+describe.skipIf(rootBypassesChmod)('POST /api/telephony/outbound/authorize — APPROVE durability', () => {
   it('refuses an approval it could not persist and never dials the carrier', async () => {
     const staged = await stageOutbound();
     const requestId = staged.body.request.id;
@@ -185,7 +190,7 @@ describe('POST /api/telephony/outbound/authorize — APPROVE durability', () => 
   });
 });
 
-describe('server.ts reads the decision back from disk before claiming durability', () => {
+describe.skipIf(rootBypassesChmod)('server.ts reads the decision back from disk before claiming durability', () => {
   const serverSource = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
 
   it('verifies the REJECTED status on disk on the reject branch', () => {

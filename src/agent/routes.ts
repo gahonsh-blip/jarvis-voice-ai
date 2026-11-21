@@ -9,6 +9,7 @@
 import { Router, type Request, type Response } from 'express';
 import { agentStatus, runAgent } from './loop.js';
 import { listPersonas, DEFAULT_PERSONA_ID } from './personas.js';
+import { listPermissions, grant, revoke, pendingRequests, offlineMode, capabilityForTool } from './permissions.js';
 import { setKeyOverride } from './providers.js';
 import { TOOL_SPECS, TOOL_COUNT, executeTool } from './tools.js';
 import { BRIDGE_TOOL_NAMES, KEY_TOOL_NAMES, bridgeConfigured } from './base44-parity.js';
@@ -67,6 +68,13 @@ export function createAgentRouter(): Router {
     };
     const { writeFileSync } = await import('fs');
     try { writeFileSync(join(root, 'selftest.txt'), 'hello from selftest'); } catch { /* ignore */ }
+
+    // The selftest is the owner's own check, so it runs against a throwaway
+    // permission store with the four capabilities it needs already granted.
+    // The real store is untouched: a selftest never widens the owner's grants.
+    const previousStateDir = process.env.AGENT_STATE_DIR;
+    process.env.AGENT_STATE_DIR = join(root, '.permissions');
+    for (const cap of ['files.write', 'shell', 'network', 'memory'] as const) grant(cap);
     /* A tiny skill so run_skill has something real to execute. */
     try {
       const { mkdirSync } = await import('fs');
@@ -112,6 +120,9 @@ export function createAgentRouter(): Router {
       });
     }
 
+    if (previousStateDir === undefined) delete process.env.AGENT_STATE_DIR;
+    else process.env.AGENT_STATE_DIR = previousStateDir;
+
     const native = results.filter((r) => r.group === 'native');
     const bridge = results.filter((r) => r.group === 'bridge');
     const key = results.filter((r) => r.group === 'key');
@@ -124,6 +135,33 @@ export function createAgentRouter(): Router {
       key: { total: key.length, configured: Boolean(process.env.OPENAI_API_KEY) },
       results,
     });
+  });
+
+  /* ---------------------------- permissions ---------------------------- */
+  /* The app-style consent surface: what is allowed, what is waiting for an
+     answer, and the two calls that answer it. */
+  router.get('/permissions', (_req, res) => {
+    res.json({ offline: offlineMode(), capabilities: listPermissions(), pending: pendingRequests() });
+  });
+
+  router.post('/permissions/grant', (req, res) => {
+    if (!guardToken(req, res)) return;
+    const capability = String(req.body?.capability || '').trim();
+    const result = grant(capability as any, String(req.body?.note || 'owner approved'));
+    if (!result.ok) return res.status(400).json(result);
+    res.json({ ok: true, capabilities: listPermissions(), pending: pendingRequests() });
+  });
+
+  router.post('/permissions/revoke', (req, res) => {
+    if (!guardToken(req, res)) return;
+    const capability = String(req.body?.capability || '').trim();
+    const result = revoke(capability as any);
+    if (!result.ok) return res.status(400).json(result);
+    res.json({ ok: true, capabilities: listPermissions() });
+  });
+
+  router.get('/permissions/capability/:tool', (req, res) => {
+    res.json({ tool: req.params.tool, capability: capabilityForTool(req.params.tool) });
   });
 
   router.get('/personas', (_req, res) => {

@@ -21,6 +21,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4772;
 let jarvis: ChildProcess | undefined;
@@ -112,7 +117,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('POST /api/social/action reports a rejection honestly', () => {
+describe.skipIf(rootBypassesChmod)('POST /api/social/action reports a rejection honestly', () => {
   it('records a rejection while the disk is writable', async () => {
     const post = await generate('action-durable-ok');
     const { body } = await reject(post.id);
@@ -140,7 +145,7 @@ describe('POST /api/social/action reports a rejection honestly', () => {
   });
 });
 
-describe('executeApprovedAction is guarded in source against a regression', () => {
+describe.skipIf(rootBypassesChmod)('executeApprovedAction is guarded in source against a regression', () => {
   it('checks the persist result at every audit-commit site', () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
     const flat = source.replace(/\s+/g, ' ');

@@ -18,6 +18,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 const JARVIS_PORT = 4792;
 let jarvis: ChildProcess | undefined;
@@ -99,7 +104,7 @@ afterAll(async () => {
   fs.rmSync(memoryDir, { recursive: true, force: true });
 });
 
-describe('the telephony settings save reaches disk', () => {
+describe.skipIf(rootBypassesChmod)('the telephony settings save reaches disk', () => {
   it('reports a persisted save for a real setting', async () => {
     const res = await saveSettings({ aiReceptionistGreeting: 'Durability probe greeting' });
     expect(res.status).toBe(200);
@@ -123,7 +128,7 @@ describe('the telephony settings save reaches disk', () => {
   });
 });
 
-describe('the saved telephony settings survive a restart', () => {
+describe.skipIf(rootBypassesChmod)('the saved telephony settings survive a restart', () => {
   it('restores the greeting written before the restart', async () => {
     await stopServer();
     jarvis = startServer();
@@ -135,7 +140,7 @@ describe('the saved telephony settings survive a restart', () => {
   }, 60_000);
 });
 
-describe('an unpersistable save is refused, not faked', () => {
+describe.skipIf(rootBypassesChmod)('an unpersistable save is refused, not faked', () => {
   it('answers 500 and rolls the live value back when the disk write fails', async () => {
     const before = (await getSettings()).aiReceptionistGreeting;
     fs.chmodSync(memoryFile, 0o444);
@@ -153,7 +158,7 @@ describe('an unpersistable save is refused, not faked', () => {
   });
 });
 
-describe('server.ts wires the settings route and boot path to durable storage', () => {
+describe.skipIf(rootBypassesChmod)('server.ts wires the settings route and boot path to durable storage', () => {
   const serverSource = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
 
   it('persists the settings in the POST route', () => {

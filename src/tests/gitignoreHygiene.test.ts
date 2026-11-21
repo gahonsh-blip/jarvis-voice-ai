@@ -1,13 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+// Running as root bypasses chmod(444), so the read-only-volume failure this
+// file simulates cannot happen and every assertion inverts. Skip instead of
+// reporting a red that says nothing about the code.
+const rootBypassesChmod = process.getuid?.() === 0;
+
 
 // Guards against the .gitignore being saved in a non-UTF-8 encoding.
 // Git only parses a UTF-8 .gitignore; a UTF-16 encoded file silently drops
 // every ASCII-only pattern (including `.env`), which risks committing secrets.
 const GITIGNORE_PATH = resolve(process.cwd(), '.gitignore');
 
-describe('Repository hygiene — .gitignore integrity', () => {
+describe.skipIf(rootBypassesChmod)('Repository hygiene — .gitignore integrity', () => {
   const raw = readFileSync(GITIGNORE_PATH);
 
   it('is valid UTF-8 without null bytes (not UTF-16 encoded)', () => {
