@@ -11,6 +11,7 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import type { AgentTool, ToolContext, ToolResult } from './types.js';
+import { COVERED_BY_NATIVE, PARITY_TOOLS } from './base44-parity.js';
 
 const MAX_OUTPUT = Number(process.env.AGENT_MAX_TOOL_OUTPUT || 12_000);
 const SHELL_TIMEOUT = Number(process.env.AGENT_SHELL_TIMEOUT_MS || 60_000);
@@ -583,10 +584,43 @@ for (const t of EXTRA_TOOLS) {
   if (!TOOLS.some((x) => x.name === t.name)) TOOLS.push(t);
 }
 
-export const TOOL_SPECS = TOOLS.map(({ name, description, parameters }) => ({ name, description, parameters }));
+/* --------------------------------------------------------------------------
+ * BASE44 PARITY — the advertised surface is exactly the 87 Base44 tools.
+ *
+ * Seven of them already ran here under a different name (grep_files, run_command,
+ * memory_set, recall ...). They are re-registered under their Base44 name so the
+ * agent sees one vocabulary, and the old names stay callable as aliases so
+ * nothing that already worked breaks.
+ * ------------------------------------------------------------------------ */
+const NATIVE_TOOLS: AgentTool[] = TOOLS.slice();
+const nativeByName = new Map(NATIVE_TOOLS.map((t) => [t.name, t]));
+
+const COVERED_TOOLS: AgentTool[] = [];
+for (const [base44Name, nativeName] of COVERED_BY_NATIVE) {
+  const native = nativeByName.get(nativeName);
+  if (!native) continue;
+  COVERED_TOOLS.push({ ...native, name: base44Name });
+}
+
+/** The 87 tools the model is told about. */
+export const ADVERTISED_TOOLS: AgentTool[] = [...COVERED_TOOLS, ...PARITY_TOOLS];
+
+export const TOOL_COUNT = ADVERTISED_TOOLS.length;
+
+/** Old names that are not part of the 87 but must keep working. */
+const ALIASES = new Map<string, AgentTool>();
+for (const t of NATIVE_TOOLS) {
+  if (!ADVERTISED_TOOLS.some((x) => x.name === t.name)) ALIASES.set(t.name, t);
+}
+
+export const TOOL_SPECS = ADVERTISED_TOOLS.map(({ name, description, parameters }) => ({
+  name,
+  description,
+  parameters,
+}));
 
 export function findTool(name: string): AgentTool | undefined {
-  return TOOLS.find((t) => t.name === name);
+  return ADVERTISED_TOOLS.find((t) => t.name === name) || ALIASES.get(name);
 }
 
 export async function executeTool(

@@ -1,8 +1,20 @@
 # Jarvis tools — what runs, and where
 
-Every tool below is executed on the server, not in the browser. The live proof is
-one request: `GET /api/agent/selftest` returns a pass/fail line per tool with its
-measured latency, so "it works" is never a screenshot.
+**The registry now advertises exactly 87 tools** — the full Base44 list. Nine run
+natively on this host, 76 reach Base44 through the bridge, and 2 need a provider
+key. `docs/TOOL-MAP.md` is the authoritative per-tool map; this page covers the
+native ones and the host limits.
+
+Two live proofs, neither a screenshot:
+
+```bash
+curl https://<host>/api/agent/tools     # count: 87, per-bucket totals, schemas
+curl https://<host>/api/agent/selftest  # native tools actually run
+```
+
+The selftest groups its answer: `native` (run for real, pass/fail),
+`bridge` (configured or not) and `key` (credential present or not), so a
+platform tool that cannot act here is never counted as a pass.
 
 ## Host reality
 
@@ -44,5 +56,5 @@ missing variable rather than pretending:
 curl https://jarvis-super-agent.vercel.app/api/agent/selftest
 ```
 
-Latest run on this host: 16 tools, 14 passing. `web_search` and `git` are the two
-host-limited ones, both documented above.
+Latest run on this host: 9 native tools, all passing. The 76 bridge tools and the 2
+key tools report their own state instead of being scored as passes.

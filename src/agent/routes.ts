@@ -9,7 +9,8 @@
 import { Router, type Request, type Response } from 'express';
 import { agentStatus, runAgent } from './loop.js';
 import { setKeyOverride } from './providers.js';
-import { TOOL_SPECS, executeTool } from './tools.js';
+import { TOOL_SPECS, TOOL_COUNT, executeTool } from './tools.js';
+import { BRIDGE_TOOL_NAMES, KEY_TOOL_NAMES, bridgeConfigured } from './base44-parity.js';
 import { providerStatus } from './providers.js';
 
 function guardToken(req: Request, res: Response): boolean {
@@ -59,28 +60,81 @@ export function createAgentRouter(): Router {
       json_get: { json: '{"a":{"b":[1,2]}}', path: 'a.b.0' },
       memory_set: { key: 'selftest', value: 'ok' },
       memory_get: { key: 'selftest' },
+      // Base44-parity tools that really run on this host.
+      run_skill: { skill_name: 'selftest' },
+      ask_clarifying_questions: { questions: [{ question: 'Which hall?', options: [{ label: 'Main' }] }] },
     };
     const { writeFileSync } = await import('fs');
     try { writeFileSync(join(root, 'selftest.txt'), 'hello from selftest'); } catch { /* ignore */ }
-    const results = [] as Array<{ tool: string; ok: boolean; ms: number; output: string }>;
+    /* A tiny skill so run_skill has something real to execute. */
+    try {
+      const { mkdirSync } = await import('fs');
+      mkdirSync(join(root, '.agents', 'skills'), { recursive: true });
+      writeFileSync(join(root, '.agents', 'skills', 'selftest.sh'), 'echo skill-ok\n');
+    } catch { /* ignore */ }
+
+    const bridgeNames = new Set(BRIDGE_TOOL_NAMES);
+    const keyNames = new Set(KEY_TOOL_NAMES);
+    const bridgeOn = bridgeConfigured();
+
+    const results = [] as Array<{ tool: string; group: string; ok: boolean; ms: number; output: string }>;
     for (const spec of TOOL_SPECS) {
+      // Bridge tools cannot run here without the Base44 keys; say so plainly
+      // instead of calling them "no test case" or pretending they passed.
+      if (bridgeNames.has(spec.name)) {
+        results.push({
+          tool: spec.name,
+          group: 'bridge',
+          ok: bridgeOn,
+          ms: 0,
+          output: bridgeOn
+            ? 'bridge configured — not called by selftest (would act for real)'
+            : 'bridge: needs BASE44_API_URL, BASE44_API_KEY, BASE44_AGENT_ID',
+        });
+        continue;
+      }
+      if (keyNames.has(spec.name)) {
+        const key = process.env.OPENAI_API_KEY ? 'OPENAI_API_KEY present' : 'needs OPENAI_API_KEY';
+        results.push({ tool: spec.name, group: 'key', ok: Boolean(process.env.OPENAI_API_KEY), ms: 0, output: key });
+        continue;
+      }
       const args = cases[spec.name];
-      if (!args) { results.push({ tool: spec.name, ok: false, ms: 0, output: 'no test case' }); continue; }
+      if (!args) { results.push({ tool: spec.name, group: 'native', ok: false, ms: 0, output: 'no test case' }); continue; }
       const started = Date.now();
       const out = await executeTool(spec.name, args, { root, approved: true } as any);
       results.push({
         tool: spec.name,
+        group: 'native',
         ok: Boolean(out.ok),
         ms: Date.now() - started,
         output: String(out.output ?? '').slice(0, 200).replace(/\s+/g, ' '),
       });
     }
-    const passed = results.filter((r) => r.ok).length;
-    res.json({ total: results.length, passed, failed: results.length - passed, results });
+
+    const native = results.filter((r) => r.group === 'native');
+    const bridge = results.filter((r) => r.group === 'bridge');
+    const key = results.filter((r) => r.group === 'key');
+    const passed = native.filter((r) => r.ok).length;
+    res.json({
+      total: results.length,
+      advertised: TOOL_COUNT,
+      native: { total: native.length, passed, failed: native.length - passed },
+      bridge: { total: bridge.length, configured: bridgeOn },
+      key: { total: key.length, configured: Boolean(process.env.OPENAI_API_KEY) },
+      results,
+    });
   });
 
   router.get('/tools', (_req, res) => {
-    res.json({ count: TOOL_SPECS.length, tools: TOOL_SPECS });
+    res.json({
+      count: TOOL_COUNT,
+      groups: {
+        native: TOOL_COUNT - BRIDGE_TOOL_NAMES.length - KEY_TOOL_NAMES.length,
+        bridge: BRIDGE_TOOL_NAMES.length,
+        key: KEY_TOOL_NAMES.length,
+      },
+      tools: TOOL_SPECS,
+    });
   });
 
   router.post('/run', async (req, res) => {
