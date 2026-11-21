@@ -8,6 +8,7 @@
  */
 import { Router, type Request, type Response } from 'express';
 import { agentStatus, runAgent } from './loop.js';
+import { listPersonas, DEFAULT_PERSONA_ID } from './personas.js';
 import { setKeyOverride } from './providers.js';
 import { TOOL_SPECS, TOOL_COUNT, executeTool } from './tools.js';
 import { BRIDGE_TOOL_NAMES, KEY_TOOL_NAMES, bridgeConfigured } from './base44-parity.js';
@@ -125,6 +126,10 @@ export function createAgentRouter(): Router {
     });
   });
 
+  router.get('/personas', (_req, res) => {
+    res.json({ default: DEFAULT_PERSONA_ID, personas: listPersonas() });
+  });
+
   router.get('/tools', (_req, res) => {
     res.json({
       count: TOOL_COUNT,
@@ -148,6 +153,7 @@ export function createAgentRouter(): Router {
     setKeyOverride(String(req.header('x-gemini-key') || req.body?.geminiKey || ''));
     const result = await runAgent({
       task,
+      persona: req.body?.persona,
       approved: Boolean(req.body?.approved),
       maxSteps: Number(req.body?.maxSteps) || undefined,
       root: req.body?.root,
@@ -173,6 +179,7 @@ export function createAgentRouter(): Router {
 
     const result = await runAgent({
       task,
+      persona: req.body?.persona,
       approved: Boolean(req.body?.approved),
       maxSteps: Number(req.body?.maxSteps) || undefined,
       root: req.body?.root,

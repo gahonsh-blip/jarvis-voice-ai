@@ -10,6 +10,7 @@
 JARVIS now runs its own agent loop instead of a single hard-coded model:
 
 - **Never blocked by one quota**: Gemini, Groq, OpenRouter, Cerebras, DeepSeek and local Ollama are tried in order; a failing provider cools down and the next one answers.
+- **Personas**: one registry, several voices — `jarvis` (engineering) and `college` (formal, human-sounding student assistant). See `docs/PERSONAS.md`.
 - **Real tools**: filesystem read/write inside a jailed workspace, grep, shell commands, URL fetch, free web search, git status/commit/push, durable memory.
 - **Safety**: path jail, destructive-command blocklist, approval gate for writes/commands/pushes, repeat-call protection, step cap.
 - **Three front doors**: `/api/agent/run`, `/api/agent/stream`, `npm run agent` (terminal), plus `npm run agent:status`.
